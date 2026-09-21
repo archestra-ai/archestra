@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+import { createHash, randomUUID } from "node:crypto";
 import {
   ADMIN_ROLE_NAME,
   PROJECT_INSTRUCTIONS_FILENAME,
@@ -11,6 +12,7 @@ import {
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
@@ -991,12 +993,106 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 
   describe("download_file", () => {
+    test.for([
+      {
+        filename: "report.pdf",
+        data: Buffer.from("%PDF-1.7\nprivate report\n%%EOF"),
+        expectedMime: "application/pdf",
+      },
+      {
+        filename: "archive.bin",
+        data: Buffer.from([0x00, 0xff, 0x12, 0x90, 0x02]),
+        expectedMime: "application/octet-stream",
+      },
+    ])("stages and exports $filename with byte-derived Slack metadata", async ({
+      filename,
+      data,
+      expectedMime,
+    }) => {
+      config.daggerRuntime.enabled = true;
+      const ctx = {
+        ...(await makeConversationCtx()),
+        isolationKey: randomUUID(),
+        chatOpsBindingId: randomUUID(),
+        chatOpsThreadId: "1780000000.000001",
+        chatOpsMessageId: "1780000000.000002",
+      };
+      const threadScope = {
+        organizationId,
+        userId,
+        isolationKey: ctx.isolationKey,
+        chatOpsBindingId: ctx.chatOpsBindingId,
+        chatOpsThreadId: ctx.chatOpsThreadId,
+      };
+      try {
+        const original = threadFileStore.retain({
+          scope: threadScope,
+          data,
+          filename,
+        });
+        const uploaded = await executeArchestraTool(
+          TOOL_UPLOAD_FILE_FULL_NAME,
+          {
+            path: filename,
+            source: { type: "thread_file", fileId: original.fileId },
+          },
+          ctx,
+        );
+        expect(uploaded.isError, textOf(uploaded)).toBe(false);
+        expect(uploaded.structuredContent?.mimeType).toBe(expectedMime);
+        expect(
+          await SkillSandboxFileModel.findUploadDataById(
+            uploaded.structuredContent?.uploadId as string,
+          ),
+        ).toEqual(data);
+
+        vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
+          dataBase64: data.toString("base64"),
+          sizeBytes: data.length,
+        });
+        const exported = await executeArchestraTool(
+          TOOL_DOWNLOAD_FILE_FULL_NAME,
+          { path: filename, mimeType: "image/png" },
+          ctx,
+        );
+        expect(exported.isError, textOf(exported)).toBe(false);
+        const metadata = exported.structuredContent?.threadFile as ReturnType<
+          typeof threadFileStore.retain
+        >;
+        expect(metadata).toMatchObject({
+          filename,
+          mimeType: expectedMime,
+          sizeBytes: data.length,
+          sha256: createHash("sha256").update(data).digest("hex"),
+        });
+        expect(textOf(exported)).toContain(metadata.fileId);
+        expect(textOf(exported)).toContain(metadata.sha256);
+        expect(textOf(exported)).toContain("post_thread_file");
+        expect(textOf(exported)).not.toContain(data.toString("base64"));
+        expect(
+          threadFileStore.resolve({
+            scope: threadScope,
+            fileId: metadata.fileId,
+          })?.data,
+        ).toEqual(data);
+        const persisted = await fileStore.get({
+          ref: exported.structuredContent?.fileId as string,
+          organizationId,
+          userId,
+        });
+        expect(persisted?.data).toEqual(data);
+      } finally {
+        threadFileStore.release(ctx.isolationKey);
+      }
+    });
+
     test("delegates to the runtime service and returns fileId without a download link", async () => {
       const ctx = await makeConversationCtx();
       const exportSpy = vi
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "artifact-1",
+          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out/file.txt",
           mimeType: "text/plain",
@@ -1021,12 +1117,14 @@ describe("sandbox tools (runtime enabled)", () => {
         fileId: string;
         sizeBytes: number;
         downloadUrl?: string;
+        threadFile?: unknown;
       }>(result);
       expect(structured.fileId).toBe("artifact-1");
       expect(structured.sizeBytes).toBe(42);
       // No download link is surfaced anymore — the file is reached via the Files
       // panel, and neither the structured output nor the text mentions a URL.
       expect(structured.downloadUrl).toBeUndefined();
+      expect(structured.threadFile).toBeUndefined();
       expect(JSON.stringify(result.content)).not.toContain(
         "/api/skill-sandbox/artifacts",
       );
@@ -1043,6 +1141,7 @@ describe("sandbox tools (runtime enabled)", () => {
       const ctx = await makeConversationCtx();
       vi.spyOn(skillSandboxRuntimeService, "exportArtifact").mockResolvedValue({
         artifactId: "tiny-png",
+        sha256: "0".repeat(64),
         sandboxId: "sb" as any,
         path: "/home/sandbox/preview.png",
         mimeType: "image/png",
@@ -1262,7 +1361,7 @@ describe("sandbox tools (runtime enabled)", () => {
       const text = textOf(result);
       expect(text).toContain("Validation error in");
       expect(text).toContain(
-        'source.type: set "type" to one of: "chat_attachment", "base64", "text"',
+        'source.type: set "type" to one of: "thread_file", "chat_attachment", "base64", "text", "my_file"',
       );
       expect(uploadSpy).not.toHaveBeenCalled();
     });
@@ -1732,6 +1831,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-0",
+          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",
@@ -1769,6 +1869,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-1",
+          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",

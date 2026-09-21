@@ -3114,7 +3114,11 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(callArg.message).toContain("IMG_0354.png");
   });
 
-  test("includes image attachments from thread history in follow-up messages", async ({
+  test.for([
+    undefined,
+    "image/png",
+    "application/pdf",
+  ])("includes history previews and bounds original bytes with current file type=%s", async (currentContentType, {
     makeUser,
     makeOrganization,
     makeTeam,
@@ -3125,6 +3129,11 @@ describe("ChatOpsManager attachment passthrough", () => {
       contentType: "image/png",
       contentBase64: Buffer.alloc(10_000).toString("base64"),
       name: "photo.png",
+      originalFile: {
+        data: Buffer.alloc(16 * 1024 * 1024, 1),
+        mimeType: "image/png",
+        filename: "photo.png",
+      },
     };
 
     const executorSpy = vi
@@ -3198,11 +3207,28 @@ describe("ChatOpsManager attachment passthrough", () => {
       manager as unknown as { msTeamsProvider: ChatOpsProvider }
     ).msTeamsProvider = mockProvider;
 
-    // Follow-up message with no new attachments, but in the same thread
+    const currentFileAttachment = {
+      ...historyImageAttachment,
+      contentType: currentContentType ?? "image/png",
+      name:
+        currentContentType === "application/pdf"
+          ? "current.pdf"
+          : "current.png",
+      originalFile: {
+        data: Buffer.alloc(10 * 1024 * 1024, 2),
+        mimeType: currentContentType ?? "image/png",
+        filename:
+          currentContentType === "application/pdf"
+            ? "current.pdf"
+            : "current.png",
+      },
+    };
+    // Current files keep their original-byte budget before historical files.
     const message = createMockMessage({
       threadId: "thread-123",
       isThreadReply: true,
       text: "What breed is the cat?",
+      attachments: currentContentType ? [currentFileAttachment] : undefined,
     });
 
     const result = await manager.processMessage({
@@ -3211,17 +3237,25 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
-    // The image from thread history should be forwarded to the executor via the
-    // `attachments` param.
-    expect(executorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachments: expect.arrayContaining([
-          expect.objectContaining({
-            contentType: historyImageAttachment.contentType,
-          }),
-        ]),
-      }),
+    const received = executorSpy.mock.lastCall?.[0];
+    expect(received?.chatOpsMessageId).toBe(message.messageId);
+    expect(received?.attachments?.[0].contentBase64).toBe(
+      historyImageAttachment.contentBase64,
     );
+    if (currentContentType) {
+      expect(received?.attachments?.[0].originalFile).toBeUndefined();
+      expect(
+        received?.attachments?.[1].originalFile?.data.equals(
+          currentFileAttachment.originalFile.data,
+        ),
+      ).toBe(true);
+    } else {
+      expect(
+        received?.attachments?.[0].originalFile?.data.equals(
+          historyImageAttachment.originalFile.data,
+        ),
+      ).toBe(true);
+    }
   });
 
   test("includes non-image attachments (PDF) from thread history within budget", async ({
@@ -3231,10 +3265,16 @@ describe("ChatOpsManager attachment passthrough", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
+    const originalBytes = Buffer.from("%PDF-1.7\nprivate report\n%%EOF");
     const downloadedPdf = {
       contentType: "application/pdf",
-      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      contentBase64: originalBytes.toString("base64"),
       name: "history.pdf",
+      originalFile: {
+        data: originalBytes,
+        mimeType: "application/pdf",
+        filename: "history.pdf",
+      },
     };
 
     const executorSpy = vi
@@ -3328,6 +3368,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         expect.objectContaining({
           contentType: "application/pdf",
           name: "history.pdf",
+          originalFile: {
+            data: originalBytes,
+            mimeType: "application/pdf",
+            filename: "history.pdf",
+          },
         }),
       ]),
     );

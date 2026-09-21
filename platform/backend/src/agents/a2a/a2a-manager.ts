@@ -159,6 +159,10 @@ interface A2AManagerConfig {
  * ChatOps run was traced as `a2a` because nothing reads that key.
  */
 export interface A2ASystemParams {
+  /** Trusted ingestion payload; original bytes never travel in protocol metadata. */
+  attachments?: A2AAttachment[];
+  /** The provider message that triggered the run, for delivery deduplication. */
+  chatOpsMessageId?: string;
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
   sessionId?: string;
@@ -499,17 +503,17 @@ export class A2AManager {
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the
       // turn's text + attachments rather than baking it into `requestMessages`
-      // (which stays prior-context only). Attachments are reconstructed from the
-      // protocol file parts, preserving filenames.
-      const currentTurnAttachments: A2AAttachment[] = (
-        request.message.parts || []
-      )
-        .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
-        .map((p) => ({
-          contentType: p.mediaType as string,
-          contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
-          name: p.filename,
-        }));
+      // (which stays prior-context only). Trusted ingestion may carry private
+      // originals outside the protocol; external requests use only file parts.
+      const currentTurnAttachments: A2AAttachment[] =
+        systemParams?.attachments ??
+        (request.message.parts || [])
+          .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
+          .map((p) => ({
+            contentType: p.mediaType as string,
+            contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
+            name: p.filename,
+          }));
       const currentTurnText = messageParts
         .filter((part): part is TextPart => part.type === "text")
         .map((part) => part.text)
@@ -674,6 +678,7 @@ export class A2AManager {
                 systemParams?.completionTarget?.type === "chatops"
                   ? systemParams.completionTarget.threadId
                   : undefined,
+              chatOpsMessageId: systemParams?.chatOpsMessageId,
               onTextDelta: runOpts.onTextDelta,
               abortSignal: runOpts.abortSignal,
             });

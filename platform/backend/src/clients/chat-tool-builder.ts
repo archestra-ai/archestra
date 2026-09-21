@@ -106,6 +106,7 @@ export interface ChatToolContext {
   openedAppId?: string;
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
+  chatOpsMessageId?: string;
   sessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
@@ -269,6 +270,7 @@ export function buildMcpGatewayTool(params: {
                 openedAppId: ctx.openedAppId,
                 chatOpsBindingId: ctx.chatOpsBindingId,
                 chatOpsThreadId: ctx.chatOpsThreadId,
+                chatOpsMessageId: ctx.chatOpsMessageId,
                 userId: ctx.userId,
                 agentId: ctx.agentId,
                 organizationId: ctx.organizationId,
@@ -460,6 +462,7 @@ export function buildAgentDelegationTool(params: {
     isolationKey: ctx.scopeKey,
     chatOpsBindingId: ctx.chatOpsBindingId,
     chatOpsThreadId: ctx.chatOpsThreadId,
+    chatOpsMessageId: ctx.chatOpsMessageId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,

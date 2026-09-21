@@ -76,6 +76,8 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  /** Receipts only; ChatOps message claims prevent repeats within their retention window. */
+  SlackFileDeliveryReceipt: "slack-file-delivery-receipt",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */

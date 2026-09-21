@@ -162,6 +162,8 @@ export const CHATOPS_ATTACHMENT_LIMITS = {
   MAX_ATTACHMENT_SIZE,
   MAX_TOTAL_ATTACHMENTS_SIZE,
   MAX_ATTACHMENTS_PER_MESSAGE: MAX_ATTACHMENTS_PER_EMAIL,
+  /** Maximum bytes uploaded as one native Slack thread file. */
+  MAX_THREAD_FILE_SIZE: 20 * 1024 * 1024,
   /**
    * Target raw size for an image sent inline to the model. Chosen so the
    * base64-encoded payload (~+33%) stays under the ~5 MB per-image limit

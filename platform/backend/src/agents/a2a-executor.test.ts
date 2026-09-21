@@ -1,9 +1,11 @@
 import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
 import { describe, vi } from "vitest";
+import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import ModelModel from "@/models/model";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { expect, test } from "@/test";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
@@ -925,6 +927,112 @@ describe("executeA2AMessage isolation scope", () => {
     // absent; the generated execution key travels only as isolationKey.
     expect(wiring.conversationId).toBeUndefined();
     expect(wiring.isolationKey).toEqual(expect.any(String));
+  });
+
+  test.for([
+    false,
+    true,
+  ])("retains private originals during Slack execution and cleans up after failure=%s", async (fail, {
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle files.",
+    });
+    primeExecutionMocks();
+    const original = Buffer.alloc(4096, 7);
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "image/jpeg",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+        originalFile: {
+          data: original,
+          mimeType: "image/png",
+          filename: "photo.png",
+        },
+      },
+      ...[
+        {
+          name: "report.csv",
+          mimeType: "text/csv",
+          data: Buffer.from("name,value\r\nalpha,42\r\n"),
+        },
+        {
+          name: "report.pdf",
+          mimeType: "application/pdf",
+          data: Buffer.from("%PDF-1.7\noriginal report\n%%EOF"),
+        },
+        {
+          name: "archive.bin",
+          mimeType: "application/octet-stream",
+          data: Buffer.from([0, 255, 13, 10, 128, 1]),
+        },
+      ].map(({ name, mimeType, data }) => ({
+        contentType: mimeType,
+        contentBase64: data.toString("base64"),
+        name,
+        originalFile: { data, mimeType, filename: name },
+      })),
+    ];
+    const sandboxCreation = vi.spyOn(
+      executionSandboxRegistry,
+      "getOrCreateDefault",
+    );
+    const stream = mockStreamText.getMockImplementation();
+    let retainedIds: string[] = [];
+    let scope:
+      | Parameters<typeof threadFileStore.resolve>[0]["scope"]
+      | undefined;
+    mockStreamText.mockImplementation((options) => {
+      const requestText = JSON.stringify(options.messages ?? options.prompt);
+      retainedIds = requestText.match(/chatops_file_[a-f0-9-]+/g) ?? [];
+      expect(retainedIds).toHaveLength(attachments.length);
+      scope = {
+        organizationId: org.id,
+        userId: "user-1",
+        isolationKey: toolWiring().isolationKey as string,
+        chatOpsBindingId: "binding",
+        chatOpsThreadId: "thread",
+      };
+      for (const [index, fileId] of retainedIds.entries()) {
+        const resolved = threadFileStore.resolve({ scope, fileId });
+        expect(resolved?.data).toEqual(attachments[index].originalFile?.data);
+        expect(resolved?.filename).toBe(attachments[index].name);
+      }
+      expect(requestText).not.toContain(original.toString("base64"));
+      expect(requestText).toContain("upload_file");
+      expect(requestText).toContain("post_thread_file");
+      expect(requestText).toContain("thread_file");
+      if (fail) throw new Error("provider failed");
+      return stream?.(options);
+    });
+    const execution = executeA2AMessage({
+      agentId: agent.id,
+      message: "Forward these files",
+      organizationId: org.id,
+      userId: "user-1",
+      source: "chatops:slack",
+      chatOpsBindingId: "binding",
+      chatOpsThreadId: "thread",
+      chatOpsMessageId: "trigger-ts",
+      attachments,
+    });
+    if (fail) await expect(execution).rejects.toThrow();
+    else await execution;
+    expect(scope).toBeDefined();
+    if (!scope)
+      throw new Error("The provider never received the original reference");
+    for (const fileId of retainedIds) {
+      expect(threadFileStore.resolve({ scope, fileId })).toBeNull();
+    }
+    expect(sandboxCreation).not.toHaveBeenCalled();
+    expect(mockGetChatMcpTools.mock.calls[0][0].chatOpsMessageId).toBe(
+      "trigger-ts",
+    );
   });
 
   test("chat-delegated executions scope isolation by the real conversation id", async ({

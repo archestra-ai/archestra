@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
@@ -14,6 +15,10 @@ import {
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import {
+  type ThreadFileScope,
+  threadFileStore,
+} from "@/agents/chatops/thread-file-store";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
@@ -226,6 +231,19 @@ const DownloadFileOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
+  sha256: z.string(),
+  threadFile: z
+    .object({
+      fileId: z.string(),
+      filename: z.string(),
+      mimeType: z.string(),
+      sizeBytes: z.number(),
+      sha256: z.string(),
+    })
+    .optional()
+    .describe(
+      "Execution-scoped file reference for post_thread_file in the current Slack thread.",
+    ),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -284,6 +302,14 @@ const chatAttachmentSource = (describe: { self: string; id: string }) =>
     .describe(describe.self);
 
 const UploadSourceSchema = z.discriminatedUnion("type", [
+  z
+    .strictObject({
+      type: z.literal("thread_file"),
+      fileId: z.string().regex(/^chatops_file_[0-9a-f-]{36}$/),
+    })
+    .describe(
+      "An original or generated file reference from the current Slack execution.",
+    ),
   chatAttachmentSource({
     self: "Copy bytes from a file the user attached to this conversation.",
     id:
@@ -348,12 +374,12 @@ const UploadFileSchema = z
           "/home/sandbox, or relative to the sandbox's working directory.",
       ),
     source: UploadSourceSchema.describe(
-      "Where the file bytes come from. One of four shapes, each tagged by a " +
+      "Where the file bytes come from. Each shape is tagged by a " +
         '`type`: a chat attachment (`{"type":"chat_attachment","attachmentId"|"filename":...}`), ' +
         'inline base64 (`{"type":"base64","dataBase64":...}`), inline text ' +
         '(`{"type":"text","text":"print(1)"}`), or a file from the user\'s ' +
         'persistent files (`{"type":"my_file","filename":...}`, found via ' +
-        "search_files). Use this to place input bytes; to create a file the " +
+        'search_files), or a current Slack file (`{"type":"thread_file","fileId":...}`). Use this to place input bytes; to create a file the ' +
         "sandbox will then run or read, write it with run_command instead.",
     ),
     target: SandboxTargetSchema,
@@ -836,7 +862,8 @@ const registry = defineArchestraTools([
       "run_command wrote (text or binary) or a staged attachment under " +
       `${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — its bytes are not returned to you, so you never read ` +
       "them back or re-type them. Pass `overwrite: true` to replace an existing same-named " +
-      "persistent file in place.",
+      "persistent file in place. In a Slack execution, also returns a private file reference " +
+      "for post_thread_file.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
@@ -872,6 +899,38 @@ const registry = defineArchestraTools([
           environment: await resolveEnvironmentTarget(context),
         });
 
+        let threadFile: z.infer<typeof DownloadFileOutputSchema>["threadFile"];
+        const fileScope = currentThreadFileScope(context);
+        if (fileScope) {
+          try {
+            const file = await fileStore.get({
+              ref: result.artifactId,
+              organizationId: guard.userCtx.organizationId,
+              userId: guard.userCtx.userId,
+            });
+            // A concurrent overwrite may keep the file id. Only expose the
+            // exact bytes this export produced to the Slack delivery tool.
+            if (
+              !file ||
+              createHash("sha256").update(file.data).digest("hex") !==
+                result.sha256
+            ) {
+              throw new Error(
+                "The exported file changed before it could be retained.",
+              );
+            }
+            threadFile = threadFileStore.retain({
+              scope: fileScope,
+              data: file.data,
+              filename: file.filename,
+            });
+          } catch {
+            result.stagingNotices.push(
+              "The file was saved, but a file reference for Slack could not be retained. Export it again before posting it.",
+            );
+          }
+        }
+
         logger.info(
           {
             sandboxId: resolved.sandboxId,
@@ -890,11 +949,16 @@ const registry = defineArchestraTools([
             path: result.path,
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
+            sha256: result.sha256,
+            ...(threadFile ? { threadFile } : {}),
             stagingNotices: result.stagingNotices,
             overwritten: result.overwritten,
           },
           withStagingNotices(
-            `${result.overwritten ? "Replaced" : "Saved"} ${result.path} (${result.sizeBytes} bytes) to the conversation's persistent files.`,
+            `${result.overwritten ? "Replaced" : "Saved"} ${result.path} (${result.sizeBytes} bytes) to the conversation's persistent files.` +
+              (threadFile
+                ? `\nSlack file reference: ${JSON.stringify(threadFile)}. Use post_thread_file with file_id and sha256 to send it to the current thread.`
+                : ""),
             result.stagingNotices,
           ),
         );
@@ -908,7 +972,7 @@ const registry = defineArchestraTools([
     title: "Upload File",
     description:
       "Place a file into the conversation's sandbox at a path, from a chat " +
-      "attachment, inline base64, inline text, or one of your persistent " +
+      "attachment, a current Slack thread file, inline base64, inline text, or one of your persistent " +
       "files. The file then persists in the sandbox for later commands. " +
       `Files the user attached to the conversation are already staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — use this tool ` +
       "to write inline content, place a file at a specific path, or target a " +
@@ -943,6 +1007,7 @@ const registry = defineArchestraTools([
         conversationId: context.conversationId,
         appId: context.appId,
         scope: uploadScope,
+        threadFileScope: currentThreadFileScope(context),
       });
       if ("error" in loaded) return errorResult(loaded.error);
 
@@ -2483,9 +2548,28 @@ async function loadUploadSource(params: {
   appId: string | undefined;
   /** Project file scope of the conversation; confines my_file resolution. */
   scope: ProjectFileScope | null;
+  threadFileScope?: ThreadFileScope;
 }): Promise<LoadedUpload | { error: string }> {
   const { source, userCtx, conversationId, appId, scope } = params;
   switch (source.type) {
+    case "thread_file": {
+      const file = params.threadFileScope
+        ? threadFileStore.resolve({
+            scope: params.threadFileScope,
+            fileId: source.fileId,
+          })
+        : null;
+      if (!file)
+        return {
+          error:
+            "This file reference is unavailable or belongs to another execution.",
+        };
+      return {
+        data: file.data,
+        mimeType: file.mimeType,
+        originalName: file.filename,
+      };
+    }
     case "base64": {
       if (!BASE64_RE.test(source.dataBase64)) {
         return { error: "source.dataBase64 is not valid base64." };
@@ -2545,6 +2629,36 @@ async function loadUploadSource(params: {
       };
     }
   }
+}
+
+function currentThreadFileScope(
+  context: ArchestraContext,
+): ThreadFileScope | undefined {
+  const {
+    organizationId,
+    userId,
+    isolationKey,
+    chatOpsBindingId,
+    chatOpsThreadId,
+    chatOpsMessageId,
+  } = context;
+  if (
+    !organizationId ||
+    !userId ||
+    !isolationKey ||
+    !chatOpsBindingId ||
+    !chatOpsThreadId ||
+    !chatOpsMessageId ||
+    context.appId
+  )
+    return undefined;
+  return {
+    organizationId,
+    userId,
+    isolationKey,
+    chatOpsBindingId,
+    chatOpsThreadId,
+  };
 }
 
 function formatCommandSummary(result: {

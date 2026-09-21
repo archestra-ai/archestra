@@ -370,7 +370,7 @@ export interface ChatOpsProvider {
     filename: string;
     data: Buffer;
     comment?: string;
-  }): Promise<void>;
+  }): Promise<undefined | { fileId: string }>;
 
   /**
    * Send a message with Approve/Decline buttons for a single approval request

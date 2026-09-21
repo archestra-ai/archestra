@@ -339,6 +339,81 @@ describe("A2AManager.sendMessage", () => {
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("hi");
   });
 
+  test.for([
+    {
+      filename: "photo.png",
+      mimeType: "image/png",
+      data: Buffer.from("private image bytes"),
+    },
+    {
+      filename: "report.csv",
+      mimeType: "text/csv",
+      data: Buffer.from("name,value\nalpha,42\n"),
+    },
+    {
+      filename: "report.pdf",
+      mimeType: "application/pdf",
+      data: Buffer.from("%PDF-1.7\nprivate report\n%%EOF"),
+    },
+    {
+      filename: "archive.bin",
+      mimeType: "application/octet-stream",
+      data: Buffer.from([0, 255, 128, 1]),
+    },
+  ])("trusted $filename originals survive while external metadata cannot supply originals", async (originalFile, {
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "attachment agent", teams: [] });
+    const manager = new A2AManager({ stateless: true });
+    executeA2AMessage.mockResolvedValue({
+      text: "ok",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "ok" }],
+      },
+    });
+    const attachment = {
+      contentType: originalFile.mimeType,
+      contentBase64: Buffer.from("preview").toString("base64"),
+      name: originalFile.filename,
+      originalFile,
+    };
+    const request = {
+      message: {
+        messageId: crypto.randomUUID(),
+        role: A2AProtocolRole.User,
+        parts: [
+          {
+            raw: Buffer.from("preview"),
+            mediaType: originalFile.mimeType,
+            filename: originalFile.filename,
+            metadata: { originalFile },
+          },
+        ],
+      },
+    };
+    await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request,
+      systemParams: {
+        attachments: [attachment],
+        chatOpsMessageId: "trigger-ts",
+      },
+    });
+    expect(
+      executeA2AMessage.mock.lastCall?.[0].attachments[0].originalFile.data,
+    ).toEqual(originalFile.data);
+    expect(executeA2AMessage.mock.lastCall?.[0].chatOpsMessageId).toBe(
+      "trigger-ts",
+    );
+    await manager.sendMessage({ actor, agentId: agent.id, request });
+    expect(
+      executeA2AMessage.mock.lastCall?.[0].attachments[0].originalFile,
+    ).toBeUndefined();
+  });
+
   test("a message carrying only a file part executes", async ({
     makeAgent,
   }) => {

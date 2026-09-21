@@ -41,6 +41,8 @@ const groupOrder = new Map<ArchestraToolGroupId, number>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  post_thread_file:
+    "Requires a file reference from the current Slack channel execution. Posts nonempty images, documents, spreadsheets, archives, and other files up to 20 MiB. Incoming attachments retain the existing download limits: 10 MiB per non-image file, 20 MiB per image, and 25 MiB combined. Slack workspace file-type restrictions still apply. The bot needs `files:write`; the agent's environment must permit `slack.com` and `files.slack.com`. Invocation policies evaluate the resolved `channel_id`, `thread_ts`, `sha256`, `filename`, `mime_type`, and `size_bytes` before upload. MIME types come from recognized raster-image or PDF signatures; all other formats use `application/octet-stream`, regardless of the filename or model-supplied MIME type. Upload results also follow trusted-data policies. Under restrictive defaults, the first upload can make the context sensitive and block later uploads without a suitable policy. Approval-required policies block delivery. Retries for the same incoming message and file content are suppressed for seven days; uncertain outcomes require checking the thread before making a new request. File references expire after one hour, when the execution ends, or earlier under memory pressure. Generated files use the `threadFile` reference from `download_file`.",
   // Membership mutations gate on `team:read`, then require the caller to be an
   // organization-level team manager (holds `team:create`) OR an admin
   // (team-member role) of the target team.
@@ -292,9 +294,11 @@ ${formatToolLink("query_knowledge_sources")} is an exception: its output is trea
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
+Most Archestra tools bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails).
 
 ${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
+
+${formatToolLink("post_thread_file")} checks invocation policies against the resolved file and Slack destination before sending bytes. Approval-required policies block this operation.
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
 

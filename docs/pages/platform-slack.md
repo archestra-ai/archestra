@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -135,12 +135,27 @@ Admins can view autoprovisioned users on the **Settings → Users** page — fro
 
 Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
 
-**Limits:**
-- Max 20 attachments per message
-- Max 10 MB per individual file
-- Max 25 MB total across all attachments in a single message
+### Files In Threads
 
-Files exceeding these limits are silently skipped.
+Agents can return original attachments or generated files in the current channel thread. Enable **Post Thread File** in the agent's tools. Slack stores the uploaded file; no public file host is needed.
+
+For example, attach a product photo and ask the agent to crop it for a draft. Generated documents and spreadsheets use the same upload flow. Creating or editing files requires a code sandbox. Returning an unchanged attachment does not.
+
+Original file references are temporary and valid only during the current agent execution. Later messages can load the attachment again from thread history. Uploads remain subject to tool policies and the agent's network restrictions. Policies requiring approval block file delivery in this version.
+
+Delivery supports channel threads, including private channels the bot can access. Direct-message delivery and sending to other channels are not supported. This does not provide a public media URL for services such as Buffer.
+
+See the [tool reference](/docs/platform-archestra-mcp-server#chatops) for supported formats and delivery controls.
+
+**Incoming Attachment Limits:**
+- Max 20 attachments per message
+- Max 10 MiB per non-image file
+- Max 20 MiB per image
+- Max 25 MiB total across all attachments in a single message
+
+Outgoing files can be up to 20 MiB each.
+
+The agent receives a notice when an attachment cannot be provided. Large images may use smaller model previews while retaining their original bytes for the current execution.
 
 ## Troubleshooting
 

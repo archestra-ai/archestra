@@ -8,6 +8,7 @@ import {
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON,
+  TOOL_POST_THREAD_FILE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type ToolInvocationEnforcementSurface,
@@ -279,6 +280,16 @@ export const evaluatePolicies = async (
         allToolCallNames: disabledToolNames,
       };
     }
+  }
+
+  // Slack delivery resolves its destination and immutable bytes at execution.
+  // Evaluating its policies on model arguments here would miss those fields.
+  if (enforcement.surface === "llm-proxy") {
+    filteredToolCalls = filteredToolCalls.filter(
+      (call) =>
+        archestraMcpBranding.getToolShortName(call.toolCallName) !==
+        TOOL_POST_THREAD_FILE_SHORT_NAME,
+    );
   }
 
   // If all tools were filtered out, nothing to evaluate

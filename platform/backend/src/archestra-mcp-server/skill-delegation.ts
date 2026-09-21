@@ -254,6 +254,7 @@ export async function handleSkillDelegation(
       isolationKey: context.isolationKey,
       chatOpsBindingId: context.chatOpsBindingId,
       chatOpsThreadId: context.chatOpsThreadId,
+      chatOpsMessageId: context.chatOpsMessageId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
       parentContextIsTrusted: context.contextIsTrusted,

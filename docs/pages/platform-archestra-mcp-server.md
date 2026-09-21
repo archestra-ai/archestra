@@ -23,9 +23,11 @@ All Archestra tools are prefixed with `archestra__`. Most built-in tools are alw
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
+Most Archestra tools bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails).
 
 [`query_knowledge_sources`](#query_knowledge_sources) is evaluated by trusted data policies and its results are treated as sensitive by default.
+
+[`post_thread_file`](#post_thread_file) checks invocation policies against the resolved file and Slack destination before sending bytes. Approval-required policies block this operation.
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without `knowledgeSource:create` permission will not see [`create_knowledge_base`](#create_knowledge_base) in their tool list and cannot execute it.
 
@@ -2021,6 +2023,38 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `selected` | `string[]` | Yes | The labels the user selected. Empty when declined or canceled. |
 | `timedOut` | `boolean` | No | True when the question expired without an answer. |
 
+### ChatOps
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `post_thread_file` | Post an original or generated file (including images and documents) as a native file in the current Slack thread. | `agent:read` † |
+
+† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
+
+#### post_thread_file
+
+Required RBAC permission: `agent:read`
+
+Additional access requirement: Requires a file reference from the current Slack channel execution. Posts nonempty images, documents, spreadsheets, archives, and other files up to 20 MiB. Incoming attachments retain the existing download limits: 10 MiB per non-image file, 20 MiB per image, and 25 MiB combined. Slack workspace file-type restrictions still apply. The bot needs `files:write`; the agent's environment must permit `slack.com` and `files.slack.com`. Invocation policies evaluate the resolved `channel_id`, `thread_ts`, `sha256`, `filename`, `mime_type`, and `size_bytes` before upload. MIME types come from recognized raster-image or PDF signatures; all other formats use `application/octet-stream`, regardless of the filename or model-supplied MIME type. Upload results also follow trusted-data policies. Under restrictive defaults, the first upload can make the context sensitive and block later uploads without a suitable policy. Approval-required policies block delivery. Retries for the same incoming message and file content are suppressed for seven days; uncertain outcomes require checking the thread before making a new request. File references expire after one hour, when the execution ends, or earlier under memory pressure. Generated files use the `threadFile` reference from `download_file`.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_id` | `string` | Yes |  |
+| `sha256` | `string` | Yes |  |
+| `comment` | `string` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `slack_file_id` | `string` | Yes |  |
+| `channel_id` | `string` | Yes |  |
+| `thread_ts` | `string` | Yes |  |
+| `sha256` | `string` | Yes |  |
+| `already_sent` | `boolean` | Yes |  |
+
 ### Projects
 
 | Tool | Description | Required RBAC Permission |
@@ -2663,7 +2697,7 @@ These tools are served only when the code runtime is enabled — set `ARCHESTRA_
 |------|-------------|--------------------------|
 | `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | `sandbox:execute` |
 | `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | `sandbox:execute` |
-| `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | `sandbox:execute` |
+| `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, a current Slack thread file, inline base64, inline text, or one of your persistent files. | `sandbox:execute` |
 
 #### run_command
 
@@ -2721,6 +2755,13 @@ Required RBAC permission: `sandbox:execute`
 | `path` | `string` | Yes |  |
 | `mimeType` | `string` | Yes |  |
 | `sizeBytes` | `number` | Yes |  |
+| `sha256` | `string` | Yes |  |
+| `threadFile` | `object` | No | Execution-scoped file reference for post_thread_file in the current Slack thread. |
+| `threadFile.fileId` | `string` | Yes |  |
+| `threadFile.filename` | `string` | Yes |  |
+| `threadFile.mimeType` | `string` | Yes |  |
+| `threadFile.sizeBytes` | `number` | Yes |  |
+| `threadFile.sha256` | `string` | Yes |  |
 | `stagingNotices` | `string[]` | Yes | Notices about chat attachments that could not be auto-staged (e.g. too large). Empty when all attachments are available in the sandbox. |
 | `overwritten` | `boolean` | Yes | True when an existing same-named file was replaced in place. |
 
@@ -2733,8 +2774,9 @@ Required RBAC permission: `sandbox:execute`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` | Yes | Destination path inside the container — absolute under /skills or /home/sandbox, or relative to the sandbox's working directory. |
-| `source` | `object` | Yes | Where the file bytes come from. One of four shapes, each tagged by a `type`: a chat attachment (`{"type":"chat_attachment","attachmentId"\|"filename":...}`), inline base64 (`{"type":"base64","dataBase64":...}`), inline text (`{"type":"text","text":"print(1)"}`), or a file from the user's persistent files (`{"type":"my_file","filename":...}`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead. |
-| `source.type` | `"chat_attachment" \| "base64" \| "text" \| "my_file"` | Yes |  |
+| `source` | `object` | Yes | Where the file bytes come from. Each shape is tagged by a `type`: a chat attachment (`{"type":"chat_attachment","attachmentId"\|"filename":...}`), inline base64 (`{"type":"base64","dataBase64":...}`), inline text (`{"type":"text","text":"print(1)"}`), or a file from the user's persistent files (`{"type":"my_file","filename":...}`, found via search_files), or a current Slack file (`{"type":"thread_file","fileId":...}`). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead. |
+| `source.type` | `"thread_file" \| "chat_attachment" \| "base64" \| "text" \| "my_file"` | Yes |  |
+| `source.fileId` | `string` | When `type="thread_file"` |  |
 | `source.attachmentId` | `string` | No | Id of an attachment in the current conversation. The bytes are copied directly and never enter your context. |
 | `source.filename` | `string` | No | When `type="chat_attachment"`: Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. When `type="my_file"`: Exact filename of a persistent file (when you have no id). |
 | `source.dataBase64` | `string` | When `type="base64"` | Base64-encoded file bytes. |

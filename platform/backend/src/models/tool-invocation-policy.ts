@@ -285,7 +285,8 @@ class ToolInvocationPolicyModel {
     const specificPolicies = policies.filter((p) => p.conditions.length > 0);
     const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
 
-    // Check specific policies first
+    // Any matching specific approval rule wins, regardless of query order.
+    let matchedSpecificPolicy = false;
     for (const policy of specificPolicies) {
       const conditionsMatch = policy.conditions.every((condition) => {
         const { key, value, operator } = condition;
@@ -313,14 +314,18 @@ class ToolInvocationPolicyModel {
         return true;
       }
 
-      // If a specific policy matched but is not require_approval, it takes precedence
       if (conditionsMatch) {
-        logger.debug(
-          { toolName, action: policy.action },
-          "checkApprovalRequired: specific policy matched, no approval needed",
-        );
-        return false;
+        matchedSpecificPolicy = true;
       }
+    }
+
+    // Matching specific rules take precedence over default approval rules.
+    if (matchedSpecificPolicy) {
+      logger.debug(
+        { toolName },
+        "checkApprovalRequired: specific policies matched, no approval needed",
+      );
+      return false;
     }
 
     // Fall back to default policy

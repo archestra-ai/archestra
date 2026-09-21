@@ -220,10 +220,21 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
-  }): Promise<void> {
+    expectedSlackDestination?: { organizationId: string; channelId: string };
+  }): Promise<undefined | { fileId: string }> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
+    }
+    if (
+      params.expectedSlackDestination &&
+      (binding.organizationId !==
+        params.expectedSlackDestination.organizationId ||
+        binding.channelId !== params.expectedSlackDestination.channelId ||
+        binding.provider !== "slack" ||
+        binding.isDm)
+    ) {
+      throw new Error("The authorized Slack destination changed before upload");
     }
     const provider: ChatOpsProvider | null =
       binding.provider === "slack"
@@ -236,18 +247,28 @@ export class ChatOpsManager {
     if (!provider?.isConfigured()) {
       throw new Error(`The ${binding.provider} provider is not configured`);
     }
+    if (
+      params.expectedSlackDestination &&
+      (!binding.workspaceId ||
+        provider.getWorkspaceId() !== binding.workspaceId)
+    ) {
+      throw new Error(
+        "The Slack connection no longer matches the authorized workspace",
+      );
+    }
     if (!provider.uploadFileToThread) {
       throw new Error(
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
-    await provider.uploadFileToThread({
+    const receipt = await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,
       filename: params.filename,
       data: params.data,
       comment: params.comment,
     });
+    return receipt || undefined;
   }
 
   async notifyBindingThread(params: {
@@ -1417,6 +1438,17 @@ export class ChatOpsManager {
             (sum, a) => sum + Math.ceil((a.contentBase64.length * 3) / 4),
             0,
           ) ?? 0;
+        const currentOriginalSize =
+          message.attachments?.reduce(
+            (sum, attachment) =>
+              sum + (attachment.originalFile?.data.length ?? 0),
+            0,
+          ) ?? 0;
+        let remainingOriginalBudget = Math.max(
+          0,
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
+            currentOriginalSize,
+        );
         const remainingBudget =
           CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
           currentAttachmentSize;
@@ -1459,7 +1491,16 @@ export class ChatOpsManager {
                 return;
               }
               totalSize += size;
-              historyAttachments.push(outcome.attachment);
+              const originalSize =
+                outcome.attachment.originalFile?.data.length ?? 0;
+              if (originalSize > remainingOriginalBudget) {
+                const { originalFile: _original, ...preview } =
+                  outcome.attachment;
+                historyAttachments.push(preview);
+              } else {
+                remainingOriginalBudget -= originalSize;
+                historyAttachments.push(outcome.attachment);
+              }
             });
             if (historyAttachments.length > 0) {
               logger.info(
@@ -2412,6 +2453,8 @@ export class ChatOpsManager {
     const source: InteractionSource =
       CHATOPS_PROVIDER_SOURCES[provider.providerId];
     const systemParams: A2ASystemParams = {
+      attachments: message.attachments,
+      chatOpsMessageId: message.messageId,
       sessionId,
       source,
       routeCategory: RouteCategory.CHATOPS,

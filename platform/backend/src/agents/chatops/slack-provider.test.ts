@@ -3,7 +3,10 @@ import {
   SLACK_REQUIRED_BOT_SCOPES,
   SLACK_SLASH_COMMANDS,
 } from "@archestra/shared";
+import { WebClient } from "@slack/web-api";
+import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
 // for the distributed cache so the sticky-thread activation gate
@@ -2295,9 +2298,33 @@ describe("SlackProvider file attachment downloads", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  test("downloads file and returns attachment with base64 content", async () => {
+  test.for([
+    {
+      name: "screenshot.png",
+      mimetype: "image/png",
+      bytes: Buffer.from("hello image data"),
+    },
+    {
+      name: "report.csv",
+      mimetype: "text/csv",
+      bytes: Buffer.from("name,value\r\nalpha,42\r\n"),
+    },
+    {
+      name: "report.pdf",
+      mimetype: "application/pdf",
+      bytes: Buffer.from("%PDF-1.7\noriginal report\n%%EOF"),
+    },
+    {
+      name: "archive.bin",
+      mimetype: "application/octet-stream",
+      bytes: Buffer.from([0, 255, 13, 10, 128, 1]),
+    },
+  ])("preserves original bytes and preview content for $name", async ({
+    name,
+    mimetype,
+    bytes: fileContent,
+  }) => {
     const provider = createProviderWithConfig();
-    const fileContent = Buffer.from("hello image data");
 
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(fileContent, { status: 200 }),
@@ -2309,11 +2336,10 @@ describe("SlackProvider file attachment downloads", () => {
         files: [
           {
             id: "F123",
-            name: "screenshot.png",
-            mimetype: "image/png",
+            name,
+            mimetype,
             size: fileContent.length,
-            url_private:
-              "https://files.slack.com/files-pri/T123/screenshot.png",
+            url_private: `https://files.slack.com/files-pri/T123/${name}`,
           },
         ],
       },
@@ -2324,14 +2350,19 @@ describe("SlackProvider file attachment downloads", () => {
     expect(result).not.toBeNull();
     expect(result?.attachments).toHaveLength(1);
     expect(result?.attachments?.[0]).toEqual({
-      contentType: "image/png",
+      contentType: mimetype,
       contentBase64: fileContent.toString("base64"),
-      name: "screenshot.png",
+      name,
+      originalFile: {
+        data: fileContent,
+        mimeType: mimetype,
+        filename: name,
+      },
     });
 
     // Verify auth header was sent (fetchSlackFile uses redirect: "manual")
     expect(fetch).toHaveBeenCalledWith(
-      "https://files.slack.com/files-pri/T123/screenshot.png",
+      `https://files.slack.com/files-pri/T123/${name}`,
       {
         headers: { Authorization: "Bearer xoxb-test-bot-token" },
         redirect: "manual",
@@ -2462,14 +2493,73 @@ describe("SlackProvider file attachment downloads", () => {
 
     // The image is downloaded despite exceeding the 10MB flat limit, then shrunk.
     expect(fetch).toHaveBeenCalled();
-    expect(result?.attachments).toEqual([
-      {
-        contentType: "image/jpeg",
-        contentBase64: shrunk.toString("base64"),
-        name: "IMG_0354.png",
-      },
-    ]);
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0]).toMatchObject({
+      contentType: "image/jpeg",
+      contentBase64: shrunk.toString("base64"),
+      name: "IMG_0354.png",
+      originalFile: { mimeType: "image/png", filename: "IMG_0354.png" },
+    });
+    expect(result?.attachments?.[0].originalFile?.data.equals(bigImage)).toBe(
+      true,
+    );
     expect(result?.skippedAttachments).toBeUndefined();
+  });
+
+  test.for([
+    { name: "image.png", mimeType: "image/png", sizeMiB: 16 },
+    { name: "archive.bin", mimeType: "application/octet-stream", sizeMiB: 10 },
+  ])("bounds original bytes for $name independently of small previews", async ({
+    name,
+    mimeType,
+    sizeMiB,
+  }) => {
+    const provider = createProviderWithConfig();
+    const bigImage = Buffer.alloc(16 * 1024 * 1024, 7);
+    const secondFile = Buffer.alloc(sizeMiB * 1024 * 1024, 5);
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(bigImage, { status: 200 }))
+      .mockResolvedValueOnce(new Response(secondFile, { status: 200 }));
+    vi.mocked(shrinkImageToFit).mockResolvedValue({
+      bytes: Buffer.from("preview"),
+      contentType: "image/jpeg",
+    });
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          files: [
+            {
+              id: "F_ORIGINAL_0",
+              name: "first.png",
+              mimetype: "image/png",
+              size: bigImage.length,
+              url_private: "https://files.slack.com/first",
+            },
+            {
+              id: "F_ORIGINAL_1",
+              name,
+              mimetype: mimeType,
+              size: secondFile.length,
+              url_private: "https://files.slack.com/second",
+            },
+          ],
+        },
+      ),
+      {},
+    );
+    expect(result?.attachments).toHaveLength(2);
+    expect(result?.attachments?.[0].originalFile?.data.equals(bigImage)).toBe(
+      true,
+    );
+    expect(result?.attachments?.[1].originalFile).toBeUndefined();
+    expect(result?.attachments?.map((a) => a.contentBase64)).toEqual([
+      Buffer.from("preview").toString("base64"),
+      (mimeType.startsWith("image/")
+        ? Buffer.from("preview")
+        : secondFile
+      ).toString("base64"),
+    ]);
   });
 
   test("records an oversized image that cannot be shrunk as too large", async () => {
@@ -2795,11 +2885,21 @@ describe("SlackProvider file attachment downloads", () => {
       contentType: "image/jpeg",
       contentBase64: img1.toString("base64"),
       name: "photo1.jpg",
+      originalFile: {
+        data: img1,
+        mimeType: "image/jpeg",
+        filename: "photo1.jpg",
+      },
     });
     expect(result?.attachments?.[1]).toEqual({
       contentType: "image/png",
       contentBase64: img2.toString("base64"),
       name: "photo2.png",
+      originalFile: {
+        data: img2,
+        mimeType: "image/png",
+        filename: "photo2.png",
+      },
     });
   });
 
@@ -3951,5 +4051,55 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(await UserModel.findByEmail(email)).toBeTruthy();
     expect(conversationsOpen).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("SlackProvider.uploadFileToThread", () => {
+  const server = useMswServer();
+  test("returns Slack's actual file receipt after uploading exact bytes into the thread", async () => {
+    const provider = createProvider();
+    (provider as unknown as { client: WebClient }).client = new WebClient(
+      "xoxb-test",
+      { retryConfig: { retries: 0 } },
+    );
+    const data = Buffer.from([0, 255, 2, 42]);
+    let uploaded: Buffer | undefined;
+    let completed: URLSearchParams | undefined;
+    server.use(
+      http.post("https://slack.com/api/files.getUploadURLExternal", () =>
+        HttpResponse.json({
+          ok: true,
+          file_id: "F_RECEIPT",
+          upload_url: "https://files.slack.com/upload-private",
+        }),
+      ),
+      http.post(
+        "https://files.slack.com/upload-private",
+        async ({ request }) => {
+          const form = await request.formData();
+          const body = form.get("body");
+          if (!(body instanceof File)) throw new Error("Missing uploaded file");
+          uploaded = Buffer.from(await body.arrayBuffer());
+          return HttpResponse.text("OK");
+        },
+      ),
+      http.post(
+        "https://slack.com/api/files.completeUploadExternal",
+        async ({ request }) => {
+          completed = new URLSearchParams(await request.text());
+          return HttpResponse.json({ ok: true, files: [{ id: "F_RECEIPT" }] });
+        },
+      ),
+    );
+    const receipt = await provider.uploadFileToThread({
+      channelId: "C_PRIVATE",
+      threadId: "100.1",
+      filename: "image.png",
+      data,
+    });
+    expect(receipt).toEqual({ fileId: "F_RECEIPT" });
+    expect(uploaded).toEqual(data);
+    expect(completed?.get("channel_id")).toBe("C_PRIVATE");
+    expect(completed?.get("thread_ts")).toBe("100.1");
   });
 });

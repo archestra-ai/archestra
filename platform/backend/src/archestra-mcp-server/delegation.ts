@@ -329,6 +329,7 @@ export async function handleDelegation(
       isolationKey: context.isolationKey,
       chatOpsBindingId: context.chatOpsBindingId,
       chatOpsThreadId: context.chatOpsThreadId,
+      chatOpsMessageId: context.chatOpsMessageId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
       // We only need to propagate whether the parent was already unsafe at the

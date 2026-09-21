@@ -167,6 +167,7 @@ export const TOOL_LIST_AGENT_RUNS_SHORT_NAME = "list_agent_runs";
 export const TOOL_STEER_RUN_SHORT_NAME = "steer_run";
 export const TOOL_CANCEL_RUN_SHORT_NAME = "cancel_run";
 export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
+export const TOOL_POST_THREAD_FILE_SHORT_NAME = "post_thread_file";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
@@ -321,6 +322,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_STEER_RUN_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_THREAD_FILE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -383,6 +385,7 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
+  { id: "chatops", label: "ChatOps" },
   { id: "projects", label: "Projects" },
   { id: "meta", label: "Meta" },
   { id: "skills", label: "Skills" },
@@ -529,6 +532,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   steer_run: "tasks",
   cancel_run: "tasks",
   post_run_file: "tasks",
+  post_thread_file: "chatops",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
   transfer_workspace_file: "tasks",
@@ -747,6 +751,8 @@ export const TOOL_CANCEL_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_RUN_SHORT_NAME}` as const;
 export const TOOL_POST_RUN_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_POST_THREAD_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_THREAD_FILE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
@@ -774,13 +780,15 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
- * auto-trusted, but these ingest external content (e.g. knowledge-base
- * documents) that can carry prompt injection, so their invocations and
- * results are evaluated by tool invocation and trusted data policies just
- * like external tools.
+ * auto-trusted, but these ingest external content or send content to an
+ * external destination. Their invocations and results are evaluated by tool
+ * invocation and trusted data policies just like external tools.
  */
 export const POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<ArchestraToolShortName> =
-  new Set([TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME]);
+  new Set([
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    TOOL_POST_THREAD_FILE_SHORT_NAME,
+  ]);
 
 /**
  * Agent Skill tools — only assigned to agents once an org admin opts in via

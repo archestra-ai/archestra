@@ -143,6 +143,39 @@ describe("createFastifyInstance", () => {
       expect(response.json().error.type).not.toBe("api_internal_server_error");
     });
 
+    test("returns a useful service-unavailable response when a provider connection times out", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+      const app = createFastifyInstance();
+      app.get("/v1/ollama/test-provider-timeout", async () => {
+        throw Object.assign(new Error("Connect Timeout Error"), {
+          code: "FST_REPLY_FROM_INTERNAL_SERVER_ERROR",
+          statusCode: 500,
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/ollama/test-provider-timeout",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: {
+          message:
+            "Could not connect to the model provider. Check its base URL and network access, then retry.",
+          type: "api_service_unavailable_error",
+        },
+      });
+      expect(captureSpy).not.toHaveBeenCalled();
+      captureSpy.mockRestore();
+    });
+
     test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
       const { posthogErrorTrackingService } = await import(
         "@/services/error-tracking"
@@ -240,7 +273,8 @@ describe("createFastifyInstance", () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         error: {
-          message: "Database temporarily unavailable, please retry",
+          message:
+            "Cannot reach the database. Retry shortly; if it continues, ask an administrator to check the database service and connection settings.",
           type: "api_service_unavailable_error",
         },
       });
@@ -255,6 +289,38 @@ describe("createFastifyInstance", () => {
       });
 
       captureSpy.mockRestore();
+    });
+
+    test.each([
+      [
+        "disk_full",
+        "No space left on device",
+        "Database storage is full. Ask an administrator to free or expand it.",
+      ],
+      [
+        "statement_timeout",
+        "canceling statement due to statement timeout",
+        "Database query timed out. Retry; if it continues, ask an administrator to check database load.",
+      ],
+    ])("gives an actionable response for database %s without exposing SQL", async (_kind, cause, message) => {
+      const app = createFastifyInstance();
+      app.get("/test-db-capacity", async () => {
+        throw new Error('Failed query: select "secret" from "secrets"', {
+          cause: new Error(cause),
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-capacity",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: { message, type: "api_service_unavailable_error" },
+      });
+      expect(response.body).not.toContain("select");
+      await app.close();
     });
 
     test("handles standard Error objects correctly", async () => {

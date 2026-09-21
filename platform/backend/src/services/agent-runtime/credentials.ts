@@ -223,6 +223,41 @@ export async function transferPersonalRuntimeCredential(params: {
   value: string;
   label?: string;
 }): Promise<{ declarationCreated: boolean }> {
+  const { runtime, declarationCreated } =
+    await declarePersonalRuntimeCredential({
+      runtime: params.runtime,
+      key: params.key,
+      label: params.label,
+    });
+
+  await setAgentRuntimeCredential({
+    runtime,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    key: params.key,
+    value: params.value,
+  });
+
+  return { declarationCreated };
+}
+
+/**
+ * Declare one personal credential on an Agent Runtime without storing a value.
+ *
+ * This is the half of `transferPersonalRuntimeCredential` that carries no secret,
+ * so a client can name a credential the Agent needs and leave the value to the
+ * person. The declaration is deliberately `required: false`: a required one
+ * blocks every user's runs until each connects a value, which is too much power
+ * for a caller holding only `credential:create`.
+ *
+ * Returns the runtime including the new declaration, so a caller that goes on to
+ * store a value does not re-read it.
+ */
+export async function declarePersonalRuntimeCredential(params: {
+  runtime: ResolvedAgentRuntime;
+  key: string;
+  label?: string;
+}): Promise<{ runtime: ResolvedAgentRuntime; declarationCreated: boolean }> {
   const existing = params.runtime.credentials?.find(
     (entry) => entry.key === params.key,
   );
@@ -234,38 +269,31 @@ export async function transferPersonalRuntimeCredential(params: {
     );
   }
 
-  let runtime = params.runtime;
-  const declarationCreated = !existing;
-
-  if (declarationCreated) {
-    const declaration = AgentRuntimeCredentialDeclarationSchema.parse({
-      key: params.key,
-      scope: "per_user",
-      label: params.label?.trim() || params.key,
-      required: false,
-    });
-    const credentials = [...(params.runtime.credentials ?? []), declaration];
-    // Persist the declaration before the value: `setAgentRuntimeCredential`
-    // refuses an undeclared key, and a stored value under a key the Agent does
-    // not declare would never be injected anyway.
-    await AgentModel.update(params.runtime.agentId, {
-      runtime: {
-        ...stripResolvedFields(params.runtime),
-        credentials,
-      },
-    });
-    runtime = { ...params.runtime, credentials };
+  if (existing) {
+    return { runtime: params.runtime, declarationCreated: false };
   }
 
-  await setAgentRuntimeCredential({
-    runtime,
-    organizationId: params.organizationId,
-    userId: params.userId,
+  const declaration = AgentRuntimeCredentialDeclarationSchema.parse({
     key: params.key,
-    value: params.value,
+    scope: "per_user",
+    label: params.label?.trim() || params.key,
+    required: false,
+  });
+  const credentials = [...(params.runtime.credentials ?? []), declaration];
+  // Persist the declaration before the value: `setAgentRuntimeCredential`
+  // refuses an undeclared key, and a stored value under a key the Agent does
+  // not declare would never be injected anyway.
+  await AgentModel.update(params.runtime.agentId, {
+    runtime: {
+      ...stripResolvedFields(params.runtime),
+      credentials,
+    },
   });
 
-  return { declarationCreated };
+  return {
+    runtime: { ...params.runtime, credentials },
+    declarationCreated: true,
+  };
 }
 
 /**

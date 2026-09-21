@@ -18,15 +18,12 @@ import {
   isValidCronExpression,
   type ScheduleTriggerFormState,
 } from "@/components/scheduled-tasks/schedule-trigger.utils";
+import { ScheduleTriggerPicker } from "@/components/scheduled-tasks/schedule-trigger-picker";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  CronExpressionPicker,
-  DEFAULT_CRON_PRESET_OPTIONS,
-} from "@/components/ui/cron-expression-picker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +33,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { TimezonePicker } from "@/components/ui/timezone-picker";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -517,40 +513,21 @@ function ScheduleDialog({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Schedule</Label>
-        <CronExpressionPicker
-          value={enabled ? form.cronExpression : "manual"}
-          onChange={(value) => {
-            setEnabled(value !== "manual");
-            if (value !== "manual") update({ cronExpression: value });
+        <ScheduleTriggerPicker
+          value={{
+            enabled,
+            cronExpression: form.cronExpression,
+            timezone: form.timezone,
           }}
-          presets={[
-            {
-              label: "Manual",
-              value: "manual",
-              description: "Never runs automatically",
-            },
-            ...DEFAULT_CRON_PRESET_OPTIONS,
-          ]}
-          className="w-full"
+          onChange={(next) => {
+            setEnabled(next.enabled);
+            update({
+              cronExpression: next.cronExpression,
+              timezone: next.timezone,
+            });
+          }}
         />
-        {!enabled && (
-          <p className="text-xs text-muted-foreground">
-            Only runs when you choose Run manually.
-          </p>
-        )}
       </div>
-
-      {enabled && (
-        <div className="space-y-1.5">
-          <Label>Timezone</Label>
-          <TimezonePicker
-            value={form.timezone}
-            onValueChange={(value) => update({ timezone: value })}
-            className="w-full"
-          />
-        </div>
-      )}
     </StandardFormDialog>
   );
 }

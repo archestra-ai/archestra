@@ -277,7 +277,7 @@ test("other interaction sources retain their file payloads", async ({
   expect(stored.response).toEqual(payload.response);
 });
 
-test("runtime files are omitted by the authenticated virtual key association, never a run header", async ({
+test("runtime files are omitted by either authenticated virtual key association, never a run header", async ({
   makeOrganization,
   makeUser,
   makeAgent,
@@ -323,12 +323,20 @@ test("runtime files are omitted by the authenticated virtual key association, ne
   if (!payload) throw new Error("Missing Gemini fixture");
   const before = structuredClone(payload);
 
-  for (const virtualKeyId of [key.id, unrelatedKey.id, undefined]) {
+  for (const { virtualKeyId, passthroughVirtualKeyId } of [
+    { virtualKeyId: key.id },
+    { passthroughVirtualKeyId: key.id },
+    { virtualKeyId: unrelatedKey.id, passthroughVirtualKeyId: key.id },
+    { virtualKeyId: key.id, passthroughVirtualKeyId: unrelatedKey.id },
+    { virtualKeyId: unrelatedKey.id, passthroughVirtualKeyId: unrelatedKey.id },
+    {},
+  ]) {
     const created = await InteractionModel.create({
       ...payload,
       profileId: agent.id,
       source: "opencode:main",
       virtualKeyId,
+      passthroughVirtualKeyId,
       runId: task.id,
       processedRequest: payload.request,
     });
@@ -342,7 +350,7 @@ test("runtime files are omitted by the authenticated virtual key association, ne
       stored.processedRequest,
       stored.response,
     ]) {
-      if (virtualKeyId === key.id) {
+      if (virtualKeyId === key.id || passthroughVirtualKeyId === key.id) {
         expect(JSON.stringify(value)).not.toContain(FILE_BODY);
         expect(JSON.stringify(value)).toContain(
           "Ephemeral file payload omitted",

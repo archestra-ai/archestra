@@ -27,14 +27,11 @@ import {
 import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
-import { trace } from "@opentelemetry/api";
 import * as Sentry from "@sentry/node";
 import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
-  hasZodFastifySchemaValidationErrors,
-  isResponseSerializationError,
   jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
@@ -75,7 +72,6 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
@@ -135,7 +131,7 @@ import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
   Anthropic,
-  ApiError,
+  type ApiError,
   Archestra,
   Cerebras,
   Cohere,
@@ -166,6 +162,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
+import { handleServerError } from "./server/error-handler";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -407,121 +404,6 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.mcpGatewayRoutes);
 }
 
-/** Fastify code emitted when a request body exceeds the configured limit. */
-const BODY_TOO_LARGE_CODE = "FST_ERR_CTP_BODY_TOO_LARGE";
-
-/**
- * Extract the route, URL, method, and a sample of headers we want correlated
- * with every error log line. Without these, "HTTP 50x request error occurred"
- * is unactionable — you can't tell which endpoint failed or how big the payload
- * was.
- */
-function buildRequestErrorContext(request: FastifyRequest) {
-  return {
-    method: request.method,
-    url: request.url,
-    route: request.routeOptions?.url,
-    routeId:
-      (request.routeOptions?.config as { operationId?: string } | undefined)
-        ?.operationId ?? undefined,
-    reqId: request.id,
-    contentLength: parseContentLength(request),
-    contentType: request.headers["content-type"],
-  };
-}
-
-/**
- * Read the PostHog session/distinct id that posthog-js injects into browser
- * requests (via its `tracing_headers` config). These let a captured backend
- * exception be cross-referenced with the originating session replay and person.
- */
-function getPostHogTraceContext(request: FastifyRequest): {
-  distinctId?: string;
-  sessionId?: string;
-} {
-  return {
-    distinctId: firstHeaderValue(request.headers["x-posthog-distinct-id"]),
-    sessionId: firstHeaderValue(request.headers["x-posthog-session-id"]),
-  };
-}
-
-function firstHeaderValue(
-  value: string | string[] | undefined,
-): string | undefined {
-  if (Array.isArray(value)) return value[0];
-  return value;
-}
-
-/**
- * Forward an unexpected server-side error (5xx) to PostHog Error Tracking,
- * scoped to the failing request's session/trace. Never throws — capture is
- * best-effort and must not disturb the error response.
- */
-function captureServerException(
-  request: FastifyRequest,
-  error: unknown,
-  extraProperties?: Record<string, unknown>,
-): void {
-  // Same drop/keep-and-group policy the Sentry filter uses, so the two sinks
-  // agree: expected client/upstream errors are skipped, and availability
-  // incidents (transient DB, secrets-backend outage) get a stable fingerprint.
-  const decision = classifyErrorForTracking(error);
-  if (!decision.report) {
-    return;
-  }
-
-  const { distinctId, sessionId } = getPostHogTraceContext(request);
-  posthogErrorTrackingService.captureException({
-    error,
-    distinctId,
-    sessionId,
-    traceId: trace.getActiveSpan()?.spanContext().traceId,
-    properties: {
-      method: request.method,
-      url: request.url,
-      route: request.routeOptions?.url,
-      // The requested host (from the Host header) — identifies which
-      // deployment hit the error, used by the PostHog Slack alert template.
-      hostname: request.host,
-      reqId: request.id,
-      ...(decision.fingerprint && {
-        $exception_fingerprint: decision.fingerprint.join("/"),
-      }),
-      ...decision.tags,
-      ...extraProperties,
-    },
-  });
-}
-
-function parseContentLength(request: FastifyRequest): number | undefined {
-  const raw = request.headers["content-length"];
-  if (typeof raw !== "string") return undefined;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function isBodyTooLargeError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  // A thrown ApiError(413) is a route speaking deliberately — its message
-  // already names the limit in that route's own terms. This branch only
-  // rescues Fastify's raw parser error, which arrives without a usable text.
-  if (error instanceof ApiError) return false;
-  const e = error as { code?: string; statusCode?: number };
-  return e.code === BODY_TOO_LARGE_CODE || e.statusCode === 413;
-}
-
-function formatBodyTooLargeMessage(params: {
-  limit: number;
-  contentLength?: number;
-}): string {
-  const limitMb = (params.limit / (1024 * 1024)).toFixed(0);
-  if (params.contentLength !== undefined) {
-    const gotMb = (params.contentLength / (1024 * 1024)).toFixed(1);
-    return `Request body too large: ${gotMb} MB (limit ${limitMb} MB). Use a smaller attachment, or raise ARCHESTRA_API_BODY_LIMIT.`;
-  }
-  return `Request body too large (limit ${limitMb} MB). Use a smaller attachment, or raise ARCHESTRA_API_BODY_LIMIT.`;
-}
-
 /**
  * Sets up logging and zod type provider + request validation & response serialization
  */
@@ -604,242 +486,7 @@ export const createFastifyInstance = () =>
         done();
       }
     })
-    // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
-    .setErrorHandler<ApiError | Error>(function (error, request, reply) {
-      const requestContext = buildRequestErrorContext(request);
-
-      // Handle response serialization errors (when response doesn't match schema)
-      if (isResponseSerializationError(error)) {
-        const issues = error.cause?.issues ?? [];
-        const validationErrors = issues.map((issue) => ({
-          path: issue.path?.join("."),
-          code: issue.code,
-          message: issue.message,
-        }));
-
-        this.log.error(
-          {
-            ...requestContext,
-            statusCode: 500,
-            method: error.method,
-            url: error.url,
-            validationErrors,
-          },
-          `Response serialization error on ${error.method} ${error.url}: ${JSON.stringify(validationErrors)}`,
-        );
-
-        // Explicitly capture in Sentry with full validation details
-        Sentry.captureException(error, {
-          extra: {
-            method: error.method,
-            url: error.url,
-            validationErrors,
-          },
-          tags: {
-            error_type: "response_serialization",
-          },
-        });
-
-        captureServerException(request, error, {
-          error_type: "response_serialization",
-          validation_errors: validationErrors,
-        });
-
-        return reply.status(500).send({
-          error: {
-            message: "Response doesn't match the schema",
-            type: "api_internal_server_error",
-          },
-        });
-      }
-
-      // Handle Zod validation errors (from fastify-type-provider-zod)
-      if (hasZodFastifySchemaValidationErrors(error)) {
-        const message = error.message || "Validation error";
-        this.log.info(
-          { ...requestContext, error: message, statusCode: 400 },
-          "HTTP 400 validation error occurred",
-        );
-
-        return reply.status(400).send({
-          error: {
-            message,
-            type: "api_validation_error",
-          },
-        });
-      }
-
-      // Handle Fastify "body too large" before the generic Error branch so it
-      // returns 413 (not 500) with a message that names the limit and observed
-      // size. The frontend chat-error mapper picks up `error.message`, so a
-      // useful text here flows straight into the UI.
-      if (isBodyTooLargeError(error)) {
-        // Report the limit that actually applied. A route can raise its own
-        // above the global default (the app-recording render route accepts
-        // large recording bundles), so naming the global here would misstate
-        // the ceiling the request hit.
-        const routeLimit = request.routeOptions?.bodyLimit;
-        const limit =
-          typeof routeLimit === "number" ? routeLimit : config.api.bodyLimit;
-        const contentLength = parseContentLength(request);
-        const message = formatBodyTooLargeMessage({ limit, contentLength });
-
-        this.log.warn(
-          {
-            ...requestContext,
-            statusCode: 413,
-            code: (error as { code?: string }).code ?? BODY_TOO_LARGE_CODE,
-            bodyLimit: limit,
-            contentLength,
-          },
-          "HTTP 413 request body too large",
-        );
-
-        return reply.status(413).send({
-          error: {
-            message,
-            type: "api_payload_too_large_error",
-          },
-        });
-      }
-
-      // Fastify's own typed errors (unsupported media type, malformed
-      // content-type, …) carry the intended 4xx status. Without this branch
-      // they fall through to the generic handler below, which miscodes a
-      // client mistake as a 500 and captures it as a server exception.
-      const errorStatusCode = (error as { statusCode?: unknown }).statusCode;
-      if (
-        !(error instanceof ApiError) &&
-        typeof errorStatusCode === "number" &&
-        errorStatusCode >= 400 &&
-        errorStatusCode < 500
-      ) {
-        const coerced = new ApiError(
-          errorStatusCode,
-          error.message || "Bad Request",
-        );
-        this.log.info(
-          {
-            ...requestContext,
-            error: coerced.message,
-            statusCode: coerced.statusCode,
-          },
-          "HTTP 40x request error occurred",
-        );
-        return reply.status(coerced.statusCode).send({
-          error: { message: coerced.message, type: coerced.type },
-        });
-      }
-
-      // Transient database connectivity failures (DNS lookup, connection
-      // refused during a database restart, pool connect timeouts) that
-      // survived the retry budget are availability incidents, not bugs in
-      // whichever route happened to be in flight. Respond with a retryable
-      // 503 instead of a 500, and group them in error tracking by root
-      // cause rather than by the query text the ORM wraps them in.
-      const transientDbErrorCode = getTransientDbErrorCode(error);
-      if (transientDbErrorCode) {
-        this.log.error(
-          {
-            ...requestContext,
-            error: error.message,
-            statusCode: 503,
-            dbErrorCode: transientDbErrorCode,
-          },
-          "HTTP 503 database temporarily unavailable",
-        );
-
-        captureServerException(request, error, {
-          error_type: "db_unavailable",
-          db_error_code: transientDbErrorCode,
-          status_code: 503,
-        });
-
-        return reply.status(503).send({
-          error: {
-            message: "Database temporarily unavailable, please retry",
-            type: "api_service_unavailable_error",
-          },
-        });
-      }
-
-      // Handle ApiError objects
-      if (error instanceof ApiError) {
-        const { statusCode, message, type, internalCode } = error;
-        const logPayload = {
-          ...requestContext,
-          error: message,
-          statusCode,
-          ...(internalCode && { internalCode }),
-        };
-
-        if (statusCode >= 500) {
-          this.log.error(logPayload, "HTTP 50x request error occurred");
-          // Capture is centrally filtered and grouped by
-          // classifyErrorForTracking: 502/504 upstream failures are dropped as
-          // noise, and a secrets-backend outage is grouped by root cause.
-          captureServerException(request, error, {
-            error_type: "api_error",
-            status_code: statusCode,
-            ...(internalCode && { internal_code: internalCode }),
-          });
-        } else if (statusCode >= 400) {
-          this.log.info(logPayload, "HTTP 40x request error occurred");
-        } else {
-          this.log.error(logPayload, "HTTP request error occurred");
-        }
-
-        // A throttling error that knows when it clears says so, so clients wait
-        // that long instead of guessing with their own escalating backoff.
-        // Headers cannot be added once a streaming reply has committed them.
-        const { retryAfterSeconds } = error;
-        if (
-          typeof retryAfterSeconds === "number" &&
-          Number.isFinite(retryAfterSeconds) &&
-          retryAfterSeconds > 0 &&
-          !reply.raw.headersSent
-        ) {
-          reply.header("retry-after", String(Math.ceil(retryAfterSeconds)));
-        }
-
-        return reply.status(statusCode).send({
-          error: {
-            message,
-            type,
-            ...(internalCode && { internal_code: internalCode }),
-          },
-        });
-      }
-
-      // Handle standard Error objects
-      const message = error.message || "Internal server error";
-      const statusCode = 500;
-      const errorCode = (error as { code?: string }).code;
-
-      this.log.error(
-        {
-          ...requestContext,
-          error: message,
-          statusCode,
-          ...(errorCode && { code: errorCode }),
-          stack: error.stack,
-        },
-        "HTTP 50x request error occurred",
-      );
-
-      captureServerException(request, error, {
-        error_type: "unhandled_error",
-        status_code: statusCode,
-        ...(errorCode && { code: errorCode }),
-      });
-
-      return reply.status(statusCode).send({
-        error: {
-          message,
-          type: "api_internal_server_error",
-        },
-      });
-    });
+    .setErrorHandler<ApiError | Error>(handleServerError);
 
 /**
  * Helper function to register the metrics plugin on a fastify instance.

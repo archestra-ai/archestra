@@ -17,6 +17,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -210,16 +211,16 @@ export function UploadFileDialog({
           />
 
           {failures.length > 0 && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-              <p className="font-medium text-destructive text-sm">
+            <InlineNotice variant="error">
+              <span className="font-medium">
                 Could not read {failures.length}{" "}
                 {failures.length === 1 ? "document" : "documents"}
-              </p>
-              <p className="mt-1 text-muted-foreground text-xs">
+              </span>
+              <InlineNoticeText>
                 {failures.join(", ")}. A scanned PDF with no text layer has
                 nothing to index — run OCR over it first.
-              </p>
-            </div>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
 

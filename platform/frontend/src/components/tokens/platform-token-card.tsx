@@ -3,7 +3,7 @@
 import { Key } from "lucide-react";
 import type { ReactNode } from "react";
 import { SettingsBlock } from "@/components/settings/settings-block";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PlatformTokenCardProps {
@@ -38,11 +38,11 @@ export function PlatformTokenCard({
           {isLoading ? (
             <Skeleton className="h-10 w-full max-w-sm" />
           ) : error ? (
-            <Alert variant="destructive">
-              <AlertDescription>
+            <InlineNotice variant="error">
+              <InlineNoticeText>
                 Failed to load token. Please try refreshing the page.
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Key className="mb-4 h-12 w-12 text-muted-foreground" />

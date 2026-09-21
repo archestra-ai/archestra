@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
 import config from "@/lib/config/config";
@@ -164,29 +165,29 @@ export default function SlackPage() {
               </div>
             )}
           {selectedMode === "webhook" && !hasModeChange && !isLocalDev && (
-            <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
-              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-              <span className="text-muted-foreground text-xs">
+            <InlineNotice variant="info" className="mt-3">
+              <Info />
+              <InlineNoticeText>
                 The webhook endpoint{" "}
                 <code className="bg-muted px-1 py-0.5 rounded">
                   POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
                 </code>{" "}
                 must be publicly accessible so {channelLabel} can deliver events
                 to {appName}.
-              </span>
-            </div>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
           {hasModeChange && (
             <div className="mt-3 space-y-3">
               {slack?.configured && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                  <span className="text-muted-foreground text-xs">
+                <InlineNotice>
+                  <AlertTriangle />
+                  <InlineNoticeText>
                     Changing the connection mode will reset your Slack
                     configuration. You will need to reconfigure {channelLabel}
                     with a new app manifest.
-                  </span>
-                </div>
+                  </InlineNoticeText>
+                </InlineNotice>
               )}
               <Button
                 size="sm"

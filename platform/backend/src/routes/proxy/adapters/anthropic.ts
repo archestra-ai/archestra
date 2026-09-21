@@ -1319,8 +1319,11 @@ export const anthropicAdapterFactory: LLMProvider<
     const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     const regularApiKey = isAuthToken ? undefined : apiKey;
+    const isClaudeSubscriptionToken = token?.startsWith("sk-ant-oat") ?? false;
 
-    if (anthropicVertexClient.isEnabled()) {
+    // A Claude subscription bearer belongs to Anthropic even when this
+    // deployment uses Vertex for its provider-billed Anthropic traffic.
+    if (anthropicVertexClient.isEnabled() && !isClaudeSubscriptionToken) {
       return new AnthropicProvider({
         maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: null,
@@ -1373,7 +1376,11 @@ export const anthropicAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
       authToken: token,
-      baseURL: options.baseUrl,
+      // A personal OAuth token must never be forwarded to a deployment's
+      // configured custom Anthropic upstream.
+      baseURL: isClaudeSubscriptionToken
+        ? "https://api.anthropic.com"
+        : options.baseUrl,
       fetch: customFetch,
       timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
       defaultHeaders: options.defaultHeaders,

@@ -1,14 +1,24 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const { getHealth } = archestraApiSdk;
+const { getReady } = archestraApiSdk;
+
+type ReadinessResult =
+  | "ready"
+  | "browser-offline"
+  | "database-unavailable"
+  | "backend-unreachable";
 
 export type BackendConnectionStatus =
   | "initializing"
   | "checking" // First attempt in progress, no UI shown yet
   | "connecting" // First attempt failed, now retrying with UI
+  | "browser-connecting"
+  | "database-connecting"
   | "connected"
-  | "unreachable";
+  | "unreachable"
+  | "browser-offline"
+  | "database-unavailable";
 
 export interface UseBackendConnectivityOptions {
   /**
@@ -32,10 +42,10 @@ export interface UseBackendConnectivityOptions {
    */
   autoStart?: boolean;
   /**
-   * Custom health check function for testing.
-   * Default: uses archestraApiSdk.getHealth
+   * Custom readiness check function for testing.
+   * Default: uses archestraApiSdk.getReady
    */
-  checkHealthFn?: () => Promise<boolean>;
+  checkReadinessFn?: () => Promise<ReadinessResult>;
 }
 
 export interface UseBackendConnectivityResult {
@@ -84,22 +94,26 @@ export function calculateEstimatedTotalAttempts(
   return attempts;
 }
 
-async function defaultCheckHealth(): Promise<boolean> {
+async function defaultCheckReadiness(): Promise<ReadinessResult> {
+  if (!navigator.onLine) return "browser-offline";
   try {
-    const response = await getHealth();
-    return response.response?.ok ?? false;
+    const response = await getReady();
+    if (response.error?.database === "disconnected") {
+      return "database-unavailable";
+    }
+    return response.response?.ok ? "ready" : "backend-unreachable";
   } catch {
-    return false;
+    return navigator.onLine ? "backend-unreachable" : "browser-offline";
   }
 }
 
 /**
  * Hook to check backend connectivity with exponential backoff.
  *
- * - Starts in "connecting" state and checks the /health endpoint
+ * - Starts in "checking" state and checks the /ready endpoint
  * - If successful, transitions to "connected"
  * - If failed, retries with exponential backoff (1s, 2s, 4s, 8s, 16s, max 30s)
- * - After 1 minute of failed attempts, transitions to "unreachable"
+ * - After 1 minute of failed attempts, stops automatic retries and offers manual retry
  */
 export function useBackendConnectivity(
   options: UseBackendConnectivityOptions = {},
@@ -109,7 +123,7 @@ export function useBackendConnectivity(
     initialDelayMs = 1000, // 1 second
     maxDelayMs = 30000, // 30 seconds
     autoStart = true,
-    checkHealthFn = defaultCheckHealth,
+    checkReadinessFn = defaultCheckReadiness,
   } = options;
 
   const [status, setStatus] = useState<BackendConnectionStatus>("initializing");
@@ -128,9 +142,14 @@ export function useBackendConnectivity(
     timeoutMs,
     initialDelayMs,
     maxDelayMs,
-    checkHealthFn,
+    checkReadinessFn,
   });
-  optionsRef.current = { timeoutMs, initialDelayMs, maxDelayMs, checkHealthFn };
+  optionsRef.current = {
+    timeoutMs,
+    initialDelayMs,
+    maxDelayMs,
+    checkReadinessFn,
+  };
 
   const startTimeRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,13 +173,13 @@ export function useBackendConnectivity(
     async (currentAttempt: number) => {
       if (!isMountedRef.current) return;
 
-      const { checkHealthFn, timeoutMs, initialDelayMs, maxDelayMs } =
+      const { checkReadinessFn, timeoutMs, initialDelayMs, maxDelayMs } =
         optionsRef.current;
-      const isHealthy = await checkHealthFn();
+      const readiness = await checkReadinessFn();
 
       if (!isMountedRef.current) return;
 
-      if (isHealthy) {
+      if (readiness === "ready") {
         clearTimers();
         setNextRetryAtMs(null);
         setStatus("connected");
@@ -170,7 +189,7 @@ export function useBackendConnectivity(
       // First attempt failed - transition from "checking" to "connecting"
       // This ensures we only show the connecting UI after the first failure
       if (currentAttempt === 0) {
-        setStatus("connecting");
+        setStatus(statusForFailure(readiness, false));
       }
 
       // Check if we've exceeded the timeout
@@ -180,9 +199,11 @@ export function useBackendConnectivity(
       if (elapsed >= timeoutMs) {
         clearTimers();
         setNextRetryAtMs(null);
-        setStatus("unreachable");
+        setStatus(statusForFailure(readiness, true));
         return;
       }
+
+      setStatus(statusForFailure(readiness, false));
 
       // Calculate next delay with exponential backoff
       const nextDelay = Math.min(
@@ -251,4 +272,18 @@ export function useBackendConnectivity(
       nextRetryAtMs === null ? null : Math.max(0, nextRetryAtMs - Date.now()),
     retry,
   };
+}
+
+function statusForFailure(
+  readiness: Exclude<ReadinessResult, "ready">,
+  exhausted: boolean,
+): BackendConnectionStatus {
+  switch (readiness) {
+    case "browser-offline":
+      return exhausted ? "browser-offline" : "browser-connecting";
+    case "database-unavailable":
+      return exhausted ? "database-unavailable" : "database-connecting";
+    case "backend-unreachable":
+      return exhausted ? "unreachable" : "connecting";
+  }
 }

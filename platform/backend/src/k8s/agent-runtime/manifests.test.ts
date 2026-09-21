@@ -46,6 +46,22 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it("pulls a floating image for each new workspace while leaving fixed tags cacheable", () => {
+    const floating = buildAgentRuntimeSandbox({
+      ...SPEC,
+      image: "registry.example.test/agent-claude-code:latest",
+    }).spec.podTemplate.spec;
+    expect(floating?.initContainers?.[0]?.imagePullPolicy).toBe("Always");
+    expect(floating?.containers[0]?.imagePullPolicy).toBe("Always");
+
+    const fixed = buildAgentRuntimeSandbox({
+      ...SPEC,
+      image: "registry.example.test/agent-claude-code:1.3.65",
+    }).spec.podTemplate.spec;
+    expect(fixed?.initContainers?.[0]?.imagePullPolicy).toBeUndefined();
+    expect(fixed?.containers[0]?.imagePullPolicy).toBeUndefined();
+  });
+
   it.each([
     true,
     false,

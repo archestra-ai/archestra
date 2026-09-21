@@ -57,6 +57,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     null,
   );
   const [commandCopied, setCommandCopied] = useState(false);
+  const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
   usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(Boolean(run?.workspace));
@@ -86,6 +87,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const availableConnectionCommand = live
     ? connectionCommand
     : run?.workspace?.connection?.shellCommand;
+  const portForwardCommand = run?.portForwardCommand;
   const canReattach = Boolean(isOwner && run?.terminalRetained);
   const showLiveTerminal =
     (!run && query.isPending) ||
@@ -359,6 +361,35 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             <span>{commandCopied ? "Copied!" : "Copy"}</span>
           </Button>
         </div>
+        {portForwardCommand && (
+          <>
+            <p className="pt-2 text-sm font-medium">Port forwarding command</p>
+            <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
+              <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
+                {portForwardCommand}
+              </code>
+              <Button
+                className="shrink-0 self-end sm:self-auto"
+                variant="outline"
+                size="sm"
+                aria-label="Copy port forwarding command"
+                onClick={async () => {
+                  try {
+                    await copyToClipboard(portForwardCommand);
+                    setPortCommandCopied(true);
+                    toast.success("Port forwarding command copied");
+                    setTimeout(() => setPortCommandCopied(false), 2000);
+                  } catch {
+                    toast.error("Failed to copy port forwarding command");
+                  }
+                }}
+              >
+                <Copy className="size-3.5" />
+                <span>{portCommandCopied ? "Copied!" : "Copy"}</span>
+              </Button>
+            </div>
+          </>
+        )}
       </StandardDialog>
     </main>
   );

@@ -155,23 +155,27 @@ export function SearchableMultiSelect({
             }
           }}
           className={cn(
-            "flex w-full min-h-10 h-auto items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer",
+            // `min-h-9` with `py-1` matches `Input`, so a select showing one
+            // row of chips sits level with a text field beside it in a
+            // two-column form instead of standing taller for no reason.
+            // `h-auto` still lets it grow once the chips wrap.
+            "flex w-full min-h-9 h-auto items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer",
             !value.length && "text-muted-foreground",
             disabled && "cursor-not-allowed opacity-50",
             className,
           )}
         >
-          <div className="flex flex-wrap gap-1 flex-1 items-center">
+          {/* The row owns the spacing between chips. The chips used to carry
+              `mr-1 mb-1` as well, which doubled the gap and, because the
+              bottom margin had nothing balancing it at the top, pushed the
+              whole control taller than the field beside it. */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {selectedItems.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : showSelectedBadges ? (
               <>
                 {visibleBadges.map((item) => (
-                  <Badge
-                    key={item.value}
-                    variant="secondary"
-                    className="mr-1 mb-1"
-                  >
+                  <Badge key={item.value} variant="secondary">
                     {item.selectedContent ?? item.label}
                     <button
                       type="button"
@@ -194,9 +198,7 @@ export function SearchableMultiSelect({
                   </Badge>
                 ))}
                 {hiddenCount > 0 && (
-                  <Badge variant="secondary" className="mr-1 mb-1">
-                    +{hiddenCount} more
-                  </Badge>
+                  <Badge variant="secondary">+{hiddenCount} more</Badge>
                 )}
               </>
             ) : (

@@ -9,6 +9,7 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -257,11 +258,13 @@ function VersionHistory({
       }
     >
       {isSynced ? (
-        <p className="border-b bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-400">
-          This skill&apos;s content is synced from GitHub. Earlier versions stay
-          viewable, but restoring one is unavailable — stop syncing the skill in
-          its editor to make it editable in {appName}.
-        </p>
+        <InlineNotice className="mx-4 mt-2">
+          <InlineNoticeText>
+            This skill&apos;s content is synced from GitHub. Earlier versions
+            stay viewable, but restoring one is unavailable — stop syncing the
+            skill in its editor to make it editable in {appName}.
+          </InlineNoticeText>
+        </InlineNotice>
       ) : null}
 
       <div className="flex min-h-0 flex-1">

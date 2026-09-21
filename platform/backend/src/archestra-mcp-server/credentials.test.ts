@@ -87,6 +87,18 @@ function transfer(agentId: string, key = "MY_CLI_TOKEN") {
   );
 }
 
+/** Declare-only: the same call with no `value`. */
+function declare(agentId: string, key = "MY_CLI_TOKEN") {
+  return executeArchestraTool(
+    TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+    {
+      agent_id: agentId,
+      environment: [{ key, type: "secret" }],
+    },
+    context,
+  );
+}
+
 // An Agent stored before this field existed carries no value for it. Those
 // rows are never re-parsed, so "omitted" is the state most Agents are in and
 // it has to keep working.
@@ -102,6 +114,114 @@ test("accepts a value when the Agent leaves the setting unset", async ({
   expect(stored?.runtime?.credentials).toEqual([
     expect.objectContaining({ key: "MY_CLI_TOKEN", scope: "per_user" }),
   ]);
+});
+
+test("declares a credential without a value and returns a paste link", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(makeAgent, runtimeConfig());
+
+  const result = await declare(target.id);
+
+  expect(result.isError).toBeFalsy();
+  expect(result.structuredContent).toMatchObject({
+    key: "MY_CLI_TOKEN",
+    declarationCreated: true,
+    valueStored: false,
+  });
+  const url = (result.structuredContent as { url: string }).url;
+  expect(url).toContain(`/agents/${target.id}?setup=credentials`);
+  expect(url).toContain("keys=MY_CLI_TOKEN");
+  // The section parameter would be rewritten away by agentDetailHref, taking
+  // `setup` with it, so the link must not carry one.
+  expect(url).not.toContain("section=");
+
+  const stored = await AgentModel.findById(target.id);
+  expect(stored?.runtime?.credentials).toEqual([
+    // Optional on purpose: a required declaration blocks every user's runs.
+    expect.objectContaining({
+      key: "MY_CLI_TOKEN",
+      scope: "per_user",
+      required: false,
+    }),
+  ]);
+
+  // Declared but empty, so a run still cannot read it.
+  const preflight = await preflightAgentRuntimeCredentials({
+    runtime: resolveAgentRuntime(stored!)!,
+    organizationId,
+    userId: actorId,
+  });
+  expect(preflight.configured).not.toContain("MY_CLI_TOKEN");
+});
+
+// Declaring carries no secret, so the gate that governs storing one must not
+// block it. This is the path a caller falls back to when storing is refused.
+test("declares a credential even when the administrator turned the setting off", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(
+    makeAgent,
+    runtimeConfig({ allowAgentSuppliedCredentialValues: false }),
+  );
+
+  const result = await declare(target.id);
+
+  expect(result.isError).toBeFalsy();
+  expect(result.structuredContent).toMatchObject({ valueStored: false });
+});
+
+test("declaring an already declared key creates nothing and still links", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(
+    makeAgent,
+    runtimeConfig({
+      credentials: [
+        {
+          key: "MY_CLI_TOKEN",
+          scope: "per_user",
+          label: "Existing",
+          required: false,
+        },
+      ],
+    }),
+  );
+
+  const result = await declare(target.id);
+
+  expect(result.isError).toBeFalsy();
+  expect(result.structuredContent).toMatchObject({
+    declarationCreated: false,
+    valueStored: false,
+  });
+  const stored = await AgentModel.findById(target.id);
+  expect(stored?.runtime?.credentials).toEqual([
+    expect.objectContaining({ key: "MY_CLI_TOKEN", label: "Existing" }),
+  ]);
+});
+
+test("refuses to declare a key held at organization scope", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(
+    makeAgent,
+    runtimeConfig({
+      credentials: [
+        {
+          key: "MY_CLI_TOKEN",
+          scope: "shared",
+          label: "Shared token",
+          required: false,
+        },
+      ],
+    }),
+  );
+
+  const result = await declare(target.id);
+
+  expect(result.isError).toBe(true);
+  expect(textOf(result)).toContain("declared as a shared credential");
 });
 
 test("refuses an Agent whose administrator turned the setting off", async ({

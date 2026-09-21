@@ -59,6 +59,7 @@ import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import { AgentWorkspaceRelativePathSchema } from "@/types/agent-workspace-file";
 import { sendCapturedThreadFile } from "./chatops";
 import {
+  agentCredentialSetupUrl,
   catchError,
   defineArchestraTool,
   defineArchestraTools,
@@ -1257,7 +1258,10 @@ function credentialsNeededResult(
   agentId: string,
   missing: Array<{ key: string; label: string; description?: string }>,
 ) {
-  const url = `${config.frontendBaseUrl}/agents/${agentId}?section=advanced&setup=credentials`;
+  const url = agentCredentialSetupUrl(
+    agentId,
+    missing.map(({ key }) => key),
+  );
   return errorResult(
     `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
       .map(

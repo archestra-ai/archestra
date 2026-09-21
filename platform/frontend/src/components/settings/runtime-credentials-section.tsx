@@ -31,6 +31,7 @@ import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -454,12 +455,12 @@ function DeleteCredentialDialog({
             </p>
           )}
           {usage.isError && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-destructive">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span className="text-xs leading-5">
+            <InlineNotice variant="error">
+              <AlertTriangle />
+              <InlineNoticeText>
                 Deletion is disabled until the usage check succeeds.
-              </span>
-            </div>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
       }

@@ -1,12 +1,11 @@
 import { SecretsManagerType, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import SecretModel from "@/models/secret";
-import {
-  ApiError,
-  type ISecretManager,
-  type SecretsConnectivityResult,
-  type SecretValue,
-  type SelectSecret,
+import type {
+  ISecretManager,
+  SecretsConnectivityResult,
+  SecretValue,
+  SelectSecret,
 } from "@/types";
 
 /**
@@ -81,10 +80,7 @@ export class DbSecretsManager implements ISecretManager {
   }
 
   async checkConnectivity(): Promise<SecretsConnectivityResult> {
-    throw new ApiError(
-      501,
-      "Connectivity check not implemented for database storage",
-    );
+    return { secretCount: await SecretModel.count() };
   }
 
   getUserVisibleDebugInfo() {

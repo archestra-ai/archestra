@@ -5,9 +5,9 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -177,30 +177,30 @@ function PolicyForm({
         </div>
       </div>
       {changedElsewhere && dirty && (
-        <Alert>
-          <AlertDescription>
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
             A newer revision is available. Your edits are preserved. Copy your
             changes before reloading this page to reconcile them.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
       {checked && (
-        <Alert variant={checked.valid ? "default" : "destructive"}>
-          {checked.valid && <Check className="size-4" />}
-          <AlertDescription
-            className="whitespace-pre-wrap font-mono text-xs"
-            role="status"
-          >
+        <InlineNotice variant={checked.valid ? "neutral" : "error"}>
+          {checked.valid && <Check />}
+          {/* No role here: the InlineNotice around it is already role="alert",
+              and a polite "status" nested inside an assertive "alert" does
+              nothing but confuse a screen reader. */}
+          <InlineNoticeText className="whitespace-pre-wrap font-mono">
             {checked.valid ? "Policy is valid." : checked.errors.join("\n")}
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
       {save.isError && (
-        <Alert variant="destructive">
-          <AlertDescription className="whitespace-pre-wrap" role="alert">
+        <InlineNotice variant="error">
+          <InlineNoticeText className="whitespace-pre-wrap">
             {save.error.message}
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
     </form>
   );

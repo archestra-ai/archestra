@@ -9,6 +9,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -196,17 +197,17 @@ export function SaveToKnowledgeDialog({
         </div>
 
         {failures.length > 0 && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-            <p className="font-medium text-destructive text-sm">
+          <InlineNotice variant="error">
+            <span className="font-medium">
               Could not save {failures.length}{" "}
               {failures.length === 1 ? "file" : "files"}
-            </p>
-            <p className="mt-1 text-muted-foreground text-xs">
+            </span>
+            <InlineNoticeText>
               {failures.join(", ")}. A file the repository cannot read — a
               scanned PDF with no text layer, or an image — has nothing to
               index. A name already in use needs a different one.
-            </p>
-          </div>
+            </InlineNoticeText>
+          </InlineNotice>
         )}
       </div>
 

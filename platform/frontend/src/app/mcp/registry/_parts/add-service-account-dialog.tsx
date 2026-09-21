@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -83,26 +84,26 @@ export function AddServiceAccountDialog({
 
         <DialogBody className="space-y-4">
           {resourceKind === "service-account" && (
-            <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">
+            <InlineNotice className="flex-col items-start gap-y-2">
+              <span className="font-medium">
                 This connection is shared. Use it with care.
-              </p>
-              <p>It gets used in two ways:</p>
-              <ul className="list-disc space-y-1 pl-4">
-                <li>
-                  <span className="font-medium text-foreground">
-                    Static key
-                  </span>{" "}
-                  — when it's pinned as the server's single account, every call
-                  uses it no matter who is chatting.
-                </li>
-                <li>
-                  <span className="font-medium text-foreground">Fallback</span>{" "}
-                  — during on-behalf-of, when someone chatting has no connection
-                  of their own.
-                </li>
-              </ul>
-              <p>
+              </span>
+              <InlineNoticeText>It gets used in two ways:</InlineNoticeText>
+              <InlineNoticeText className="block">
+                <ul className="list-disc space-y-1 pl-4">
+                  <li>
+                    <span className="font-medium">Static key</span> — when it's
+                    pinned as the server's single account, every call uses it no
+                    matter who is chatting.
+                  </li>
+                  <li>
+                    <span className="font-medium">Fallback</span> — during
+                    on-behalf-of, when someone chatting has no connection of
+                    their own.
+                  </li>
+                </ul>
+              </InlineNoticeText>
+              <InlineNoticeText>
                 Treat the credential like a shared secret.{" "}
                 <ExternalDocsLink
                   href={getDocsUrl(
@@ -114,8 +115,8 @@ export function AddServiceAccountDialog({
                 >
                   Learn more
                 </ExternalDocsLink>
-              </p>
-            </div>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
 
           {(availableTeams.length > 0 || canAddOrg) && (

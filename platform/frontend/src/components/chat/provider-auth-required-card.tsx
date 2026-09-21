@@ -10,6 +10,7 @@ import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -88,76 +89,69 @@ export function ProviderAuthRequiredCard({
     : undefined;
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-amber-500/30 bg-amber-500/5 p-4",
-        !isPreflight && "my-2",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-        <div className="space-y-2">
-          <div>
-            <p className="font-medium text-sm">
-              Connect {providerLabel}
-              {isPreflight && agentName ? ` to use ${agentName}` : ""}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {isPreflight
-                ? `This agent uses a personal ${providerLabel} subscription. Connect your own account before sending a message; your account is never shared with other users.`
-                : `${providerLabel} is per-user — connect your own account to use this model, then send your message again.`}
-            </p>
-          </div>
-
-          {subscriptionKind && byosEnabled ? (
-            <div
-              role="alert"
-              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs"
-            >
-              Subscription sign-in is unavailable because this deployment uses a
-              read-only external Vault. Ask an administrator to use managed
-              secret storage, or choose an agent/model that does not require
-              this exact personal subscription.
-            </div>
-          ) : subscriptionKind ? (
-            <SubscriptionSignIn
-              kind={subscriptionKind}
-              disabled={createKey.isPending || reconnectKey.isPending}
-              onSecret={async (secret) => {
-                const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
-                // The mutation hooks surface provider/validation failures. Let
-                // a rejected promise reach the device-flow component so it
-                // resets to a retryable state instead of claiming success.
-                if (existingSubscriptionKey) {
-                  await reconnectKey.mutateAsync({
-                    id: existingSubscriptionKey.id,
-                    apiKey: secret,
-                  });
-                } else {
-                  await createKey.mutateAsync({
-                    name: label,
-                    provider,
-                    apiKey: secret,
-                    scope: "personal",
-                  });
-                }
-                toast.success(
-                  isPreflight
-                    ? `${label} connected`
-                    : `${label} connected — retrying…`,
-                );
-                // Re-run the original prompt now that the key works; both
-                // mutations already invalidated the model/key caches.
-                onConnected?.();
-              }}
-            />
-          ) : (
-            <Button asChild type="button" variant="outline" size="sm">
-              <a href="/llm/model-providers">Connect in Model Providers</a>
-            </Button>
-          )}
+    <InlineNotice className={cn("items-start", !isPreflight && "my-2")}>
+      <KeyRound className="mt-0.5" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div>
+          <p className="font-medium">
+            Connect {providerLabel}
+            {isPreflight && agentName ? ` to use ${agentName}` : ""}
+          </p>
+          <InlineNoticeText className="block">
+            {isPreflight
+              ? `This agent uses a personal ${providerLabel} subscription. Connect your own account before sending a message; your account is never shared with other users.`
+              : `${providerLabel} is per-user — connect your own account to use this model, then send your message again.`}
+          </InlineNoticeText>
         </div>
+
+        {subscriptionKind && byosEnabled ? (
+          // Not a nested <InlineNotice>: the card around it is already the
+          // alert, so a second one would draw a box inside a box and have a
+          // screen reader announce the same notice twice.
+          <InlineNoticeText className="block">
+            Subscription sign-in is unavailable because this deployment uses a
+            read-only external Vault. Ask an administrator to use managed secret
+            storage, or choose an agent/model that does not require this exact
+            personal subscription.
+          </InlineNoticeText>
+        ) : subscriptionKind ? (
+          <SubscriptionSignIn
+            kind={subscriptionKind}
+            disabled={createKey.isPending || reconnectKey.isPending}
+            onSecret={async (secret) => {
+              const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
+              // The mutation hooks surface provider/validation failures. Let
+              // a rejected promise reach the device-flow component so it
+              // resets to a retryable state instead of claiming success.
+              if (existingSubscriptionKey) {
+                await reconnectKey.mutateAsync({
+                  id: existingSubscriptionKey.id,
+                  apiKey: secret,
+                });
+              } else {
+                await createKey.mutateAsync({
+                  name: label,
+                  provider,
+                  apiKey: secret,
+                  scope: "personal",
+                });
+              }
+              toast.success(
+                isPreflight
+                  ? `${label} connected`
+                  : `${label} connected — retrying…`,
+              );
+              // Re-run the original prompt now that the key works; both
+              // mutations already invalidated the model/key caches.
+              onConnected?.();
+            }}
+          />
+        ) : (
+          <Button asChild type="button" variant="outline" size="sm">
+            <a href="/llm/model-providers">Connect in Model Providers</a>
+          </Button>
+        )}
       </div>
-    </div>
+    </InlineNotice>
   );
 }

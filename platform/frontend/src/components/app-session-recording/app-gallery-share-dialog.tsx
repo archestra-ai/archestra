@@ -23,13 +23,13 @@ import {
   useState,
 } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -832,14 +832,14 @@ function ShareDialogBody(props: {
   }
   if (state.step === "error") {
     // The title already blames the step; the body is the app's standard
-    // destructive Alert plus the quieter manual workaround. Cancel and Try
+    // error inline notice plus the quieter manual workaround. Cancel and Try
     // again live in the footer like every other dialog's actions.
     return (
       <div className="flex flex-col gap-3">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
+        <InlineNotice variant="error">
+          <AlertTriangle />
+          <InlineNoticeText>{state.message}</InlineNoticeText>
+        </InlineNotice>
         <button
           type="button"
           className="w-fit text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"

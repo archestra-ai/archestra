@@ -30,11 +30,13 @@ export function TimezonePicker({
   onValueChange,
   className,
   disabled,
+  ariaLabel,
 }: {
   value: string;
   onValueChange: (value: string) => void;
   className?: string;
   disabled?: boolean;
+  ariaLabel?: string;
 }) {
   const items = useMemo(() => {
     const zones = supportedTimezones();
@@ -53,6 +55,7 @@ export function TimezonePicker({
       searchPlaceholder="Search timezones..."
       className={className}
       disabled={disabled}
+      ariaLabel={ariaLabel}
     />
   );
 }

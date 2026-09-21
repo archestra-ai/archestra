@@ -1,0 +1,53 @@
+# Features and cluster settings shared by the staging and demo installations.
+# Pass this file before the installation-specific values file so each release
+# can override its own endpoints, resources, and credentials.
+archestra:
+  codeRuntime:
+    enabled: true
+
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        create: true
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+
+  env:
+    ARCHESTRA_ANALYTICS: disabled
+    ARCHESTRA_BETA: "true"
+    # Keep these capabilities available even if the beta master switch changes.
+    ARCHESTRA_OPENAPPA_ENABLED: "true"
+    ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
+    ARCHESTRA_LLM_PROXY_PLUGINS: ""
+    ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
+    ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
+    ARCHESTRA_MCP_SKILLS_ENABLED: "true"
+    # Runtime enablement is independent of beta. Sessions use the existing
+    # isolated node pool; each installation supplies its own in-cluster URL.
+    ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
+    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
+    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
+    ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
+    ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE: "60Gi"
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS: "standard-rwo"
+    ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
+    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
+    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
+    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+    ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT: "true"
+    # Security-held private key can recover locked-chat audit trails from both installs.
+    ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFvakRQWU5RbjNSYktoamJ5MUVzTgpvYXYwNGUyQnpoOTFWaEs0TlErNDFEcGVwcjg0dGx6R3ZjandYVC9OQ0txODJvem9kUGwyZE5NeWFxdDE0UG5FCnQ0NUsvRXdrTXE0VlFEUWtlTUJJTFh6c1ZlY0YzQmZ3Rko1eGNLdGFCNXRsNXRRRWVPakhPU2xiamN0czVyaDkKN2wzcE5DdURoUXRkajNmSE80NTN2UXN4eDEyK0drZlpQVVNWeFpiNEhhYkdhazMxWTl3UG1pZVV5ajVzSkkwTwp6VzFrVHFiMkFocEVSQnIxUkNFeUgrSzlvdmRCZlZiYUdGTFZIdmtiSkdSbVNzYk85SVZsQUpNUHE5ZnJXam1VCm5oR2h0UVFzeTQ2TG92ZXFSaTMxM2RaeDUweXEvVGd2TFJLSVFDZEtKYmkvVEoyRmtVMk9VSXdpYWFTQjdyNTAKa0YvZDhGUTNsUVdKWlA4YXU1UWQzQjV1bzl1M3NTMWk1WTZOeHRBYWN0TjBEV2k2L3ZjbEtlRjg5YTFtbkZ3TApBTkZteENsbkVxL3UydmpwbWhOQS9JMnVFVXFvQmZ5NkUxVFFyNSsySUhnZGVXT2tPTFJnYXc5QWE3Z3g1SzlqCkdjaHhXUDkzMDhvN01SS1JsdjlPaTl2UUZsMVB3YUZPbEIyUzIvb2RCcTNhNDFzMkhNUU1ZalJZMC9wR0NuWjUKM2xuN1BzZm9qOEZMd1NoZkRHNVhmNTNnREo0UXB4a3N0amdrekx5ZkxHaThUVGdwSjVmeDJWdVZQajdtTk5JMwpoNWxYZnh4N09Gd1daZEJUVFBnZ3h6LzN1MUs5TTNoUnlObUxrOXZEUVhRS2k2TWdMNVF1THRvQTdVL01GSzBXClY2ZVIyTG4zMFhMVDduaDNlcnRNYnNFQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo="
+    # Both installations use Google SSO, with independent cookie names/domains.
+    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
+    ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
+    # Trust only the GKE load balancer proxy ranges for client IP resolution.
+    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"

@@ -14,28 +14,15 @@ archestra:
       memory: "4Gi"
 
   env:
-    ARCHESTRA_ANALYTICS: disabled
-    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_API_BASE_URL: "https://demo.archestra.dev"
     ARCHESTRA_FRONTEND_URL: "https://demo.archestra.dev"
+    ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-demo.archestra-demo.svc.cluster.local:9000"
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "demo-sandbox.archestra.dev"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: "demo.archestra.dev"
     # Staging's parent-domain cookies are also sent to this host; isolate names.
     ARCHESTRA_AUTH_COOKIE_PREFIX: "archestra-demo"
-    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
-    ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
-    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
-    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
-    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
-    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
-    ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT: "true"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "gemini"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "gemini-2.5-flash"
-
-  orchestrator:
-    kubernetes:
-      serviceAccount:
-        annotations:
-          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
 
   gkeBackendConfig:
     enabled: true
@@ -57,6 +44,15 @@ archestra:
           - path: /
             port: 3000
             pathType: Prefix
+      - host: "*.demo-sandbox.archestra.dev"
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix
+    tls:
+      - hosts:
+          - "*.demo-sandbox.archestra.dev"
+        secretName: archestra-demo-sandbox-wildcard-tls
 
 postgresql:
   enabled: true

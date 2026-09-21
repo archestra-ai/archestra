@@ -20,9 +20,9 @@ import {
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Editor } from "@/components/editor";
 import { FormDialog } from "@/components/form-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useImportAgent } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
@@ -350,11 +350,11 @@ export function ImportAgentDialog({
 
               {/* Error state */}
               {state.status === "error" && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Invalid Configuration</AlertTitle>
-                  <AlertDescription>{state.message}</AlertDescription>
-                </Alert>
+                <InlineNotice variant="error">
+                  <AlertTriangle />
+                  <span className="font-medium">Invalid Configuration</span>
+                  <InlineNoticeText>{state.message}</InlineNoticeText>
+                </InlineNotice>
               )}
             </>
           ) : null}
@@ -362,17 +362,13 @@ export function ImportAgentDialog({
           {/* Preview state */}
           {state.status === "parsed" && (
             <div className="space-y-4">
-              <Alert variant="info">
-                <FileJson className="h-4 w-4" />
-                <AlertTitle>Ready to Import</AlertTitle>
-                <AlertDescription>
-                  {state.fileName && (
-                    <span className="block text-xs text-muted-foreground mb-1">
-                      File: {state.fileName}
-                    </span>
-                  )}
-                </AlertDescription>
-              </Alert>
+              <InlineNotice variant="info">
+                <FileJson />
+                <span className="font-medium">Ready to Import</span>
+                {state.fileName && (
+                  <InlineNoticeText>File: {state.fileName}</InlineNoticeText>
+                )}
+              </InlineNotice>
 
               <div className="rounded-lg border p-4 space-y-5">
                 <div className="flex items-start gap-3">
@@ -579,35 +575,29 @@ export function ImportAgentDialog({
           {/* Imported state */}
           {state.status === "imported" && (
             <div className="space-y-4">
-              <Alert variant="info">
-                <Bot className="h-4 w-4" />
-                <AlertTitle>Import Complete</AlertTitle>
-                <AlertDescription>
-                  <span className="block text-sm">
-                    Imported agent: <strong>{state.agent.name}</strong>
-                  </span>
-                </AlertDescription>
-              </Alert>
+              <InlineNotice variant="info">
+                <Bot />
+                <span className="font-medium">Import Complete</span>
+                <InlineNoticeText>
+                  Imported agent: <strong>{state.agent.name}</strong>
+                </InlineNoticeText>
+              </InlineNotice>
 
               {state.warnings.length > 0 && (
-                <Alert variant="warning">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Imported with warnings</AlertTitle>
-                  <AlertDescription>
-                    <div className="mt-2 space-y-1">
+                <InlineNotice variant="warning">
+                  <AlertTriangle />
+                  <span className="font-medium">Imported with warnings</span>
+                  <InlineNoticeText>
+                    <div className="space-y-1">
                       {state.warnings.slice(0, 5).map((w) => (
-                        <div key={`${w.type}-${w.name}`} className="text-sm">
-                          {w.message}
-                        </div>
+                        <div key={`${w.type}-${w.name}`}>{w.message}</div>
                       ))}
                       {state.warnings.length > 5 && (
-                        <div className="text-xs text-muted-foreground">
-                          + {state.warnings.length - 5} more
-                        </div>
+                        <div>+ {state.warnings.length - 5} more</div>
                       )}
                     </div>
-                  </AlertDescription>
-                </Alert>
+                  </InlineNoticeText>
+                </InlineNotice>
               )}
 
               <p className="text-xs text-muted-foreground">

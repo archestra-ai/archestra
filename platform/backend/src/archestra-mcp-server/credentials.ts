@@ -2,9 +2,13 @@ import { TOOL_TRANSFER_CREDENTIAL_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import { AgentModel, AgentTeamModel } from "@/models";
-import { transferPersonalRuntimeCredential } from "@/services/agent-runtime/credentials";
+import {
+  declarePersonalRuntimeCredential,
+  transferPersonalRuntimeCredential,
+} from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
+  agentCredentialSetupUrl,
   catchError,
   defineArchestraTool,
   defineArchestraTools,
@@ -27,7 +31,13 @@ const TransferCredentialEnvVarSchema = z
     type: z
       .literal("secret")
       .describe("Always 'secret'. Marks the value for redaction in logs."),
-    value: z.string().min(1).describe("The credential value to transfer."),
+    value: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "The credential value to transfer. OMIT IT to declare the credential without a value and get back a link the person opens to paste it themselves — the value then never enters your context. Send a value only when the person asked you to move one you already hold.",
+      ),
   })
   .strict();
 
@@ -41,6 +51,17 @@ const TransferCredentialOutputSchema = z.object({
   declarationCreated: z
     .boolean()
     .describe("Whether this call declared the credential on the Agent."),
+  valueStored: z
+    .boolean()
+    .describe(
+      "Whether a value is now stored. False means the credential is declared and still empty.",
+    ),
+  url: z
+    .string()
+    .nullable()
+    .describe(
+      "Where the person pastes the value. Null when this call already stored one.",
+    ),
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
@@ -51,12 +72,13 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
     description:
-      "Give an Agent Runtime Agent a credential this client already holds, so a handed-over task can use the CLI authentication the local session was using. " +
-      "The value is stored personally for you: it applies to every run YOU start on that Agent, not only the current one, and never to anyone else's runs. " +
+      "Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
+      "PREFER THE SAFE MODE: omit `value` to declare the credential and get back a link. The person opens it and pastes the value themselves, so the secret never enters your context or this transcript. Use it whenever you would otherwise have to read a secret to pass it on. " +
+      "Send a `value` only when the person deliberately handed you one to move. That mode writes the secret into your context and this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. " +
+      "Either way the credential is personal to you: it applies to every run YOU start on that Agent, and never to anyone else's runs. " +
       "Organization-wide credentials are set in Settings and are refused here. " +
-      "An Agent accepts these values unless an administrator turned that off in its Agent Runtime settings, in which case this tool refuses and the credential is set in Settings instead. " +
-      "EXPOSURE: the value passes through your context and is written into this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. Prefer Settings for a credential that should never enter a model's context. " +
-      "The value reaches the workspace on the Agent's NEXT turn, not one already running.",
+      "An administrator can stop an Agent accepting a transferred value in its Agent Runtime settings. Declaring stays available, because it carries no secret. " +
+      "A stored value reaches the workspace on the Agent's NEXT turn, not one already running.",
     schema: z.object({
       agent_id: z.string().describe("The Agent to give the credential to."),
       environment: z
@@ -105,15 +127,22 @@ const registry = defineArchestraTools([
             "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
           );
         }
-        // Only an explicit `false` refuses. An Agent stored before this field
+        const [entry] = args.environment;
+
+        // The gate governs storing a client-supplied secret. Declaring carries
+        // none, so it stays available on an Agent where storing is turned off —
+        // that Agent is exactly where the person should paste the value instead.
+        // Only an explicit `false` refuses: an Agent stored before this field
         // existed has no value at all, and those must keep working.
-        if (runtime.allowAgentSuppliedCredentialValues === false) {
+        if (
+          entry.value !== undefined &&
+          runtime.allowAgentSuppliedCredentialValues === false
+        ) {
           return errorResult(
-            `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings; set the credential in Settings instead.`,
+            `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings. Call this tool again without \`value\` to declare "${entry.key}" and get a link the person can paste it into.`,
           );
         }
 
-        const [entry] = args.environment;
         // Checked here as well as in the service so the caller gets the real
         // reason: `catchError` deliberately flattens thrown errors to a generic
         // message, which would hide why the transfer was refused.
@@ -123,6 +152,36 @@ const registry = defineArchestraTools([
         if (declared?.scope === "shared") {
           return errorResult(
             `"${entry.key}" is declared as a shared credential on "${agent.name}". A shared value applies to every user's runs of this Agent, so it is set in Settings rather than transferred from a client.`,
+          );
+        }
+
+        if (entry.value === undefined) {
+          const { declarationCreated } = await declarePersonalRuntimeCredential(
+            {
+              runtime,
+              key: entry.key,
+              label: args.label,
+            },
+          );
+          const url = agentCredentialSetupUrl(agent.id, [entry.key]);
+          const availability =
+            "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
+
+          return structuredSuccessResult(
+            {
+              key: entry.key,
+              scope: "personal" as const,
+              declarationCreated,
+              valueStored: false,
+              url,
+              availability,
+            },
+            [
+              `Declared ${entry.key} on "${agent.name}". No value is stored.`,
+              `Ask the person to paste it here: ${url}`,
+              "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
+              availability,
+            ].join("\n"),
           );
         }
 
@@ -143,6 +202,8 @@ const registry = defineArchestraTools([
             key: entry.key,
             scope: "personal" as const,
             declarationCreated,
+            valueStored: true,
+            url: null,
             availability,
           },
           [

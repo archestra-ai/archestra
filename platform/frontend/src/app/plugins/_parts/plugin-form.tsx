@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { typeRole } from "@/lib/design/type-scale";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
 import { PluginScopeSelector } from "./plugin-scope-selector";
@@ -97,7 +96,10 @@ export function PluginForm({
           are the answer to "these are read-only — where do I change them?",
           so they read best straight after the question. */}
       {isGithubPlugin && (
-        <FormPanel title="GitHub source">
+        <FormPanel
+          title="GitHub source"
+          description="Where these files are pulled from, and how they stay up to date."
+        >
           <GithubSourceFields
             draft={draft}
             onChange={onChange}
@@ -197,7 +199,7 @@ function GithubSourceFields({
         githubAppConfigs={githubAppConfigs}
         patFields={
           <div className="space-y-2">
-            <Label htmlFor="plugin-github-token">Personal Access Token</Label>
+            <Label htmlFor="plugin-github-token">Personal access token</Label>
             <FieldDescription>
               <span>Leave empty to keep existing credentials unchanged.</span>{" "}
               <span>
@@ -219,7 +221,7 @@ function GithubSourceFields({
               onChange={(event) =>
                 onChange({ githubToken: event.target.value })
               }
-              placeholder="Leave empty to keep existing token"
+              placeholder="ghp_…"
             />
           </div>
         }
@@ -244,15 +246,27 @@ function GithubSourceFields({
 /** One panel of the form, named only where the fields do not name themselves. */
 function FormPanel({
   title,
+  description,
   children,
 }: {
   title?: string;
+  /** One line saying what the panel governs, under its heading. */
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <section className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
       {title && (
-        <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
+        // Semibold, not the `section-title` role: that role is `text-sm
+        // font-medium`, which is exactly what `<Label>` renders, so a panel
+        // heading set in it reads as one more field name stacked above the
+        // fields it is supposed to head. Weight is what separates the two.
+        <div className="space-y-1">
+          <h2 className="text-base leading-none font-semibold">{title}</h2>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
       )}
       {children}
     </section>

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { getAgentCatalogImages } from "@archestra/shared";
+import {
+  getAgentCatalogImages,
+  getDefaultAgentRuntimeImage,
+} from "@archestra/shared";
 import { KubeConfig, type V1DaemonSet } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
@@ -120,6 +123,31 @@ test("a transient API failure never breaks startup and a later pass retries", as
   server.use(http.get(API, () => HttpResponse.json({ items: [] })));
   await agentImagePrefetcher.reconcile();
   expect(fleet.size).toBe(6);
+});
+
+test("refreshes floating catalog images when the stable platform version advances", async () => {
+  config.agentRuntime.defaultImage = getDefaultAgentRuntimeImage("1.3.65");
+  await agentImagePrefetcher.reconcile();
+  const claudeImage = getAgentCatalogImages(config.agentRuntime.defaultImage)[
+    "claude-code"
+  ];
+  const before = [...fleet.values()].find((daemonSet) =>
+    daemonSet.spec?.template.spec?.initContainers?.some(
+      (container) => container.image === claudeImage,
+    ),
+  );
+  expect(
+    before?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy,
+  ).toBe("Always");
+  const previousFingerprint = before?.metadata?.annotations;
+
+  config.agentRuntime.defaultImage = getDefaultAgentRuntimeImage("1.3.66");
+  await agentImagePrefetcher.reconcile();
+  const after = fleet.get(before?.metadata?.name ?? "");
+  expect(after?.metadata?.annotations).not.toEqual(previousFingerprint);
+  expect(after?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy).toBe(
+    "Always",
+  );
 });
 
 test("does no cluster work when Agent Runtime is disabled", async () => {

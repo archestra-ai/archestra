@@ -471,12 +471,17 @@ class InteractionModel {
         : (data.environmentId ?? null));
 
     // Runtime source/run headers are caller-controlled; use the authenticated
-    // virtual key's stored run association to recognize ephemeral Slack files.
+    // standard or passthrough key's stored run association for ephemeral files.
     const ephemeralFiles =
       data.source === "chatops:slack" ||
       (data.virtualKeyId
         ? await AgentRunModel.usesEphemeralFiles({
             virtualApiKeyId: data.virtualKeyId,
+          })
+        : false) ||
+      (data.passthroughVirtualKeyId
+        ? await AgentRunModel.usesEphemeralFiles({
+            virtualApiKeyId: data.passthroughVirtualKeyId,
           })
         : false);
     // Redact the audit copy without changing live provider traffic.

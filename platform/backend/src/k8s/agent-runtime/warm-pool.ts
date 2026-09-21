@@ -10,6 +10,7 @@ import {
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_SANDBOX_API,
   type AgentSandbox,
@@ -128,6 +129,7 @@ class AgentWarmPoolManager {
         if (
           !runtime ||
           runtime.backend !== "kubernetes" ||
+          usesFloatingAgentImageTag(runtime.image) ||
           (runtime.privileged && !config.agentRuntime.allowPrivileged)
         )
           continue;
@@ -307,7 +309,14 @@ class AgentWarmPoolManager {
     api: CustomObjectsApi;
     spec: KubernetesAgentRunLaunchSpec;
   }): Promise<boolean> {
-    if (!config.agentRuntime.warmPoolSize || !params.spec.poolScope)
+    // A pre-started Sandbox keeps the image it pulled when capacity was
+    // created. Floating tags must cold-start so every new workspace resolves
+    // the current image instead of claiming stale warm capacity.
+    if (
+      !config.agentRuntime.warmPoolSize ||
+      !params.spec.poolScope ||
+      usesFloatingAgentImageTag(params.spec.image)
+    )
       return false;
     const { api, spec } = params;
     const namespace = spec.namespace;

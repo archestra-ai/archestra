@@ -161,9 +161,8 @@ describe("composing an organization's effective policy", () => {
       catalogId,
       policy: HELPER_BATTERY_POLICY,
     });
-    const [battery] = await openappaBatteriesService.listBatteries(
-      organizationId,
-    );
+    const [battery] =
+      await openappaBatteriesService.listBatteries(organizationId);
     expect(battery?.installs[0]?.status).toBe("active");
 
     // The runtime resolves a composed `token_env` from this process's

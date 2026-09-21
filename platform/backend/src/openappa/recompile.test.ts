@@ -192,9 +192,9 @@ describe("recompile coalescing", () => {
     expect(refused.lastErrorAt).toBeInstanceOf(Date);
     // The root alone keeps being enforced: a refused document never serves.
     expect(refused.content).toBe(root.content);
-    expect(await OpenAppaEffectivePolicyModel.find(organizationId)).toMatchObject(
-      { lastError: refused.lastError },
-    );
+    expect(
+      await OpenAppaEffectivePolicyModel.find(organizationId),
+    ).toMatchObject({ lastError: refused.lastError });
 
     await OpenAppaEffectivePolicyModel.invalidate(organizationId);
     const accepted =

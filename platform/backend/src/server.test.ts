@@ -273,7 +273,8 @@ describe("createFastifyInstance", () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         error: {
-          message: "Database temporarily unavailable, please retry",
+          message:
+            "Cannot reach the database. Retry shortly; if it continues, ask an administrator to check the database service and connection settings.",
           type: "api_service_unavailable_error",
         },
       });
@@ -288,6 +289,38 @@ describe("createFastifyInstance", () => {
       });
 
       captureSpy.mockRestore();
+    });
+
+    test.each([
+      [
+        "disk_full",
+        "No space left on device",
+        "Database storage is full. Ask an administrator to free or expand it.",
+      ],
+      [
+        "statement_timeout",
+        "canceling statement due to statement timeout",
+        "Database query timed out. Retry; if it continues, ask an administrator to check database load.",
+      ],
+    ])("gives an actionable response for database %s without exposing SQL", async (_kind, cause, message) => {
+      const app = createFastifyInstance();
+      app.get("/test-db-capacity", async () => {
+        throw new Error('Failed query: select "secret" from "secrets"', {
+          cause: new Error(cause),
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-capacity",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: { message, type: "api_service_unavailable_error" },
+      });
+      expect(response.body).not.toContain("select");
+      await app.close();
     });
 
     test("handles standard Error objects correctly", async () => {

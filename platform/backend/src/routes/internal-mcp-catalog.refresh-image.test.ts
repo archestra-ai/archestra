@@ -286,6 +286,41 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     expect(response.json().error.message).toContain("CrashLoopBackOff");
   });
 
+  test("explains a deployment readiness timeout without exposing its internal name", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "single-tenant-slow-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: false,
+        localConfig: { dockerImage: "registry.example.com/mcp:latest" },
+      },
+      { organizationId, authorId: user.id },
+    );
+    await McpServerModel.create({
+      name: "single-tenant-slow-server-a",
+      catalogId: catalog.id,
+      serverType: "local",
+      scope: "org",
+    });
+    const readinessError = new Error(
+      "Deployment internal-pod-name did not become ready after 60 attempts",
+    );
+    readinessError.name = "McpServerReadinessTimeoutError";
+    mockAutoReinstallServer.mockRejectedValueOnce(readinessError);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.message).toBe(
+      "MCP server did not become ready. Check its deployment status and pod logs, then retry.",
+    );
+    expect(response.body).not.toContain("internal-pod-name");
+  });
+
   test("maps Kubernetes API throttling to a retryable 503 with a readable message", async () => {
     const catalog = await InternalMcpCatalogModel.create(
       {

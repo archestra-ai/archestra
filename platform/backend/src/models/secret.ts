@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
@@ -92,6 +92,13 @@ class SecretModel {
    */
   static async findAllRaw(): Promise<SelectSecret[]> {
     return db.select().from(schema.secretsTable);
+  }
+
+  static async count(): Promise<number> {
+    const [{ secretCount }] = await db
+      .select({ secretCount: count() })
+      .from(schema.secretsTable);
+    return secretCount;
   }
 
   /**

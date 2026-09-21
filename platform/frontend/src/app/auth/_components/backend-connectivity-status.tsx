@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
+import { getConnectivityMessage } from "@/lib/config/connectivity-messages";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface BackendConnectivityStatusProps {
@@ -34,7 +35,12 @@ export function BackendConnectivityStatus({
   const hasInitiatedRefreshRef = useRef(false);
 
   useEffect(() => {
-    if (status === "connecting" && attemptCount > 0) {
+    if (
+      (status === "connecting" ||
+        status === "database-connecting" ||
+        status === "browser-connecting") &&
+      attemptCount > 0
+    ) {
       hadConnectionIssuesRef.current = true;
     }
   }, [status, attemptCount]);
@@ -101,20 +107,37 @@ function ConnectionStatusView({
   nextRetryInMs,
   onRetry,
 }: {
-  status: "connecting" | "unreachable";
+  status:
+    | "connecting"
+    | "browser-connecting"
+    | "database-connecting"
+    | "unreachable"
+    | "browser-offline"
+    | "database-unavailable";
   nextRetryInMs: number | null;
   onRetry: () => void;
 }) {
   const appName = useAppName();
-  const isUnreachable = status === "unreachable";
+  const isUnreachable =
+    status === "unreachable" ||
+    status === "database-unavailable" ||
+    status === "browser-offline";
+  const isDatabase =
+    status === "database-connecting" || status === "database-unavailable";
+  const isBrowserOffline =
+    status === "browser-connecting" || status === "browser-offline";
+  const { title, detail } = getConnectivityMessage(
+    isBrowserOffline
+      ? "browser-offline"
+      : isDatabase
+        ? "database-unavailable"
+        : "backend-unreachable",
+    appName,
+  );
 
   if (!isUnreachable) {
     return (
-      <ConnectivityView
-        title={`Connecting to ${appName}`}
-        description="The backend is not responding yet. Sign-in will appear when it is ready."
-        busy
-      >
+      <ConnectivityView title={title} description={detail} busy>
         <ConnectionActivity nextRetryInMs={nextRetryInMs} />
       </ConnectivityView>
     );
@@ -122,8 +145,8 @@ function ConnectionStatusView({
 
   return (
     <ConnectivityView
-      title="Backend unavailable"
-      description={`The ${appName} backend did not respond. Check that it is running, then try again.`}
+      title={title}
+      description={detail}
       urgent
       actions={
         <>
@@ -131,16 +154,18 @@ function ConnectionStatusView({
             <RefreshCcw className="size-4" />
             <span>Try again</span>
           </Button>
-          <Button variant="ghost" asChild>
-            <a
-              href={`${GITHUB_REPO_URL}/issues`}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              <span>Report issue</span>
-              <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
+          {!isDatabase && !isBrowserOffline && (
+            <Button variant="ghost" asChild>
+              <a
+                href={`${GITHUB_REPO_URL}/issues`}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <span>Report issue</span>
+                <ExternalLink className="size-3.5" />
+              </a>
+            </Button>
+          )}
         </>
       }
     />

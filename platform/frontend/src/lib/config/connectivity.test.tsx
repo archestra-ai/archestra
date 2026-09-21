@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetHealth } = vi.hoisted(() => ({ mockGetHealth: vi.fn() }));
+const { mockGetReady } = vi.hoisted(() => ({ mockGetReady: vi.fn() }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -11,7 +11,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     ...actual,
     archestraApiSdk: {
       ...actual.archestraApiSdk,
-      getHealth: (...args: unknown[]) => mockGetHealth(...args),
+      getReady: (...args: unknown[]) => mockGetReady(...args),
     },
   };
 });
@@ -20,8 +20,24 @@ vi.mock("sonner");
 
 import { ConnectivityProvider, useConnectivity } from "./connectivity";
 
-const HEALTH_OK = { data: { name: "archestra", status: "ok", version: "1" } };
-const HEALTH_FAIL = { error: new Error("offline") };
+const READY_OK = {
+  data: {
+    name: "archestra",
+    status: "ok",
+    version: "1",
+    database: "connected",
+    sandbox: "disabled",
+  },
+};
+const READY_FAIL = { error: new Error("offline") };
+const DATABASE_DOWN = {
+  error: {
+    name: "archestra",
+    status: "degraded",
+    version: "1",
+    database: "disconnected",
+  },
+};
 
 function makeWrapper() {
   const queryClient = new QueryClient({
@@ -53,8 +69,8 @@ describe("ConnectivityProvider", () => {
     vi.useRealTimers();
   });
 
-  it("needs two consecutive /health failures before reporting backend-unreachable", async () => {
-    mockGetHealth.mockResolvedValue(HEALTH_FAIL);
+  it("needs two consecutive readiness failures before reporting backend-unreachable", async () => {
+    mockGetReady.mockResolvedValue(READY_FAIL);
     const { result } = renderHook(() => useConnectivity(), {
       wrapper: makeWrapper().wrapper,
     });
@@ -62,17 +78,35 @@ describe("ConnectivityProvider", () => {
     // Mount poll = failure #1 — still online under the hysteresis threshold.
     await flush();
     expect(result.current.state.kind).toBe("online");
-    expect(mockGetHealth).toHaveBeenCalledTimes(1);
+    expect(mockGetReady).toHaveBeenCalledTimes(1);
 
     // Next poll = failure #2 — now unreachable.
     act(() => result.current.retry());
     await flush();
     expect(result.current.state.kind).toBe("backend-unreachable");
-    expect(mockGetHealth).toHaveBeenCalledTimes(2);
+    expect(mockGetReady).toHaveBeenCalledTimes(2);
   });
 
-  it("clears unreachable and fires exactly one refetch wave when /health recovers", async () => {
-    mockGetHealth.mockResolvedValue(HEALTH_FAIL);
+  it("reports a database outage separately from a backend outage", async () => {
+    mockGetReady.mockResolvedValue(DATABASE_DOWN);
+    const { result } = renderHook(() => useConnectivity(), {
+      wrapper: makeWrapper().wrapper,
+    });
+
+    await flush();
+    expect(result.current.state.kind).toBe("online");
+    act(() => result.current.retry());
+    await flush();
+    expect(result.current.state.kind).toBe("database-unavailable");
+
+    mockGetReady.mockResolvedValue(READY_OK);
+    act(() => result.current.retry());
+    await flush();
+    expect(result.current.state.kind).toBe("online");
+  });
+
+  it("clears unreachable and fires exactly one refetch wave when /ready recovers", async () => {
+    mockGetReady.mockResolvedValue(READY_FAIL);
     const { queryClient, wrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useConnectivity(), { wrapper });
@@ -82,7 +116,7 @@ describe("ConnectivityProvider", () => {
     await flush();
     expect(result.current.state.kind).toBe("backend-unreachable");
 
-    mockGetHealth.mockResolvedValue(HEALTH_OK);
+    mockGetReady.mockResolvedValue(READY_OK);
     act(() => result.current.retry());
     await flush();
     expect(result.current.state.kind).toBe("online");
@@ -93,8 +127,8 @@ describe("ConnectivityProvider", () => {
     expect(activeInvalidations).toHaveLength(1);
   });
 
-  it("reports browser-offline immediately when navigator goes offline, independent of /health", async () => {
-    mockGetHealth.mockResolvedValue(HEALTH_OK);
+  it("reports browser-offline immediately when navigator goes offline, independent of /ready", async () => {
+    mockGetReady.mockResolvedValue(READY_OK);
     const { result } = renderHook(() => useConnectivity(), {
       wrapper: makeWrapper().wrapper,
     });
@@ -119,7 +153,7 @@ describe("ConnectivityProvider", () => {
   });
 
   it("fires exactly one refetch wave per offline→online transition, not while steady", async () => {
-    mockGetHealth.mockResolvedValue(HEALTH_OK);
+    mockGetReady.mockResolvedValue(READY_OK);
     const { queryClient, wrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useConnectivity(), { wrapper });

@@ -149,6 +149,7 @@ describe("classifyErrorForTracking", () => {
       "McpServerConnectionTimeoutError",
       "McpServerUnreachableError",
       "McpServerDeploymentFailedError",
+      "McpServerReadinessTimeoutError",
     ]) {
       expect(classifyErrorForTracking(namedError(name)).report).toBe(false);
     }

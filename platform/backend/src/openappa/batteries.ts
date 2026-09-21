@@ -522,8 +522,11 @@ class OpenAppaBatteriesService {
       if (policy) return { policy, installs: plan.installs };
       // Another composition stored its result between this attempt's read and
       // its write. Reading again at once tends to lose the same race, so wait
-      // first, jittered so simultaneous losers do not line up again.
-      await sleep(recomposeBackoffMs(attempt));
+      // first, jittered so simultaneous losers do not line up again. The last
+      // attempt waits for nothing: the caller, and the follow-up queued behind
+      // it, would only sit out the delay before the refusal.
+      if (attempt + 1 < RECOMPILE_ATTEMPTS)
+        await sleep(recomposeBackoffMs(attempt));
     }
     // Exhaustion is contention, not a fault: the inputs are fine and the next
     // call composes them. Callers relay this as "retry later", the way every

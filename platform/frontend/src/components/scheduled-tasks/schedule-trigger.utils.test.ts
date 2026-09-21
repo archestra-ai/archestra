@@ -1,16 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCronFromSchedule,
+  buildScheduleCron,
   buildScheduleTriggerPayload,
   DEFAULT_FORM_STATE,
   getScheduledRunChatState,
   isValidCronExpression,
   parseCronToMode,
+  parseScheduleFrequency,
 } from "./schedule-trigger.utils";
 
 describe("parseCronToMode", () => {
   it("maps a plain hourly expression to the hourly preset", () => {
     expect(parseCronToMode("0 * * * *").mode).toBe("hourly");
+  });
+
+  it("keeps an hourly expression's minute offset", () => {
+    expect(parseCronToMode("15 * * * *")).toEqual({
+      mode: "hourly",
+      hour: "9",
+      minute: "15",
+      days: [0, 1, 2, 3, 4, 5, 6],
+    });
   });
 
   it("maps a daily weekday expression to the daily preset", () => {
@@ -43,7 +54,7 @@ describe("parseCronToMode", () => {
     ["a stepped weekday", "0 9 * * */2"],
     ["a six-field expression", "0 0 9 * * 1-5"],
     ["a non-numeric field", "0 9 * * MON"],
-  ])("routes %s to the custom tab", (_label, expression) => {
+  ])("routes %s to custom mode", (_label, expression) => {
     expect(parseCronToMode(expression).mode).toBe("custom");
   });
 
@@ -62,6 +73,34 @@ describe("parseCronToMode", () => {
   });
 });
 
+describe("parseScheduleFrequency", () => {
+  it("treats a disabled trigger as manual before inspecting its expression", () => {
+    expect(parseScheduleFrequency("0 */6 * * *", false)).toBe("manual");
+  });
+
+  it.each([
+    ["0 */6 * * *", "6h"],
+    ["0 */12 * * *", "12h"],
+    ["0 * * * *", "hourly"],
+    ["0 9 * * 1-5", "daily"],
+    ["0 9 * * 1", "weekly"],
+    ["*/15 * * * *", "custom"],
+  ] as const)("detects %s as %s", (expression, frequency) => {
+    expect(parseScheduleFrequency(expression, true)).toBe(frequency);
+  });
+
+  it("uses the default weekday schedule as a daily frequency", () => {
+    const defaultState = DEFAULT_FORM_STATE();
+
+    expect(parseScheduleFrequency(defaultState.cronExpression, true)).toBe(
+      "daily",
+    );
+    expect(parseCronToMode(defaultState.cronExpression).days).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+  });
+});
+
 describe("buildCronFromSchedule", () => {
   it("builds an hourly expression at the given minute", () => {
     expect(buildCronFromSchedule("hourly", "9", "0", [1, 2])).toBe("0 * * * *");
@@ -77,6 +116,41 @@ describe("buildCronFromSchedule", () => {
     expect(buildCronFromSchedule("daily", "9", "0", [5, 1, 3])).toBe(
       "0 9 * * 1,3,5",
     );
+  });
+
+  it.each([
+    [[1, 2, 3], "0 9 * * 1-3"],
+    [[1, 2, 3, 5], "0 9 * * 1-3,5"],
+    [[1, 3, 5], "0 9 * * 1,3,5"],
+  ] as const)("compresses weekday runs in %j", (days, expression) => {
+    expect(buildCronFromSchedule("daily", "9", "0", [...days])).toBe(
+      expression,
+    );
+  });
+});
+
+describe("buildScheduleCron", () => {
+  it.each([
+    ["hourly", "15 * * * *"],
+    ["6h", "0 */6 * * *"],
+    ["12h", "0 */12 * * *"],
+    ["daily", "0 9 * * 1-5"],
+    ["weekly", "0 9 * * 1"],
+  ] as const)("builds and detects the %s frequency", (frequency, expression) => {
+    const built = buildScheduleCron(
+      frequency,
+      "9",
+      frequency === "hourly" ? "15" : "0",
+      frequency === "weekly" ? [1] : [1, 2, 3, 4, 5],
+    );
+
+    expect(built).toBe(expression);
+    expect(parseScheduleFrequency(built ?? "", true)).toBe(frequency);
+  });
+
+  it("does not synthesize expressions for manual or custom input", () => {
+    expect(buildScheduleCron("manual", "9", "0", [1])).toBeNull();
+    expect(buildScheduleCron("custom", "9", "0", [1])).toBeNull();
   });
 });
 

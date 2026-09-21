@@ -2,6 +2,12 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Radix Select uses browser pointer-capture and scrolling APIs that jsdom omits.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
@@ -390,7 +396,7 @@ describe("ProjectSchedulesSection default agent", () => {
       expect.objectContaining({ enabled: false, projectId: "project-1" }),
     );
     await userEvent.click(schedulePicker());
-    await userEvent.click(screen.getByRole("button", { name: /^Every hour/ }));
+    await userEvent.click(screen.getByRole("option", { name: "Every hour" }));
     expect(screen.getByText("Timezone")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith(
@@ -448,11 +454,11 @@ describe("ProjectSchedulesSection default agent", () => {
       selector: "label",
     }).parentElement;
     await userEvent.click(
-      within(schedulePicker as HTMLElement).getByRole("combobox"),
+      within(schedulePicker as HTMLElement).getByRole("combobox", {
+        name: "Schedule",
+      }),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: /Manual.*Never runs automatically/ }),
-    );
+    await userEvent.click(screen.getByRole("option", { name: "Manual" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(useUpdateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith({
       id: SCHEDULE.id,

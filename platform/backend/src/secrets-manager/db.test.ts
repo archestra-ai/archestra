@@ -4,6 +4,16 @@ import { describe, expect, test } from "@/test";
 import { DbSecretsManager } from "./db";
 
 describe("DbSecretsManager", () => {
+  test("connectivity check returns the stored secret count", async () => {
+    const manager = new DbSecretsManager();
+    expect(await manager.checkConnectivity()).toEqual({ secretCount: 0 });
+
+    await SecretModel.create({ name: "first", secret: { value: "one" } });
+    await SecretModel.create({ name: "second", secret: { value: "two" } });
+
+    expect(await manager.checkConnectivity()).toEqual({ secretCount: 2 });
+  });
+
   test("caches secret lookups and invalidates on update", async ({
     makeSecret,
   }) => {

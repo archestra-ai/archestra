@@ -9,14 +9,14 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Published combined OpenAPPA revision: adapter, hosted batteries, independent-root
-# forks, and PostgreSQL connection pooling. The embedded reporting helper requires
-# upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a", features = ["postgres"] }
-appa-adapter-archestra = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a" }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a" }
+# Pinned to OpenAPPA main at the merge of #384 (a host that embeds the runtime
+# brings its own adapter; hosted composition; bundled batteries) on top of
+# v0.24.0. Re-pin to the first release that includes it. The embedded reporting helper
+# currently requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -30,6 +30,7 @@ futures-util = "0.3"
 [dev-dependencies]
 # A paused clock: the connection-wait test does not spend its thirty seconds.
 tokio = { version = "1", features = ["rt", "test-util"] }
+proptest = "1"
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

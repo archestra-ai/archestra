@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
@@ -22,9 +23,10 @@ describe("battery helper bridge", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let userId: string;
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
     config.openappa.enabled = true;
     app = createFastifyInstance();
     await app.register(routes);
@@ -194,7 +196,7 @@ describe("battery helper bridge", () => {
       const files = [
         {
           path: "appa-package.toml",
-          text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+          text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
         },
         {
           path: "appa.toml",

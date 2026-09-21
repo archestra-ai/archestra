@@ -1,7 +1,8 @@
 //! Battery packages as the host sees them: the ones bundled with the pinned
 //! OpenAPPA checkout, and the ones an organization uploads, both read through the
 //! same package validation the marketplace applies.
-use appa_package::{Host, Role, bundled_batteries, validate_package};
+use appa_package::{Role, bundled_batteries, validate_package};
+use appa_runtime_api::CanonicalTool;
 use std::{path::Component, sync::OnceLock};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,20 +34,23 @@ pub(crate) struct BatteryInfo {
     pub files: Vec<BatteryFile>,
 }
 
-/// Every bundled battery that declares the Archestra host, inspected once per process.
+/// Every bundled battery that governs MCP tools, inspected once per process.
 pub(crate) fn bundled() -> &'static [BatteryInfo] {
     static BUNDLED: OnceLock<Vec<BatteryInfo>> = OnceLock::new();
     BUNDLED.get_or_init(|| {
         bundled_batteries()
             .iter()
-            .filter(|battery| {
-                battery
-                    .manifest()
-                    .ok()
-                    .is_some_and(|package| match &package.role {
-                        Role::Battery(battery) => battery.hosts.contains(&Host::Archestra),
-                        Role::Plugin(_) => false,
-                    })
+            .filter(|battery| match battery.manifest() {
+                Ok(package) => match &package.role {
+                    Role::Battery(declared) => battery
+                        .file(declared.policy.as_str())
+                        .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
+                        .is_none_or(|document| governs_mcp_tools(&document)),
+                    Role::Plugin(_) => false,
+                },
+                // A bundle this host cannot read is not quietly left out: inspection
+                // below names what is wrong with it.
+                Err(_) => true,
             })
             .map(|battery| {
                 let files = battery
@@ -98,12 +102,6 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
             package.name
         ));
     };
-    if !battery.hosts.contains(&Host::Archestra) {
-        return Err(format!(
-            "battery {} does not declare the archestra host",
-            package.name
-        ));
-    }
     let policy_path = battery.policy.as_str();
     let policy = files
         .iter()
@@ -115,11 +113,18 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
                 package.name
             )
         })?;
+    let document: toml::Table = toml::from_str(&policy).map_err(|error| error.to_string())?;
+    if !governs_mcp_tools(&document) {
+        return Err(format!(
+            "battery {} names no MCP tool, and MCP tools are the tools this host serves",
+            package.name
+        ));
+    }
     Ok(BatteryInfo {
         name: package.name.to_string(),
         description: package.description.clone(),
         namespaces: battery.namespaces.iter().map(ToString::to_string).collect(),
-        externals: helper_externals(&policy)?,
+        externals: helper_externals(&document)?,
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
         credentials: battery.credentials.clone(),
@@ -128,12 +133,37 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
     })
 }
 
-fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
-    let document: toml::Table = toml::from_str(policy).map_err(|error| error.to_string())?;
-    crate::policy::refuse_host_variables(&document)?;
-    crate::policy::refuse_url_externals(&document)?;
+/// Whether a battery has anything to say under this host: a rule names an MCP tool,
+/// the only kind of tool Archestra serves. A battery written for another host's own
+/// tools composes but never matches here, so it is not offered.
+fn governs_mcp_tools(document: &toml::Table) -> bool {
+    document
+        .get("policy")
+        .and_then(toml::Value::as_table)
+        .and_then(|policy| policy.get("tool"))
+        .and_then(toml::Value::as_array)
+        .is_some_and(|rules| {
+            rules.iter().any(|rule| {
+                rule.get("name")
+                    .and_then(toml::Value::as_str)
+                    .is_some_and(governs_an_mcp_tool)
+            })
+        })
+}
+
+/// Whether a rule's name before its selector, as the runtime reads it, is a canonical
+/// `mcp/<catalog>/<tool>` identity. The marketplace keeps every battery rule inside the
+/// namespaces it declares, so a wildcard never reaches here.
+fn governs_an_mcp_tool(name: &str) -> bool {
+    let bare = name.split_once('(').map_or(name, |(bare, _)| bare);
+    CanonicalTool::parse(bare).is_ok_and(|tool| tool.as_str().starts_with("mcp/"))
+}
+
+fn helper_externals(document: &toml::Table) -> Result<Vec<HelperExternal>, String> {
+    crate::policy::refuse_host_variables(document)?;
+    crate::policy::refuse_url_externals(document)?;
     let mut externals: Vec<HelperExternal> = Vec::new();
-    for (kind, name, entry) in crate::policy::external_bindings(&document) {
+    for (kind, name, entry) in crate::policy::external_bindings(document) {
         let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
             continue;
         };
@@ -170,7 +200,7 @@ mod tests {
         let github = bundled()
             .iter()
             .find(|battery| battery.name == "github")
-            .expect("the github battery declares the archestra host");
+            .expect("the github battery governs MCP tools");
         assert_eq!(
             github.credentials,
             vec!["APPA_PROVIDER_GITHUB_TOKEN".to_owned()]
@@ -196,18 +226,14 @@ mod tests {
 
     #[test]
     fn an_uploaded_package_passes_the_marketplace_checks_or_is_refused() {
-        let manifest = |hosts: &str| {
-            format!(
-                "schema = 1\nname = \"acme\"\ndescription = \"Acme rules\"\n[battery]\npolicy = \"appa.toml\"\nhosts = [{hosts}]\nnamespaces = [\"acme\"]\n"
-            )
-        };
+        let manifest = "schema = 1\nname = \"acme\"\ndescription = \"Acme rules\"\n[battery]\npolicy = \"appa.toml\"\nhosts = [\"claude-code\"]\nnamespaces = [\"acme\"]\n";
         let policy =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n";
-        let files = |hosts: &str| {
+        let files = || {
             vec![
                 BatteryFile {
                     path: MANIFEST_FILE.to_owned(),
-                    text: manifest(hosts),
+                    text: manifest.to_owned(),
                 },
                 BatteryFile {
                     path: "appa.toml".to_owned(),
@@ -215,27 +241,40 @@ mod tests {
                 },
             ]
         };
-        let info = inspect(&files("\"archestra\"")).unwrap();
+        let info = inspect(&files()).unwrap();
         assert_eq!(info.name, "acme");
         assert!(info.credentials.is_empty());
-        assert!(inspect(&files("\"claude-code\"")).is_err());
-        assert!(inspect(&files("\"archestra\"")[1..]).is_err());
-        let mut escaping = files("\"archestra\"");
+        assert!(inspect(&files()[1..]).is_err());
+        let mut escaping = files();
         escaping[1].path = "../appa.toml".to_owned();
         assert!(inspect(&escaping).is_err());
-        let mut foreign = files("\"archestra\"");
+        let mut foreign = files();
         foreign[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/other/list\"\ndelta = {}\n"
                 .to_owned();
         assert!(inspect(&foreign).is_err());
-        let mut same_name = files("\"archestra\"");
-        same_name[1].text = "[policy]\nversion = 2\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
+        let mut another_hosts_tools = files();
+        another_hosts_tools[1].text =
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {}\n"
+                .to_owned();
+        assert!(inspect(&another_hosts_tools).is_err());
+        let mut no_identity = files();
+        no_identity[1].text =
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme\"\ndelta = {}\n".to_owned();
+        assert!(inspect(&no_identity).is_err());
+        let mut selected = files();
+        selected[1].text =
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list(path:private*)\"\ndelta = {}\n"
+                .to_owned();
+        assert!(inspect(&selected).is_ok());
+        let mut same_name = files();
+        same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
         assert!(inspect(&same_name).is_err());
-        let mut host_variable = files("\"archestra\"");
-        host_variable[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
+        let mut host_variable = files();
+        host_variable[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
         assert!(inspect(&host_variable).is_err());
-        let mut remote = files("\"archestra\"");
-        remote[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
+        let mut remote = files();
+        remote[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
         assert!(inspect(&remote).is_err());
     }
 }

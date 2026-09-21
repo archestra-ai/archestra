@@ -1,6 +1,7 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
 
+mod adapter;
 mod batteries;
 mod policy;
 
@@ -516,8 +517,8 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
     }
 }
 
-/// The batteries bundled with the pinned OpenAPPA checkout that declare the
-/// Archestra host.
+/// The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
+/// which is what Archestra serves.
 #[napi(js_name = "listBundledOpenappaBatteries")]
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
@@ -1249,6 +1250,7 @@ impl State {
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
+                    harness: adapter::harness(),
                     endpoint: reporting.endpoint.clone(),
                     hostname: reporting.hostname.clone(),
                     message: args.message,
@@ -1937,7 +1939,7 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
 /// The identity the runtime judges: the host's spelling derived through the
 /// Archestra adapter, the way the wire derives a served host's calls.
 fn canonical_tool(raw: &str) -> napi::Result<String> {
-    (appa_adapter_archestra::adapter().derive)(raw)
+    (adapter::adapter().derive)(raw)
         .map(|derived| derived.canonical.as_str().to_owned())
         .map_err(|refusal| {
             error(match refusal {
@@ -1952,7 +1954,7 @@ fn canonical_tool(raw: &str) -> napi::Result<String> {
 fn spelled_tool(canonical: &str) -> String {
     CanonicalTool::parse(canonical)
         .ok()
-        .and_then(|tool| (appa_adapter_archestra::adapter().spell)(&tool))
+        .and_then(|tool| (adapter::adapter().spell)(&tool))
         .unwrap_or_else(|| canonical.to_owned())
 }
 

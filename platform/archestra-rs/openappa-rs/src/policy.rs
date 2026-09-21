@@ -28,7 +28,7 @@ pub(crate) fn compile(content: &str) -> Result<Config, String> {
 
 /// Open a runtime over `store` under the Archestra adapter.
 pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, String> {
-    Runtime::open_with_store_as(config, store, None, appa_adapter_archestra::adapter())
+    Runtime::open_with_store_as(config, store, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())
 }
 
@@ -98,12 +98,26 @@ pub(crate) fn compose(
         .iter()
         .map(bind_helpers)
         .collect::<Result<Vec<_>, _>>()?;
+    // A battery reads one variable at most: the bridge token of the helpers this host
+    // bound for it.
+    let granted: Vec<Vec<&str>> = batteries
+        .iter()
+        .map(|battery| {
+            battery
+                .helpers
+                .iter()
+                .map(|binding| binding.token_env.as_str())
+                .collect()
+        })
+        .collect();
     let hosted: Vec<HostedBattery<'_>> = batteries
         .iter()
         .zip(&policies)
-        .map(|(battery, policy)| HostedBattery {
+        .zip(&granted)
+        .map(|((battery, policy), token_env)| HostedBattery {
             name: &battery.name,
             policy,
+            token_env,
         })
         .collect();
     let config =
@@ -234,7 +248,7 @@ mod tests {
             call_id: Some(format!("call:{call_id}")),
             actor: actor.clone(),
             call: ProposedCall {
-                tool: (appa_adapter_archestra::adapter().derive)(tool)
+                tool: (crate::adapter::adapter().derive)(tool)
                     .expect("test tool names are well formed")
                     .canonical
                     .as_str()
@@ -285,11 +299,16 @@ requires = { audience = { within = ["internal"] } }
 "#,
         );
         let actor = started(&runtime, "symbolic-approval").await;
-        let HookDecision::DenyCall { offers, .. } =
-            hooks::handle(&runtime, call(&actor, "read_internal")).await
+        let HookDecision::DenyCall {
+            offers, feedback, ..
+        } = hooks::handle(&runtime, call(&actor, "read_internal")).await
         else {
             panic!("the read must require acceptance before executing");
         };
+        assert!(
+            feedback.contains(crate::adapter::CONTROL_TOOL_RAW) && !feedback.contains("appa/"),
+            "the model is told to take the remedy through the control tool as this host spells it: {feedback}"
+        );
         let args = serde_json::json!({ "offer_id": offers[0].id });
         assert_eq!(
             hooks::handle(

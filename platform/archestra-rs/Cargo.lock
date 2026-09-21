@@ -105,9 +105,8 @@ dependencies = [
 [[package]]
 name = "appa"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
- "appa-adapter-archestra",
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
  "appa-builtin",
@@ -151,17 +150,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "appa-adapter-archestra"
-version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
-dependencies = [
- "appa-runtime-api",
-]
-
-[[package]]
 name = "appa-adapter-claude-code"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -172,7 +163,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-kagent"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "appa-runtime-api",
 ]
@@ -180,7 +171,7 @@ dependencies = [
 [[package]]
 name = "appa-builtin"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "serde",
  "serde_json",
@@ -190,7 +181,7 @@ dependencies = [
 [[package]]
 name = "appa-engine"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "serde",
  "serde_json",
@@ -203,7 +194,7 @@ dependencies = [
 [[package]]
 name = "appa-eventlog"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -220,7 +211,7 @@ dependencies = [
 [[package]]
 name = "appa-package"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -233,7 +224,7 @@ dependencies = [
 [[package]]
 name = "appa-policy"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -246,7 +237,7 @@ dependencies = [
 [[package]]
 name = "appa-runtime-api"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a#7c7293078fa0d09086fdd67f6d1dcdb7d6789b6a"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=4f2b89e05baef8a74c4a4ded3b8214996de01ae5#4f2b89e05baef8a74c4a4ded3b8214996de01ae5"
 dependencies = [
  "serde",
  "serde_json",
@@ -402,6 +393,21 @@ name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
+name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bitflags"
@@ -1529,7 +1535,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "system-configuration 0.7.0",
  "tokio",
  "tower-service",
@@ -1695,7 +1701,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
 dependencies = [
  "byteorder-lite",
- "quick-error",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -2130,7 +2136,6 @@ name = "openappa_rs"
 version = "0.1.0"
 dependencies = [
  "appa",
- "appa-adapter-archestra",
  "appa-eventlog",
  "appa-package",
  "appa-runtime-api",
@@ -2139,6 +2144,7 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "openssl",
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2499,6 +2505,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "proptest"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b45fcc2344c680f5025fe57779faef368840d0bd1f42f216291f0dc4ace4744"
+dependencies = [
+ "bit-set",
+ "bit-vec",
+ "bitflags 2.13.0",
+ "num-traits",
+ "rand 0.9.4",
+ "rand_chacha",
+ "rand_xorshift",
+ "regex-syntax",
+ "rusty-fork",
+ "tempfile",
+ "unarray",
+]
+
+[[package]]
 name = "prost"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2529,6 +2554,12 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
+name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
@@ -2546,7 +2577,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.45",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2584,7 +2615,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -2655,6 +2686,15 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rand_xorshift"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
+dependencies = [
+ "rand_core 0.9.5",
+]
 
 [[package]]
 name = "redox_syscall"
@@ -3072,6 +3112,18 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "rusty-fork"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
+dependencies = [
+ "fnv",
+ "quick-error 1.2.3",
+ "tempfile",
+ "wait-timeout",
+]
 
 [[package]]
 name = "ryu"
@@ -3976,6 +4028,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
+name = "unarray"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
+
+[[package]]
 name = "unicase"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4072,6 +4130,15 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "walkdir"
@@ -4262,7 +4329,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

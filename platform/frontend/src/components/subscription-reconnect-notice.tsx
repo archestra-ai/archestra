@@ -9,10 +9,7 @@ import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  InlineNotice,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
 import { cn } from "@/lib/utils";

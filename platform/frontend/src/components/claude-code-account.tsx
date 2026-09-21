@@ -7,10 +7,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  InlineNotice,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";

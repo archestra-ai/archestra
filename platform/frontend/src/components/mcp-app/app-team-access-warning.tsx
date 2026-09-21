@@ -1,9 +1,6 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
-import {
-  InlineNotice,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 /**
  * One warning for every Apps visibility editor. App administrators may assign

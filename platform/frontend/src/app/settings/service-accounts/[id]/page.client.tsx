@@ -18,14 +18,22 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
-import { CreatedByCell } from "@/components/created-by-cell";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DetailFacts, presentFacts } from "@/components/detail-facts";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  CollectionFilters,
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingWrapper } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
+import { SearchInput } from "@/components/search-input";
 import {
   AccountHealthBadge,
   KeyStatusBadge,
@@ -37,7 +45,9 @@ import {
 } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -55,8 +65,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
-  type ServiceAccountDetail,
   type ServiceAccountToken,
   useBulkServiceAccountTokenAction,
   useCreateServiceAccountToken,
@@ -71,11 +81,14 @@ import {
   describeAccountHealth,
   getAccountHealth,
   getKeyStatus,
+  KEY_STATUS_LABELS,
+  type KeyStatus,
 } from "@/lib/service-account-status";
 import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
+import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction, useSetSettingsPageHeader } from "../../layout";
 
 type TokenFormValues = {
@@ -95,6 +108,32 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
  */
 const EXAMPLE_KEY = "arch_YOUR_KEY";
 
+/**
+ * The record's facets, in bar order. Overview is first and so is the tab an
+ * unrecognised `?tab=` falls back to.
+ *
+ * A third facet, Permissions, belongs here once scoped grants reach service
+ * accounts: add the id, its label, and a branch in the content switch.
+ */
+const TAB_IDS = ["overview", "keys"] as const;
+type DetailTab = (typeof TAB_IDS)[number];
+
+const TAB_LABELS: Record<DetailTab, string> = {
+  overview: "Overview",
+  keys: "API keys",
+};
+
+/** Sentinel for "no filter", matching the service accounts list beside it. */
+const ALL = "all";
+
+/** Offered in severity order, the order the statuses are derived in. */
+const KEY_STATUS_FILTERS: KeyStatus[] = [
+  "expired",
+  "expiring",
+  "active",
+  "disabled",
+];
+
 export default function ServiceAccountDetailPage({
   serviceAccountId,
 }: {
@@ -102,6 +141,8 @@ export default function ServiceAccountDetailPage({
 }) {
   const setActionButton = useSetSettingsAction();
   const setPageHeader = useSetSettingsPageHeader();
+  const { searchParams, pathname, updateQueryParams } =
+    useDataTableQueryParams();
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
   const { data: canUpdateServiceAccounts } = useHasPermissions({
@@ -141,6 +182,69 @@ export default function ServiceAccountDetailPage({
     [serviceAccount?.tokens],
   );
   const health = serviceAccount ? getAccountHealth(serviceAccount) : null;
+
+  const tabParam = searchParams.get("tab");
+  const activeTab: DetailTab = TAB_IDS.includes(tabParam as DetailTab)
+    ? (tabParam as DetailTab)
+    : "overview";
+
+  const search = searchParams.get("search") || "";
+  const statusFilter = searchParams.get("status") || ALL;
+  const hasActiveFilters = search.trim().length > 0 || statusFilter !== ALL;
+
+  const clearFilters = useCallback(
+    () => updateQueryParams({ search: null, status: null, page: "1" }),
+    [updateQueryParams],
+  );
+
+  const filteredTokens = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const now = new Date();
+
+    return tokens.filter((token) => {
+      if (query && !token.name.toLowerCase().includes(query)) return false;
+      if (statusFilter !== ALL && getKeyStatus(token, now) !== statusFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [tokens, search, statusFilter]);
+
+  // The tab bar is a row of links, so the URL owns the selection. The key
+  // table's own state is scoped to its tab: carried while you stay on it, and
+  // dropped on the way out so it cannot come back on a later visit.
+  const tabHref = useCallback(
+    (tab: DetailTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "overview") {
+        params.delete("tab");
+      } else {
+        params.set("tab", tab);
+      }
+      if (tab !== "keys") {
+        params.delete("search");
+        params.delete("status");
+        params.delete("page");
+        params.delete("pageSize");
+      }
+      const queryString = params.toString();
+      return queryString ? `${pathname}?${queryString}` : pathname;
+    },
+    [pathname, searchParams],
+  );
+
+  const tabs = useMemo(
+    () =>
+      TAB_IDS.map((tab) => ({
+        label: TAB_LABELS[tab],
+        href: tabHref(tab),
+        testId: `service-account-tab-${tab}`,
+        // Selection lives in a query param, which `PageLayout` cannot read
+        // from an href alone.
+        selected: tab === activeTab,
+      })),
+    [activeTab, tabHref],
+  );
 
   const openTokenDialog = useCallback(() => {
     tokenForm.reset({
@@ -207,8 +311,8 @@ export default function ServiceAccountDetailPage({
     setPageHeader({
       title: serviceAccount.name,
       documentTitle: serviceAccount.name,
-      description: <Provenance account={serviceAccount} />,
       status: <AccountHealthBadge health={health} />,
+      tabs,
       backLink: (
         <PageBackLink href="/settings/service-accounts">
           Back to service accounts
@@ -217,7 +321,7 @@ export default function ServiceAccountDetailPage({
     });
 
     return () => setPageHeader(null);
-  }, [health, serviceAccount, setPageHeader]);
+  }, [health, serviceAccount, setPageHeader, tabs]);
 
   useEffect(() => {
     if (!serviceAccount) return;
@@ -241,9 +345,9 @@ export default function ServiceAccountDetailPage({
     clearSelection,
     selected: selectedTokens,
   } = useBulkSelection({
-    rows: tokens,
+    rows: filteredTokens,
     getId: (token) => token.id,
-    filterSignature: serviceAccountId,
+    filterSignature: `${serviceAccountId}|${search}|${statusFilter}`,
   });
 
   const columns: ColumnDef<ServiceAccountToken>[] = useMemo(
@@ -466,168 +570,238 @@ export default function ServiceAccountDetailPage({
             </Alert>
           )}
 
-          {/* Three sections, one heading system. The page used to open with a
-              bordered Overview card under a heavier heading than the sections
-              below it, and four of its five facts were already on screen: the
-              role in the Roles field, the key count in the table, and the
-              health in the badge beside the title. What was left - who made
-              this and when it last worked - is provenance, so it rides in the
-              header with the title rather than as a box of its own. */}
-          <SettingsBlock
-            id="service-account-keys"
-            title="API keys"
-            description={
-              <>
-                Keys that let scripts and integrations call the{" "}
-                {apiDocsUrl ? (
-                  <ExternalDocsLink
-                    href={apiDocsUrl}
-                    className="text-inherit underline underline-offset-4"
-                    showIcon={false}
-                  >
-                    platform API
-                  </ExternalDocsLink>
-                ) : (
-                  <span>platform API</span>
-                )}{" "}
-                as this service account.
-              </>
-            }
-            contentClassName="space-y-3"
-          >
-            {canUpdateServiceAccounts && (
-              <BulkActions
-                count={selectedTokens.length}
-                noun="API key"
-                onClear={clearSelection}
-                busy={bulkTokenAction.isPending}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    runTokenBulk(
-                      { type: "setDisabled", disabled: false },
-                      { verb: "Activated", failureVerb: "activate" },
-                    )
-                  }
-                >
-                  <Power className="h-4 w-4" />
-                  <span>Activate</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    runTokenBulk(
-                      { type: "setDisabled", disabled: true },
-                      { verb: "Deactivated", failureVerb: "deactivate" },
-                    )
-                  }
-                >
-                  <PowerOff className="h-4 w-4" />
-                  <span>Deactivate</span>
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkRevokeOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Revoke</span>
-                </Button>
-              </BulkActions>
-            )}
-
-            <DataTable
-              columns={columns}
-              data={tokens}
-              getRowId={(row) => row.id}
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              onPageRowIdsChange={onPageRowIdsChange}
-              hideSelectedCount
-              emptyIcon={KeyRound}
-              emptyMessage="No API keys yet"
-              emptyDescription="Without a key this service account cannot authenticate. Create one to start using it."
-              hidePaginationWhenSinglePage
-              // These sizes sum to 690 with the 56px select column, so the
-              // table fits the settings shell instead of hiding Actions behind
-              // a horizontal scroll.
-              fixedWidthColumnIds={[
-                "tokenStart",
-                "disabled",
-                "lastUsedAt",
-                "actions",
-              ]}
-              flexibleColumnIds={["name"]}
-            />
-
-            {canAuthenticate(health) && (
-              <div className="space-y-2 pt-1">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Authenticate a request as this service account
+          {activeTab === "keys" ? (
+            // The filter bar, the selection actions and the table are one
+            // scope: at zero selection the bar is the filters, and ticking a
+            // row swaps the actions into that same row rather than opening a
+            // second one above the table.
+            <BulkActionsScope>
+              <div>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Keys that let scripts and integrations call the{" "}
+                  {apiDocsUrl ? (
+                    <ExternalDocsLink
+                      href={apiDocsUrl}
+                      className="text-inherit underline underline-offset-4"
+                      showIcon={false}
+                    >
+                      platform API
+                    </ExternalDocsLink>
+                  ) : (
+                    <span>platform API</span>
+                  )}{" "}
+                  as this service account.
                 </p>
-                <CopyableCode
-                  value={`curl -H "Authorization: ${EXAMPLE_KEY}" ${apiBaseUrl()}/api/config`}
-                  toastMessage="Example request copied"
-                  className="text-xs"
-                />
-              </div>
-            )}
-          </SettingsBlock>
 
-          <SettingsBlock
-            title="Account settings"
-            description="The display name shown across the platform, and the roles every request made with this account's keys is authorized against."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="service-account-name">Display name</Label>
-                <Input
-                  id="service-account-name"
-                  disabled={!canUpdateServiceAccounts}
-                  {...form.register("name", { required: true })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="service-account-role">Roles</Label>
-                <RoleSelect
-                  multiple
-                  id="service-account-role"
-                  value={selectedRole}
-                  onValueChange={setSelectedRole}
-                  disabled={!canUpdateServiceAccounts}
-                  placeholder="Select a role"
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </SettingsBlock>
+                <CollectionFilters>
+                  <FilterBar
+                    onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                    search={
+                      <SearchInput
+                        objectNamePlural="API keys"
+                        searchFields={["name"]}
+                        className={filterSearchClass}
+                      />
+                    }
+                  >
+                    <FilterSelect
+                      value={statusFilter}
+                      onValueChange={(value) =>
+                        updateQueryParams({
+                          status: value === ALL ? null : value,
+                          page: "1",
+                        })
+                      }
+                      placeholder="Filter by status"
+                      items={[
+                        { value: ALL, label: "All statuses" },
+                        ...KEY_STATUS_FILTERS.map((status) => ({
+                          value: status,
+                          label: KEY_STATUS_LABELS[status],
+                        })),
+                      ]}
+                    />
+                  </FilterBar>
+                </CollectionFilters>
 
-          <SettingsBlock
-            title="Labels"
-            description="Key-value labels to organize and filter this service account."
-          >
-            {/* The component carries its own heading and helper text, which
-                would repeat this block's. */}
-            <ProfileLabels
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-              showLabel={false}
-              showDescription={false}
-            />
-          </SettingsBlock>
+                {canUpdateServiceAccounts && (
+                  <BulkActions
+                    count={selectedTokens.length}
+                    noun="API key"
+                    onClear={clearSelection}
+                    busy={bulkTokenAction.isPending}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        runTokenBulk(
+                          { type: "setDisabled", disabled: false },
+                          { verb: "Activated", failureVerb: "activate" },
+                        )
+                      }
+                    >
+                      <Power className="h-4 w-4" />
+                      <span>Activate</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        runTokenBulk(
+                          { type: "setDisabled", disabled: true },
+                          { verb: "Deactivated", failureVerb: "deactivate" },
+                        )
+                      }
+                    >
+                      <PowerOff className="h-4 w-4" />
+                      <span>Deactivate</span>
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setBulkRevokeOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Revoke</span>
+                    </Button>
+                  </BulkActions>
+                )}
 
-          <SettingsSaveBar
-            hasChanges={hasChanges}
-            isSaving={updateMutation.isPending}
-            permissions={{ serviceAccount: ["update"] }}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            disabledSave={!watchedName.trim()}
-          />
+                <DataTable
+                  columns={columns}
+                  data={filteredTokens}
+                  getRowId={(row) => row.id}
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
+                  hideSelectedCount
+                  emptyIcon={KeyRound}
+                  emptyMessage="No API keys yet"
+                  emptyDescription="Without a key this service account cannot authenticate. Create one to start using it."
+                  hasActiveFilters={hasActiveFilters}
+                  filteredEmptyMessage="No API keys match your filters"
+                  onClearFilters={clearFilters}
+                  hidePaginationWhenSinglePage
+                  // These sizes sum to 690 with the 56px select column, so the
+                  // table fits the settings shell instead of hiding Actions
+                  // behind a horizontal scroll.
+                  fixedWidthColumnIds={[
+                    "tokenStart",
+                    "disabled",
+                    "lastUsedAt",
+                    "actions",
+                  ]}
+                  flexibleColumnIds={["name"]}
+                />
+
+                {canAuthenticate(health) && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Authenticate a request as this service account
+                    </p>
+                    <CopyableCode
+                      value={`curl -H "Authorization: ${EXAMPLE_KEY}" ${apiBaseUrl()}/api/config`}
+                      toastMessage="Example request copied"
+                      className="text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </BulkActionsScope>
+          ) : (
+            <>
+              <DetailFacts
+                facts={presentFacts([
+                  {
+                    label: "Role",
+                    value: (
+                      <Badge variant="secondary">
+                        {formatRoleName(serviceAccount.role)}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    label: "API keys",
+                    value:
+                      serviceAccount.tokenCount === 0
+                        ? "None"
+                        : serviceAccount.activeTokenCount ===
+                            serviceAccount.tokenCount
+                          ? `${serviceAccount.tokenCount} usable`
+                          : `${serviceAccount.activeTokenCount} of ${serviceAccount.tokenCount} usable`,
+                  },
+                  {
+                    label: "Last used",
+                    value: serviceAccount.lastUsedAt
+                      ? formatRelativeTimeFromNow(serviceAccount.lastUsedAt)
+                      : "Never used",
+                  },
+                  {
+                    label: "Created",
+                    value: formatRelativeTimeFromNow(serviceAccount.createdAt),
+                  },
+                  createdByFact(serviceAccount.createdBy),
+                ])}
+                // No heading over it: the tab it sits on is the heading, and
+                // "Overview" twice on one screen is the duplication this page
+                // was reported for.
+                className="rounded-lg border bg-card p-4"
+              />
+
+              <SettingsBlock
+                title="Account settings"
+                description="The display name shown across the platform, and the roles every request made with this account's keys is authorized against."
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="service-account-name">Display name</Label>
+                    <Input
+                      id="service-account-name"
+                      disabled={!canUpdateServiceAccounts}
+                      {...form.register("name", { required: true })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="service-account-role">Roles</Label>
+                    <RoleSelect
+                      multiple
+                      id="service-account-role"
+                      value={selectedRole}
+                      onValueChange={setSelectedRole}
+                      disabled={!canUpdateServiceAccounts}
+                      placeholder="Select a role"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </SettingsBlock>
+
+              <SettingsBlock
+                title="Labels"
+                description="Key-value labels to organize and filter this service account."
+              >
+                {/* The component carries its own heading and helper text,
+                    which would repeat this block's. */}
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                  showLabel={false}
+                  showDescription={false}
+                />
+              </SettingsBlock>
+
+              <SettingsSaveBar
+                hasChanges={hasChanges}
+                isSaving={updateMutation.isPending}
+                permissions={{ serviceAccount: ["update"] }}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                disabledSave={!watchedName.trim()}
+              />
+            </>
+          )}
 
           <CreateTokenDialog
             open={isTokenDialogOpen}
@@ -674,32 +848,6 @@ export default function ServiceAccountDetailPage({
 }
 
 // === Internal helpers
-
-/**
- * Who made this service account and when it last worked, on the header line
- * under its name. Provenance rather than configuration: it is what a reader
- * checks once on arrival and never edits, so it belongs beside the title
- * instead of in a card competing with the sections that do take input.
- */
-function Provenance({ account }: { account: ServiceAccountDetail }) {
-  return (
-    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      <span>Created {formatRelativeTimeFromNow(account.createdAt)}</span>
-      {account.createdBy && (
-        <>
-          <span>by</span>
-          <CreatedByCell createdBy={account.createdBy} />
-        </>
-      )}
-      <span aria-hidden>&middot;</span>
-      <span>
-        {account.lastUsedAt
-          ? `Last used ${formatRelativeTimeFromNow(account.lastUsedAt)}`
-          : "Never used"}
-      </span>
-    </span>
-  );
-}
 
 /**
  * The date beside a key's status badge: when it lapses, or when it did. Says

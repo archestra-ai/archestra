@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.66](https://github.com/archestra-ai/archestra/compare/platform-v1.3.65...platform-v1.3.66) (2026-09-21)
+
+
+### Bug Fixes
+
+* **mcp:** sanitize advertised tool schemas for Gemini clients (backport release/1.3) ([#8110](https://github.com/archestra-ai/archestra/issues/8110)) ([e5ba7ba](https://github.com/archestra-ai/archestra/commit/e5ba7ba0a36b95fa3ff4517066b57dace61ee594))
+
 ## [1.3.65](https://github.com/archestra-ai/archestra/compare/platform-v1.3.64...platform-v1.3.65) (2026-09-19)
 
 

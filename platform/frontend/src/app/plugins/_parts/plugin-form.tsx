@@ -114,7 +114,7 @@ export function PluginForm({
 
       {/* No heading: the visibility control names the section itself. */}
       <SettingsSection>
-        <fieldset disabled={readOnly} className="contents">
+        <fieldset disabled={readOnly} className="space-y-4">
           <PluginScopeSelector
             scope={draft.scope}
             onScopeChange={(scope) => onChange({ scope })}

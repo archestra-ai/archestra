@@ -200,6 +200,8 @@ export const AgentRuntimeSchema = z.object({
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
   resources: AgentRuntimeResourcesSchema.nullable(),
+  /** Container ports users can forward from an active workspace. */
+  ports: z.array(z.number().int().min(1).max(65_535)).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
   /**
@@ -338,6 +340,7 @@ export const AgentRunSessionResponseSchema = SelectAgentRunSessionSchema.extend(
 );
 
 export const GetAgentRunResponseSchema = AgentRunSessionResponseSchema.extend({
+  portForwardCommand: z.string().nullable().optional(),
   workspace: z
     .object({
       state: AgentWorkspaceStateSchema,

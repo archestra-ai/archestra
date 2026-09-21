@@ -5,7 +5,7 @@ import {
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import Link from "next/link";
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
 import type { EnvVarDraft } from "@/components/environment-variable-dialog";
@@ -43,6 +43,7 @@ export type AgentRuntimeConfig = {
     cpuLimit?: string;
     memoryLimit?: string;
   } | null;
+  ports?: number[];
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
     key: string;
@@ -493,6 +494,11 @@ export function AgentRuntimeRunControls({
         />
       </div>
 
+      <RuntimePortsField
+        value={config.ports ?? []}
+        onChange={(ports) => update({ ports })}
+      />
+
       <div className="flex items-start justify-between gap-6 border-t pt-4">
         <div className="min-w-0 space-y-1">
           <Label htmlFor="agent-runtime-privileged">Privileged mode</Label>
@@ -509,6 +515,64 @@ export function AgentRuntimeRunControls({
           onCheckedChange={(privileged) => update({ privileged })}
         />
       </div>
+    </div>
+  );
+}
+
+function RuntimePortsField({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (ports: number[]) => void;
+}) {
+  const [draft, setDraft] = useState(value.join(", "));
+  const lastEmitted = useRef<string | null>(null);
+  useEffect(() => {
+    const incoming = value.join(", ");
+    if (incoming !== lastEmitted.current) setDraft(incoming);
+  }, [value]);
+  const parts = draft.trim() ? draft.split(/[\s,]+/).filter(Boolean) : [];
+  const ports = parts.map(Number);
+  const valid = ports.every(
+    (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
+  );
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="agent-runtime-ports">Ports to forward</Label>
+      <FieldDescription>
+        Optional container ports, separated by commas. These appear in the
+        run&apos;s connection details.
+      </FieldDescription>
+      <Input
+        id="agent-runtime-ports"
+        inputMode="numeric"
+        placeholder="3000, 9000"
+        value={draft}
+        aria-invalid={!valid}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          const parsed = next.trim()
+            ? next
+                .split(/[\s,]+/)
+                .filter(Boolean)
+                .map(Number)
+            : [];
+          if (
+            parsed.every(
+              (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
+            )
+          ) {
+            lastEmitted.current = parsed.join(", ");
+            onChange(parsed);
+          }
+        }}
+      />
+      {!valid && (
+        <FieldDescription>Use port numbers from 1 to 65535.</FieldDescription>
+      )}
     </div>
   );
 }

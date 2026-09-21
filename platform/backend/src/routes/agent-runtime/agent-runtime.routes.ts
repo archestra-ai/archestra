@@ -707,19 +707,31 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           owned.taskId,
           terminalRetained,
         );
+        const connection =
+          workspace && ["active", "idle"].includes(workspace.state)
+            ? await resolveAgentRuntimeBackendDriver(
+                owned.backend,
+              ).getWorkspaceConnection(owned)
+            : null;
+        const ports = connection
+          ? await AgentModel.getRuntimePorts({
+              id: owned.agentId,
+              organizationId: request.organizationId,
+            })
+          : [];
         return reply.send({
           ...owned,
           terminalRetained,
+          portForwardCommand:
+            connection && ports.length
+              ? `kubectl port-forward -n ${owned.runtimeScope} pod/${connection.hostname.split(".")[0]} ${ports.map((port) => `:${port}`).join(" ")}`
+              : null,
           workspace: workspace
             ? {
                 state: workspace.state,
                 expiresAt: workspace.expiresAt,
                 idleAt: workspace.idleAt,
-                connection: ["active", "idle"].includes(workspace.state)
-                  ? await resolveAgentRuntimeBackendDriver(
-                      owned.backend,
-                    ).getWorkspaceConnection(owned)
-                  : null,
+                connection,
               }
             : null,
           viewerRole: "owner" as const,

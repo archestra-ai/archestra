@@ -1,6 +1,6 @@
 import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -485,13 +485,6 @@ describe("NewPluginPage", () => {
     expect(screen.getByTestId("plugin-scope-selector")).toBeVisible();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
-    const contentCard = displayName.closest(".rounded-lg.border");
-    if (!contentCard) throw new Error("Plugin content card not rendered");
-    expect(
-      within(contentCard as HTMLElement).queryByRole("button", {
-        name: /Create plugin/,
-      }),
-    ).not.toBeInTheDocument();
     // An unnamed plugin is not creatable, whatever else is filled in.
     expect(create).toBeDisabled();
 

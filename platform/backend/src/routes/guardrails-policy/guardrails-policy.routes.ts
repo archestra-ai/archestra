@@ -47,7 +47,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(GuardrailsValidationSchema),
       },
     },
-    async (request) => guardrailsPolicyService.validate(request.body.content),
+    async (request) =>
+      guardrailsPolicyService.validate(request.body.content, {
+        organizationId: request.organizationId,
+      }),
   );
   app.put(
     "/api/guardrails-policy",

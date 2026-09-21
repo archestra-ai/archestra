@@ -97,7 +97,8 @@ export function AppaGithubSyncPanel() {
             Ask your administrator to enable APPA on the server to connect a
             policy repository.
           </p>
-        ) : source ? (
+        ) : // A row can exist for its declaration flags alone, with no source on it.
+        source?.repo && source.path ? (
           <>
             <div className="flex flex-wrap items-center gap-3">
               <Github className="size-4 shrink-0 text-muted-foreground" />

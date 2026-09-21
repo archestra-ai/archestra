@@ -35,6 +35,8 @@ const install = (fields: Partial<Install>): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  packageHash: null,
+  lastError: null,
   credentialBindings: {},
   createdAt: "2026-09-18T12:00:00Z",
   updatedAt: "2026-09-18T12:00:00Z",
@@ -89,7 +91,7 @@ test("an installed battery follows its install and is switched through it", asyn
           {
             battery: "github",
             evidence: "host",
-            install: install({ enabled: false, status: "disabled" }),
+            install: install({ enabled: false, status: "server_missing" }),
           },
         ];
         return HttpResponse.json(matches[0].install);
@@ -164,7 +166,7 @@ test("a choice made while a tool sync attaches the battery lands on the new inst
         const updated = install({
           id: "install-3",
           enabled: false,
-          status: "disabled",
+          status: "server_missing",
         });
         matches = [{ battery: "github", evidence: "host", install: updated }];
         return HttpResponse.json(updated);

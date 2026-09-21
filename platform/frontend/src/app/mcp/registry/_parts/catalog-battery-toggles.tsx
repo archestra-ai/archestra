@@ -87,10 +87,10 @@ type InstallStatus = NonNullable<BatteryMatch["install"]>["status"];
 
 const STATUS_NOTES: Record<InstallStatus, string> = {
   active: "Its guardrails apply to this server's tools.",
-  disabled: "Off. Its guardrails do not apply.",
   missing_credentials: "Needs a credential before its helpers can run.",
   naming_conflict: "Off: its tool names clash with another battery.",
-  superseded: "Off: another server already owns this battery's helpers.",
+  server_missing: "Off: it is bound to no server this deployment carries.",
+  refused: "Off: the policy it composes into was refused.",
   unavailable: "Off: the battery package is gone.",
 };
 

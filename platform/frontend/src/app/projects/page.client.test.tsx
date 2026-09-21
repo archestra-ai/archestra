@@ -10,7 +10,6 @@ const mockRouterPush = vi.fn();
 const mockCreateMutateAsync = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
-const mockSetShareMutateAsync = vi.fn();
 const mockBulkDeleteMutate = vi.fn();
 const mockBulkUpdateVisibilityMutateAsync = vi.fn();
 /** The detail the edit dialog loads; tests override the pin and sharing. */
@@ -49,18 +48,11 @@ type ProjectFixture = {
 
 vi.mock("next/navigation");
 
-// The edit dialog now hosts the shared user-share control, which reads the
-// session and the org member list. This suite is about the card menus, so the
-// control is stubbed rather than wiring those queries into every case.
-vi.mock("@/components/user-share-field", () => ({
-  useUserShareOption: (value: string) => ({
-    value,
-    label: "Users",
-    description: "Share this with selected people",
-    disabled: false,
-    hasCandidates: true,
-  }),
-  UserShareField: () => null,
+// The edit dialog's Permissions page loads and saves the project's own policy.
+// This suite is about the card menus and the General page, so it is stubbed
+// rather than wiring the permission queries into every case.
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => <div>permissions</div>,
 }));
 
 vi.mock("@/components/search-input", () => ({
@@ -318,10 +310,6 @@ vi.mock("@/lib/projects/projects.query", () => ({
   }),
   // The edit dialog fetches the project detail by id; return a minimal one.
   useProject: () => ({ data: mockEditingProject }),
-  useSetProjectShare: () => ({
-    mutateAsync: mockSetShareMutateAsync,
-    isPending: false,
-  }),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -369,7 +357,6 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
-    mockSetShareMutateAsync.mockResolvedValue(true);
     mockBulkUpdateVisibilityMutateAsync.mockResolvedValue({
       succeeded: ["Project"],
       failed: [],
@@ -464,11 +451,6 @@ describe("ProjectsPageClient", () => {
       pinned: true,
     });
 
-    fireEvent.click(screen.getByText("Edit details"));
-    expect(
-      screen.getByRole("heading", { name: "Edit project" }),
-    ).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
   });
@@ -552,23 +534,11 @@ describe("ProjectsPageClient", () => {
   describe("default agent, with agent:read granted", () => {
     const PINNED = { id: "pinned", name: "Pinned Agent", scope: "org" };
 
-    /** Visibility options render label and description in one control. */
-    function clickOptionStartingWith(label: string) {
-      const option = screen
-        .getAllByRole("button")
-        .find((button) => button.textContent?.startsWith(label));
-      if (!option) throw new Error(`no visibility option for "${label}"`);
-      fireEvent.click(option);
-    }
-
     beforeEach(() => {
-      // share-org too, or the Organization option renders disabled.
       vi.mocked(useHasPermissions).mockImplementation(
         (permissions) =>
           ({
-            data:
-              permissions.agent?.includes("read") === true ||
-              permissions.project?.includes("share-org") === true,
+            data: permissions.agent?.includes("read") === true,
           }) as ReturnType<typeof useHasPermissions>,
       );
       mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
@@ -604,7 +574,7 @@ describe("ProjectsPageClient", () => {
       expect(screen.queryByText("Default")).not.toBeInTheDocument();
     });
 
-    it("saves the sharing change before the agent, which is judged against it", async () => {
+    it("saves the project without a sharing payload", async () => {
       vi.mocked(useInternalAgents).mockReturnValue({
         data: [PINNED],
         isPending: false,
@@ -612,17 +582,29 @@ describe("ProjectsPageClient", () => {
 
       render(<ProjectsPageClient />);
       fireEvent.click(screen.getByText("Edit details"));
-      // The visibility selector shows only the current choice until expanded.
-      clickOptionStartingWith("Personal");
-      clickOptionStartingWith("Organization");
+      fireEvent.change(screen.getByLabelText("Name *"), {
+        target: { value: "Renamed project" },
+      });
       fireEvent.click(screen.getByText("Save"));
 
-      await waitFor(() => expect(mockSetShareMutateAsync).toHaveBeenCalled());
       await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
-      // Sending the agent first would validate it against the old audience.
-      expect(mockSetShareMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
-        mockUpdateMutateAsync.mock.invocationCallOrder[0],
+      // Sharing is a permission policy now, saved by the Permissions page
+      // itself. The legacy columns this form used to write are read by nothing.
+      const body = mockUpdateMutateAsync.mock.calls[0][0];
+      expect(body).toEqual(
+        expect.objectContaining({ id: "owner", name: "Renamed project" }),
       );
+      expect(body).not.toHaveProperty("visibility");
+      expect(body).not.toHaveProperty("teamIds");
+      expect(body).not.toHaveProperty("userIds");
+    });
+
+    it("no longer offers the legacy sharing control", () => {
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.queryByText("Sharing")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
     });
   });
 

@@ -11,12 +11,13 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   BatteryCredentialBindings,
+  BatteryInstallStatus,
   BatteryPackageFile,
 } from "@/types/openappa-batteries";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import organizationsTable from "./organization";
 
-// A battery package an organization uploaded; it shadows the bundled battery of the same name.
+// A battery package an organization uploaded, content-addressed: a name may have several versions.
 export const openappaBatteryPackagesTable = pgTable(
   "openappa_battery_packages",
   {
@@ -36,14 +37,20 @@ export const openappaBatteryPackagesTable = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("openappa_battery_packages_org_name_idx").on(
+    // An include entry spells a content hash: the bytes under one hash never change.
+    uniqueIndex("openappa_battery_packages_org_hash_idx").on(
+      table.organizationId,
+      table.contentHash,
+    ),
+    // The panel lists a name's stored versions.
+    index("openappa_battery_packages_org_name_list_idx").on(
       table.organizationId,
       table.name,
     ),
   ],
 );
 
-// A battery attached to one MCP catalog entry: the catalog's tools are the battery's aliases.
+// The derived read model of the declarations: one row per (organization, catalog, battery).
 export const openappaBatteryInstallsTable = pgTable(
   "openappa_battery_installs",
   {
@@ -56,6 +63,13 @@ export const openappaBatteryInstallsTable = pgTable(
       .notNull()
       .references(() => internalMcpCatalogTable.id, { onDelete: "cascade" }),
     enabled: boolean().notNull().default(true),
+    status: text()
+      .$type<BatteryInstallStatus>()
+      .notNull()
+      .default("active" satisfies BatteryInstallStatus),
+    // The package version the declaration spells; null for a bundled battery.
+    packageHash: text("package_hash"),
+    lastError: text("last_error"),
     credentialBindings: jsonb("credential_bindings")
       .$type<BatteryCredentialBindings>()
       .notNull()

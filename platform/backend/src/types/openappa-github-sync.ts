@@ -4,6 +4,13 @@ import { openappaGithubSyncTable } from "@/database/schemas/openappa-github-sync
 
 const AppaSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
 export type AppaSyncInterval = z.infer<typeof AppaSyncIntervalSchema>;
+
+/** Why a pulled document is held instead of published. */
+export const HeldPullReasonSchema = z.enum([
+  "drops_batteries",
+  "changes_credentials",
+]);
+export type HeldPullReason = z.infer<typeof HeldPullReasonSchema>;
 export const AppaGithubSourceSchema = z
   .object({
     repo: z
@@ -49,7 +56,9 @@ export const AppaGithubSourceSchema = z
 export type AppaGithubSource = z.infer<typeof AppaGithubSourceSchema>;
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
-}).omit({ content: true });
+  heldReasons: z.array(HeldPullReasonSchema),
+  // Held bytes stay in the database like the accepted ones; the hash identifies the pull.
+}).omit({ content: true, heldContent: true });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),

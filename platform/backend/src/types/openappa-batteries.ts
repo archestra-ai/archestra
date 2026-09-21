@@ -21,14 +21,37 @@ export type BatteryCredentialBindings = z.infer<
   typeof BatteryCredentialBindingsSchema
 >;
 
+/** Why a declared battery does or does not take part in the composed policy, by precedence. */
+export const BatteryInstallStatusSchema = z.enum([
+  "unavailable",
+  "missing_credentials",
+  "naming_conflict",
+  "server_missing",
+  "refused",
+  "active",
+]);
+export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
+
 export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
 ).extend({
+  status: BatteryInstallStatusSchema,
   credentialBindings: BatteryCredentialBindingsSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
 export type BatteryInstall = z.infer<typeof BatteryInstallSchema>;
+
+/** One derived install as a recompose computes it; ids are the model's to preserve. */
+export const BatteryInstallRowSchema = z.strictObject({
+  batteryName: z.string().min(1).max(100),
+  catalogId: z.string().uuid(),
+  status: BatteryInstallStatusSchema,
+  packageHash: z.string().nullable(),
+  lastError: z.string().nullable(),
+  credentialBindings: BatteryCredentialBindingsSchema,
+});
+export type BatteryInstallRow = z.infer<typeof BatteryInstallRowSchema>;
 
 export const BatteryPackageSchema = createSelectSchema(
   openappaBatteryPackagesTable,
@@ -41,7 +64,7 @@ export type BatteryPackage = z.infer<typeof BatteryPackageSchema>;
 /** A stored package's identity: enough to find its inspected form or fetch its files. */
 export type BatteryPackageSummary = Pick<
   BatteryPackage,
-  "organizationId" | "name" | "contentHash"
+  "organizationId" | "name" | "contentHash" | "description" | "createdAt"
 >;
 
 export const EffectivePolicySchema = createSelectSchema(
@@ -54,17 +77,6 @@ export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 
 export const BatterySourceSchema = z.enum(["bundled", "organization"]);
 export type BatterySource = z.infer<typeof BatterySourceSchema>;
-
-/** Why an install does or does not take part in the composed policy. */
-export const BatteryInstallStatusSchema = z.enum([
-  "active",
-  "disabled",
-  "missing_credentials",
-  "naming_conflict",
-  "superseded",
-  "unavailable",
-]);
-export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
 
 export const BatteryInstallViewSchema = BatteryInstallSchema.extend({
   status: BatteryInstallStatusSchema,

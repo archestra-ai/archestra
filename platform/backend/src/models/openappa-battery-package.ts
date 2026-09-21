@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
+  BatteryPackage,
   BatteryPackageFile,
   BatteryPackageSummary,
 } from "@/types/openappa-batteries";
@@ -8,22 +9,21 @@ import type {
 const table = schema.openappaBatteryPackagesTable;
 
 class OpenAppaBatteryPackageModel {
-  /** Every package of the organization without its files. */
-  static async listSummaries(
-    organizationId: string,
-  ): Promise<BatteryPackageSummary[]> {
+  /** Every package of the organization without its files, newest version of a name first. */
+  static async list(organizationId: string): Promise<BatteryPackageSummary[]> {
     return db
       .select(summary)
       .from(table)
       .where(eq(table.organizationId, organizationId))
-      .orderBy(table.name);
+      .orderBy(asc(table.name), desc(table.createdAt));
   }
 
-  static async findSummary(params: {
+  /** The stored versions of one battery name, newest first. */
+  static async listByName(params: {
     organizationId: string;
     name: string;
-  }): Promise<BatteryPackageSummary | null> {
-    const [row] = await db
+  }): Promise<BatteryPackageSummary[]> {
+    return db
       .select(summary)
       .from(table)
       .where(
@@ -31,49 +31,59 @@ class OpenAppaBatteryPackageModel {
           eq(table.organizationId, params.organizationId),
           eq(table.name, params.name),
         ),
-      );
-    return row ?? null;
+      )
+      .orderBy(desc(table.createdAt));
   }
 
-  static async find(params: { organizationId: string; name: string }) {
+  /** The row an include entry spells; the bytes under a hash never change. */
+  static async findByHash(params: {
+    organizationId: string;
+    contentHash: string;
+  }): Promise<BatteryPackage | null> {
     const [row] = await db
       .select()
       .from(table)
       .where(
         and(
           eq(table.organizationId, params.organizationId),
-          eq(table.name, params.name),
+          eq(table.contentHash, params.contentHash),
         ),
       );
     return row ?? null;
   }
 
-  static async upsert(params: {
+  /** Store a version; the same bytes again answer the stored row untouched. */
+  static async insert(params: {
     organizationId: string;
     name: string;
     description: string;
     contentHash: string;
     files: BatteryPackageFile[];
-  }) {
-    const { organizationId, name, ...values } = params;
-    const [row] = await db
+  }): Promise<BatteryPackage> {
+    const [inserted] = await db
       .insert(table)
-      .values({ organizationId, name, ...values })
-      .onConflictDoUpdate({
-        target: [table.organizationId, table.name],
-        set: { ...values, updatedAt: new Date() },
+      .values(params)
+      .onConflictDoNothing({
+        target: [table.organizationId, table.contentHash],
       })
       .returning();
-    return row;
+    if (inserted) return inserted;
+    const existing = await OpenAppaBatteryPackageModel.findByHash(params);
+    if (!existing)
+      throw new Error("Battery package insert conflicted with no stored row");
+    return existing;
   }
 
-  static async delete(params: { organizationId: string; name: string }) {
+  static async delete(params: {
+    organizationId: string;
+    contentHash: string;
+  }): Promise<boolean> {
     const rows = await db
       .delete(table)
       .where(
         and(
           eq(table.organizationId, params.organizationId),
-          eq(table.name, params.name),
+          eq(table.contentHash, params.contentHash),
         ),
       )
       .returning({ id: table.id });
@@ -81,12 +91,12 @@ class OpenAppaBatteryPackageModel {
   }
 
   static async findByIdForAudit(
-    name: string,
+    contentHash: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const row = await OpenAppaBatteryPackageModel.find({
+    const row = await OpenAppaBatteryPackageModel.findByHash({
       organizationId,
-      name,
+      contentHash,
     });
     return row
       ? {
@@ -106,5 +116,7 @@ export default OpenAppaBatteryPackageModel;
 const summary = {
   organizationId: table.organizationId,
   name: table.name,
+  description: table.description,
   contentHash: table.contentHash,
+  createdAt: table.createdAt,
 };

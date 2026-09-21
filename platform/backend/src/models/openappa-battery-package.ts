@@ -90,6 +90,26 @@ class OpenAppaBatteryPackageModel {
     return rows.length > 0;
   }
 
+  /**
+   * The newest stored version of a name: what an upload of that name answered
+   * before it ran, and what it answers after.
+   */
+  static async findNewestByNameForAudit(
+    name: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [newest] = await OpenAppaBatteryPackageModel.listByName({
+      organizationId,
+      name,
+    });
+    return newest
+      ? OpenAppaBatteryPackageModel.findByIdForAudit(
+          newest.contentHash,
+          organizationId,
+        )
+      : null;
+  }
+
   static async findByIdForAudit(
     contentHash: string,
     organizationId: string,

@@ -165,6 +165,59 @@ class OpenAppaGithubSyncModel {
     });
   }
 
+  /**
+   * Publish the held bytes as a new revision authored by the user accepting
+   * them, and clear the hold and the pending flag. Held bytes never reach the
+   * policy any other way, and `GuardrailsPolicyModel.save` refuses a write while
+   * syncing is on, which is exactly when a pull can be held.
+   */
+  static async publishHeld(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{ contentHash: string; sourceCommit: string } | null> {
+    const { organizationId, userId } = params;
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
+      );
+      const [row] = await tx
+        .select()
+        .from(table)
+        .where(eq(table.organizationId, organizationId));
+      if (!row?.heldContent || !row.heldContentHash || !row.heldSourceCommit)
+        return null;
+      const policies = schema.guardrailsPolicyRevisionsTable;
+      const [current] = await tx
+        .select()
+        .from(policies)
+        .where(eq(policies.organizationId, organizationId))
+        .orderBy(desc(policies.revision))
+        .limit(1);
+      if (current?.contentHash !== row.heldContentHash)
+        await tx.insert(policies).values({
+          organizationId,
+          revision: (current?.revision ?? 0) + 1,
+          content: row.heldContent,
+          contentHash: row.heldContentHash,
+          updatedBy: userId,
+        });
+      await tx
+        .update(table)
+        .set({
+          content: row.heldContent,
+          sourceCommit: row.heldSourceCommit,
+          lastSyncError: null,
+          declarationsPendingPublish: false,
+          ...NO_HOLD,
+        })
+        .where(eq(table.organizationId, organizationId));
+      return {
+        contentHash: row.heldContentHash,
+        sourceCommit: row.heldSourceCommit,
+      };
+    });
+  }
+
   static async clearHold(organizationId: string) {
     await db
       .update(table)

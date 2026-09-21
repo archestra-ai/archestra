@@ -71,7 +71,7 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read guardrails policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; batteries installed for MCP servers compose into enforcement on top of it, and `effective` shows the composed result the runtime enforces. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)
@@ -87,17 +87,23 @@ const registry = defineArchestraTools([
     shortName: "validate_guardrails_policy",
     title: "Validate guardrails policy",
     description:
-      "Validate proposed organization.appa.toml without applying changes. Explain the intended behavior to the user before updating their policy.",
+      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
-    async handler({ args }) {
-      return result(await guardrailsPolicyService.validate(args.content));
+    async handler({ args, context }) {
+      if (!context.organizationId)
+        throw new ApiError(401, "Organization context is required");
+      return result(
+        await guardrailsPolicyService.validate(args.content, {
+          organizationId: context.organizationId,
+        }),
+      );
     },
   }),
   defineArchestraTool({
     shortName: "update_guardrails_policy",
     title: "Update guardrails policy",
     description:
-      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission.",
+      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission, and credential:update as well whenever the saved text hands a credential to a battery it did not already reach — a new `[credentials]` entry, a changed key, or a newly included battery that reads a variable the table already binds. Removing a battery or a binding needs no extra permission.",
     schema: UpdateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId || !context.userId)

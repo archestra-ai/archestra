@@ -6,31 +6,35 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
-  BatteryInstallViewSchema,
   BatteryMatchSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   EffectivePolicySchema,
+  PolicyBatteryViewSchema,
+  PolicyDeclarationsViewSchema,
   UpdateBatteryInstallSchema,
   UploadBatteryPackageSchema,
+  UploadedBatteryPackageSchema,
 } from "@/types/openappa-batteries";
 
 const InstallParamsSchema = z.object({ id: z.uuid() });
-const PackageParamsSchema = z.object({
+const PackageNameParamsSchema = z.object({
   name: z
     .string()
     .min(1)
     .max(100)
     .regex(/^[a-z0-9][a-z0-9-]*$/),
 });
+const PackageHashParamsSchema = z.object({
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+});
 const MatchesQuerySchema = z.object({ catalogId: z.uuid() });
 const DeletedSchema = z.object({ success: z.literal(true) });
 
 const routes: FastifyPluginAsyncZod = async (app) => {
-  // Installing a battery changes organization policy, so writes require
-  // organization management as well as the endpoint permission. The one
-  // other way in is auto-attach on an MCP server whose URL host or image
-  // identifies the provider; a name alone attaches a battery disabled.
+  // Every write here edits the organization's policy text, so writes require
+  // organization management as well as the endpoint permission. The policy
+  // service gates the credential grants an edit would create on top of that.
   app.addHook("preHandler", async (request) => {
     if (!openappaEnabled())
       throw new ApiError(404, "Guardrails v2 is disabled");
@@ -59,6 +63,18 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       openappaBatteriesService.listBatteries(request.organizationId),
+  );
+  app.get(
+    "/api/openappa/policy-declarations",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaPolicyDeclarations,
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(PolicyDeclarationsViewSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.policyDeclarations(request.organizationId),
   );
   app.get(
     "/api/openappa/effective-policy",
@@ -95,7 +111,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.CreateOpenappaBatteryInstall,
         tags: ["OpenAPPA"],
         body: CreateBatteryInstallSchema,
-        response: constructResponseSchema(BatteryInstallViewSchema),
+        response: constructResponseSchema(PolicyBatteryViewSchema),
       },
     },
     async (request) =>
@@ -113,7 +129,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         tags: ["OpenAPPA"],
         params: InstallParamsSchema,
         body: UpdateBatteryInstallSchema,
-        response: constructResponseSchema(BatteryInstallViewSchema),
+        response: constructResponseSchema(PolicyBatteryViewSchema),
       },
     },
     async (request) =>
@@ -136,6 +152,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       await openappaBatteriesService.deleteInstall({
+        userId: request.user.id,
         organizationId: request.organizationId,
         id: request.params.id,
       });
@@ -148,9 +165,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.UploadOpenappaBatteryPackage,
         tags: ["OpenAPPA"],
-        params: PackageParamsSchema,
+        params: PackageNameParamsSchema,
         body: UploadBatteryPackageSchema,
-        response: constructResponseSchema(BatterySummarySchema),
+        response: constructResponseSchema(UploadedBatteryPackageSchema),
       },
     },
     async (request) =>
@@ -162,19 +179,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       }),
   );
   app.delete(
-    "/api/openappa/battery-packages/:name",
+    "/api/openappa/battery-packages/:contentHash",
     {
       schema: {
         operationId: RouteId.DeleteOpenappaBatteryPackage,
         tags: ["OpenAPPA"],
-        params: PackageParamsSchema,
+        params: PackageHashParamsSchema,
         response: constructResponseSchema(DeletedSchema),
       },
     },
     async (request) => {
       await openappaBatteriesService.deletePackage({
         organizationId: request.organizationId,
-        name: request.params.name,
+        contentHash: request.params.contentHash,
       });
       return { success: true as const };
     },

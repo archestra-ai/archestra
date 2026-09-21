@@ -147,8 +147,11 @@ describe("APPA Guide feature availability", () => {
     ]);
   });
 
-  test("policy examples compile with the embedded APPA version", async () => {
+  test("policy examples compile with the embedded APPA version", async ({
+    makeOrganization,
+  }) => {
     config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
     const reference = APPA_GUIDE_SKILL.files[0].content;
     const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
       (match) => match[1],
@@ -164,7 +167,9 @@ describe("APPA Guide feature availability", () => {
       header + fallback + binding,
       header + remote,
     ]) {
-      expect(await guardrailsPolicyService.validate(candidate)).toEqual({
+      expect(
+        await guardrailsPolicyService.validate(candidate, { organizationId }),
+      ).toEqual({
         valid: true,
         errors: [],
       });

@@ -321,6 +321,143 @@ describe("APPA GitHub sync", () => {
     });
   });
 
+  /** Serve different upstream bytes under a different commit. */
+  const upstream = (content: string, sha: string) => {
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/commits/:ref",
+        () => HttpResponse.json({ sha }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/guardrails/appa.toml",
+        () => HttpResponse.text(content),
+      ),
+    );
+  };
+
+  test("a pull handing a battery a credential is held, and accepting it takes credential update", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    await configure();
+    await syncAppaGithubPolicy(organizationId);
+    const granted = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    const second = "b".repeat(40);
+    upstream(granted, second);
+    await syncAppaGithubPolicy(organizationId);
+
+    // The bytes are kept, not published: the repository cannot grant this.
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: policy, revision: 1 });
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: granted,
+      heldSourceCommit: second,
+      heldReasons: ["changes_credentials"],
+      sourceCommit: commit,
+    });
+    const status = await app.inject({
+      method: "GET",
+      url: "/api/openappa/github-sync",
+    });
+    expect(status.json().source).not.toHaveProperty("heldContent");
+
+    const manager = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { organization: ["update"], toolPolicy: ["read", "update"] },
+    });
+    await makeMember(manager.id, organizationId, { role: role.role });
+    const managerApp = createFastifyInstance();
+    managerApp.addHook("onRequest", async (request) => {
+      Object.assign(request, { user: manager, organizationId });
+    });
+    await managerApp.register(routes);
+    try {
+      expect(
+        (
+          await managerApp.inject({
+            method: "POST",
+            url: "/api/openappa/github-sync/accept-held",
+          })
+        ).statusCode,
+      ).toBe(403);
+    } finally {
+      await managerApp.close();
+    }
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ revision: 1 });
+
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/accept-held",
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      sourceCommit: second,
+      reasons: ["changes_credentials"],
+      changedVariables: ["APPA_PROVIDER_GITHUB_TOKEN"],
+    });
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: granted, revision: 2, updatedBy: adminId });
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: null,
+      heldReasons: [],
+      content: granted,
+      sourceCommit: second,
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/openappa/github-sync/accept-held",
+        })
+      ).statusCode,
+    ).toBe(409);
+  });
+
+  test("a pull dropping a battery this deployment has not published yet is held", async () => {
+    await configure();
+    const declared = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
+    upstream(declared, commit);
+    await syncAppaGithubPolicy(organizationId);
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: declared, revision: 1 });
+    // Declarations written here are not in the repository yet, so a pull that
+    // lacks them is a rollback nobody asked for.
+    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
+      organizationId,
+      true,
+    );
+    const second = "c".repeat(40);
+    upstream(policy, second);
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: policy,
+      heldSourceCommit: second,
+      heldReasons: ["drops_batteries"],
+    });
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: declared, revision: 1 });
+    // Accepting it is the operator's call, and it clears the pending flag.
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/openappa/github-sync/accept-held",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      declarationsPendingPublish: false,
+      heldContent: null,
+    });
+  });
+
   test("unchanged upstream bytes do not create redundant policy revisions", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);

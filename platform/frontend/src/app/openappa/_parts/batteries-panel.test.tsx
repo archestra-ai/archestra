@@ -33,6 +33,7 @@ const github = (installs: Install[]): Battery => ({
   name: "github",
   description: "GitHub rules",
   source: "bundled",
+  contentHash: null,
   namespaces: ["github"],
   helpers: ["github_read_repo"],
   credentials: ["APPA_PROVIDER_GITHUB_TOKEN"],
@@ -45,6 +46,8 @@ const install = (fields: Partial<Install>): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  packageHash: null,
+  lastError: null,
   credentialBindings: {},
   createdAt: "2026-09-18T12:00:00Z",
   updatedAt: "2026-09-18T12:00:00Z",
@@ -113,7 +116,7 @@ test("an install shows its server, and the switch turns the battery off through 
       `${baseUrl}/api/openappa/battery-installs/install-1`,
       async ({ request }) => {
         expect(await request.json()).toEqual({ enabled: false });
-        const updated = install({ enabled: false, status: "disabled" });
+        const updated = install({ enabled: false, status: "server_missing" });
         batteries = [github([updated])];
         return HttpResponse.json(updated);
       },
@@ -191,7 +194,7 @@ test("uploading a package sends the picked files by their path inside the folder
           ...github([]),
           name: "acme",
           description: "Acme rules",
-          source: "organization",
+          source: "upload",
           credentials: [],
         };
         batteries = [github([]), uploaded];

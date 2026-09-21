@@ -29,7 +29,7 @@ describe("guardrails battery matches", () => {
       url: `/api/openappa/battery-matches?catalogId=${catalogId}`,
     });
 
-  test("a matching catalog entry reports its battery, the evidence and the install once attached", async ({
+  test("a matching catalog entry reports its battery, the evidence and the row it was declared for", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -43,20 +43,30 @@ describe("guardrails battery matches", () => {
       name: "github__get_me",
       rawName: "get_me",
     });
+    // A synced catalog is only a suggestion: nothing is declared for it.
+    await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
     expect((await matches(catalog.id)).json()).toEqual([
       { battery: "github", evidence: "host", install: null },
     ]);
-    await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/openappa/battery-installs",
+          payload: { batteryName: "github", catalogId: catalog.id },
+        })
+      ).statusCode,
+    ).toBe(200);
     expect((await matches(catalog.id)).json()).toMatchObject([
       {
         battery: "github",
         evidence: "host",
-        install: { enabled: true, status: "missing_credentials" },
+        install: { catalogId: catalog.id, status: "missing_credentials" },
       },
     ]);
   });
 
-  test("a name-only match attaches disabled, and an unrelated entry matches nothing", async ({
+  test("a name-only match is reported undeclared, and an unrelated entry matches nothing", async ({
     makeInternalMcpCatalog,
   }) => {
     const byName = await makeInternalMcpCatalog({
@@ -65,8 +75,8 @@ describe("guardrails battery matches", () => {
       serverUrl: "https://mcp.example.com/chat",
     });
     await openappaBatteriesService.onCatalogToolsChanged(byName.id);
-    expect((await matches(byName.id)).json()).toMatchObject([
-      { battery: "slack", evidence: "name", install: { enabled: false } },
+    expect((await matches(byName.id)).json()).toEqual([
+      { battery: "slack", evidence: "name", install: null },
     ]);
     const plain = await makeInternalMcpCatalog({
       organizationId,

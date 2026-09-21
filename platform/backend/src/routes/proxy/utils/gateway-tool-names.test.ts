@@ -45,6 +45,35 @@ describe("buildGatewayToolNameCanonicalizer", () => {
     );
   });
 
+  test("strips OpenCode's underscore-joined decoration for the org's own gateway", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+
+    const canonicalize = await buildGatewayToolNameCanonicalizer({
+      organizationId: org.id,
+    });
+
+    expect(canonicalize("prod_gateway_archestra__ask_user")).toBe(
+      "archestra__ask_user",
+    );
+    expect(canonicalize("prod_gateway_github__create_issue")).toBe(
+      "github__create_issue",
+    );
+    // A local tool that merely starts with the gateway's name is no gateway
+    // tool, and a label that is no gateway anchors nothing.
+    expect(canonicalize("prod_gateway_notes")).toBe("prod_gateway_notes");
+    expect(canonicalize("other_gateway_archestra__ask_user")).toBe(
+      "other_gateway_archestra__ask_user",
+    );
+  });
+
   test("expands a bare built-in short name left after stripping", async ({
     makeOrganization,
     makeAgent,

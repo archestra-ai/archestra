@@ -1,7 +1,11 @@
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
-import type { AppaClientAdapter } from "../types";
-import { readHeader } from "../utils";
+import type { AppaClientAdapter, AskUserArguments } from "../types";
+import { questionHeader, readHeader } from "../utils";
+
+// OpenCode labels each question's tab with a header of at most 30 characters,
+// the same bound ask_user declares for it.
+const QUESTION_HEADER_MAX_LENGTH = 30;
 
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
@@ -26,10 +30,29 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    return name.startsWith("builtin:") || name.startsWith("host/")
-      ? name
-      : `builtin:${name}`;
+    // `builtin:` is OpenCode's local-tool decoration. The embedded runtime
+    // derives the bare spelling to host/archestra/<name> itself.
+    return name.startsWith("builtin:") ? name.slice("builtin:".length) : name;
   }
+
+  // OpenCode shows no MCP forms (its client declares no elicitation), but its
+  // own `question` tool renders one.
+  readonly nativeQuestion = {
+    toolName: "question",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          header: questionHeader(args.header, QUESTION_HEADER_MAX_LENGTH),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiple: args.allowMultiple === true,
+        },
+      ],
+    }),
+  };
 
   /**
    * Extracts OpenCode session identity from request headers: `X-Session-Id`,

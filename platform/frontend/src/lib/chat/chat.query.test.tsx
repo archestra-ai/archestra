@@ -19,6 +19,7 @@ import {
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
+  useResolveChatMcpElicitation,
   useStopChatStream,
   useUpdateConversation,
 } from "./chat.query";
@@ -36,6 +37,7 @@ vi.mock("@archestra/shared", () => ({
     updateChatConversation: vi.fn(),
     createChatConversation: vi.fn(),
     stopChatStream: vi.fn(),
+    resolveChatMcpElicitation: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -707,6 +709,71 @@ describe("useStopChatStream", () => {
     await act(async () => {
       await expect(result.current.mutateAsync("c1")).rejects.toThrow("boom");
     });
+    expect(mockedHandleApiError).toHaveBeenCalledWith({ message: "boom" });
+  });
+});
+
+describe("useResolveChatMcpElicitation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const answer = async () => {
+    const { result } = renderHook(() => useResolveChatMcpElicitation(), {
+      wrapper: createWrapper(),
+    });
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.mutateAsync({
+        id: "question-1",
+        conversationId: "c1",
+        action: "accept",
+        content: { choice: "EU" },
+      });
+    });
+    return outcome;
+  };
+
+  it("reports an answer the backend took", async () => {
+    vi.mocked(archestraApiSdk.resolveChatMcpElicitation).mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.resolveChatMcpElicitation>>);
+
+    expect(await answer()).toBe("answered");
+    expect(archestraApiSdk.resolveChatMcpElicitation).toHaveBeenCalledWith({
+      path: { id: "question-1" },
+      body: {
+        conversationId: "c1",
+        action: "accept",
+        content: { choice: "EU" },
+      },
+    });
+    expect(mockedHandleApiError).not.toHaveBeenCalled();
+  });
+
+  it("treats a 409 as a question no longer waiting, without an error toast", async () => {
+    vi.mocked(archestraApiSdk.resolveChatMcpElicitation).mockResolvedValue(
+      errorResult(409) as Awaited<
+        ReturnType<typeof archestraApiSdk.resolveChatMcpElicitation>
+      >,
+    );
+
+    expect(await answer()).toBe("stale");
+    expect(mockedHandleApiError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    500,
+    undefined,
+  ])("reports any other failure (status %s) and keeps the question answerable", async (status) => {
+    vi.mocked(archestraApiSdk.resolveChatMcpElicitation).mockResolvedValue(
+      errorResult(status) as Awaited<
+        ReturnType<typeof archestraApiSdk.resolveChatMcpElicitation>
+      >,
+    );
+
+    expect(await answer()).toBe("failed");
     expect(mockedHandleApiError).toHaveBeenCalledWith({ message: "boom" });
   });
 });

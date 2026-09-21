@@ -992,14 +992,23 @@ function extractRetryAfterHeader(error: unknown): string | undefined {
     const record = headers as Record<string, unknown>;
     value = record["retry-after"] ?? record["Retry-After"];
   }
-  if (typeof value !== "string") return undefined;
-
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
-  if (/^\d+$/.test(trimmed) || Number.isFinite(Date.parse(trimmed))) {
-    return trimmed;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed) || Number.isFinite(Date.parse(trimmed))) {
+      return trimmed;
+    }
   }
-  return undefined;
+
+  // Kimi/Moonshot often puts "please try again after 1 seconds" in the body
+  // without a Retry-After header. Cap so a daily-quota reset cannot hang the
+  // stream (see sdk-retry-policy.ts).
+  const match = error.message.match(/try again after (\d+) seconds?/i);
+  if (!match) return undefined;
+  const seconds = Number(match[1]);
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > 30) {
+    return undefined;
+  }
+  return String(seconds);
 }
 
 /**

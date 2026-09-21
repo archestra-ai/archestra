@@ -4,9 +4,21 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type MockChatSession = {
+  earlyToolUiStarts: Record<string, never>;
+  contextCompaction: undefined;
+  pendingMcpElicitations: unknown[];
+  mcpTasks: Record<string, never>;
+  resolveMcpElicitation: ReturnType<typeof vi.fn>;
+  sendMessage: ReturnType<typeof vi.fn>;
+};
+
 const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
   vi.fn((_parts: unknown[]) => false),
 );
+const mockChatSession = vi.hoisted(() => ({
+  current: null as MockChatSession | null,
+}));
 
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
@@ -272,7 +284,7 @@ vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useGlobalChat: () => ({
-    getSession: () => null,
+    getSession: () => mockChatSession.current,
   }),
 }));
 
@@ -305,6 +317,7 @@ describe("ChatMessages", () => {
     } as unknown as ReturnType<typeof useOrganization>);
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
     mockHasKnowledgeBaseToolCall.mockReturnValue(false);
+    mockChatSession.current = null;
   });
 
   it("renders external MCP Skill attribution from message metadata", () => {
@@ -1458,6 +1471,310 @@ describe("ChatMessages", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders a persisted ask_user result in its grouped transcript slot", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__ask_user",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: {
+              question: "Who should see the app?",
+              options: [{ label: "Only me" }, { label: "My team" }],
+              remedy_offers: [
+                { protected: "e30", payload: "{}", signature: "sig" },
+              ],
+            },
+            output: {
+              content: [
+                {
+                  type: "text",
+                  text: "The user dismissed the question. Do not proceed with the question.",
+                },
+              ],
+              structuredContent: { action: "cancel", selected: [] },
+            },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const summary = screen.getByTestId("ask-user-tool-group");
+    expect(summary).toHaveTextContent("Who should see the app?");
+    expect(summary).toHaveTextContent("Dismissed");
+    expect(screen.getByRole("list", { name: "Answers" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ask user/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a parallel ask_user batch in one stable slot while results arrive apart", () => {
+    const resolveMcpElicitation = vi.fn().mockResolvedValue(true);
+    const initialMessages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          askUserInput("call-color", "Pick a color"),
+          {
+            type: "tool-sparky__todo_write",
+            toolCallId: "call-search",
+            state: "output-available",
+            input: { todos: [] },
+            output: { ok: true },
+          },
+          askUserInput("call-fruit", "Pick a fruit"),
+        ],
+      },
+    ] as UIMessage[];
+    mockChatSession.current = chatSession({
+      requests: [
+        choiceRequest("q-color", "call-color", "Pick a color", [
+          "Blue",
+          "Green",
+        ]),
+        choiceRequest("q-fruit", "call-fruit", "Pick a fruit", [
+          "Apple",
+          "Pear",
+        ]),
+      ],
+      resolveMcpElicitation,
+    });
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={initialMessages}
+        status="streaming"
+      />,
+    );
+
+    const group = screen.getByTestId("ask-user-tool-group");
+    expect(screen.getByText("todo-write-tool")).toBeInTheDocument();
+
+    const oneResult = [
+      {
+        ...initialMessages[0],
+        parts: [
+          ...initialMessages[0].parts,
+          askUserResult("call-color", "Blue"),
+        ],
+      },
+    ] as UIMessage[];
+    mockChatSession.current = chatSession({
+      requests: [
+        choiceRequest("q-fruit", "call-fruit", "Pick a fruit", [
+          "Apple",
+          "Pear",
+        ]),
+      ],
+      resolveMcpElicitation,
+    });
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={oneResult}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("ask-user-tool-group")).toBe(group);
+
+    const completedMessages = [
+      {
+        ...oneResult[0],
+        parts: [...oneResult[0].parts, askUserResult("call-fruit", "Apple")],
+      },
+    ] as UIMessage[];
+    mockChatSession.current = chatSession({
+      requests: [],
+      resolveMcpElicitation,
+    });
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={completedMessages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("ask-user-tool-group")).toBe(group);
+    expect(screen.getAllByRole("list", { name: "Answers" })).toHaveLength(1);
+    expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
+      "Pick a colorBluePick a fruitApple",
+    );
+  });
+
+  it("keeps unreadable and separated error ask_user outputs in the generic renderer", () => {
+    const messages = [
+      {
+        id: "assistant-plain",
+        role: "assistant",
+        parts: [
+          askUserInput("call-plain", "Show raw output?"),
+          {
+            type: "tool-sparky__ask_user",
+            toolCallId: "call-plain",
+            state: "output-available",
+            output: { content: "plain output" },
+          },
+        ],
+      },
+      {
+        id: "assistant-error",
+        role: "assistant",
+        parts: [
+          askUserInput("call-error", "Show error?"),
+          {
+            type: "tool-sparky__ask_user",
+            toolCallId: "call-error",
+            state: "output-error",
+            errorText: "Request failed",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.queryByTestId("ask-user-tool-group")).not.toBeInTheDocument();
+    expect(screen.getAllByText("tool-sparky__ask_user")).toHaveLength(2);
+    expect(screen.getByText("Request failed")).toBeInTheDocument();
+  });
+
+  it("settles a previously pending ask_user group when the response is stopped", () => {
+    const resolveMcpElicitation = vi.fn().mockResolvedValue(true);
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          askUserInput("call-color", "Pick a color"),
+        ],
+      },
+    ] as UIMessage[];
+    mockChatSession.current = chatSession({
+      requests: [
+        choiceRequest("q-color", "call-color", "Pick a color", [
+          "Blue",
+          "Green",
+        ]),
+      ],
+      resolveMcpElicitation,
+    });
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+    const group = screen.getByTestId("ask-user-tool-group");
+
+    mockChatSession.current = chatSession({
+      requests: [],
+      resolveMcpElicitation,
+    });
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("ask-user-tool-group")).toBe(group);
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
+      "Pick a colorStopped without an answer",
+    );
+  });
+
+  it("hides the proxy's signed-offer fields from execute_remedy_plan inputs", () => {
+    const remedyInput = {
+      offer_id: "offer-1",
+      plan: "Share the report with the team",
+      execution: { original_arguments: { offer_id: "offer-1" } },
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: '{"offer_id":"offer-1"}',
+      signature: "c2lnbmF0dXJlLWJ5dGVz",
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__execute_remedy_plan",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: remedyInput,
+            output: { content: [{ type: "text", text: "Remedy applied." }] },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__execute_remedy_plan",
+            toolCallId: "call-2",
+            state: "approval-requested",
+            input: remedyInput,
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    // Completed: a compact circle whose expanded card lists the input.
+    fireEvent.click(
+      screen.getByRole("button", { name: /execute remedy plan/i }),
+    );
+
+    const shownInputs = screen
+      .getAllByText(/Share the report with the team/)
+      .map((node) => node.textContent ?? "");
+    // One from the expanded card, one from the approval card.
+    expect(shownInputs).toHaveLength(2);
+    for (const shown of shownInputs) {
+      expect(JSON.parse(shown)).toEqual({
+        offer_id: "offer-1",
+        plan: "Share the report with the team",
+      });
+    }
+  });
+
   it("renders approval controls for a direct tool call that requires approval", () => {
     const onToolApprovalResponse = vi.fn();
     const messages = [
@@ -1809,6 +2126,72 @@ describe("ChatMessages", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+function chatSession({
+  requests,
+  resolveMcpElicitation,
+}: {
+  requests: Array<{
+    id: string;
+    conversationId: string;
+    toolName: string;
+    toolCallId: string;
+    message: string;
+    mode: "form";
+    requestedSchema: unknown;
+  }>;
+  resolveMcpElicitation: ReturnType<typeof vi.fn>;
+}) {
+  return {
+    earlyToolUiStarts: {},
+    contextCompaction: undefined,
+    pendingMcpElicitations: requests,
+    mcpTasks: {},
+    resolveMcpElicitation,
+    sendMessage: vi.fn(),
+  };
+}
+
+function choiceRequest(
+  id: string,
+  toolCallId: string,
+  message: string,
+  options: string[],
+) {
+  return {
+    id,
+    conversationId: "conv-1",
+    toolName: "sparky__ask_user",
+    toolCallId,
+    message,
+    mode: "form" as const,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        choice: { type: "string", enum: options },
+      },
+      required: ["choice"],
+    },
+  };
+}
+
+function askUserInput(toolCallId: string, question: string) {
+  return {
+    type: "tool-sparky__ask_user",
+    toolCallId,
+    state: "input-available",
+    input: { question },
+  };
+}
+
+function askUserResult(toolCallId: string, selected: string) {
+  return {
+    type: "tool-sparky__ask_user",
+    toolCallId,
+    state: "output-available",
+    output: { structuredContent: { action: "accept", selected: [selected] } },
+  };
+}
 
 describe("owned-app inline rendering", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";

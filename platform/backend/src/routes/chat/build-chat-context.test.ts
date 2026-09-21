@@ -1,4 +1,6 @@
+import { TOOL_ASK_USER_SHORT_NAME } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { ConversationEnabledToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -17,7 +19,7 @@ vi.mock("@/clients/chat-mcp-client", async (importOriginal) => {
 
 const { buildChatContext } = await import("./build-chat-context");
 
-describe("buildChatContext enabled-tool selection", () => {
+describe("buildChatContext", () => {
   beforeEach(() => {
     mockGetChatMcpTools.mockReset().mockResolvedValue({});
     mockGetChatMcpToolUiResourceUris.mockReset().mockResolvedValue({});
@@ -122,5 +124,34 @@ describe("buildChatContext enabled-tool selection", () => {
       hasCustomSelection: true,
       enabledToolCount: 0,
     });
+  });
+
+  test("tells the model to offer choices through ask_user, which chat can show", async ({
+    makeAgent,
+    makeConversation,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
+    mockGetChatMcpTools.mockResolvedValue({ [askUser]: {} });
+
+    const result = await run({
+      conversationId: conversation.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      organizationId: org.id,
+      user: { id: user.id, email: user.email, name: user.name },
+    });
+
+    expect(result.systemPrompt).toContain(
+      `If you offer them choices, use ${askUser}, never a plain-text multiple-choice question.`,
+    );
   });
 });

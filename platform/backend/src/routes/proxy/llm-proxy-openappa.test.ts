@@ -825,6 +825,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent.messages[2].content[0].content).toBe("APPROVED REPLACEMENT");
   });
 
+  test("governs an external ask_user result instead of trusting its name", async () => {
+    const answer = "The user picked: Accept for this session.";
+    const body = payload(false, [
+      { role: "user", content: "Check the weather" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_ask",
+            name: "archestra__ask_user",
+            input: {
+              question: "Accept for this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_ask", content: answer },
+        ],
+      },
+    ]);
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.map((event) => event.event)).toContain("tool_result");
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+    };
+    expect(sent.messages[2].content[0].content).toBe("APPROVED REPLACEMENT");
+  });
+
   test("reports one prompt and one turn end for a turn that runs no tool", async () => {
     options = { includeToolUse: false, streamStopReason: "end_turn" };
 
@@ -1811,17 +1851,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "user-agent": "Claude-Code/1",
         "x-claude-code-session-id": "native-client-session",
       },
-      "host/claude-code/get_weather",
+      "get_weather",
     ],
-    ["Codex", { originator: "codex" }, "builtin:get_weather"],
+    ["Codex", { originator: "codex" }, "get_weather"],
     [
       "OpenCode",
       { "x-opencode-session": "native-client-session" },
-      "builtin:get_weather",
+      "get_weather",
     ],
   ])("binds the explicit APPA root exactly once for authenticated %s calls", async (_client, clientHeaders, expectedTool) => {
     // The client's own session id never becomes the root: the explicit header
-    // does, and the call reaches the runtime under that client's namespace.
+    // does, and local client decorations are normalized before runtime dispatch.
     const response = await post(payload(false), clientHeaders);
 
     expect(response.statusCode, response.body).toBe(200);
@@ -1839,7 +1879,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test.for([
     ["my_gateway_archestra__whoami", "archestra__whoami"],
-    ["lookalike_archestra__whoami", "builtin:lookalike_archestra__whoami"],
+    ["lookalike_archestra__whoami", "lookalike_archestra__whoami"],
   ] as const)("rules OpenCode's %s by whether its label is one of our gateways", async ([
     called,
     expectedTool,

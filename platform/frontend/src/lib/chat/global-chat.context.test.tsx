@@ -799,9 +799,9 @@ describe("ChatProvider retries", () => {
     });
 
     await waitFor(() =>
-      expect(latestSessionRef.current?.pendingMcpElicitation).toMatchObject({
-        id: "00000000-0000-4000-8000-000000000001",
-      }),
+      expect(latestSessionRef.current?.pendingMcpElicitations).toMatchObject([
+        { id: "00000000-0000-4000-8000-000000000001" },
+      ]),
     );
 
     act(() => {
@@ -809,7 +809,7 @@ describe("ChatProvider retries", () => {
     });
 
     await waitFor(() =>
-      expect(latestSessionRef.current?.pendingMcpElicitation).toBeNull(),
+      expect(latestSessionRef.current?.pendingMcpElicitations).toEqual([]),
     );
 
     act(() => {
@@ -826,9 +826,9 @@ describe("ChatProvider retries", () => {
     });
 
     await waitFor(() =>
-      expect(latestSessionRef.current?.pendingMcpElicitation).toMatchObject({
-        id: "00000000-0000-4000-8000-000000000002",
-      }),
+      expect(latestSessionRef.current?.pendingMcpElicitations).toMatchObject([
+        { id: "00000000-0000-4000-8000-000000000002" },
+      ]),
     );
 
     act(() => {
@@ -838,7 +838,7 @@ describe("ChatProvider retries", () => {
     });
 
     await waitFor(() =>
-      expect(latestSessionRef.current?.pendingMcpElicitation).toBeNull(),
+      expect(latestSessionRef.current?.pendingMcpElicitations).toEqual([]),
     );
   });
 
@@ -1080,6 +1080,18 @@ describe("ChatProvider retries", () => {
     );
 
     await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          id: "00000000-0000-4000-8000-000000000001",
+          conversationId: "conversation-1",
+          toolName: "archestra__ask_user",
+          message: "Which region?",
+          mode: "form",
+        },
+      });
+    });
 
     // Sever the stream, let the auto-retry fire, and land its duplicate-run
     // 409 — the session is now reattaching via resumeStream().
@@ -1107,6 +1119,8 @@ describe("ChatProvider retries", () => {
     });
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
     expect(latestSessionRef.current?.isRecovering).toBe(true);
+    // Still the live run's question while the chat reattaches to it.
+    expect(latestSessionRef.current?.pendingMcpElicitations).toHaveLength(1);
 
     // The run finished before the reattach landed: reconnectToStream gets the
     // 204 and the SDK resolves resumeStream() WITHOUT firing onFinish or
@@ -1120,6 +1134,8 @@ describe("ChatProvider retries", () => {
     // typed message) and keep the frozen snapshot rendered indefinitely.
     expect(latestSessionRef.current?.isRecovering).toBe(false);
     expect(mocks.clearError).toHaveBeenCalled();
+    // A finished run waits on no question.
+    expect(latestSessionRef.current?.pendingMcpElicitations).toEqual([]);
 
     // A later cold 409 is a genuine concurrent submit again: toast, no
     // reattach.
@@ -2456,6 +2472,375 @@ function CaptureTitleAnimation({
 
   return null;
 }
+
+describe("pending MCP elicitation questions", () => {
+  const conversationId = "conversation-questions";
+  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let messages: UIMessage[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatMessageQueue.clear(conversationId);
+    chatOptions = undefined;
+    messages = [];
+    // Nothing to resume (no trailing user message), so the queue drain is
+    // gated only by what these tests set up.
+    mocks.resumeStream.mockResolvedValue(undefined);
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  afterEach(() => {
+    chatMessageQueue.clear(conversationId);
+  });
+
+  const renderSession = () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    return { latestSessionRef, rerender: () => rerender(tree()) };
+  };
+
+  const question = (id: string, extra?: { toolCallId?: string }) => ({
+    type: "data-mcp-elicitation",
+    data: {
+      id,
+      conversationId,
+      toolName: "archestra__ask_user",
+      message: `Question ${id}?`,
+      mode: "form",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", enum: ["Yes", "No"] },
+        },
+        required: ["choice"],
+      },
+      ...extra,
+    },
+  });
+
+  const resolved = (id: string, forConversation = conversationId) => ({
+    type: "data-mcp-elicitation-resolved",
+    data: { id, conversationId: forConversation, outcome: "answered" },
+  });
+
+  const pendingIds = (session: ChatSessionSnapshot) =>
+    session?.pendingMcpElicitations.map((request) => request.id);
+
+  it("keeps every question in arrival order and drops one when the backend reports it resolved", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+      chatOptions?.onData?.(question("q-2"));
+      // A duplicate delivery of the same question is not a second question.
+      chatOptions?.onData?.(question("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1", "q-2"]),
+    );
+
+    act(() => {
+      chatOptions?.onData?.(resolved("q-1", "another-conversation"));
+    });
+    act(() => {
+      chatOptions?.onData?.(resolved("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-2"]),
+    );
+  });
+
+  it("never brings back a settled question when the run is replayed", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+      chatOptions?.onData?.(resolved("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual([]),
+    );
+
+    // A reconnect replays the turn from its first event: the question arrives
+    // again, and its resolution only after it.
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+    });
+    await act(async () => {});
+    expect(pendingIds(latestSessionRef.current)).toEqual([]);
+
+    act(() => {
+      chatOptions?.onData?.(resolved("q-1"));
+    });
+    expect(pendingIds(latestSessionRef.current)).toEqual([]);
+  });
+
+  it("drops a question once the tool call that asked it has finished", async () => {
+    const toolPart = (state: "input-available" | "output-available") =>
+      ({
+        type: "dynamic-tool",
+        toolName: "archestra__ask_user",
+        toolCallId: "call-1",
+        state,
+        input: { question: "Question q-1?" },
+        ...(state === "output-available"
+          ? { output: { content: [{ type: "text", text: "done" }] } }
+          : {}),
+      }) as UIMessage["parts"][number];
+    messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [toolPart("input-available")],
+      },
+    ];
+    const { latestSessionRef, rerender } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1", { toolCallId: "call-1" }));
+      chatOptions?.onData?.(question("q-2", { toolCallId: "call-2" }));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1", "q-2"]),
+    );
+
+    messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [toolPart("output-available")],
+      },
+    ];
+    rerender();
+
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-2"]),
+    );
+  });
+
+  it("drops an answered question, keeps a failed one, and drops a refused one with a note", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+      chatOptions?.onData?.(question("q-2"));
+      chatOptions?.onData?.(question("q-3"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual([
+        "q-1",
+        "q-2",
+        "q-3",
+      ]),
+    );
+
+    mocks.mutateAsync.mockResolvedValueOnce("answered");
+    await act(async () => {
+      await latestSessionRef.current?.resolveMcpElicitation({
+        id: "q-1",
+        action: "accept",
+        content: { choice: "Yes" },
+      });
+    });
+    expect(mocks.mutateAsync).toHaveBeenLastCalledWith({
+      id: "q-1",
+      conversationId,
+      action: "accept",
+      content: { choice: "Yes" },
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-2", "q-3"]),
+    );
+
+    // Any other failure was already reported; the question stays for a retry.
+    mocks.mutateAsync.mockResolvedValueOnce("failed");
+    await act(async () => {
+      await latestSessionRef.current?.resolveMcpElicitation({
+        id: "q-2",
+        action: "cancel",
+      });
+    });
+    expect(pendingIds(latestSessionRef.current)).toEqual(["q-2", "q-3"]);
+
+    // 409: the backend is no longer waiting on it. Nothing else explained
+    // that yet, so the user gets a note rather than a card that just vanishes.
+    mocks.mutateAsync.mockResolvedValueOnce("stale");
+    await act(async () => {
+      await latestSessionRef.current?.resolveMcpElicitation({
+        id: "q-2",
+        action: "cancel",
+      });
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-3"]),
+    );
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+
+    // Once the resolved event has retired it, a late 409 stays quiet.
+    act(() => {
+      chatOptions?.onData?.(resolved("q-3"));
+    });
+    mocks.mutateAsync.mockResolvedValueOnce("stale");
+    await act(async () => {
+      await latestSessionRef.current?.resolveMcpElicitation({
+        id: "q-3",
+        action: "cancel",
+      });
+    });
+    expect(pendingIds(latestSessionRef.current)).toEqual([]);
+    expect(toast.info).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps pending questions through a dropped stream the chat recovers from", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+      chatOptions?.onData?.(question("q-2"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1", "q-2"]),
+    );
+
+    // The connection drops: the SDK reports the error, then finishes the
+    // errored stream, while the auto-retry is scheduled. The card (and the
+    // picks in it) must stay up until the recovered run settles it.
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        chatOptions?.onError?.(new Error("Failed to fetch"));
+        chatOptions?.onFinish?.({
+          message: { parts: [] },
+          isAbort: false,
+          isError: true,
+          isDisconnect: true,
+        });
+      });
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1", "q-2"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds queued messages while a question is pending", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]),
+    );
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "and another thing" });
+    });
+    await act(async () => {});
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    act(() => {
+      chatOptions?.onData?.(resolved("q-1"));
+    });
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+  });
+
+  it("ignores a data-mcp-elicitation payload that fails schema validation", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          conversationId,
+          toolName: "archestra__ask_user",
+          message: "Missing id and mode",
+        },
+      });
+      chatOptions?.onData?.(question("q-1"));
+    });
+
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]),
+    );
+  });
+
+  it("clears a pending question after repeated submit failures so the queue can drain", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]),
+    );
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "and another thing" });
+    });
+    await act(async () => {});
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    vi.useFakeTimers();
+    try {
+      mocks.mutateAsync.mockResolvedValue("failed");
+      await act(async () => {
+        await latestSessionRef.current?.resolveMcpElicitation({
+          id: "q-1",
+          action: "accept",
+          content: { choice: "Yes" },
+        });
+      });
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]);
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(pendingIds(latestSessionRef.current)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+  });
+});
 
 function RegisterChatSession({
   conversationId = "conversation-1",

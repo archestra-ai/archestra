@@ -1,10 +1,27 @@
 import type { AppaSessionIdentity } from "@/openappa/wire";
-import type { AppaClientAdapter } from "../types";
-import { readHeader } from "../utils";
+import type { AppaClientAdapter, AskUserArguments } from "../types";
+import { questionHeader, readHeader } from "../utils";
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly id = "claude-code" as const;
+  readonly nativeQuestion = {
+    toolName: "AskUserQuestion",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          // Claude Code's AskUserQuestion tab label is at most 12 characters.
+          header: questionHeader(args.header, 12),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiSelect: args.allowMultiple === true,
+        },
+      ],
+    }),
+  };
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (
@@ -24,7 +41,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    return name.startsWith("host/") ? name : `host/claude-code/${name}`;
+    // Older receipts used this adapter's invalid host decoration. Normalize it
+    // back to Claude's native spelling so the Archestra runtime can derive it.
+    return name.startsWith("host/claude-code/")
+      ? name.slice("host/claude-code/".length)
+      : name;
   }
 
   /**

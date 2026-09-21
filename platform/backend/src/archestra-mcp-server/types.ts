@@ -67,12 +67,13 @@ export interface ArchestraContext {
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /**
-   * Bridge for asking the user a structured question mid-execution (the chat
-   * elicitation round-trip). Present only when a chat stream is driving the
-   * call; absent in headless executions, where a built-in tool must degrade to
-   * a typed `no_viewer` outcome rather than block.
+   * Bridge for asking the user a structured question mid-execution. Chat
+   * attaches the stream round-trip; the MCP gateway attaches native
+   * `elicitation/create` (or MRTR Input Required). Absent in headless
+   * executions, where a built-in tool must degrade to a typed `no_viewer`
+   * outcome rather than block.
    */
-  elicitation?: ChatMcpElicitationBridge;
+  elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
   /**

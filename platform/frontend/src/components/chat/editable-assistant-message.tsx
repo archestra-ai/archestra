@@ -117,7 +117,12 @@ export function EditableAssistantMessage({
           bridge between the message and the buttons. */}
       <div className="relative max-w-[80%]">
         <MessageContent className="max-w-none">
-          <Response isStreaming={isStreaming}>{displayText}</Response>
+          <Response
+            isStreaming={isStreaming}
+            className="group-[.is-assistant]:[&>:first-child]:mt-0 group-[.is-assistant]:[&>:last-child]:mb-0"
+          >
+            {displayText}
+          </Response>
           {citationParts && (
             <KnowledgeGraphCitations
               parts={citationParts}

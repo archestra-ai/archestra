@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -31,12 +32,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  type ElicitRequest,
   ElicitResultSchema,
+  ErrorCode,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   type ListToolsResult,
+  McpError,
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -56,6 +60,10 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
+import {
+  type ArchestraElicitationOutcome,
+  ELICITATION_ANSWER_TIMEOUT_MS,
+} from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -129,6 +137,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  MCP_CLIENT_CAPABILITIES_META_KEY,
   RESOURCE_NOT_FOUND_ERROR_CODE,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
@@ -452,6 +461,7 @@ export async function createAgentServer(params: {
             ),
           )
         : [];
+    const implicitAskUserTools = getImplicitAskUserTools();
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter(
@@ -460,6 +470,7 @@ export async function createAgentServer(params: {
         ...implicitMetaTools,
         ...implicitTaskControlTools,
         ...implicitOpenAppaTools,
+        ...implicitAskUserTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -972,6 +983,18 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
                 contextIsTrusted,
+                elicitation: {
+                  elicit: createGatewayUserElicit({
+                    extra,
+                    mrtr,
+                    mrtrEnabled,
+                    agentId,
+                    toolName: name,
+                    requestMeta: request.params._meta as
+                      | Record<string, unknown>
+                      | undefined,
+                  }),
+                },
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -1044,7 +1067,8 @@ export async function createAgentServer(params: {
             );
           }
 
-          return archestraResult;
+          // A 2026-07-28 client rejects a result without `resultType`.
+          return complete(archestraResult);
         }
 
         logger.info(
@@ -1115,7 +1139,11 @@ export async function createAgentServer(params: {
                   }
 
                   try {
-                    return await extra.sendRequest(request, ElicitResultSchema);
+                    return await extra.sendRequest(
+                      request,
+                      ElicitResultSchema,
+                      { timeout: ELICITATION_ANSWER_TIMEOUT_MS },
+                    );
                   } catch (error) {
                     logger.warn(
                       {
@@ -1284,13 +1312,19 @@ export async function createAgentServer(params: {
  */
 export function createStatelessTransport(
   agentId: string,
+  options?: { sseResponse?: boolean },
 ): StreamableHTTPServerTransport {
   logger.info({ agentId }, "Creating stateless transport instance");
 
-  // Create transport in stateless mode (no session persistence)
+  // Create transport in stateless mode (no session persistence).
+  // JSON responses are the default: single request/response pairs stay plain
+  // JSON for simple clients. A client that declares a server-initiated
+  // capability (elicitation, sampling, ...) gets SSE instead — in
+  // enableJsonResponse mode the SDK transport has no channel for a mid-call
+  // server-initiated request and silently drops it.
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode - no sessions
-    enableJsonResponse: true, // Use JSON responses instead of SSE
+    enableJsonResponse: options?.sseResponse !== true,
   });
 
   logger.info({ agentId }, "Stateless transport instance created");
@@ -1642,7 +1676,7 @@ async function validateOAuthTokenByHash(params: {
     if (
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      return validateMcpOauthClientToken({
+      return validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
@@ -1738,7 +1772,7 @@ async function validateOAuthTokenByHash(params: {
  * call time are not supported — assign shared/org-scoped credentials to those
  * tools.
  */
-async function validateMcpOauthClientToken(params: {
+async function validateMcpClientAccessToken(params: {
   accessToken: {
     id: string;
     clientId: string | null;
@@ -1936,16 +1970,16 @@ export async function authenticateMCPGatewayRequest(
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  const oauthResult = await validateOAuthTokenByHash({
+  const accessTokenResult = await validateOAuthTokenByHash({
     profileId,
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
   });
-  if (oauthResult) {
+  if (accessTokenResult) {
     // This cache is intentionally short-lived and process-local. Revocations
     // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
-    cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
-    return { result: oauthResult, reason: null };
+    cacheTokenAuthResult(tokenHashes.cacheKey, accessTokenResult);
+    return { result: accessTokenResult, reason: null };
   }
 
   logger.warn(
@@ -2368,6 +2402,117 @@ function getImplicitArchestraMetaTools() {
 
 function getImplicitTaskControlTools() {
   return getArchestraMcpTools().filter((tool) => isTaskControlTool(tool.name));
+}
+
+function getImplicitAskUserTools() {
+  return getArchestraMcpTools().filter(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_ASK_USER_SHORT_NAME,
+  );
+}
+
+function createGatewayUserElicit(params: {
+  extra: {
+    sendRequest: (
+      request: ElicitRequest,
+      resultSchema: typeof ElicitResultSchema,
+      options?: { timeout?: number },
+    ) => Promise<unknown>;
+    _meta?: Record<string, unknown>;
+  };
+  mrtr?: {
+    inputResponses?: InputResponses;
+    clientCapabilities?: unknown;
+  };
+  mrtrEnabled: boolean;
+  agentId: string;
+  toolName: string;
+  requestMeta?: Record<string, unknown>;
+}): (args: {
+  toolName: string;
+  message: string;
+  requestedSchema?: unknown;
+}) => Promise<ArchestraElicitationOutcome> {
+  const { extra, mrtr, mrtrEnabled, agentId, toolName, requestMeta } = params;
+
+  return async ({ message, requestedSchema }) => {
+    const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+    if (supplied !== undefined) {
+      return {
+        status: "answered",
+        result: ElicitResultSchema.parse(supplied),
+      };
+    }
+
+    const request = {
+      method: "elicitation/create",
+      params: {
+        mode: "form",
+        message,
+        requestedSchema,
+      },
+    } as ElicitRequest;
+
+    const clientCapabilities =
+      mrtr?.clientCapabilities ??
+      extra._meta?.[MCP_CLIENT_CAPABILITIES_META_KEY] ??
+      requestMeta?.[MCP_CLIENT_CAPABILITIES_META_KEY];
+    const canElicit = clientSupportsInputRequest({
+      clientCapabilities,
+      request: {
+        method: "elicitation/create",
+        params: request.params as Record<string, unknown>,
+      },
+    });
+    // Under 2026-07-28 a server may not open a request mid-call: the client
+    // drops it and the call would wait out the answer timeout. Unwind to an
+    // InputRequiredResult instead, which the client answers on a retry.
+    if (mrtrEnabled) {
+      throw new InputRequiredSignal({
+        key: GATEWAY_INPUT_REQUEST_KEY,
+        request: {
+          method: "elicitation/create",
+          params: request.params as Record<string, unknown>,
+        },
+      });
+    }
+
+    // A legacy client that declared elicitation gets it in-band: the answer
+    // arrives on a separate POST and is routed back to this Server, so the
+    // client renders its native form.
+    if (canElicit) {
+      try {
+        return {
+          status: "answered",
+          result: ElicitResultSchema.parse(
+            await extra.sendRequest(request, ElicitResultSchema, {
+              timeout: ELICITATION_ANSWER_TIMEOUT_MS,
+            }),
+          ),
+        };
+      } catch (error) {
+        // The client showed the form; the person just never answered it.
+        if (
+          error instanceof McpError &&
+          error.code === ErrorCode.RequestTimeout
+        ) {
+          return { status: "unanswered" };
+        }
+        logger.warn(
+          {
+            agentId,
+            toolName,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "MCP elicitation request was not completed by caller",
+        );
+        return { status: "no_viewer" };
+      }
+    }
+
+    return { status: "no_viewer" };
+  };
 }
 
 // First occurrence wins: callers (getMcpToolsByAgent) order candidates with

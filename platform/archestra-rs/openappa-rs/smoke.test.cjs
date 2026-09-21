@@ -584,7 +584,10 @@ builtin = "hitl"
     assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
     // A direct call keeps naming the tool itself.
-    assert.match(await hint(undefined), /^\[appa\] Authorized\. Call the read_untrusted tool again/);
+    assert.match(
+      await hint(undefined),
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+    );
   });
 
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {

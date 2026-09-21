@@ -1,11 +1,14 @@
 /**
  * Prepares an OpenAPPA request before provider dispatch:
  * 1. Restores denial notices in history back to original calls and rulings.
- * 2. Resolves session remedy tools and validates client declarations.
+ * 2. Removes the proxy's transport arguments from history and declarations.
+ * 3. Resolves session remedy tools and validates client declarations.
  */
 import {
   type ArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
@@ -26,6 +29,8 @@ import {
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
   stripAppaTools,
+  stripDeclaredParameters,
+  stripProxyArguments,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -52,10 +57,17 @@ export type AppaPreparedRequest = {
   namespaces: ReadonlyMap<string, string>;
   /** Canonical tool name to declared spelling mapping. */
   spellings: ReadonlyMap<string, string>;
+  /** Client spellings whose user answers may bypass runtime result governance. */
+  platformToolNames?: ReadonlySet<string>;
   promptOperationId?: string;
   turnEndOperationId?: string;
   /** Signed offer routing collected from notices before restoration. */
   offerClaims?: OfferJws[];
+  /**
+   * Offer claims from current-turn notices only. Earlier offers have expired
+   * or already executed.
+   */
+  askUserOfferClaims?: OfferJws[];
 };
 
 /**
@@ -67,6 +79,8 @@ export function prepareAppaRequest(params: {
   /** This client's session identity, as `appaSessionIdentity` read it. */
   session?: AppaSessionIdentity;
   canonicalizeToolName: (name: string) => string;
+  /** Internal Chat calls use platform tools without a client decoration. */
+  trustBarePlatformTools?: boolean;
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
@@ -82,6 +96,7 @@ export function prepareAppaRequest(params: {
   }
   let historicalControlToolName: string | undefined;
   let offerClaims: OfferJws[] | undefined;
+  let askUserOfferClaims: OfferJws[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
@@ -98,6 +113,13 @@ export function prepareAppaRequest(params: {
       ...noticeMatch,
     });
     if (collected.length > 0) offerClaims = collected;
+    const thisTurn = collectSignedOfferClaims({
+      family,
+      body: params.body,
+      ...noticeMatch,
+      currentTurnOnly: true,
+    });
+    if (thisTurn.length > 0) askUserOfferClaims = thisTurn;
     historicalControlToolName = restoreAppaRemedyExecutions({
       family,
       body: params.body,
@@ -113,6 +135,16 @@ export function prepareAppaRequest(params: {
       body: params.body,
       ...noticeMatch,
     });
+    // The control calls came back whole from their receipts above; ask_user
+    // calls carry the offers the proxy stamped for the tool alone.
+    stripProxyArguments({
+      family,
+      body: params.body,
+      isStampedTool: (name) =>
+        shortToolName(params.canonicalizeToolName(name)) ===
+        TOOL_ASK_USER_SHORT_NAME,
+      names: ASK_USER_PROXY_ARGUMENTS,
+    });
   }
 
   // No declared tools, no root: nothing can be proposed, so nothing is gated.
@@ -122,9 +154,11 @@ export function prepareAppaRequest(params: {
       ...(historicalControlToolName ? { historicalControlToolName } : {}),
       session,
       spellings: new Map(),
+      platformToolNames: new Set(),
       customTools: new Set(),
       namespaces: new Map(),
       ...(offerClaims ? { offerClaims } : {}),
+      ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
     };
   }
   const toolDeclarations = declared.map(({ tool }) => tool);
@@ -139,6 +173,7 @@ export function prepareAppaRequest(params: {
 
   const found = new Map<string, AppaToolDeclaration>();
   const spellings = new Map<string, string>();
+  const platformToolNames = new Set<string>();
   const customTools = new Set<string>();
   for (const { tool, namespace } of declared) {
     // The provider runs it, so the client never names or calls it: its calls
@@ -168,7 +203,19 @@ export function prepareAppaRequest(params: {
     const short =
       shortToolName(canonical) ??
       anchoredLabelShort(anchored, params.canonicalizeToolName);
-    if (short) spellings.set(archestraMcpBranding.getToolName(short), name);
+    if (short) {
+      spellings.set(archestraMcpBranding.getToolName(short), name);
+      if (
+        short === TOOL_ASK_USER_SHORT_NAME &&
+        params.trustBarePlatformTools === true
+      ) {
+        platformToolNames.add(name);
+      }
+    }
+    // The tool still takes them from the proxy; the model is never offered them.
+    const proxyArguments = short ? PROXY_ARGUMENTS.get(short) : undefined;
+    if (proxyArguments)
+      stripDeclaredParameters({ tool, names: proxyArguments });
     if (
       short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -239,10 +286,12 @@ export function prepareAppaRequest(params: {
     },
     session,
     spellings,
+    platformToolNames,
     customTools,
     namespaces,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
+    ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
   };
 }
 
@@ -283,6 +332,22 @@ export function namespacedToolName(
 
 // === Internal helpers ===
 
+/** The offers the proxy stamps onto the model's ask_user calls. */
+const ASK_USER_PROXY_ARGUMENTS: ReadonlySet<string> = new Set(
+  PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
+);
+
+/** Per tool, the arguments the proxy writes onto the model's calls. */
+const PROXY_ARGUMENTS: ReadonlyMap<
+  ArchestraToolShortName,
+  ReadonlySet<string>
+> = new Map(
+  Object.entries(PROXY_STAMPED_TOOL_ARGUMENTS).map(([tool, names]) => [
+    tool as ArchestraToolShortName,
+    new Set<string>(names),
+  ]),
+);
+
 /** Where a request declares one of the APPA tools. */
 type AppaToolDeclaration = {
   name: string;
@@ -312,7 +377,8 @@ function anchoredLabelShort(
 ): ArchestraToolShortName | null {
   const resolved = underscoreLabeledPlatformToolName(name, canonicalize);
   const short = resolved ? shortToolName(resolved) : null;
-  return short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+  return short === TOOL_ASK_USER_SHORT_NAME ||
+    short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
     short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
     ? short
     : null;

@@ -1609,6 +1609,7 @@ export async function handleLLMProxy<
           interactionType: provider.interactionType,
           session: appaIdentity,
           canonicalizeToolName,
+          trustBarePlatformTools: isInternalChat,
         });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,

@@ -364,6 +364,36 @@ requires = { audience = { within = ["internal"] } }
         }
     }
 
+    #[tokio::test]
+    async fn embedded_runtime_derives_external_client_local_tool_spellings() {
+        let runtime = memory_runtime(
+            r#"[policy]
+version = 2
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+[[policy.tool]]
+name = "host/archestra/read_file"
+delta = {}
+[[policy.tool]]
+name = "host/archestra/Bash"
+delta = {}
+"#,
+        );
+        let actor = started(&runtime, "external-client-local-tools").await;
+        for tool in ["exec_command", "read_file", "Bash"] {
+            let decision = hooks::handle(&runtime, call(&actor, tool)).await;
+            assert!(
+                matches!(decision, HookDecision::AllowCall { .. }),
+                "{tool} must derive to its host/archestra identity: {decision:?}"
+            );
+        }
+        assert!(matches!(
+            hooks::handle(&runtime, call(&actor, "unknown_local_tool")).await,
+            HookDecision::Refuse { .. }
+        ));
+    }
+
     /// The document a trajectory opened under keeps judging it after the serving
     /// policy changes: a recompile never rewrites an open conversation's rules.
     #[tokio::test]

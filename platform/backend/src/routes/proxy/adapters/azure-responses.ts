@@ -45,6 +45,8 @@ import {
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
+  namespaceOf,
+  namespacesByCallId,
   rewriteResponsesOutput,
   toSse,
 } from "./responses-tool-call-rewrite";
@@ -479,7 +481,7 @@ class AzureResponsesStreamAdapter
   private replacedText: string | null = null;
   private toolCallsByItemId = new Map<
     string,
-    { id: string; name: string; arguments: string }
+    { id: string; name: string; arguments: string; namespace?: string }
   >();
 
   setTextSuffix(getSuffix: (completedText: string) => string): void {
@@ -727,6 +729,11 @@ class AzureResponsesStreamAdapter
       toolCalls,
       firstOutputIndex,
       nextSequenceNumber: () => sequence++,
+      // Codex routes a namespaced call by the namespace its item names.
+      namespaceByCallId: namespacesByCallId({
+        items: upstreamOutput,
+        streamed: this.toolCallsByItemId.values(),
+      }),
     });
     const rewritten = {
       ...base,
@@ -964,6 +971,7 @@ class AzureResponsesStreamAdapter
         id: item.call_id,
         name: item.name,
         arguments: item.arguments,
+        ...namespaceOf(item),
       });
       this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
       return;

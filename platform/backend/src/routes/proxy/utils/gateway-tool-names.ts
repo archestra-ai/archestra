@@ -26,14 +26,12 @@ export type ToolNameCanonicalizer = (toolName: string) => string;
  * nor any `tools` row — so guardrail evaluation used to find nothing to
  * enforce (tool-invocation policies fail open on an unknown name).
  *
- * The decoration is only stripped when the label segment is the client server
- * name of one of the organization's own gateways (`toMcpClientServerName` of
- * a live gateway-capable agent). Anchoring on the org's real gateway names is
- * what keeps this safe: a hostile MCP server connected directly to the client
- * cannot get its tools canonicalized into platform built-ins or policied
- * tools by merely naming them to look like ours — its label won't match a
- * gateway, so its tools keep their foreign names and stay on the fail-closed
- * paths (unknown result = untrusted context, discovered-tool policies).
+ * The decoration is stripped when the label segment matches the client server
+ * name of one of the organization's gateway-capable agents
+ * (`toMcpClientServerName` of its configured name). This is an identity hint,
+ * not authentication. Clients control their local server labels. Callers must
+ * not grant user-input or security exemptions solely because this
+ * function produced a built-in name.
  *
  * A bare built-in short name left after stripping (a client that decorates
  * the listed name down to its short form) is expanded to the full built-in
@@ -73,6 +71,8 @@ export async function buildGatewayToolNameCanonicalizer(params: {
         .join(MCP_SERVER_TOOL_NAME_SEPARATOR);
       return resolveRunToolTargetName(canonicalName);
     }
+    const underscoreJoined = stripUnderscoreJoinedLabel(toolName, serverNames);
+    if (underscoreJoined) return resolveRunToolTargetName(underscoreJoined);
     return stripLearnedDecoration(toolName, learnedPrefixes);
   };
 }
@@ -92,22 +92,19 @@ export async function buildGatewayToolNameCanonicalizer(params: {
  * the decoration instead of the tool, and policy lookups miss the row that
  * speaks for it.
  *
- * A client namespaces every tool from ONE server with the SAME prefix, so the
+ * A client namespaces every tool from one server with the same prefix, so the
  * prefix is identifiable from evidence rather than convention: whichever prefix
  * a request's tool list carries in front of one of *our* branded tool names is
  * that request's decoration for our gateway. That is per-request, and it names
  * a prefix rather than trusting a name — a server can only ever claim its own
  * prefix, never another server's.
  *
- * Which bounds the spoof this anchoring exists to prevent. A hostile MCP server
- * connected straight to the client can put our branded name on its own tools
- * and so claim its own prefix — but claiming it only causes ITS names to be
- * stripped to `<server>__<tool>`, which is then looked up and policy-evaluated
- * like any other tool. That is strictly more enforcement than the untouched
- * name it gets today, which matches no row and is evaluated by nothing. The one
- * thing it must not buy is built-in status, since built-ins bypass policy — so
- * {@link stripLearnedDecoration} refuses to hand back a branded name. Built-in
- * recognition keeps requiring the strict, unlearned anchor above.
+ * A hostile MCP server can put our branded name on its own tools and claim its
+ * own prefix. Stripping that prefix must not grant built-in status, since
+ * built-ins bypass policy. {@link stripLearnedDecoration} therefore refuses to
+ * hand back a branded name. The strict path above still recognizes configured
+ * gateway labels for canonical identity, but security-sensitive callers need a
+ * separate trust signal because client labels remain spoofable.
  */
 function learnGatewayDecorationPrefixes(
   declaredToolNames: readonly string[],
@@ -161,6 +158,31 @@ function stripLearnedDecoration(
     return remainder;
   }
   return toolName;
+}
+
+/**
+ * Strip a gateway label a client joined to the tool name with one underscore,
+ * as OpenCode does (`<server_name>_<tool>`).
+ *
+ * The strict anchor still applies: the label must be the client server name
+ * of one of this organization's gateways. The rest must itself be a gateway
+ * tool name (`<server>__<tool>`), which no client-local tool name is, so a
+ * local tool that merely starts with a gateway's name is left alone. Gateway
+ * names can prefix one another, so the longest matching label wins.
+ */
+function stripUnderscoreJoinedLabel(
+  toolName: string,
+  serverNames: ReadonlySet<string>,
+): string | undefined {
+  let label: string | undefined;
+  for (const serverName of serverNames) {
+    if (label !== undefined && serverName.length <= label.length) continue;
+    if (!toolName.startsWith(`${serverName}_`)) continue;
+    const rest = toolName.slice(serverName.length + 1);
+    if (!rest.startsWith("_") && rest.includes(MCP_SERVER_TOOL_NAME_SEPARATOR))
+      label = serverName;
+  }
+  return label === undefined ? undefined : toolName.slice(label.length + 1);
 }
 
 /** How deep into the segments a client's gateway label may sit (0 or 1). */

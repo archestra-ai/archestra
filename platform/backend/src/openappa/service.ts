@@ -3,6 +3,7 @@ import {
   APPA_SESSION_HEADER,
   extractMcpToolError,
   isSeededAppRenderToolResult,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -440,6 +441,9 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
+  canonicalize: (name: string) => string;
+  /** The proxy verifies that this exact result belongs to an issued question. */
+  isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
   trustedChat?: boolean;
 }) {
@@ -450,6 +454,8 @@ export async function processProxyResults(params: {
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
+    // The runtime released no question call, so it would withhold the answer.
+    if (params.isUserQuestion?.(result) === true) continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -490,6 +496,7 @@ export async function evaluateToolCalls(
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   options: {
     canonicalize: (name: string) => string;
+    isUserQuestion?: (name: string) => boolean;
     /** This session's declared spelling of the control tool. */
     controlToolName?: string;
   },
@@ -520,6 +527,12 @@ export async function evaluateToolCalls(
       // Direct remedy control calls bypass evaluation and execute via gateway.
       if (options.controlToolName && call.name === options.controlToolName) {
         return { kind: "control" as const };
+      }
+      if (
+        options.isUserQuestion?.(call.name) ??
+        isPlatformUserQuestion(call.name, options.canonicalize)
+      ) {
+        return { kind: "allow" as const };
       }
       const tool =
         archestraMcpBranding.getToolShortName(
@@ -798,4 +811,19 @@ function nativePresentation(controlToolName?: string): {
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     supports_delegation: false,
   };
+}
+
+/**
+ * Checks whether a tool is the platform question tool (`ask_user`).
+ * Client adapters supply native question exemptions separately.
+ */
+function isPlatformUserQuestion(
+  name: string,
+  canonicalize: (name: string) => string,
+): boolean {
+  const canonical = canonicalize(name);
+  return (
+    archestraMcpBranding.getToolShortName(canonical) ===
+    TOOL_ASK_USER_SHORT_NAME
+  );
 }

@@ -50,10 +50,16 @@ type ResponsesCustomCallItem = {
   status?: "completed" | "in_progress";
 };
 
-/** Renders a Responses `function_call` output item, preserving upstream item ID when available. */
+/**
+ * Renders a Responses `function_call` output item, preserving the upstream
+ * item ID and namespace when available. Codex routes a call to a namespaced
+ * tool (its MCP servers') by the namespace the item names, so a call
+ * re-emitted without it reaches no tool.
+ */
 export function responsesFunctionCallItem(
   toolCall: RewrittenToolCall,
   itemId?: string,
+  namespace?: string,
 ): ResponsesFunctionCallItem {
   return {
     id: itemId ?? `fc_${toolCall.id}`,
@@ -61,7 +67,9 @@ export function responsesFunctionCallItem(
     type: "function_call" as const,
     name: toolCall.name,
     arguments: toolCall.arguments,
-    ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
+    ...((toolCall.namespace ?? namespace)
+      ? { namespace: toolCall.namespace ?? namespace }
+      : {}),
     status: "completed" as const,
   };
 }
@@ -77,6 +85,8 @@ export function formatResponsesFunctionCallFrames(params: {
   nextSequenceNumber: () => number;
   /** The item id upstream streamed for a call, by `call_id`. */
   itemIdByCallId?: ReadonlyMap<string, string>;
+  /** The namespace upstream's item for a call named, by `call_id`. */
+  namespaceByCallId?: ReadonlyMap<string, string>;
   /**
    * Calls upstream streamed as custom tool calls and this rewrite left alone.
    * They are re-emitted in their own shape: a client that registered a custom
@@ -96,7 +106,11 @@ export function formatResponsesFunctionCallFrames(params: {
         nextSequenceNumber,
       });
     }
-    const item = responsesFunctionCallItem(toolCall, itemId);
+    const item = responsesFunctionCallItem(
+      toolCall,
+      itemId,
+      params.namespaceByCallId?.get(toolCall.id),
+    );
     return [
       toSse({
         type: "response.output_item.added",
@@ -157,6 +171,7 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
             ? (responsesFunctionCallItem(
                 rewritten,
                 (item as { id?: string }).id,
+                namespaceOf(item).namespace,
               ) as unknown as TItem)
             : item.type === "custom_tool_call"
               ? ({
@@ -306,6 +321,30 @@ export function toSse(event: unknown): string {
 export function namespaceOf(item: unknown): { namespace?: string } {
   const namespace = (item as { namespace?: unknown } | null)?.namespace;
   return typeof namespace === "string" && namespace !== "" ? { namespace } : {};
+}
+
+/**
+ * The namespace each call named, by call id: from the completed envelope's
+ * items, then from what was streamed for calls the envelope did not carry.
+ */
+export function namespacesByCallId(params: {
+  items: readonly unknown[];
+  streamed: Iterable<{ id: string; namespace?: string }>;
+}): Map<string, string> {
+  const byCallId = new Map<string, string>();
+  for (const item of params.items) {
+    const callId = (item as { call_id?: unknown } | null)?.call_id;
+    const { namespace } = namespaceOf(item);
+    if (typeof callId === "string" && namespace) {
+      byCallId.set(callId, namespace);
+    }
+  }
+  for (const call of params.streamed) {
+    if (call.namespace && !byCallId.has(call.id)) {
+      byCallId.set(call.id, call.namespace);
+    }
+  }
+  return byCallId;
 }
 
 /** Parses the proxy's canonical custom-call wrapper at its wire boundary. */

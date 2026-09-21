@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,6 +54,10 @@ While a response streams, the send button becomes Stop. Clicking it or pressing 
 ### MCP Elicitation
 
 Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.
+
+Multiple-choice questions appear directly in the conversation. When an agent asks several questions at once, each question appears in its own tab. Selecting an option in a single-choice question moves you to the next tab. For multiple-choice questions, select Next to change tabs. Submit on the last tab sends all answers.
+
+Submitted answers collapse into one summary. If saving fails, you can retry without selecting answers again.
 
 ### Browser (Playwright)
 

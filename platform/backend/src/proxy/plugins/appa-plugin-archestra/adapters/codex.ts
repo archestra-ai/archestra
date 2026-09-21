@@ -7,6 +7,11 @@ import { readHeader } from "../utils";
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
+  // Codex advertises request_user_input even when Default mode cannot run it.
+  // Keep ask_user on the gateway so Codex shows an MCP elicitation form.
+  readonly nativeQuestion = {
+    toolName: "request_user_input",
+  };
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (
@@ -32,14 +37,15 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    // Codex decorates local function tools with `functions.` before its native
-    // namespace, so remove that decoration before preserving the native name.
+    // OpenAPPA's Archestra adapter derives a bare host spelling to its typed
+    // host/archestra identity. Codex's function and builtin decorations are
+    // client syntax, not part of that spelling.
     const stripped = name.startsWith("functions.")
       ? name.slice("functions.".length)
       : name;
-    return stripped.startsWith("builtin:") || stripped.startsWith("host/")
-      ? stripped
-      : `builtin:${stripped}`;
+    return stripped.startsWith("builtin:")
+      ? stripped.slice("builtin:".length)
+      : stripped;
   }
 
   /**

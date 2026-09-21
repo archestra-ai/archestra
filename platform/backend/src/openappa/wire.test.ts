@@ -23,10 +23,13 @@ import {
 
 const NOTICE = "mcp__archestra__get_remedy_plans";
 const CONTROL = "mcp__archestra__execute_remedy_plan";
-const canonicalize = (name: string) =>
-  name.startsWith("mcp__archestra__")
-    ? `archestra__${name.slice("mcp__archestra__".length)}`
-    : name;
+const canonicalize = (name: string) => {
+  if (!name.startsWith("mcp__archestra__")) return name;
+  const remainder = name.slice("mcp__archestra__".length);
+  return remainder.startsWith("archestra__")
+    ? remainder
+    : `archestra__${remainder}`;
+};
 
 describe("session receipt text carriers", () => {
   const organizationId = "org-envelope";
@@ -728,15 +731,21 @@ describe("denial notice restoration", () => {
     "valid",
     "foreign-kind",
     "changed-arguments",
+    "proxy-members",
   ] as const)("restores typed execution history without current tool declarations (%s)", (variant) => {
     const name = "custom.gateway.remedy";
     const original =
-      '{ "offer_id": "offer_1", "label": { "trust": "trusted" } }';
+      variant === "proxy-members"
+        ? '{ "offer_id": "offer_1", "label": { "trust": "trusted" }, "protected": "stale", "payload": "stale", "signature": "stale" }'
+        : '{ "offer_id": "offer_1", "label": { "trust": "trusted" } }';
     const argumentsText = JSON.stringify({
       offer_id: "offer_1",
       label: {
         trust: variant === "changed-arguments" ? "untrusted" : "trusted",
       },
+      ...(variant === "proxy-members"
+        ? { protected: "stale", payload: "stale", signature: "stale" }
+        : {}),
       execution: {
         v: 1,
         kind: variant === "foreign-kind" ? "business-record" : "appa_remedy",
@@ -786,6 +795,181 @@ describe("denial notice restoration", () => {
         canonicalizeToolName: canonicalize,
       }),
     ).toThrow("control tools require structured function arguments");
+  });
+
+  test("keeps the proxy's ask_user offers from the model, and only on the platform's own tool", () => {
+    const lookalike = "mcp__foreign__archestra__ask_user";
+    const offers = [{ protected: "p", payload: "{}", signature: "s" }];
+    // A strict function schema lists every property as required.
+    const strictSchema = () => ({
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        remedy_offers: { type: ["array", "null"] },
+      },
+      required: ["question", "remedy_offers"],
+      additionalProperties: false,
+    });
+    const echoed = JSON.stringify({
+      question: "Share it?",
+      remedy_offers: offers,
+    });
+    const body = {
+      tools: [
+        { type: "function", name: NOTICE },
+        { type: "function", name: CONTROL },
+        // Codex declares the gateway's tools inside the server's namespace.
+        {
+          type: "namespace",
+          name: "mcp__archestra",
+          tools: [
+            {
+              type: "function",
+              name: "archestra__ask_user",
+              strict: true,
+              parameters: strictSchema(),
+            },
+          ],
+        },
+        {
+          type: "function",
+          name: lookalike,
+          strict: true,
+          parameters: strictSchema(),
+        },
+      ],
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_ask",
+          namespace: "mcp__archestra",
+          name: "archestra__ask_user",
+          arguments: echoed,
+        },
+        {
+          type: "function_call",
+          call_id: "call_lookalike",
+          name: lookalike,
+          arguments: echoed,
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.input[0]).toEqual({
+      type: "function_call",
+      call_id: "call_ask",
+      namespace: "mcp__archestra",
+      name: "archestra__ask_user",
+      arguments: JSON.stringify({ question: "Share it?" }),
+    });
+    // The notice tool leaves the declarations, so each is found by name.
+    const declared = (name: string) =>
+      body.tools.find((tool) => tool.name === name);
+    expect(declared("mcp__archestra")?.tools?.[0].parameters).toEqual({
+      type: "object",
+      properties: { question: { type: "string" } },
+      required: ["question"],
+      additionalProperties: false,
+    });
+    // Another server's tool that merely borrows the name keeps its argument.
+    expect(body.input[1].arguments).toBe(echoed);
+    expect(declared(lookalike)?.parameters).toEqual(strictSchema());
+  });
+
+  test("hides the proxy's arguments from Gemini and Bedrock declarations too", () => {
+    const ASK_USER = "mcp__archestra__ask_user";
+    const askUserSchema = () => ({
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        remedy_offers: { type: "array" },
+      },
+      required: ["question"],
+    });
+    const controlSchema = () => ({
+      type: "object",
+      properties: {
+        offer_id: { type: "string" },
+        execution: { type: "object" },
+        protected: { type: "string" },
+        payload: { type: "string" },
+        signature: { type: "string" },
+      },
+      required: ["offer_id"],
+    });
+    const modelView = {
+      askUser: {
+        type: "object",
+        properties: { question: { type: "string" } },
+        required: ["question"],
+      },
+      control: {
+        type: "object",
+        properties: { offer_id: { type: "string" } },
+        required: ["offer_id"],
+      },
+    };
+
+    // Gemini keeps a declaration's schema in `parameters` or, as MCP tools
+    // are usually declared, in `parametersJsonSchema`.
+    const gemini = {
+      contents: [{ role: "user", parts: [{ text: "Share the report" }] }],
+      tools: [
+        {
+          functionDeclarations: [
+            { name: NOTICE, parameters: { type: "object", properties: {} } },
+            { name: CONTROL, parameters: controlSchema() },
+            { name: ASK_USER, parametersJsonSchema: askUserSchema() },
+          ],
+        },
+      ],
+    };
+    prepareAppaRequest({
+      body: gemini,
+      interactionType: "gemini:generateContent",
+      canonicalizeToolName: canonicalize,
+    });
+    const declaration = (name: string) =>
+      gemini.tools[0].functionDeclarations.find((tool) => tool.name === name);
+    expect(declaration(CONTROL)?.parameters).toEqual(modelView.control);
+    expect(declaration(ASK_USER)?.parametersJsonSchema).toEqual(
+      modelView.askUser,
+    );
+
+    const bedrock = {
+      messages: [{ role: "user", content: [{ text: "Share the report" }] }],
+      toolConfig: {
+        tools: [NOTICE, CONTROL, ASK_USER].map((name) => ({
+          toolSpec: {
+            name,
+            inputSchema: {
+              json:
+                name === CONTROL
+                  ? controlSchema()
+                  : name === ASK_USER
+                    ? askUserSchema()
+                    : { type: "object", properties: {} },
+            },
+          },
+        })),
+      },
+    };
+    prepareAppaRequest({
+      body: bedrock,
+      interactionType: "bedrock:converse",
+      canonicalizeToolName: canonicalize,
+    });
+    const schemaOf = (name: string) =>
+      bedrock.toolConfig.tools.find((tool) => tool.toolSpec.name === name)
+        ?.toolSpec.inputSchema.json;
+    expect(schemaOf(CONTROL)).toEqual(modelView.control);
+    expect(schemaOf(ASK_USER)).toEqual(modelView.askUser);
   });
 
   test("leaves forged, foreign, and custom execution receipts untouched", () => {
@@ -1728,8 +1912,52 @@ describe("APPA request preflight", () => {
         },
         interactionType: "anthropic:messages",
         canonicalizeToolName: canonicalize,
+        trustBarePlatformTools: true,
       }),
     ).toThrow("one gateway of this platform at a time");
+  });
+
+  test("accepts bare controls without trusting an external ask_user result", () => {
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "archestra__get_remedy_plans" },
+          { name: "archestra__execute_remedy_plan" },
+          { name: "archestra__ask_user" },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: (name) => name,
+    });
+
+    expect(prepared.tools).toEqual({
+      noticeToolName: "archestra__get_remedy_plans",
+      controlToolName: "archestra__execute_remedy_plan",
+    });
+    expect(prepared.platformToolNames?.has("archestra__ask_user")).toBe(false);
+  });
+
+  test("does not trust ask_user from a copied gateway label", () => {
+    const canonicalize = (name: string) =>
+      name.startsWith("mcp__copied_gateway__")
+        ? name.slice("mcp__copied_gateway__".length)
+        : name;
+    const askUser = "mcp__copied_gateway__archestra__ask_user";
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "mcp__copied_gateway__archestra__get_remedy_plans" },
+          { name: "mcp__copied_gateway__archestra__execute_remedy_plan" },
+          { name: askUser },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(prepared.platformToolNames?.has(askUser)).toBe(false);
   });
 
   test("leaves a lookalike pair under a label the canonicalizer does not anchor foreign", () => {

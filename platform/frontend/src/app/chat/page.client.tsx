@@ -36,7 +36,6 @@ import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-ch
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import {
@@ -226,6 +225,10 @@ import {
   externalMcpSkillCommandValue,
   resolveUrlSkillAction,
 } from "./skill-commands";
+import {
+  resolveSuggestionPreview,
+  SuggestedPromptPills,
+} from "./suggested-prompt-pills";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -308,6 +311,9 @@ export function ChatPageContent({
   // Composer prefill from a Skill deep link; handed to the composer once and
   // cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const [hoveredSuggestionPrompt, setHoveredSuggestionPrompt] = useState<
+    string | null
+  >(null);
   const [externalMcpSkillAttachment, setExternalMcpSkillAttachment] =
     useState<ChatExternalMcpSkillMetadata | null>(null);
   const urlSkillProcessedRef = useRef(false);
@@ -968,6 +974,10 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
+  const suggestionPreview = resolveSuggestionPreview(
+    initialAgent?.suggestedPrompts,
+    hoveredSuggestionPrompt,
+  );
   const {
     data: activeAgentCredentials = [],
     isPending: isActiveAgentCredentialPending,
@@ -3648,35 +3658,28 @@ export function ChatPageContent({
                       </div>
                       {(() => {
                         if (isInitialRuntimeMode) return null;
-                        const currentAgent = internalAgents.find(
-                          (a) => a.id === initialAgentId,
-                        );
-                        const prompts = currentAgent?.suggestedPrompts;
+                        const prompts = initialAgent?.suggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
-                          <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                            {prompts.map((sp) => (
-                              <Suggestion
-                                key={`${sp.summaryTitle}-${sp.prompt}`}
-                                suggestion={sp.summaryTitle}
-                                disabled={
-                                  isAgentSubscriptionMetadataPending ||
-                                  (initialPerUserConnect.needsConnect &&
-                                    Boolean(initialPerUserConnect.provider))
-                                }
-                                onClick={() => {
-                                  trackEvent("prompt_selected", {
-                                    agentId: initialAgentId ?? undefined,
-                                    promptLength: sp.prompt.length,
-                                  });
-                                  submitInitialMessage({
-                                    text: sp.prompt,
-                                    files: [],
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
+                          <SuggestedPromptPills
+                            prompts={prompts}
+                            disabled={
+                              isAgentSubscriptionMetadataPending ||
+                              (initialPerUserConnect.needsConnect &&
+                                Boolean(initialPerUserConnect.provider))
+                            }
+                            onPreviewChange={setHoveredSuggestionPrompt}
+                            onSelect={(sp) => {
+                              trackEvent("prompt_selected", {
+                                agentId: initialAgentId ?? undefined,
+                                promptLength: sp.prompt.length,
+                              });
+                              submitInitialMessage({
+                                text: sp.prompt,
+                                files: [],
+                              });
+                            }}
+                          />
                         );
                       })()}
                       <div className="w-full max-w-4xl space-y-3">
@@ -3707,6 +3710,7 @@ export function ChatPageContent({
                                 )}
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
+                                  placeholderPreview={suggestionPreview}
                                   toolsUnavailable={initialToolsUnavailable}
                                   notRecommendedForAgents={
                                     initialNotRecommended

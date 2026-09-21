@@ -1,6 +1,9 @@
 "use client";
 
-import { getAgentRuntimeAllowedProtocols } from "@archestra/shared";
+import {
+  getAgentRuntimeAllowedProtocols,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
@@ -49,6 +52,8 @@ export type AgentRuntimeConfig = {
     description?: string;
     required: boolean;
   }> | null;
+  /** Undefined means enabled. Only an explicit `false` refuses a transfer. */
+  allowAgentSuppliedCredentialValues?: boolean;
   claudeCode?: {
     authentication: "provider" | "subscription";
     model?: string;
@@ -225,61 +230,85 @@ export function AgentRuntimeEnvironmentFields({
   const runtimeEnabled = useFeature("agentRuntime");
   const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
   return (
-    <DeploymentEnvironmentVariablesEditor
-      hideHeading={hideLabel}
-      value={toEnvironmentDrafts(config)}
-      onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
-      description={
-        <>
-          Add plain configuration or declare static secrets for this Agent.
-          Secret values are provided after saving. Manage reusable organization
-          or per-user credentials on the{" "}
-          <Link
-            href="/settings/credentials"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            Credentials
-          </Link>{" "}
-          page, then select them as a secret source.
-        </>
-      }
-      targetLabel="dedicated runtime"
-      installationLabel="Per user"
-      staticLabel="Shared"
-      installationDescription="Each user provides their own value."
-      staticDescription="The same value is used for every run."
-      installationCalloutTitle="Each user provides their own value"
-      requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
-      promptedValueLabel="per-user"
-      deferStaticSecretValue
-      installationOnlyForSecrets
-      allowRequiredStaticSecret
-      normalizeKey={uppercase}
-      credentialBindingOptions={(runtimeCredentials.data ?? []).map(
-        (definition) => ({
-          id: definition.key,
-          label: definition.name,
-          icon:
-            definition.icon ??
-            (definition.kind === "github_app_user" ||
-            definition.kind === "github_app"
-              ? "logo:github"
-              : null),
-          sourceLabel:
-            definition.kind === "github_app_user"
-              ? "GitHub connection"
-              : definition.kind === "github_app"
-                ? "GitHub App connection"
-                : undefined,
-          defaultKey: defaultCredentialEnvironmentKey(definition.key),
-          description: definition.description,
-          allowedScopes: [
-            ...(definition.allowPersonal ? (["installation"] as const) : []),
-            ...(definition.allowOrganization ? (["static"] as const) : []),
-          ],
-        }),
-      )}
-    />
+    <div className="space-y-4">
+      <DeploymentEnvironmentVariablesEditor
+        hideHeading={hideLabel}
+        value={toEnvironmentDrafts(config)}
+        onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
+        description={
+          <>
+            Add plain configuration or declare static secrets for this Agent.
+            Secret values are provided after saving. Manage reusable
+            organization or per-user credentials on the{" "}
+            <Link
+              href="/settings/credentials"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Credentials
+            </Link>{" "}
+            page, then select them as a secret source.
+          </>
+        }
+        targetLabel="dedicated runtime"
+        installationLabel="Per user"
+        staticLabel="Shared"
+        installationDescription="Each user provides their own value."
+        staticDescription="The same value is used for every run."
+        installationCalloutTitle="Each user provides their own value"
+        requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
+        promptedValueLabel="per-user"
+        deferStaticSecretValue
+        installationOnlyForSecrets
+        allowRequiredStaticSecret
+        normalizeKey={uppercase}
+        credentialBindingOptions={(runtimeCredentials.data ?? []).map(
+          (definition) => ({
+            id: definition.key,
+            label: definition.name,
+            icon:
+              definition.icon ??
+              (definition.kind === "github_app_user" ||
+              definition.kind === "github_app"
+                ? "logo:github"
+                : null),
+            sourceLabel:
+              definition.kind === "github_app_user"
+                ? "GitHub connection"
+                : definition.kind === "github_app"
+                  ? "GitHub App connection"
+                  : undefined,
+            defaultKey: defaultCredentialEnvironmentKey(definition.key),
+            description: definition.description,
+            allowedScopes: [
+              ...(definition.allowPersonal ? (["installation"] as const) : []),
+              ...(definition.allowOrganization ? (["static"] as const) : []),
+            ],
+          }),
+        )}
+      />
+
+      <div className="flex items-start justify-between gap-6 border-t pt-4">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="agent-runtime-allow-client-credentials">
+            Accept credentials from a connected client
+          </Label>
+          <FieldDescription>
+            Lets a client store a credential on this Agent with{" "}
+            <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>, for your runs
+            only. The model sees the value, and the client keeps it in its chat
+            history. Turn it off to require the Credentials page.
+          </FieldDescription>
+        </div>
+        <Switch
+          id="agent-runtime-allow-client-credentials"
+          className="mt-0.5 shrink-0"
+          checked={config.allowAgentSuppliedCredentialValues !== false}
+          onCheckedChange={(allowed) =>
+            update({ allowAgentSuppliedCredentialValues: allowed })
+          }
+        />
+      </div>
+    </div>
   );
 }
 

@@ -19,12 +19,17 @@ import unittest
 def locate_helper():
     """Find the helper in a checkout or in the built image.
 
-    The repository keeps it beside this directory. The image installs it on
-    PATH and bind-mounts these tests somewhere unrelated, so neither location
-    can be assumed.
+    The backend owns the source now — it sends this program to the runtime
+    inline — and the image keeps a copy on PATH for debugging. The image
+    bind-mounts these tests somewhere unrelated, so neither location can be
+    assumed.
     """
     candidates = [
-        Path(__file__).resolve().parent.parent / "bin" / "archestra-workspace-files",
+        Path(__file__).resolve().parent.parent.parent
+        / "backend"
+        / "src"
+        / "static"
+        / "workspace-files.py",
         Path("/usr/local/bin/archestra-workspace-files"),
     ]
     for candidate in candidates:

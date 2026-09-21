@@ -87,10 +87,30 @@ function transfer(agentId: string, key = "MY_CLI_TOKEN") {
   );
 }
 
-test("refuses an Agent that has not opted in to client-supplied values", async ({
+// An Agent stored before this field existed carries no value for it. Those
+// rows are never re-parsed, so "omitted" is the state most Agents are in and
+// it has to keep working.
+test("accepts a value when the Agent leaves the setting unset", async ({
   makeAgent,
 }) => {
   const target = await makeRuntimeAgent(makeAgent, runtimeConfig());
+
+  const result = await transfer(target.id);
+
+  expect(result.isError).toBeFalsy();
+  const stored = await AgentModel.findById(target.id);
+  expect(stored?.runtime?.credentials).toEqual([
+    expect.objectContaining({ key: "MY_CLI_TOKEN", scope: "per_user" }),
+  ]);
+});
+
+test("refuses an Agent whose administrator turned the setting off", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(
+    makeAgent,
+    runtimeConfig({ allowAgentSuppliedCredentialValues: false }),
+  );
 
   const result = await transfer(target.id);
 

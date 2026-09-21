@@ -88,7 +88,7 @@ export async function acceptHeldAppaGithubPull(params: {
   assertEnabled();
   const { organizationId, userId } = params;
   const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!row?.heldContent)
+  if (!row?.heldContent || !row.heldContentHash)
     throw new ApiError(409, "There is no held pull to accept");
   if (
     row.heldReasons.includes("changes_credentials") &&
@@ -103,10 +103,16 @@ export async function acceptHeldAppaGithubPull(params: {
     organizationId,
     local: local.content,
     pulled: row.heldContent,
+    // The record of what was accepted has to name the batteries the pull drops,
+    // whatever the flag says by now: the hold is why they are being named.
+    pendingPublish:
+      row.declarationsPendingPublish ||
+      row.heldReasons.includes("drops_batteries"),
   });
   const published = await OpenAppaGithubSyncModel.publishHeld({
     organizationId,
     userId,
+    heldContentHash: row.heldContentHash,
   });
   if (!published) throw new ApiError(409, "There is no held pull to accept");
   await openappaBatteriesService.recompileOrganizations([organizationId]);
@@ -197,11 +203,20 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       });
       return;
     }
-    await OpenAppaGithubSyncModel.finish({
+    const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
       revision: row.revision,
       outcome: { content, contentHash, sourceCommit: commit.sha },
     });
+    // A download that raced a source edit or a disconnect published nothing, so
+    // the declarations it would have carried upstream are still unpublished.
+    if (!published) {
+      logger.info(
+        { organizationId },
+        "An APPA GitHub pull was discarded: the source changed while it downloaded",
+      );
+      return;
+    }
     if (row.declarationsPendingPublish)
       await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
         organizationId,

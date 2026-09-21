@@ -29,6 +29,18 @@ const PACKAGE_FILES = [
   },
 ];
 
+/** A package under its own name that governs the shared `acme` namespace. */
+const sharedNamespacePackage = (name: string, tool: string) => [
+  {
+    path: "appa-package.toml",
+    text: `schema = 1\nname = "${name}"\ndescription = "Governs acme"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["acme"]\n`,
+  },
+  {
+    path: "appa.toml",
+    text: `[policy]\nversion = 2\n[[policy.tool]]\nname = "mcp/acme/${tool}"\ndelta = {}\n`,
+  },
+];
+
 describe("guardrails batteries", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
@@ -213,19 +225,23 @@ describe("guardrails batteries", () => {
       (await guardrailsPolicyService.get(organizationId)).content,
     ).toContain("batteries/github/appa.toml");
 
-    const records = await db
-      .select()
-      .from(schema.auditLogsTable)
-      .where(eq(schema.auditLogsTable.organizationId, organizationId));
-    expect(
-      records
-        .map((record) => record.action)
-        .filter((action) => action.startsWith("openappaBatteryInstall"))
-        .sort(),
-    ).toEqual([
+    const records = (
+      await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId))
+    ).filter((record) => record.action.startsWith("openappaBatteryInstall"));
+    expect(records.map((record) => record.action).sort()).toEqual([
       "openappaBatteryInstall.created",
       "openappaBatteryInstall.updated",
       "openappaBatteryInstall.updated",
+    ]);
+    // A declaration has no id of its own, so each write names the row it made,
+    // falling back to the battery once the unbind leaves no row to name.
+    expect(records.map((record) => record.resourceId)).toEqual([
+      row.id,
+      row.id,
+      "github",
     ]);
   });
 
@@ -279,6 +295,65 @@ describe("guardrails batteries", () => {
     expect(
       (await guardrailsPolicyService.get(organizationId)).content,
     ).not.toContain("batteries/github/appa.toml");
+  });
+
+  test("removing one battery leaves the alias another included battery declares", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    // Two packages governing one namespace: the alias is both their server list.
+    for (const [name, tool] of [
+      ["acme", "list"],
+      ["acme-extra", "read"],
+    ]) {
+      const uploaded = await app.inject({
+        method: "PUT",
+        url: `/api/openappa/battery-packages/${name}`,
+        payload: { files: sharedNamespacePackage(name, tool) },
+      });
+      expect(uploaded.statusCode, uploaded.body).toBe(200);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload: {
+          batteryName: name,
+          catalogId: catalog.id,
+          packageHash: uploaded.json().contentHash,
+        },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      expect(created.json()).toMatchObject({ status: "active" });
+    }
+    const dropped = (await installRows()).find(
+      (row) => row.batteryName === "acme",
+    );
+    if (!dropped) throw new Error("the acme battery derived no row");
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/openappa/battery-installs/${dropped.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await declarations()).toMatchObject({
+      batteries: [
+        {
+          name: "acme-extra",
+          status: "active",
+          servers: [{ target: "acme_prod", catalogId: catalog.id }],
+        },
+      ],
+    });
   });
 
   test("a tool namespace holding a double underscore is no alias target", async ({

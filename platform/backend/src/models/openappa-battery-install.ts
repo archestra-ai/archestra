@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray } from "drizzle-orm";
+import { and, asc, eq, notInArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   BatteryInstall,
@@ -19,26 +19,31 @@ class OpenAppaBatteryInstallModel {
     const { organizationId, rows } = params;
     return db.transaction(async (tx) => {
       const now = new Date();
-      const saved: BatteryInstall[] = [];
-      for (const row of rows) {
-        const [upserted] = await tx
-          .insert(table)
-          // `enabled` is true for every declared battery; absence is how one is off.
-          .values({ organizationId, enabled: true, ...row })
-          .onConflictDoUpdate({
-            target: [table.organizationId, table.catalogId, table.batteryName],
-            set: {
-              status: row.status,
-              packageHash: row.packageHash,
-              lastError: row.lastError,
-              credentialBindings: row.credentialBindings,
-              enabled: true,
-              updatedAt: now,
-            },
-          })
-          .returning();
-        saved.push(upserted);
-      }
+      const saved =
+        rows.length === 0
+          ? []
+          : await tx
+              .insert(table)
+              // `enabled` is true for every declared battery; absence is how one is off.
+              .values(
+                rows.map((row) => ({ organizationId, enabled: true, ...row })),
+              )
+              .onConflictDoUpdate({
+                target: [
+                  table.organizationId,
+                  table.catalogId,
+                  table.batteryName,
+                ],
+                set: {
+                  status: sql`excluded.status`,
+                  packageHash: sql`excluded.package_hash`,
+                  lastError: sql`excluded.last_error`,
+                  credentialBindings: sql`excluded.credential_bindings`,
+                  enabled: true,
+                  updatedAt: now,
+                },
+              })
+              .returning();
       await tx.delete(table).where(
         saved.length === 0
           ? eq(table.organizationId, organizationId)

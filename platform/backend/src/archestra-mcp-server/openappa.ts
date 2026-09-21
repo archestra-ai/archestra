@@ -19,7 +19,6 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
-import type { EffectivePolicy } from "@/types/openappa-batteries";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const RemedyPlanArgumentsSchema = z.object({
@@ -71,23 +70,23 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read guardrails policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
       const [root, effective] = await Promise.all([
         guardrailsPolicyService.get(context.organizationId),
-        openappaBatteriesService.getEffectivePolicy(context.organizationId),
+        enforced(context.organizationId),
       ]);
-      return result({ ...root, effective: enforced(effective) });
+      return result({ ...root, effective });
     },
   }),
   defineArchestraTool({
     shortName: "validate_guardrails_policy",
     title: "Validate guardrails policy",
     description:
-      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it. Explain the intended behavior to the user before updating their policy.",
+      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId)
@@ -103,7 +102,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Update guardrails policy",
     description:
-      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission, and credential:update as well whenever the saved text hands a credential to a battery it did not already reach — a new `[credentials]` entry, a changed key, or a newly included battery that reads a variable the table already binds. Removing a battery or a binding needs no extra permission.",
+      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission, and credential:update as well whenever the saved text hands a credential to a battery it did not already reach — a new `[credentials]` entry, a changed key, or a newly included battery that reads a variable the table already binds. Removing a battery or a binding needs no extra permission. The answer carries `effective.batteries` with each battery's status: report any that is not `active`.",
     schema: UpdateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId || !context.userId)
@@ -116,10 +115,10 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         userId: context.userId,
       });
-      const effective = await openappaBatteriesService.getEffectivePolicy(
-        context.organizationId,
-      );
-      return result({ ...saved, effective: enforced(effective) });
+      return result({
+        ...saved,
+        effective: await enforced(context.organizationId),
+      });
     },
   }),
   defineArchestraTool({
@@ -235,11 +234,25 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 /**
- * What the runtime enforces: the root composed with the installed batteries,
- * or the root alone with the error when the last composition failed.
+ * What the runtime enforces: the root composed with the batteries it declares,
+ * or the last composition that opened with the error the newest one raised.
+ * Every declared battery is listed with its status, because a battery that
+ * governs nothing still composes and would otherwise read as success.
  */
-function enforced(effective: EffectivePolicy) {
-  return { content: effective.content, error: effective.lastError };
+async function enforced(organizationId: string) {
+  const [effective, declarations] = await Promise.all([
+    openappaBatteriesService.getEffectivePolicy(organizationId),
+    openappaBatteriesService.policyDeclarations(organizationId),
+  ]);
+  return {
+    content: effective.content,
+    error: effective.lastError,
+    batteries: declarations.batteries.map((battery) => ({
+      entry: battery.entry,
+      name: battery.name,
+      status: battery.status,
+    })),
+  };
 }
 
 function result(value: object) {

@@ -17,15 +17,23 @@ not change it.
 ## Read and explain
 
 Call \`archestra__get_guardrails_policy\` with no arguments. Read the returned
-\`content\` and \`revision\`. This is the organization's own policy text; the
-batteries installed for MCP servers compose into what is enforced on top of it,
-and they are managed in Studio, not through this tool. The returned
-\`effective\` is what the runtime enforces: its \`content\` is the composed
-policy, and its \`error\` is set when the last composition failed, in which
-case only the root text is enforced. If the user only asked to inspect or
-explain, summarize what is enforced from \`effective.content\`, note which
-rules come from batteries rather than the root text, and report an
-\`effective.error\` as a problem to fix. Do not save or propose unrelated changes.
+\`content\` and \`revision\`. This is the organization's own policy text, and it
+declares its own batteries: each \`include\` entry names one battery, its
+\`[server_aliases]\` entries point a battery's namespace at the tool prefixes of
+the MCP servers it governs, and \`[credentials]\` binds the credential variable a
+battery's helpers read to a runtime credential key. The returned \`effective\` is
+what the runtime enforces: its \`content\` is the composed policy, its \`error\`
+is set when the last composition failed — in which case the last composition that
+opened is what is enforced — and its \`batteries\` lists every declared battery
+with the status it composed under. Only \`active\` means the battery governs its
+servers: \`unavailable\` means nothing answers its entry, \`missing_credentials\`
+that \`[credentials]\` does not bind what it reads, \`server_missing\` that no
+alias target resolves to a server, \`naming_conflict\` that a target is ambiguous,
+and \`refused\` that the runtime rejected the composition. If the user only asked
+to inspect or explain, summarize what is enforced from \`effective.content\`, note
+which rules come from batteries rather than the root text, and report every
+non-\`active\` battery and any \`effective.error\` as a problem to fix. Do not
+save or propose unrelated changes.
 
 ## Inspect installed MCP servers
 
@@ -64,8 +72,12 @@ scan or save policy rules; follow these steps when handling the user's request.
    question. An inspection request does not authorize a save. Existing approval
    for a specific change carries forward; do not ask for it again.
 4. Call \`archestra__validate_guardrails_policy\` with
-   \`{ "content": "<complete proposed TOML>" }\`. Fix reported errors and
-   validate again. Validation checks the policy, not the availability or
+   \`{ "content": "<complete proposed TOML>" }\`. Validation composes the
+   document with the batteries its \`include\` entries name, so an entry nothing
+   answers is an error unless the saved revision already spells it — then it is
+   a \`warnings\` line instead, and the battery will govern nothing. Fix reported
+   errors and validate again; report the warnings rather than reading \`valid\`
+   alone as working. Validation checks the policy, not the availability or
    correctness of external annotation services.
 5. If the text already provides the requested behavior, report that no change
    is needed. Otherwise call \`archestra__update_guardrails_policy\` with
@@ -76,9 +88,11 @@ scan or save policy rules; follow these steps when handling the user's request.
    Never just increase N and resend the old text. If the edits conflict in
    meaning, ask the user which behavior they want.
 7. Read back the saved policy. If the save's \`effective.error\` is set, the
-   root text saved but its composition with the installed batteries failed and
-   only the root text is enforced: report that as a problem, not a success.
-   Otherwise briefly report the change and its save number. Saved policies
+   text saved but composing it with its batteries failed and the last
+   composition that opened is still what is enforced: report that as a problem,
+   not a success. Report any battery in \`effective.batteries\` whose status is
+   not \`active\` the same way. Otherwise briefly report the change and its save
+   number. Saved policies
    apply to new conversations. This conversation keeps its original policy; a
    successful save does not prove the new behavior here.
 
@@ -93,11 +107,16 @@ scan or save policy rules; follow these steps when handling the user's request.
   restrictions. It neither classifies their data nor raises existing trust.
 - Explicit rules still apply. Keep the catch-all unless the user wants unknown
   tools blocked. Do not quietly weaken a rule to make a blocked call succeed.
-- The supported editor format is \`[policy]\` plus \`[externals]\`.
-  Local commands and file includes are rejected. Batteries are installed per
-  MCP server outside the policy text and compose into it automatically. Do not
-  copy Claude Code's subprocess annotators, battery includes, CLI reload steps,
-  or local hooks.
+- The supported editor format is \`[policy]\` plus \`[externals]\`, and the
+  battery declarations the host answers: \`include\`, \`[server_aliases]\` and
+  \`[credentials]\`. An \`include\` entry is spelled \`batteries/<name>/appa.toml\`
+  for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an
+  uploaded package; any other entry, a local command, or a path outside
+  \`batteries/\` is rejected. A battery is included once, and removing its entry
+  is how it is turned off. Adding an entry for a battery that reads a credential
+  the table already binds, or changing a key in \`[credentials]\`, needs
+  \`credential:update\`; removing either needs nothing extra. Do not copy Claude
+  Code's subprocess annotators, CLI reload steps, or local hooks.
 - Keep secrets out of policy text. Existing remote bindings may refer to a
   backend environment variable with \`token_env\`; never invent a credential.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`.
@@ -202,7 +221,30 @@ review channel. Do not invent one or replace a denied operation with noop.
 When APPA provides a remedy offer, use only the exact offer_id from that
 response with the available remedy tool and the user's authorization.
 
-This guide does not configure subprocesses, battery installs, or deployment
+## Battery declarations
+
+A battery is declared in this same document. \`include\` names it — either
+\`batteries/<name>/appa.toml\` for a bundled battery or
+\`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package —
+\`[server_aliases]\` points the namespace the battery declares at the tool
+prefixes of the servers it should govern, and \`[credentials]\` binds each
+credential variable a battery's helpers read to a runtime credential key:
+
+\`\`\`toml
+include = ["batteries/github/appa.toml"]
+
+[server_aliases]
+github = ["github_prod"]
+
+[credentials]
+APPA_PROVIDER_GITHUB_TOKEN = "github-token"
+\`\`\`
+
+The value of a credential never appears here, only the key. Validation composes
+these entries, so read the statuses it reports back rather than assuming a
+declared battery is governing anything.
+
+This guide does not configure subprocesses, package uploads, or deployment
 changes. If the existing bindings cannot express the requested behavior,
 explain what support is missing rather than silently allowing it.
 `,

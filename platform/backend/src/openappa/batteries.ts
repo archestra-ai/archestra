@@ -54,6 +54,13 @@ import {
   uploadedEntry,
 } from "./declarations";
 
+/** A battery after a write, and the derived row that write stands for. */
+type BatteryWriteResult = {
+  battery: PolicyBatteryView;
+  /** Null when the write left the battery governing no catalog. */
+  installId: string | null;
+};
+
 /**
  * The batteries of an organization's policy: composing the declarations its root
  * document makes, deriving the install rows that composition implies, and writing
@@ -258,7 +265,7 @@ class OpenAppaBatteriesService {
     userId: string;
     organizationId: string;
     install: CreateBatteryInstall;
-  }): Promise<PolicyBatteryView> {
+  }): Promise<BatteryWriteResult> {
     const { userId, organizationId, install } = params;
     const catalog = await this.requireCatalog({
       organizationId,
@@ -293,7 +300,11 @@ class OpenAppaBatteriesService {
         ];
       },
     });
-    return this.batteryView({ organizationId, name: install.batteryName });
+    return this.batteryView({
+      organizationId,
+      name: install.batteryName,
+      catalogId: install.catalogId,
+    });
   }
 
   /**
@@ -305,7 +316,7 @@ class OpenAppaBatteriesService {
     organizationId: string;
     id: string;
     changes: UpdateBatteryInstall;
-  }): Promise<PolicyBatteryView> {
+  }): Promise<BatteryWriteResult> {
     const { userId, organizationId, id, changes } = params;
     const existing = await OpenAppaBatteryInstallModel.find({
       id,
@@ -334,7 +345,12 @@ class OpenAppaBatteriesService {
           edits.push(
             ...(changes.enabled
               ? bindEdits({ resolution, namespaces, targets })
-              : unbindEdits({ resolution, namespaces, targets })),
+              : unbindEdits({
+                  resolution,
+                  namespaces,
+                  targets,
+                  keep: otherNamespaces(resolution, existing.batteryName),
+                })),
           );
         for (const [variable, key] of Object.entries(
           changes.credentialBindings ?? {},
@@ -349,7 +365,11 @@ class OpenAppaBatteriesService {
         return edits;
       },
     });
-    return this.batteryView({ organizationId, name: existing.batteryName });
+    return this.batteryView({
+      organizationId,
+      name: existing.batteryName,
+      catalogId: existing.catalogId,
+    });
   }
 
   /**
@@ -392,14 +412,15 @@ class OpenAppaBatteriesService {
           (namespace) =>
             remainingTargets({ resolution, namespace, targets }).length > 0,
         );
-        return remaining
-          ? unbindEdits({ resolution, namespaces, targets })
-          : [
-              { kind: "removeInclude", entry: included.entry },
-              ...(namespaces.length > 0
-                ? [{ kind: "unbindServers" as const, namespaces }]
-                : []),
-            ];
+        const keep = otherNamespaces(resolution, existing.batteryName);
+        return [
+          // With no target left anywhere the battery governs nothing, so the
+          // entry that declares it goes with its last catalog.
+          ...(remaining
+            ? []
+            : [{ kind: "removeInclude" as const, entry: included.entry }]),
+          ...unbindEdits({ resolution, namespaces, targets, keep }),
+        ];
       },
     });
     await this.recompile(organizationId);
@@ -817,34 +838,51 @@ class OpenAppaBatteriesService {
     const newest = new Map<string, string>();
     for (const stored of await OpenAppaBatteryPackageModel.list(organizationId))
       if (!newest.has(stored.name)) newest.set(stored.name, stored.contentHash);
-    for (const [name, contentHash] of newest) {
-      const inspected = await openappaDeclarations.resolveInstalled({
-        organizationId,
+    // One stored package's bytes say nothing about another's, so the newest
+    // version of every name is inspected at once.
+    const inspected = await Promise.all(
+      [...newest].map(async ([name, contentHash]) => ({
         name,
-        packageHash: contentHash,
-      });
-      if (inspected)
-        available.set(name, {
+        contentHash,
+        package: await openappaDeclarations.resolveInstalled({
+          organizationId,
+          name,
+          packageHash: contentHash,
+        }),
+      })),
+    );
+    for (const upload of inspected)
+      if (upload.package)
+        available.set(upload.name, {
           source: "upload",
-          contentHash,
-          package: inspected,
+          contentHash: upload.contentHash,
+          package: upload.package,
         });
-    }
     return available;
   }
 
-  /** The battery as the latest composition sees it, after the write that changed it. */
+  /**
+   * The battery as the latest composition sees it, after the write that changed
+   * it, with the derived row that write stands for when the composition kept
+   * one: the audit trail records the write against that row.
+   */
   private async batteryView(params: {
     organizationId: string;
     name: string;
-  }): Promise<PolicyBatteryView> {
-    const { batteries } = await this.recompose(params.organizationId);
+    catalogId: string;
+  }): Promise<BatteryWriteResult> {
+    const { batteries, installs } = await this.recompose(params.organizationId);
     const battery = batteries.find(
       (candidate) => candidate.name === params.name,
     );
     if (!battery)
       throw new ApiError(404, `The policy does not include ${params.name}`);
-    return battery;
+    const row = installs.find(
+      (install) =>
+        install.batteryName === params.name &&
+        install.catalogId === params.catalogId,
+    );
+    return { battery, installId: row?.id ?? null };
   }
 
   /**
@@ -1146,25 +1184,44 @@ function bindEdits(params: {
   }));
 }
 
-/** The alias edits that take `targets` out of every namespace. */
+/**
+ * The alias edits that take `targets` out of every namespace. An alias another
+ * included battery declares is that battery's server list too, so emptying it
+ * would silently un-govern it: such a namespace is left as it stands.
+ */
 function unbindEdits(params: {
   resolution: PolicyResolution;
   namespaces: readonly string[];
   targets: ReadonlySet<string>;
+  /** Namespaces another included battery declares; never unbound. */
+  keep?: ReadonlySet<string>;
 }): PolicyEditInput[] {
-  const { resolution, namespaces, targets } = params;
+  const { resolution, namespaces, targets, keep } = params;
   const edits: PolicyEditInput[] = [];
   const emptied: string[] = [];
   for (const namespace of namespaces) {
     const bound = boundTargets({ resolution, namespace });
     const remaining = bound.filter((target) => !targets.has(target));
     if (remaining.length === bound.length) continue;
-    if (remaining.length === 0) emptied.push(namespace);
-    else edits.push({ kind: "bindServers", namespace, servers: remaining });
+    if (remaining.length === 0) {
+      if (!keep?.has(namespace)) emptied.push(namespace);
+    } else edits.push({ kind: "bindServers", namespace, servers: remaining });
   }
   if (emptied.length > 0)
     edits.push({ kind: "unbindServers", namespaces: emptied });
   return edits;
+}
+
+/** The namespaces the included batteries other than `name` declare. */
+function otherNamespaces(
+  resolution: PolicyResolution,
+  name: string,
+): ReadonlySet<string> {
+  return new Set(
+    resolution.entries
+      .filter((entry) => entry.name !== name)
+      .flatMap((entry) => entry.battery?.namespaces ?? []),
+  );
 }
 
 function remainingTargets(params: {

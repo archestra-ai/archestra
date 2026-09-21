@@ -47082,6 +47082,7 @@ export type ValidateGuardrailsPolicyResponses = {
     200: {
         valid: boolean;
         errors: Array<string>;
+        warnings: Array<string>;
     };
 };
 

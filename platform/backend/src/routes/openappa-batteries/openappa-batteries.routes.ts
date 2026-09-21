@@ -114,12 +114,18 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(PolicyBatteryViewSchema),
       },
     },
-    async (request) =>
-      openappaBatteriesService.createInstall({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        install: request.body,
-      }),
+    async (request) => {
+      const { battery, installId } =
+        await openappaBatteriesService.createInstall({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          install: request.body,
+        });
+      // The response is the declaration, which has no row id of its own, so the
+      // audit record is told which row the write produced.
+      request.auditResourceId = { value: installId ?? battery.name };
+      return battery;
+    },
   );
   app.patch(
     "/api/openappa/battery-installs/:id",
@@ -132,13 +138,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(PolicyBatteryViewSchema),
       },
     },
-    async (request) =>
-      openappaBatteriesService.updateInstall({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        id: request.params.id,
-        changes: request.body,
-      }),
+    async (request) => {
+      const { battery, installId } =
+        await openappaBatteriesService.updateInstall({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          id: request.params.id,
+          changes: request.body,
+        });
+      // An update that unbinds the last catalog leaves no row to name, so the
+      // record falls back to the battery the declaration is for.
+      request.auditResourceId = { value: installId ?? battery.name };
+      return battery;
+    },
   );
   app.delete(
     "/api/openappa/battery-installs/:id",

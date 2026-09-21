@@ -129,25 +129,39 @@ class OpenAppaDeclarations {
     const native = await loadNative();
     const declarations = await native.parseOpenappaDeclarations(params.content);
     const errors = [...declarations.errors];
-    const entries: EntryResolution[] = [];
-    for (const declared of declarations.include) {
-      const spelling = classify(declared.entry);
+    const declared: Array<{
+      entry: string;
+      line: number;
+      spelling: EntrySpelling;
+    }> = [];
+    for (const include of declarations.include) {
+      const spelling = classify(include.entry);
       if (!spelling) {
         errors.push(
-          `include (line ${declared.line}): ${JSON.stringify(declared.entry)} is neither batteries/<name>/appa.toml nor batteries/<name>@sha256-<hash>/appa.toml`,
+          `include (line ${include.line}): ${JSON.stringify(include.entry)} is neither batteries/<name>/appa.toml nor batteries/<name>@sha256-<hash>/appa.toml`,
         );
         continue;
       }
-      entries.push({
-        entry: declared.entry,
-        line: declared.line,
-        ...spelling,
-        battery: await this.resolveSpelling({
+      declared.push({ entry: include.entry, line: include.line, spelling });
+    }
+    // Entries resolve against the bundle and the package store independently,
+    // so they are resolved together; the document's order is what is returned.
+    const batteries = await Promise.all(
+      declared.map(({ spelling }) =>
+        this.resolveSpelling({
           organizationId: params.organizationId,
           ...spelling,
         }),
-      });
-    }
+      ),
+    );
+    const entries: EntryResolution[] = declared.map(
+      ({ entry, line, spelling }, index) => ({
+        entry,
+        line,
+        ...spelling,
+        battery: batteries[index] ?? null,
+      }),
+    );
     return {
       entries,
       aliases: declarations.serverAliases,
@@ -280,6 +294,17 @@ class OpenAppaDeclarations {
         ) ?? null
       );
     if (packageHash === null) return null;
+    // Bytes under a hash never change, so an inspected package is reusable; the
+    // files column is only read when nothing inspected them yet.
+    const cached = this.inspected.get(packageHash);
+    if (cached)
+      return cached.name === name &&
+        (await OpenAppaBatteryPackageModel.existsByHash({
+          organizationId,
+          contentHash: packageHash,
+        }))
+        ? cached
+        : null;
     const stored = await OpenAppaBatteryPackageModel.findByHash({
       organizationId,
       contentHash: packageHash,
@@ -341,10 +366,15 @@ const BUNDLED_SPELLING = /^batteries\/([a-z0-9][a-z0-9-]*)\/appa\.toml$/;
 const UPLOADED_SPELLING =
   /^batteries\/([a-z0-9][a-z0-9-]*)@sha256-([0-9a-f]{64})\/appa\.toml$/;
 
+/** What a spelling says about the battery it names. */
+type EntrySpelling = {
+  name: string;
+  source: BatterySource;
+  packageHash: string | null;
+};
+
 /** Which of the two admitted spellings an entry is, or nothing when it is neither. */
-function classify(
-  entry: string,
-): { name: string; source: BatterySource; packageHash: string | null } | null {
+function classify(entry: string): EntrySpelling | null {
   const bundled = BUNDLED_SPELLING.exec(entry);
   if (bundled)
     return { name: bundled[1], source: "bundled", packageHash: null };

@@ -1,0 +1,153 @@
+name: Deploy platform environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Staging or demo installation
+        required: true
+        type: string
+      version:
+        description: Platform image tag
+        required: true
+        type: string
+    secrets:
+      GCP_DEPLOY_SERVICE_ACCOUNT_NAME:
+        required: true
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: true
+      AUTH_ADMIN_EMAIL:
+        required: true
+      AUTH_ADMIN_PASSWORD:
+        required: true
+      METRICS_SECRET:
+        required: false
+      OTEL_EXPORTER_OTLP_ENDPOINT:
+        required: false
+      AUTH_SECRET:
+        required: false
+      BACKEND_DSN:
+        required: false
+      FRONTEND_DSN:
+        required: false
+      OUTLOOK_TENANT_ID:
+        required: false
+      OUTLOOK_CLIENT_ID:
+        required: false
+      OUTLOOK_CLIENT_SECRET:
+        required: false
+      CHAT_ANTHROPIC_API_KEY:
+        required: false
+      MICROSOFT_365_COPILOT_CLIENT_ID:
+        required: false
+      MICROSOFT_365_COPILOT_TENANT_ID:
+        required: false
+      DATABASE_URL:
+        required: false
+      MFILES_VAF_ADD_ON_GITHUB_TOKEN:
+        required: false
+      CONTENT_ENCRYPTION_SECRET:
+        required: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to check out the chart and deployment values.
+      id-token: write # Required for Google Workload Identity Federation.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/google-auth
+        with:
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials archestra-staging \
+            --zone us-central1-a \
+            --project friendly-path-465518-r6
+
+      - name: Deploy platform
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          PLATFORM_IMAGE_TAG: ${{ inputs.version }}
+          AUTH_ADMIN_EMAIL: ${{ secrets.AUTH_ADMIN_EMAIL }}
+          AUTH_ADMIN_PASSWORD: ${{ secrets.AUTH_ADMIN_PASSWORD }}
+          METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          BACKEND_DSN: ${{ secrets.BACKEND_DSN }}
+          FRONTEND_DSN: ${{ secrets.FRONTEND_DSN }}
+          OUTLOOK_TENANT_ID: ${{ secrets.OUTLOOK_TENANT_ID }}
+          OUTLOOK_CLIENT_ID: ${{ secrets.OUTLOOK_CLIENT_ID }}
+          OUTLOOK_CLIENT_SECRET: ${{ secrets.OUTLOOK_CLIENT_SECRET }}
+          CHAT_ANTHROPIC_API_KEY: ${{ secrets.CHAT_ANTHROPIC_API_KEY }}
+          MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.MICROSOFT_365_COPILOT_CLIENT_ID }}
+          MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.MICROSOFT_365_COPILOT_TENANT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MFILES_VAF_ADD_ON_GITHUB_TOKEN: ${{ secrets.MFILES_VAF_ADD_ON_GITHUB_TOKEN }}
+          CONTENT_ENCRYPTION_SECRET: ${{ secrets.CONTENT_ENCRYPTION_SECRET }}
+        run: |
+          case "$TARGET_ENVIRONMENT" in
+            staging)
+              release=archestra-platform
+              namespace=archestra
+              values_file=.github/values-staging.yaml
+              ;;
+            demo)
+              release=archestra-demo
+              namespace=archestra-demo
+              values_file=.github/values-demo.yaml
+              ;;
+            *)
+              echo "Unsupported deployment environment" >&2
+              exit 1
+              ;;
+          esac
+
+          helm_args=(
+            upgrade "$release" ./platform/helm/archestra
+            --install --namespace "$namespace"
+            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}"
+            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
+            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
+            --values "$values_file" --atomic --timeout 15m
+          )
+
+          if [[ "$TARGET_ENVIRONMENT" == staging ]]; then
+            helm_args+=(
+              --create-namespace
+              --set "archestra.env.ARCHESTRA_METRICS_SECRET=${METRICS_SECRET}"
+              --set "archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}"
+              --set "archestra.env.ARCHESTRA_AUTH_SECRET=${AUTH_SECRET}"
+              --set "archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN=${BACKEND_DSN}"
+              --set "archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN=${FRONTEND_DSN}"
+              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID=${OUTLOOK_TENANT_ID}"
+              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID}"
+              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET}"
+              --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${CHAT_ANTHROPIC_API_KEY}"
+              --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${MICROSOFT_365_COPILOT_CLIENT_ID}"
+              --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${MICROSOFT_365_COPILOT_TENANT_ID}"
+              --set "archestra.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET=${CONTENT_ENCRYPTION_SECRET}"
+              --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"
+              --set-string "postgresql.external_database_url=${DATABASE_URL}"
+            )
+          fi
+
+          helm "${helm_args[@]}"

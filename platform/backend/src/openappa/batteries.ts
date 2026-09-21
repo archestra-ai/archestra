@@ -546,13 +546,18 @@ class OpenAppaBatteriesService {
       serverAliases: plan.serverAliases,
       batteries: plan.composed,
     });
-    const content = composed.content ?? root.content;
+    // A refused composition carries no document. napi renders that absence as
+    // `undefined`, not the `null` the generated typing spells, so normalize it
+    // before deciding whether the runtime refused: an identity test against
+    // `null` alone silently stores a refusal as a clean composition.
+    const accepted = composed.content ?? null;
+    const content = accepted ?? root.content;
     return {
       content,
       contentHash: hash(content),
       rootRevision: root.revision,
       installFingerprint,
-      error: composed.content === null ? composed.errors.join("\n") : null,
+      error: accepted === null ? composed.errors.join("\n") : null,
     };
   }
 

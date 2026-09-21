@@ -1,3 +1,5 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
@@ -137,3 +139,137 @@ describe("bundled batteries", () => {
     }
   });
 });
+
+describe("composing an organization's effective policy", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  test("a composition publishes the bridge bearer the runtime resolves for a helper", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalogId = (await makeInternalMcpCatalog({ organizationId })).id;
+    await installUploadedBattery({
+      organizationId,
+      userId,
+      catalogId,
+      policy: HELPER_BATTERY_POLICY,
+    });
+    const [battery] = await openappaBatteriesService.listBatteries(
+      organizationId,
+    );
+    expect(battery?.installs[0]?.status).toBe("active");
+
+    // The runtime resolves a composed `token_env` from this process's
+    // environment and refuses the document when it is unset, so composing has
+    // to publish the bearer rather than inherit it from an earlier import.
+    vi.stubEnv(BRIDGE_TOKEN_ENV, undefined);
+    const policy = await openappaBatteriesService.recompile(organizationId);
+
+    expect(policy.lastError).toBeNull();
+    expect(process.env[BRIDGE_TOKEN_ENV]).toBe(
+      openappaBatteriesService.bridgeToken,
+    );
+  });
+
+  test("a battery the runtime refuses records the refusal and leaves the root enforced", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalogId = (await makeInternalMcpCatalog({ organizationId })).id;
+    const root = await guardrailsPolicyService.get(organizationId);
+    await installUploadedBattery({
+      organizationId,
+      userId,
+      catalogId,
+      // The root already declares the `noop` annotator, so composing this
+      // battery under it names one external twice and the runtime refuses it.
+      policy: COLLIDING_BATTERY_POLICY,
+    });
+
+    const policy = await openappaBatteriesService.recompile(organizationId);
+
+    expect(policy.lastError).toBeTruthy();
+    expect(policy.lastErrorAt).toBeInstanceOf(Date);
+    expect(policy.content).toBe(root.content);
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
+    ).toBe(policy.lastError);
+  });
+});
+
+const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
+
+const BATTERY_MANIFEST = `schema = 1
+name = "acme"
+description = "Acme battery under test"
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+namespaces = ["acme"]
+helpers = ["check.py"]
+`;
+
+/** One helper command, no credential: the install is active on its own. */
+const HELPER_BATTERY_POLICY = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "mcp/acme/list"
+delta = {}
+
+[externals.annotators."acme.check"]
+command = ["python3", "check.py"]
+`;
+
+const COLLIDING_BATTERY_POLICY = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "mcp/acme/list"
+delta = {}
+
+[externals.annotators.noop]
+command = ["python3", "check.py"]
+`;
+
+/** Upload the acme battery with `policy` and install it, enabled, on `catalogId`. */
+async function installUploadedBattery(params: {
+  organizationId: string;
+  userId: string;
+  catalogId: string;
+  policy: string;
+}) {
+  const { organizationId, userId, catalogId } = params;
+  await openappaBatteriesService.uploadPackage({
+    userId,
+    organizationId,
+    name: "acme",
+    files: [
+      { path: "appa-package.toml", text: BATTERY_MANIFEST },
+      { path: "appa.toml", text: params.policy },
+      { path: "check.py", text: "print('{}')\n" },
+    ],
+  });
+  const install = await OpenAppaBatteryInstallModel.createIfAbsent({
+    organizationId,
+    batteryName: "acme",
+    catalogId,
+    enabled: true,
+    credentialBindings: {},
+  });
+  if (!install) throw new Error("the battery install already existed");
+  return install;
+}

@@ -190,6 +190,11 @@ async function binding(content: string) {
   if (!openappaEnabled()) {
     throw new Error("OpenAPPA is disabled");
   }
+  // The addon compiles `content` before it serves it, and a composed document
+  // names the helper bridge bearer as a `token_env` the runtime resolves from
+  // this process's environment. Publish it on every crossing, not once at
+  // import time, so opening and reloading never depend on module order.
+  openappaBatteriesService.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());

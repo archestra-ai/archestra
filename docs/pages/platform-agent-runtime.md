@@ -32,7 +32,7 @@ Choose a maintained template from **Create Agent**. The **Runtime** picker sits 
 
 Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
 
-Existing Agents keep their saved runtime image when the platform upgrades. To use a newer maintained image, update **Image** in the Agent's **Agent Runtime** settings and start a new run. Continuing an existing workspace keeps its original image.
+Stable releases use `:latest` for the Claude Code, Codex, OpenCode, Hermes, and OpenClaw templates. New workspaces pull the current stable image. Release candidates and development builds keep fixed image tags. Existing Agents keep their saved image. To opt in once, set **Image** to the maintained `:latest` reference. Running workspaces keep their original image; start a new workspace to use an update.
 
 An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
 

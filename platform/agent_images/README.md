@@ -13,6 +13,14 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 
+On stable platform releases, the five native-client templates use the approved
+`:latest` aliases. The `agent-archestra` base stays pinned to the platform
+version. Release candidates and development deployments keep matching fixed
+tags, so they do not pull a CLI from an older stable release. Agent Runtime
+stores the selected image on each Agent; existing pinned Agents need a one-time
+Image edit to follow the stable alias. Floating-tag runs cold-start so a warm
+container cannot retain a previous image after its tag moves.
+
 Build a target from `platform/`:
 
 ```bash

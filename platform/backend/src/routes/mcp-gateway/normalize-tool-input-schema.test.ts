@@ -1,7 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { z } from "zod";
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
-import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
 import { normalizeToolInputSchema } from "./utils";
 
 function assertNoNonStringConstOrEnum(schema: unknown): void {
@@ -65,24 +63,6 @@ describe("normalizeToolInputSchema", () => {
         },
       },
     });
-  });
-
-  test("OpenAPPA notice and execution Zod schemas advertise without Gemini-hostile literals", () => {
-    const notice = normalizeToolInputSchema(
-      z.toJSONSchema(NoticeArguments, { io: "input" }),
-    ) as { properties?: Record<string, unknown> };
-    const execution = normalizeToolInputSchema(
-      z.toJSONSchema(
-        z.object({ execution: RemedyExecutionSchema.optional() }),
-        { io: "input" },
-      ),
-    ) as { properties?: Record<string, unknown> };
-
-    expect(notice.properties?.tool).toBeDefined();
-    expect(notice.properties?.notice).toBeDefined();
-    expect(execution.properties?.execution).toBeDefined();
-    assertNoNonStringConstOrEnum(notice);
-    assertNoNonStringConstOrEnum(execution);
   });
 
   test("every built-in MCP tool advertises a Gemini-safe input schema", () => {

@@ -483,39 +483,51 @@ WITH holders AS (
       WHEN 'mcpServerInstallation' THEN ARRAY['mcpRegistry']
       ELSE ARRAY[h.role_action] END) AS resource
   ) mapped
+), entries AS (
+  -- Merge: a grant written by hand on this policy is not discarded, and a
+  -- role already listed keeps the union of both action sets. The merge
+  -- happens here rather than in the conflict clause so the row that would be
+  -- written can be compared with the row already stored. Merging inside
+  -- a conflict clause writes unconditionally, and this statement runs at
+  -- every start, so it raised the revision of every policy on every boot.
+  -- The revision is the token the permissions editor holds while somebody
+  -- edits, so each restart failed their save for no reason.
+  SELECT organization_id, resource, 'role' AS subject_type, role_id AS subject_id,
+    unnest(actions) AS action
+  FROM targeted
+  UNION ALL
+  SELECT p.organization_id, p.resource, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.scope = '*'
+    AND (p.organization_id, p.resource) IN (SELECT organization_id, resource FROM targeted)
+), subjects AS (
+  SELECT organization_id, resource, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, resource, subject_type, subject_id
 ), merged AS (
-  SELECT t.organization_id, t.resource,
+  -- Ordered the same way as every other statement here. The two halves of the
+  -- old merge disagreed on ordering, so the stored array could reshuffle
+  -- between runs and read as a change even when the grants were identical.
+  SELECT organization_id, resource,
     jsonb_agg(jsonb_build_object(
-      'subject', jsonb_build_object('type', 'role', 'id', t.role_id),
-      'actions', to_jsonb(t.actions)
-    ) ORDER BY t.role_id) AS grants
-  FROM targeted t GROUP BY t.organization_id, t.resource
+      'subject', jsonb_build_object('type', subject_type, 'id', subject_id),
+      'actions', actions
+    ) ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id, resource
 )
 INSERT INTO resource_permission_policies
   (organization_id, resource, scope, grants, revision, legacy_sharing_migrated, updated_at)
 SELECT m.organization_id, m.resource, '*', m.grants, 1, true, now()
 FROM merged m
 ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
-  -- Merge: a grant written by hand on this policy is not discarded, and a
-  -- role already listed keeps the union of both action sets.
-  grants = (
-    SELECT COALESCE(jsonb_agg(jsonb_build_object(
-      'subject', entry.subject, 'actions', entry.actions) ORDER BY entry.subject->>'id'), '[]'::jsonb)
-    FROM (
-      SELECT g->'subject' AS subject,
-        jsonb_agg(DISTINCT action ORDER BY action) AS actions
-      FROM (
-        SELECT jsonb_array_elements(resource_permission_policies.grants) AS g
-        UNION ALL
-        SELECT jsonb_array_elements(EXCLUDED.grants)
-      ) all_grants
-      CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') AS action
-      GROUP BY g->'subject'
-    ) entry
-  ),
+  grants = EXCLUDED.grants,
   revision = resource_permission_policies.revision + 1,
   legacy_sharing_migrated = true,
-  updated_at = now();
+  updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated
+  OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
   // retireConvertedRoleActions

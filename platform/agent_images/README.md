@@ -25,7 +25,7 @@ all six targets locally and use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
 
-Claude Code personal subscriptions use a token from the configured secrets backend and connect directly to Anthropic. Those inference calls bypass proxy logs, limits, and guardrails. MCP calls still use the Agent-scoped gateway and its tool policies.
+Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
 Maintained clients send the task ID as both `X-Archestra-Run-Id` and `X-Archestra-Session-Id` on proxy and MCP gateway requests. Do the same in any new
 wrapper so the platform can group interactions and tool calls with the run.

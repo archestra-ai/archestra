@@ -32,6 +32,8 @@ Choose a maintained template from **Create Agent**. The **Runtime** picker sits 
 
 Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
 
+Existing Agents keep their saved runtime image when the platform upgrades. To use a newer maintained image, update **Image** in the Agent's **Agent Runtime** settings and start a new run. Continuing an existing workspace keeps its original image.
+
 An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
 
 The created page and Agent header show remaining setup requirements. Connection changes refresh the banner automatically. Each person connects their own subscription before running a shared Agent.
@@ -70,7 +72,7 @@ Assigned MCP tools are available through the Agent's gateway with the initiating
 
 **Claude Code** supports two connection types:
 
-- **Personal Claude subscription:** each person connects their own Pro or Max account. Subscription inference goes directly to Anthropic and bypasses Archestra's inference logs, cost limits, and inference guardrails. MCP tool policies still apply.
+- **Personal Claude subscription:** each person connects their own Pro or Max account. Claude Code sends inference through Archestra's proxy, using your subscription for Anthropic access. Proxy logs show token usage. Subscription requests do not count toward metered cost limits. Inference guardrails and MCP tool policies apply.
 - **API key or cloud provider:** use Anthropic, AWS Bedrock, or Anthropic on Vertex AI through Archestra's proxy. Platform inference controls apply. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for setup.
 
 Personal Claude connections belong to your user account. Connect once to reuse your subscription across your Claude Code Agents and Environments. They work only in the Claude Code runtime. Tokens use your configured secrets backend. Reconnect when the connection expires.
@@ -96,6 +98,8 @@ The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runti
 Use a custom image to add development tools or run your own Agent client. Set its image, command, and arguments on the Agent. Archestra supplies the task, credentials, storage, and live terminal.
 
 Custom clients must connect to the injected MCP gateway and support listing and calling tools. Use `list_skills` and `load_skill` for skill instructions and resources. No additional Archestra SDK is required. Native skill directories and slash commands are client-specific.
+
+Send model requests to the injected LLM proxy, using the supplied virtual key as the provider key. The maintained Claude Code subscription image uses a separate passthrough key and OAuth bearer token, so the proxy can attribute its token usage to the run. See the [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#runtime-environment) for the request headers.
 
 The [maintained images](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/README.md) provide build examples. The [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md) contains the complete environment and transcript specifications.
 
@@ -201,7 +205,7 @@ Two limits are worth stating to anyone who uses this. The value passes through t
 
 The run's terminal output shows command progress and results. LLM Proxy Logs show model requests, usage, and cost. MCP Gateway Logs show tool calls and outcomes. Run IDs link these records to the task.
 
-Proxy and gateway requests also participate in existing tracing and metrics. Direct Claude subscription inference is absent from proxy logs; its MCP calls remain visible through the gateway.
+Proxy and gateway requests also participate in existing tracing and metrics. Claude subscription inference appears in proxy logs with token usage; its MCP calls appear in gateway logs.
 
 ## Delegate Work
 

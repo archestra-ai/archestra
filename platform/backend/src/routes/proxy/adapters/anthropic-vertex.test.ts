@@ -71,4 +71,37 @@ describe("anthropicAdapterFactory Vertex AI", () => {
       messages: [{ role: "user", content: "Hello" }],
     });
   });
+
+  test("sends a Claude subscription bearer to Anthropic when Vertex is enabled", async () => {
+    const upstreamFetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        id: "msg_test",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "OK" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 4, output_tokens: 2 },
+      }),
+    );
+    const client = anthropicAdapterFactory.createClient(
+      "Bearer:sk-ant-oat01-test-subscription",
+      { baseUrl: "https://custom-upstream.example.test", source: "api" },
+    ) as AnthropicProvider;
+
+    await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "Reply OK" }],
+    });
+
+    const [input, init] = upstreamFetch.mock.calls[0] ?? [];
+    const request = new Request(input, init);
+    expect(request.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(request.headers.get("authorization")).toBe(
+      "Bearer sk-ant-oat01-test-subscription",
+    );
+    expect(request.headers.get("x-api-key")).toBeNull();
+  });
 });

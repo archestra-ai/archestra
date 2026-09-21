@@ -139,7 +139,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |
-| `ARCHESTRA_VIRTUAL_KEY` | Personal virtual key for the run. |
+| `ARCHESTRA_VIRTUAL_KEY` | Run-scoped virtual key. Provider-backed runs use it as the provider credential at the proxy. Claude Code subscription runs use it as a personal passthrough identity header alongside their own OAuth bearer token. |
 | `ANTHROPIC_BEDROCK_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK`, `AWS_REGION` | Configure native Bedrock transport for Claude Code using a Bedrock model. |
 | `AWS_BEARER_TOKEN_BEDROCK` | The run’s virtual key for the Bedrock proxy. AWS credentials remain server-side. |
 | `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |
@@ -150,4 +150,4 @@ Archestra supplies the applicable variables below when launching a run. You do n
 
 Send `X-Archestra-Run-Id` and `X-Archestra-Session-Id`, both set to `ARCHESTRA_AGENT_RUNTIME_TASK_ID`, on every LLM proxy and MCP gateway request. This groups model interactions and tool calls with the run in logs and traces. The maintained catalog images configure these headers automatically.
 
-Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. The maintained Claude Code subscription mode deliberately connects directly to Anthropic; its MCP calls still use the gateway.
+Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. Custom images receive a standard virtual key: send `ARCHESTRA_VIRTUAL_KEY` as the provider API key to `ARCHESTRA_LLM_PROXY_URL`. The maintained Claude Code subscription mode receives a personal passthrough key instead. Its wrapper sends that key in `X-Archestra-Virtual-Key`, its OAuth bearer token in `Authorization`, and model requests to the proxy URL. The passthrough key authenticates the run's user while the bearer token authenticates to Anthropic.

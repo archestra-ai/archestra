@@ -88,6 +88,13 @@ describe.each([
             ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
             ANTHROPIC_AUTH_TOKEN: "test-key",
             CLAUDE_CODE_OAUTH_TOKEN: "test-subscription-token",
+            ...(client === "claude-code"
+              ? {
+                  ANTHROPIC_BASE_URL: "http://localhost:9000/v1/anthropic/test",
+                  ANTHROPIC_CUSTOM_HEADERS:
+                    "X-Archestra-Virtual-Key: test-passthrough-key",
+                }
+              : {}),
             OPENAI_API_KEY: "test-key",
             OPENAI_BASE_URL: "http://localhost:9000/v1/test",
           },

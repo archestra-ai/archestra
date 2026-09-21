@@ -166,10 +166,16 @@ export async function buildAgentRunLaunchSpec(params: {
           runtimeScope: params.runtimeScope,
         })
       : undefined;
-  // Subscription inference stays inside the native CLI and goes directly to
-  // Anthropic. Only provider-billed runs receive a proxy virtual key.
+  // Claude Code supplies its own OAuth token. A personal passthrough key
+  // authenticates the actor to the proxy without storing that token as a
+  // provider key, so subscription requests retain usage and run attribution.
   const virtualKey = usesClaudeCodeSubscription
-    ? null
+    ? await VirtualApiKeyModel.create({
+        organizationId: params.organizationId,
+        name: `agent-run-${params.taskId.slice(0, 8)}`,
+        keyType: "passthrough",
+        ...virtualKeyVisibility(params.actor),
+      })
     : await createProviderBackedVirtualKey({
         organizationId: params.organizationId,
         actor: params.actor,
@@ -267,13 +273,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     ...(usesClaudeCodeSubscription
-      ? {
-          ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription",
-        }
-      : {
-          OPENAI_BASE_URL: modelRouterUrl,
-          ANTHROPIC_BASE_URL: anthropicUrl,
-        }),
+      ? { ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription" }
+      : { OPENAI_BASE_URL: modelRouterUrl }),
+    ANTHROPIC_BASE_URL: anthropicUrl,
     ...(isClaudeCodeBedrock
       ? {
           CLAUDE_CODE_USE_BEDROCK: "1",
@@ -324,13 +326,15 @@ export async function buildAgentRunLaunchSpec(params: {
     ...(isClaudeCodeBedrock
       ? { AWS_BEARER_TOKEN_BEDROCK: virtualKeyValue }
       : {}),
-    ...(isClaudeCodeRuntime && !usesClaudeCodeSubscription
+    ...(isClaudeCodeRuntime
       ? {
-          // Claude Code accepts only one custom-header variable. Keep run
-          // correlation on both auth paths, and add the passthrough identity
-          // only when the CLI supplies its own subscription credential.
+          // Claude Code accepts only one custom-header variable. Subscription
+          // requests need the passthrough key as well as run correlation.
           [CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY]: claudeCodeCustomHeaders({
             taskId: params.taskId,
+            passthroughKey: usesClaudeCodeSubscription
+              ? virtualKeyValue
+              : undefined,
           }),
         }
       : {}),
@@ -389,6 +393,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_CUSTOM_HEADERS",
   "ANTHROPIC_BEDROCK_BASE_URL",
   "AWS_BEARER_TOKEN_BEDROCK",
   "CLAUDE_CODE_USE_BEDROCK",
@@ -418,10 +423,16 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_VIRTUAL_KEY",
 ]);
 
-function claudeCodeCustomHeaders(params: { taskId: string }): string {
+function claudeCodeCustomHeaders(params: {
+  taskId: string;
+  passthroughKey?: string;
+}): string {
   return [
     `${RUN_ID_HEADER}: ${params.taskId}`,
     `${SESSION_ID_HEADER}: ${params.taskId}`,
+    ...(params.passthroughKey
+      ? [`X-Archestra-Virtual-Key: ${params.passthroughKey}`]
+      : []),
   ].join("\n");
 }
 

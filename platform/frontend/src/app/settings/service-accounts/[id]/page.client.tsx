@@ -102,11 +102,12 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
 };
 
 /**
- * Placeholder standing in for a real key in the example request. Deliberately
- * not a plausible key, so a pasted command fails loudly rather than looking
+ * Placeholder standing in for a real key in the example request. Angle
+ * brackets rather than the `arch_` prefix a real key carries: it reads as a
+ * slot to fill, and a command pasted unedited fails loudly instead of looking
  * like it carries a working credential.
  */
-const EXAMPLE_KEY = "arch_YOUR_KEY";
+const EXAMPLE_KEY = "<YOUR_KEY>";
 
 /**
  * The record's facets, in bar order. Overview is first and so is the tab an
@@ -594,6 +595,23 @@ export default function ServiceAccountDetailPage({
                   as this service account.
                 </p>
 
+                {/* Above the table, with the prose that introduces the
+                    section. It answers "how do I use one of these", which is
+                    a question you have before you read the list, not after
+                    it. */}
+                {canAuthenticate(health) && (
+                  <div className="mb-4 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Authenticate a request as this service account
+                    </p>
+                    <CopyableCode
+                      value={`curl -H "Authorization: ${EXAMPLE_KEY}" ${apiBaseUrl()}/api/config`}
+                      toastMessage="Example request copied"
+                      className="text-xs"
+                    />
+                  </div>
+                )}
+
                 <CollectionFilters>
                   <FilterBar
                     onClearFilters={hasActiveFilters ? clearFilters : undefined}
@@ -698,19 +716,6 @@ export default function ServiceAccountDetailPage({
                   ]}
                   flexibleColumnIds={["name"]}
                 />
-
-                {canAuthenticate(health) && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Authenticate a request as this service account
-                    </p>
-                    <CopyableCode
-                      value={`curl -H "Authorization: ${EXAMPLE_KEY}" ${apiBaseUrl()}/api/config`}
-                      toastMessage="Example request copied"
-                      className="text-xs"
-                    />
-                  </div>
-                )}
               </div>
             </BulkActionsScope>
           ) : (

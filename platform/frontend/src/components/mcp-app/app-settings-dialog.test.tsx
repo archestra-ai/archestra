@@ -75,7 +75,11 @@ const teamViewerPermissions = {
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/teams`, () => HttpResponse.json(teamsSeed)),
   http.get(`${API_ORIGIN}/api/environments`, () =>
-    HttpResponse.json({ environments: [], defaultAssignedCatalogCount: 0 }),
+    HttpResponse.json({
+      environments: [],
+      defaultAssignedCatalogCount: 0,
+      canDeployToDefault: true,
+    }),
   ),
   http.get(`${API_ORIGIN}/api/organization`, () =>
     HttpResponse.json(organizationSeed),

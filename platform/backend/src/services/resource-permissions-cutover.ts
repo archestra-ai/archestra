@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { sql } from "drizzle-orm";
-import config from "@/config";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
 
@@ -402,6 +401,80 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
+  // ---------------------------------------------------------------------
+  // convertServiceAccountAuthority
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- A service account is the one scoped resource with no audience of its own.
+-- It has no scope column, no team junction and no named-user list: the
+-- organization owns every one of them, and who could reach one was decided
+-- entirely by the caller's \`serviceAccount\` role actions. So there is no
+-- per-object visibility to convert, and this statement converts the role
+-- actions instead — which is the same rule the organization-wide statements
+-- above apply, one grant per role that holds the action, never a grant to
+-- everyone.
+--
+-- Writing it at \`*\` rather than onto each account is a decision, not an
+-- omission: DO NOT "complete" this by backfilling a policy per account.
+--
+-- Copying these role grants onto every account would put a row on each
+-- account's Permissions tab that cannot be revoked there. Deleting it would
+-- leave the identical \`*\` grant still deciding, so the account would carry on
+-- answering to a role the tab has just been told to drop. That is a
+-- correctness trap, not untidiness. At \`*\` the same rows show as inherited,
+-- which is what they are, revocable at the one place that governs them, and a
+-- per-object grant added in the editor layers on top.
+--
+-- Independently: \`*\` also covers accounts created after the upgrade, which a
+-- per-object backfill cannot reach at all.
+WITH role_actions AS (
+  -- The built-in roles keep their permissions in code rather than in this
+  -- table, so they are named. Only the two admin tiers carry any
+  -- \`serviceAccount\` action; editor and member carry none.
+  SELECT o.id AS organization_id, builtin.id AS subject_id,
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+  FROM organization o
+  CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  UNION ALL
+  SELECT roles.organization_id, roles.id, expanded.action
+  FROM organization_role roles
+  CROSS JOIN LATERAL (
+    SELECT action FROM jsonb_array_elements_text(
+      COALESCE(roles.permission::jsonb->'serviceAccount', '[]'::jsonb)) action
+    WHERE action IN ('read', 'update', 'delete')
+    UNION
+    SELECT 'use' WHERE COALESCE(roles.permission::jsonb->'serviceAccount', '[]'::jsonb) ? 'read'
+    UNION
+    SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->'serviceAccount', '[]'::jsonb) ? 'update'
+  ) expanded
+), entries AS (
+  -- Merged rather than replaced, so a grant written by hand in the editor
+  -- survives a re-run, and compared against what is stored rather than written
+  -- unconditionally, so a re-run that changes nothing does not raise the
+  -- revision the editor holds while somebody is editing.
+  SELECT organization_id, 'role' AS subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'serviceAccount' AND p.scope = '*'
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'serviceAccount', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
 ];
 
 /** @public — read by resource-permissions-cutover.roles.test.ts */
@@ -530,6 +603,81 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
   OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
+  // convertDeployToRestrictedToEnvironmentGrants
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- Deploying into a restricted environment was six role actions — one per kind
+-- of thing deployed — and not one of them could name an environment. It
+-- becomes \`use\` on the environment instead, which is where the authority
+-- always belonged: an environment is a place you deploy into.
+--
+-- The conversion grants it at \`*\`, because that is exactly the reach the
+-- retired actions had: holding \`agent:deploy-to-restricted\` unlocked EVERY
+-- restricted environment in the organization, never a named one. Nobody who
+-- could deploy loses the ability. The one widening is a hand-authored role
+-- that held a strict subset of the six: it could deploy some kinds of object
+-- and not others, and that distinction does not survive the move. Every
+-- built-in role is all-or-nothing (admin, platform_admin and editor held all
+-- six; member held none), so a deployment on stock roles converts exactly.
+--
+-- Naming ONE environment is possible from here on, which the retired actions
+-- could never express.
+WITH holders AS (
+  SELECT o.id AS organization_id, grantee.id AS role_id
+  FROM organization o
+  JOIN LATERAL (
+    -- Built-in roles keep their permissions in code, not in this table.
+    SELECT unnest(ARRAY['admin', 'platform_admin', 'editor']) AS id
+    UNION
+    SELECT roles.id FROM organization_role roles
+    WHERE roles.organization_id = o.id
+      AND EXISTS (
+        SELECT 1 FROM unnest(ARRAY[
+          'agent', 'skill', 'app', 'mcpGateway', 'mcpRegistry', 'knowledgeSource'
+        ]) AS deployable(resource)
+        WHERE COALESCE(roles.permission::jsonb -> deployable.resource, '[]'::jsonb)
+          ? 'deploy-to-restricted'
+      )
+  ) grantee ON true
+), entries AS (
+  -- Merge rather than replace, and compare before writing: this runs at every
+  -- start, and an unconditional write would raise the revision the permissions
+  -- editor holds while somebody is editing.
+  SELECT organization_id, 'role' AS subject_type, role_id AS subject_id,
+    unnest(ARRAY['read', 'use']) AS action
+  FROM holders
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'environment' AND p.scope = '*'
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), merged AS (
+  -- Ordered like every other statement here, so the stored array cannot
+  -- reshuffle between runs and read as a change when nothing changed.
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object(
+      'subject', jsonb_build_object('type', subject_type, 'id', subject_id),
+      'actions', actions
+    ) ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies
+  (organization_id, resource, scope, grants, revision, legacy_sharing_migrated, updated_at)
+SELECT organization_id, 'environment', '*', grants, 1, true, now() FROM merged
+ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
+  grants = EXCLUDED.grants,
+  revision = resource_permission_policies.revision + 1,
+  legacy_sharing_migrated = true,
+  updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated
+  OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
+  // ---------------------------------------------------------------------
   // retireConvertedRoleActions
   // ---------------------------------------------------------------------
   sql.raw(`
@@ -546,7 +694,9 @@ WITH converted AS (
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
           FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)
-          WHERE action NOT IN ('"admin"'::jsonb, '"team-admin"'::jsonb)), '[]'::jsonb)
+          WHERE action NOT IN (
+            '"admin"'::jsonb, '"team-admin"'::jsonb, '"deploy-to-restricted"'::jsonb
+          )), '[]'::jsonb)
       ELSE actions END)
     FROM jsonb_each(r.permission::jsonb) AS resources(resource, actions)
   ), '{}'::jsonb) AS permission

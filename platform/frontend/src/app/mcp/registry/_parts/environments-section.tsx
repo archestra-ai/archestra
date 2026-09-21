@@ -24,6 +24,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import {
@@ -945,19 +946,9 @@ function EnvironmentEditorDialog({
           <div className="space-y-1">
             <Label htmlFor="environment-restricted">Restricted</Label>
             <FieldDescription>
-              Deploying to this environment requires the{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                deploy-to-restricted
-              </code>{" "}
-              permission on the resource being deployed (e.g.{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                mcpRegistry
-              </code>{" "}
-              for MCP servers,{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                agent
-              </code>{" "}
-              for agents).
+              Only people granted access to this environment can deploy into it.
+              Grant it in Permissions below. Unrestricted environments stay open
+              to anyone who can create the resource.
             </FieldDescription>
           </div>
           <Switch
@@ -967,6 +958,18 @@ function EnvironmentEditorDialog({
             disabled={isPending}
           />
         </div>
+        {/*
+          Who may deploy here. Only a saved environment has an id to hang
+          grants on, and the Default environment is org configuration rather
+          than a row, so neither the create form nor the default editor shows
+          it. Both land in the unrestricted case anyway, which asks nobody for
+          anything.
+        */}
+        {mode === "edit" && environment && (
+          <div className="border-t pt-4">
+            <ResourceAccessSection resource="environment" id={environment.id} />
+          </div>
+        )}
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
             <h3 className="font-medium text-sm">Network Egress Policy</h3>

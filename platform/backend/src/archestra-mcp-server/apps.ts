@@ -603,12 +603,7 @@ const registry = defineArchestraTools([
         (await resolveDefaultEnvironmentForNewResource({
           organizationId,
           resource: "app",
-          canDeployToRestricted: await userHasPermission(
-            userId,
-            organizationId,
-            "app",
-            "deploy-to-restricted",
-          ),
+          userId,
         }));
       const toolsResolution = await resolveToolsParam({
         agentId: context.agent.id,

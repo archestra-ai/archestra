@@ -63,9 +63,13 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(EnvironmentListSchema),
       },
     },
-    async ({ organizationId, query }, reply) => {
+    async ({ organizationId, query, user }, reply) => {
       return reply.send(
-        await listEnvironments(organizationId, parseLabelsParam(query.labels)),
+        await listEnvironments({
+          organizationId,
+          userId: user.id,
+          labels: parseLabelsParam(query.labels),
+        }),
       );
     },
   );

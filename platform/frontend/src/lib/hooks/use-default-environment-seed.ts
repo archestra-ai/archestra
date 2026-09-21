@@ -10,9 +10,9 @@ import { useDefaultEnvironmentIdForResource } from "@/lib/environment.query";
  * backend would pick anyway.
  *
  * Seeds once per enabled stretch, and only after the answer is trustworthy: the
- * environments list and the caller's deploy-to-restricted permission both load
- * asynchronously, and seeding on a partial answer would either write the wrong
- * environment or overwrite a choice the user has already made. A dialog that
+ * environments list loads asynchronously and carries whether the caller may
+ * deploy into each one, and seeding on a partial answer would either write the
+ * wrong environment or overwrite a choice the user has already made. A dialog that
  * stays mounted between opens therefore passes `enabled: open && creating` and
  * gets a fresh seed each time it reopens.
  *

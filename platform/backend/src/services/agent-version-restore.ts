@@ -1,8 +1,4 @@
-import {
-  getResourceForAgentType,
-  IncomingEmailSecurityModeSchema,
-} from "@archestra/shared";
-import { userHasPermission } from "@/auth";
+import { IncomingEmailSecurityModeSchema } from "@archestra/shared";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
@@ -476,22 +472,16 @@ async function planScalars(params: {
     scalars.incomingEmailSecurityMode = parsed.data;
   }
 
-  // Gated by the caller's CURRENT deploy-to-restricted permission, exactly like
+  // Gated by the caller's CURRENT grant on the environment, exactly like
   // setting it through the update route. `null` is gated too: it does not mean
   // "no environment" but the implicit default one, which an org can mark
   // restricted — so leaving it ungated would make a restore a way to move an
   // agent into a restricted default the update route refuses.
   if (snapshot.environmentId !== (current.environmentId ?? null)) {
-    const canDeployToRestricted = await userHasPermission(
-      userId,
-      organizationId,
-      getResourceForAgentType(current.agentType),
-      "deploy-to-restricted",
-    );
     await assertCanAssignEnvironment({
       environmentId: snapshot.environmentId,
       organizationId,
-      canDeployToRestricted,
+      userId,
     });
     scalars.environmentId = snapshot.environmentId;
   }

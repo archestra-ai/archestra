@@ -13,10 +13,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import {
-  getAgentTypePermissionChecker,
-  getResourceForAgentType,
-} from "@/auth/agent-type-permissions";
+import { getAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
@@ -471,12 +468,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId,
           organizationId,
-          canDeployToRestricted: await userHasPermission(
-            user.id,
-            organizationId,
-            "mcpGateway",
-            "deploy-to-restricted",
-          ),
+          userId: user.id,
         });
         effectiveScope = "org";
         publishableOverMcp = true;
@@ -523,12 +515,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await assertCanAssignEnvironment({
                 environmentId,
                 organizationId,
-                canDeployToRestricted: await userHasPermission(
-                  user.id,
-                  organizationId,
-                  getResourceForAgentType(agent.agentType),
-                  "deploy-to-restricted",
-                ),
+                userId: user.id,
               });
             }
           } else if (agent.accessAllSkills) {
@@ -2116,11 +2103,11 @@ async function assertOnlineSkillCatalogEnabled(
 }
 
 /**
- * Assigning a skill to restricted environments is gated by
- * skill:deploy-to-restricted, mirroring the per-resource permissions the agent
- * and MCP-catalog assignment paths use. An empty set (skill available in every
- * environment, including the org default) is gated like assigning the default
- * environment. Throws 403/404 if the caller may not assign an environment.
+ * Assigning a skill to restricted environments asks for a `use` grant on each
+ * environment, the same question the agent and MCP-catalog assignment paths
+ * ask. An empty set (skill available in every environment, including the org
+ * default) is gated like assigning the default environment. Throws 403/404 if
+ * the caller may not assign an environment.
  */
 async function assertSkillEnvironmentsAssignable(params: {
   userId: string;
@@ -2128,26 +2115,16 @@ async function assertSkillEnvironmentsAssignable(params: {
   environmentIds: string[];
 }): Promise<void> {
   const { userId, organizationId, environmentIds } = params;
-  const hasSkillDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    "skill",
-    "deploy-to-restricted",
-  );
   if (environmentIds.length === 0) {
     await assertCanAssignEnvironment({
       environmentId: null,
       organizationId,
-      canDeployToRestricted: hasSkillDeploy,
+      userId,
     });
     return;
   }
   for (const environmentId of environmentIds) {
-    await assertCanAssignEnvironment({
-      environmentId,
-      organizationId,
-      canDeployToRestricted: hasSkillDeploy,
-    });
+    await assertCanAssignEnvironment({ environmentId, organizationId, userId });
   }
 }
 

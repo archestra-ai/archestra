@@ -13,7 +13,6 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
@@ -862,12 +861,7 @@ async function resolveNewAgentEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      resource,
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 

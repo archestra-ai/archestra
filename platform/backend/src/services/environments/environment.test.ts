@@ -13,6 +13,7 @@ import {
   OrganizationModel,
   PlaywrightRuntimeModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   assertCanAssignEnvironment,
   assertValuesMatchEnvironmentRegex,
@@ -24,6 +25,9 @@ import {
 import { test } from "@/test";
 
 const MISSING_ID = "00000000-0000-0000-0000-000000000000";
+
+/** These cases assert listing shape, not deploy authority. */
+const LISTER_ID = "00000000-0000-0000-0000-0000000000ff";
 
 describe("EnvironmentService", () => {
   test("createEnvironment rejects duplicate names with 409", async ({
@@ -94,7 +98,10 @@ describe("EnvironmentService", () => {
     });
     await createItem("in-env", env.id); // excluded — assigned to an environment
 
-    const listed = await listEnvironments(org.id);
+    const listed = await listEnvironments({
+      organizationId: org.id,
+      userId: LISTER_ID,
+    });
     expect(listed.defaultAssignedCatalogCount).toBe(2);
   });
 
@@ -146,7 +153,10 @@ describe("EnvironmentService", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
 
     // Still present after the blocked delete.
-    const listed = await listEnvironments(org.id);
+    const listed = await listEnvironments({
+      organizationId: org.id,
+      userId: LISTER_ID,
+    });
     expect(listed.environments.some((e) => e.id === env.id)).toBe(true);
   });
 
@@ -161,7 +171,10 @@ describe("EnvironmentService", () => {
     await expect(
       deleteEnvironment({ id: env.id, organizationId: org.id }),
     ).resolves.toBeUndefined();
-    const listed = await listEnvironments(org.id);
+    const listed = await listEnvironments({
+      organizationId: org.id,
+      userId: LISTER_ID,
+    });
     expect(listed.environments.some((e) => e.id === env.id)).toBe(false);
   });
 
@@ -237,7 +250,10 @@ describe("EnvironmentService", () => {
     });
     expect(created.restricted).toBe(true);
 
-    const listed = await listEnvironments(org.id);
+    const listed = await listEnvironments({
+      organizationId: org.id,
+      userId: LISTER_ID,
+    });
     const prod = listed.environments.find((e) => e.id === created.id);
     expect(prod?.restricted).toBe(true);
   });
@@ -267,111 +283,190 @@ describe("EnvironmentService", () => {
     expect(updated.restricted).toBe(true);
   });
 
+  /**
+   * Deploying into a restricted environment is now `use` on that environment,
+   * so these ask the question of two real members: one whose role carries the
+   * grant and one whose role does not. The pair is what the retired
+   * `deploy-to-restricted` action used to decide.
+   */
   test("assertCanAssignEnvironment allows the default (null) environment when not restricted", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
     await expect(
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        canDeployToRestricted: false,
+        userId: member.id,
       }),
     ).resolves.toBeUndefined();
   });
 
-  test("assertCanAssignEnvironment rejects the default (null) environment when restricted, without env-admin (403)", async ({
+  test("assertCanAssignEnvironment rejects the restricted default (null) environment without an environment grant (403)", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentRestricted: true,
     });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
     await expect(
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        canDeployToRestricted: false,
+        userId: member.id,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  test("assertCanAssignEnvironment allows the restricted default (null) environment with env-admin", async ({
+  test("assertCanAssignEnvironment allows the restricted default (null) environment with a wildcard grant", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentRestricted: true,
     });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
     await expect(
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        canDeployToRestricted: true,
+        userId: admin.id,
       }),
     ).resolves.toBeUndefined();
   });
 
-  test("assertCanAssignEnvironment allows an unrestricted environment without env-admin", async ({
+  test("assertCanAssignEnvironment allows an unrestricted environment without any grant", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const env = await createEnvironment({
       organizationId: org.id,
       data: { name: "Sandbox" },
     });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
     await expect(
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        canDeployToRestricted: false,
+        userId: member.id,
       }),
     ).resolves.toBeUndefined();
   });
 
-  test("assertCanAssignEnvironment rejects a restricted environment without env-admin (403)", async ({
+  test("assertCanAssignEnvironment rejects a restricted environment without a grant on it (403)", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const env = await createEnvironment({
       organizationId: org.id,
       data: { name: "Prod", restricted: true },
     });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
     await expect(
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        canDeployToRestricted: false,
+        userId: member.id,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  test("assertCanAssignEnvironment allows a restricted environment with env-admin", async ({
+  test("assertCanAssignEnvironment allows a restricted environment with a wildcard grant", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const env = await createEnvironment({
       organizationId: org.id,
       data: { name: "Prod", restricted: true },
     });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
     await expect(
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        canDeployToRestricted: true,
+        userId: admin.id,
       }),
     ).resolves.toBeUndefined();
   });
 
-  test("assertCanAssignEnvironment throws 404 for an unknown environment", async ({
+  /**
+   * The axis the retired action could not express: authority over ONE
+   * restricted environment, and not over its neighbour.
+   */
+  test("a grant on one restricted environment does not unlock another", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const granted = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod EU", restricted: true },
+    });
+    const other = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod US", restricted: true },
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: org.id,
+      resource: "environment",
+      scope: granted.id,
+      revision: 0,
+      grants: [
+        { subject: { type: "user", id: member.id }, actions: ["read", "use"] },
+      ],
+    });
+    await expect(
+      assertCanAssignEnvironment({
+        environmentId: granted.id,
+        organizationId: org.id,
+        userId: member.id,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertCanAssignEnvironment({
+        environmentId: other.id,
+        organizationId: org.id,
+        userId: member.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("assertCanAssignEnvironment throws 404 for an unknown environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
     await expect(
       assertCanAssignEnvironment({
         environmentId: MISSING_ID,
         organizationId: org.id,
-        canDeployToRestricted: true,
+        userId: admin.id,
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
   });

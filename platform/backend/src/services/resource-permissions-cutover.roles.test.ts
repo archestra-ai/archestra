@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
@@ -138,5 +138,63 @@ describe("scoped RBAC final cutover", () => {
         actions: ["manage-permissions", "read", "update", "use"],
       },
     ]);
+  });
+
+  /**
+   * The one shape the deploy conversion cannot carry across unchanged.
+   *
+   * `deploy-to-restricted` discriminated on the kind of object deployed, so a
+   * role could be allowed to put an agent in a restricted environment while
+   * being refused an MCP server there. `environment:use` discriminates on the
+   * environment instead, and there is no room in a policy key for both axes.
+   * A partial holder therefore comes out of the conversion able to deploy
+   * anything into a restricted environment. This test exists to make that
+   * widening deliberate and visible rather than a surprise in production.
+   */
+  test("a role holding deploy-to-restricted on one resource gains use on every environment", async ({
+    makeOrganization,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const partial = await makeCustomRole(org.id, {
+      permission: { agent: ["read", "deploy-to-restricted"] },
+    });
+
+    await runMigration();
+
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "environment",
+      scope: "*",
+    });
+    expect(
+      policy?.grants.find(
+        (grant) =>
+          grant.subject.type === "role" && grant.subject.id === partial.id,
+      )?.actions,
+    ).toEqual(["read", "use"]);
+
+    // And the role action it replaces is gone, so nothing reads it twice.
+    const [row] = await db
+      .select({ permission: schema.organizationRolesTable.permission })
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, partial.id));
+    expect(JSON.parse(row.permission).agent).toEqual(["read"]);
+  });
+
+  /** Replaying must not touch a policy whose grants already match. */
+  test("the deploy conversion replays without revision churn", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const key = {
+      organizationId: org.id,
+      resource: "environment" as const,
+      scope: "*",
+    };
+    await runMigration();
+    const first = await ResourcePermissionPolicyModel.find(key);
+    await runMigration();
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(first);
   });
 });

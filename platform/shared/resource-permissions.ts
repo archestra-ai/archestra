@@ -16,6 +16,13 @@ export const ScopedResourceSchema = z.enum([
   "knowledgeFile",
   "llmVirtualKey",
   "llmProviderApiKey",
+  // Deploying into a restricted environment is `use` on that environment.
+  "environment",
+  // A service account carries no audience of its own — the organization owns
+  // every one of them — but it is still an object somebody has to be allowed
+  // to manage, so it is scoped by id like the rest rather than being
+  // organization-wide.
+  "serviceAccount",
   // Authority over a whole class of thing, with no object to sit on. These
   // replace the `admin` role actions that let someone read rows they did not
   // create. They are granted at `*` and nowhere else, so they appear on the

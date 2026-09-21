@@ -168,7 +168,7 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
-| `agent:deploy-to-restricted` | Assign agents to restricted deployment environments |
+| `agent:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
 | `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
@@ -184,7 +184,7 @@ The following table lists all available permissions that can be assigned to cust
 | `app:delete` | Delete MCP Apps |
 | `app:team-admin` | Manage team-scoped MCP Apps, including their team assignments, in teams you belong to |
 | `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
-| `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
+| `app:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `auditLog:read` | View audit log records of your own administrative actions |
 | `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
 | `chat:read` | View and access chat conversations |
@@ -217,7 +217,7 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors, view the deleted ones, and restore them |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
 | `knowledgeSource:admin` | View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions |
-| `knowledgeSource:deploy-to-restricted` | Assign Knowledge Bases and Connectors to restricted deployment environments |
+| `knowledgeSource:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `knowledgeSourceAutoSync:read` | View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings |
 | `knowledgeSourceAutoSync:create` | Create connectors with auto-sync permissions (access mirrors the source system) |
 | `knowledgeSourceAutoSync:update` | Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs |
@@ -255,7 +255,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpGateway:delete` | Delete MCP gateways |
 | `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
 | `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
-| `mcpGateway:deploy-to-restricted` | Assign MCP gateways to restricted deployment environments |
+| `mcpGateway:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `mcpOauthClient:read` | View MCP OAuth client registrations |
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
 | `mcpOauthClient:update` | Modify MCP OAuth client registrations |
@@ -266,7 +266,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
 | `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
 | `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
-| `mcpRegistry:deploy-to-restricted` | Deploy MCP servers (catalog items) to restricted environments |
+| `mcpRegistry:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
@@ -317,7 +317,7 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
-| `skill:deploy-to-restricted` | Assign agent skills to restricted deployment environments |
+| `skill:deploy-to-restricted` | Retired: deploying to a restricted environment is now a `use` grant on that environment |
 | `skillsSettings:read` | View Skills settings (online catalog availability) |
 | `skillsSettings:update` | Modify Skills settings |
 | `team:read` | View teams and their members |
@@ -350,7 +350,7 @@ Service accounts use their assigned role for these APIs. A service account has n
 
 ## Resource Permission Grants
 
-Agents, MCP gateways, MCP registry entries, skills, apps, and models support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
+Agents, MCP gateways, MCP registry entries, skills, apps, models, and service accounts support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
 
 | Where you are | Manage permissions |
 | --- | --- |
@@ -358,6 +358,7 @@ Agents, MCP gateways, MCP registry entries, skills, apps, and models support gra
 | Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
+| Service account detail page | Open **Permissions** |
 | All objects of a resource type | Open **Settings > Permissions** and select the resource type |
 
 Initial grants are validated before creation and persisted with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional `initialGrants` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
@@ -365,6 +366,8 @@ Initial grants are validated before creation and persisted with the resource. In
 Resource grants are an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
 
 Roles and grants answer different questions. A role says what a principal may do with a type of resource, and the pages that assign roles ask nothing about individual objects. A grant says which objects those actions reach. Assigning a role therefore gives a principal whatever the organization's own grants give that role, and nothing more.
+
+A service account is both a recipient and a resource. Grant `update` on one account to say who looks after it — a team that owns a deployment key, for example. An account belongs to the organization rather than to a team, so roles that reach every account hold their grant on `*`.
 
 Recipients can be users, teams, service accounts, roles, or everyone in the organization. A service account is an independent recipient; its grants do not depend on the person who created it. Disabled service accounts cannot use their grants. Their assigned roles and organization-wide grants also contribute to access, so removing one direct grant does not necessarily remove all access.
 
@@ -475,6 +478,15 @@ Object grants control reading, execution, editing, deletion, and permission mana
 An update grant does not include execution or permission management.
 Creation adds a full grant for the creator. That grant can be revoked.
 Ownership and team administration do not override revocation.
+
+### Environments
+
+Deploying a resource into a [restricted environment](/docs/platform-environments) requires a `use` grant on that environment.
+Grants are per environment, so a team can deploy to one restricted environment without reaching another.
+One grant covers every kind of resource deployed there.
+Unrestricted environments stay open to anyone who can create the resource.
+The organization's implicit Default environment has no object to grant on, so deploying into a restricted Default requires `use` on every environment.
+Creating, editing, and deleting environments remain role permissions.
 
 ### Visibility-Scoped Credentials
 

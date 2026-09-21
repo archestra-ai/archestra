@@ -154220,6 +154220,9 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "canDeploy": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -154236,7 +154239,8 @@
                           "createdAt",
                           "updatedAt",
                           "assignedCatalogCount",
-                          "labels"
+                          "labels",
+                          "canDeploy"
                         ],
                         "additionalProperties": false
                       }
@@ -154288,12 +154292,16 @@
                         "knowledgeSource"
                       ],
                       "additionalProperties": false
+                    },
+                    "canDeployToDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "environments",
                     "defaultAssignedCatalogCount",
-                    "resourceDefaults"
+                    "resourceDefaults",
+                    "canDeployToDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -380205,7 +380213,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "List organization service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: View service accounts",
+        "description": "List organization service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -380585,10 +380593,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -380641,6 +380648,136 @@
                       "required": [
                         "key",
                         "value"
+                      ]
+                    }
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
                       ]
                     }
                   }
@@ -381078,7 +381215,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Get one organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: View service accounts",
+        "description": "Get one organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -381503,10 +381640,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "patch": {
@@ -381514,7 +381650,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Update an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "description": "Update an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -381995,10 +382131,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -382006,7 +382141,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Delete an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:delete`: Delete service accounts",
+        "description": "Delete an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -382269,10 +382404,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -382282,7 +382416,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Enable or disable several service accounts in one request. A disabled account authenticates with none of its keys, so this is the reversible way to stop an automation without destroying the keys it would need to start again. Ids outside the caller's organization are reported in `failed` as not found and leave the rest of the batch applied. An account already in the requested state is reported as succeeded without being rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "description": "Enable or disable several service accounts in one request. A disabled account authenticates with none of its keys, so this is the reversible way to stop an automation without destroying the keys it would need to start again. Ids outside the caller's organization are reported in `failed` as not found and leave the rest of the batch applied. An account already in the requested state is reported as succeeded without being rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -382606,10 +382740,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -382617,7 +382750,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Delete several service accounts in one request, along with their tokens. Ids outside the caller's organization are reported in `failed` as not found and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:delete`: Delete service accounts",
+        "description": "Delete several service accounts in one request, along with their tokens. Ids outside the caller's organization are reported in `failed` as not found and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -382936,10 +383069,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -382949,7 +383081,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Create a token for an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "description": "Create a token for an organization service account\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -383274,10 +383406,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -383287,7 +383418,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Delete one service account token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "description": "Delete one service account token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -383560,10 +383691,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "patch": {
@@ -383571,7 +383701,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Update one service account token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "description": "Update one service account token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -383899,10 +384029,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "serviceAccount:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -426529,6 +426658,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "environment",
+                "serviceAccount",
                 "scheduledTask",
                 "log",
                 "auditLog"
@@ -426943,6 +427074,8 @@
                           "knowledgeFile",
                           "llmVirtualKey",
                           "llmProviderApiKey",
+                          "environment",
+                          "serviceAccount",
                           "scheduledTask",
                           "log",
                           "auditLog"
@@ -427262,6 +427395,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "environment",
+                "serviceAccount",
                 "scheduledTask",
                 "log",
                 "auditLog"
@@ -427691,6 +427826,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "environment",
+                "serviceAccount",
                 "scheduledTask",
                 "log",
                 "auditLog"
@@ -427751,6 +427888,8 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "environment",
+                        "serviceAccount",
                         "scheduledTask",
                         "log",
                         "auditLog"
@@ -428662,6 +428801,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "environment",
+                "serviceAccount",
                 "scheduledTask",
                 "log",
                 "auditLog"
@@ -428722,6 +428863,8 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "environment",
+                        "serviceAccount",
                         "scheduledTask",
                         "log",
                         "auditLog"

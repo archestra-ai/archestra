@@ -61,6 +61,53 @@ export function resolveLegacyResourcePermissions(params: {
       action,
     }));
   }
+  if (params.resource === "environment") {
+    // DO NOT DELETE THIS BRANCH. It looks like a special case for a resource
+    // that could fall through to the generic rules below. It cannot.
+    //
+    // An environment has no author and no visibility column, so it resolves as
+    // organization-scoped, and the generic rule turns the `read` action plus
+    // organization scope into `read` AND `use`. Migration 0355 gave
+    // `environment:read` to every custom role, so every role in every
+    // organization would come out of here holding `use` on every environment
+    // — which is the key to every restricted environment, standing open for
+    // the entire pre-conversion window.
+    //
+    // Deploying into a restricted environment was never the read action: it
+    // was `deploy-to-restricted`, and that is what `use` has to mean here
+    // until the conversion replaces it with real grants.
+    const allowed: ResourcePermissionAction[] = [];
+    if (actions.includes("read")) allowed.push("read");
+    if (holdsLegacyDeployToRestricted(params.permissions)) allowed.push("use");
+    if (actions.includes("update"))
+      allowed.push("update", "manage-permissions");
+    if (actions.includes("delete")) allowed.push("delete");
+    return allowed.map((action) => ({
+      organizationId: params.organizationId,
+      resource: params.resource,
+      scope: params.scope,
+      action,
+    }));
+  }
+  if (params.resource === "serviceAccount") {
+    // A service account belongs to the organization and names no audience, so
+    // the generic rules below would call it organization-wide and then refuse
+    // every write: `canModify` only ever says yes for an owner, a write-level
+    // team or an `admin` action, and a service account has none of the three.
+    // Reaching one was purely a question of the caller's role actions, so that
+    // is what converts.
+    const allowed: ResourcePermissionAction[] = [];
+    if (actions.includes("read")) allowed.push("read", "use");
+    if (actions.includes("update"))
+      allowed.push("update", "manage-permissions");
+    if (actions.includes("delete")) allowed.push("delete");
+    return allowed.map((action) => ({
+      organizationId: params.organizationId,
+      resource: params.resource,
+      scope: params.scope,
+      action,
+    }));
+  }
   const visible =
     isAdmin ||
     (!!target &&
@@ -104,4 +151,29 @@ export function resolveLegacyResourcePermissions(params: {
     scope: params.scope,
     action,
   }));
+}
+
+/**
+ * The resources whose retired `deploy-to-restricted` action let a principal
+ * deploy into a restricted environment.
+ *
+ * Holding it on any one of them is enough. The retired action discriminated on
+ * the kind of object being deployed; `environment:use` discriminates on the
+ * environment instead, so the kinds collapse together here. Nobody who could
+ * deploy loses the ability, and the widening is confined to a hand-authored
+ * role that held a strict subset of the six.
+ */
+const DEPLOY_TO_RESTRICTED_RESOURCES = [
+  "agent",
+  "skill",
+  "app",
+  "mcpGateway",
+  "mcpRegistry",
+  "knowledgeSource",
+] as const;
+
+function holdsLegacyDeployToRestricted(permissions: Permissions): boolean {
+  return DEPLOY_TO_RESTRICTED_RESOURCES.some((resource) =>
+    permissions[resource]?.includes("deploy-to-restricted"),
+  );
 }

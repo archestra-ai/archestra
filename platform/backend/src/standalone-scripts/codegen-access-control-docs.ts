@@ -121,7 +121,7 @@ function generateCustomRolesPermissionsTable(): string {
 function generateScopedResourcesSection(): string {
   return `## Resource Permission Grants
 
-Agents, MCP gateways, MCP registry entries, skills, apps, and models support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
+Agents, MCP gateways, MCP registry entries, skills, apps, models, and service accounts support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
 
 | Where you are | Manage permissions |
 | --- | --- |
@@ -129,6 +129,7 @@ Agents, MCP gateways, MCP registry entries, skills, apps, and models support gra
 | Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
+| Service account detail page | Open **Permissions** |
 | All objects of a resource type | Open **Settings > Permissions** and select the resource type |
 
 Initial grants are validated before creation and persisted with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional \`initialGrants\` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
@@ -136,6 +137,8 @@ Initial grants are validated before creation and persisted with the resource. In
 Resource grants are an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
 
 Roles and grants answer different questions. A role says what a principal may do with a type of resource, and the pages that assign roles ask nothing about individual objects. A grant says which objects those actions reach. Assigning a role therefore gives a principal whatever the organization's own grants give that role, and nothing more.
+
+A service account is both a recipient and a resource. Grant \`update\` on one account to say who looks after it — a team that owns a deployment key, for example. An account belongs to the organization rather than to a team, so roles that reach every account hold their grant on \`*\`.
 
 Recipients can be users, teams, service accounts, roles, or everyone in the organization. A service account is an independent recipient; its grants do not depend on the person who created it. Disabled service accounts cannot use their grants. Their assigned roles and organization-wide grants also contribute to access, so removing one direct grant does not necessarily remove all access.
 
@@ -246,6 +249,15 @@ Object grants control reading, execution, editing, deletion, and permission mana
 An update grant does not include execution or permission management.
 Creation adds a full grant for the creator. That grant can be revoked.
 Ownership and team administration do not override revocation.
+
+### Environments
+
+Deploying a resource into a [restricted environment](/docs/platform-environments) requires a \`use\` grant on that environment.
+Grants are per environment, so a team can deploy to one restricted environment without reaching another.
+One grant covers every kind of resource deployed there.
+Unrestricted environments stay open to anyone who can create the resource.
+The organization's implicit Default environment has no object to grant on, so deploying into a restricted Default requires \`use\` on every environment.
+Creating, editing, and deleting environments remain role permissions.
 
 ### Visibility-Scoped Credentials
 

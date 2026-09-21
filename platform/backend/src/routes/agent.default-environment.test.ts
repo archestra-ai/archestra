@@ -1,5 +1,6 @@
 import { type Mock, vi } from "vitest";
 import { EnvironmentResourceDefaultModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -13,7 +14,8 @@ import type { User } from "@/types";
  *
  * Harness mirrors agent.restricted-environment.test.ts: `@/auth` is fully
  * mocked so the agent-type permission stack always grants, and
- * `deploy-to-restricted` is controlled per test via `deployGrants`.
+ * Reaching a restricted environment is a `use` grant on that environment,
+ * written per test.
  */
 vi.mock("@/auth");
 vi.mock("@/observability");
@@ -32,9 +34,8 @@ describe("Agent routes - configured default environment", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  let deployGrants: Set<string>;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     (getAgentTypePermissionChecker as Mock).mockImplementation(async () => ({
       require: vi.fn(),
       isAdmin: vi.fn(() => true),
@@ -48,23 +49,14 @@ describe("Agent routes - configured default environment", () => {
     (hasAnyAgentTypeReadPermission as Mock).mockResolvedValue(true);
     (requireAgentModifyPermission as Mock).mockImplementation(() => {});
 
-    deployGrants = new Set();
-    mockUserHasPermission.mockImplementation(
-      async (
-        _userId: string,
-        _orgId: string,
-        resource: string,
-        action: string,
-      ) => {
-        if (action === "deploy-to-restricted")
-          return deployGrants.has(resource);
-        return true;
-      },
-    );
+    mockUserHasPermission.mockResolvedValue(true);
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // A plain member reaches no environment by role, so the one case that
+    // expects the restricted default to apply has to be granted it.
+    await makeMember(user.id, organizationId, { role: "member" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -162,10 +154,18 @@ describe("Agent routes - configured default environment", () => {
   });
 
   test("a restricted default applies for a caller who may deploy there", async () => {
-    deployGrants = new Set(["agent"]);
     const locked = await createEnvironment({
       organizationId,
       data: { name: "Locked", restricted: true },
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "environment",
+      scope: locked.id,
+      revision: 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,

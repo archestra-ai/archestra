@@ -2012,8 +2012,8 @@ function isCanonicalBase64(value: string): boolean {
 /**
  * Authorize binding an app to `environmentId` (null = org default). Mirrors the
  * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
- * app:deploy-to-restricted are enforced by `assertCanAssignEnvironment`, which
- * also gates a restricted *default* environment.
+ * a `use` grant on it are enforced by `assertCanAssignEnvironment`, which also
+ * gates a restricted *default* environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -2021,17 +2021,7 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const hasAppDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    "app",
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasAppDeploy,
-  });
+  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
 }
 
 /**
@@ -2055,13 +2045,6 @@ async function resolveNewAppEnvironmentId(params: {
   const { userId, organizationId, requested, builderAgentId } = params;
   if (requested !== undefined) return requested;
 
-  const canDeployToRestricted = await userHasPermission(
-    userId,
-    organizationId,
-    "app",
-    "deploy-to-restricted",
-  );
-
   if (builderAgentId) {
     const agentEnvironmentId =
       await AgentModel.findEnvironmentId(builderAgentId);
@@ -2074,7 +2057,7 @@ async function resolveNewAppEnvironmentId(params: {
       (await environmentIsAssignable({
         environmentId: agentEnvironmentId,
         organizationId,
-        canDeployToRestricted,
+        userId,
       }))
     ) {
       return agentEnvironmentId;
@@ -2084,7 +2067,7 @@ async function resolveNewAppEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource: "app",
-    canDeployToRestricted,
+    userId,
   });
 }
 
@@ -2096,7 +2079,7 @@ async function resolveNewAppEnvironmentId(params: {
 async function environmentIsAssignable(params: {
   environmentId: string;
   organizationId: string;
-  canDeployToRestricted: boolean;
+  userId: string;
 }): Promise<boolean> {
   try {
     await assertCanAssignEnvironment(params);

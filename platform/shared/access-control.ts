@@ -494,13 +494,13 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:update": "Modify agent configuration and settings",
   "agent:delete": "Delete agents",
   "agent:deploy-to-restricted":
-    "Assign agents to restricted deployment environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "skill:read": "View agent skills allowed by your resource grants",
   "skill:create": "Create new agent skills",
   "skill:update": "Modify agent skill content allowed by your resource grants",
   "skill:delete": "Delete agent skills",
   "skill:deploy-to-restricted":
-    "Assign agent skills to restricted deployment environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "plugin:read": "View plugins and their file metadata",
   "plugin:create": "Create plugins",
   "plugin:update": "Modify plugin metadata and files",
@@ -512,7 +512,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Modify MCP Apps and their tools allowed by your resource grants",
   "app:delete": "Delete MCP Apps",
   "app:deploy-to-restricted":
-    "Assign MCP Apps to restricted deployment environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
@@ -537,7 +537,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpOauthClient:update": "Modify MCP OAuth client registrations",
   "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
   "mcpGateway:deploy-to-restricted":
-    "Assign MCP gateways to restricted deployment environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "toolPolicy:read":
     "View tools, tool invocation policies, and trusted data policies",
   "toolPolicy:create": "Register tools and create security policies",
@@ -551,7 +551,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:manage-deleted":
     "View and restore soft-deleted MCP registry entries",
   "mcpRegistry:deploy-to-restricted":
-    "Deploy MCP servers (catalog items) to restricted environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -676,7 +676,7 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:admin":
     "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
   "knowledgeSource:deploy-to-restricted":
-    "Assign Knowledge Bases and Connectors to restricted deployment environments",
+    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "knowledgeSourceAutoSync:read":
     "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
   "knowledgeSourceAutoSync:create":
@@ -1382,34 +1382,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
-  [RouteId.GetServiceAccounts]: {
-    serviceAccount: ["read"],
-  },
+  // Which service accounts a caller reaches, and what they may do to each, is
+  // a grant on the account itself now, so these carry no resource-wide action
+  // and the handlers ask `ResourcePermissions`. Creating one still does: there
+  // is no object to hold a grant yet, and minting an account is the act that
+  // decides who its first grants name.
+  [RouteId.GetServiceAccounts]: {},
   [RouteId.GetServiceAccountLabelKeys]: { serviceAccount: ["read"] },
   [RouteId.GetServiceAccountLabelValues]: { serviceAccount: ["read"] },
-  [RouteId.GetServiceAccount]: {
-    serviceAccount: ["read"],
-  },
+  [RouteId.GetServiceAccount]: {},
   [RouteId.CreateServiceAccount]: {
     serviceAccount: ["create"],
   },
-  [RouteId.UpdateServiceAccount]: {
-    serviceAccount: ["update"],
-  },
-  [RouteId.BulkDeleteServiceAccounts]: { serviceAccount: ["delete"] },
-  [RouteId.BulkSetServiceAccountsDisabled]: { serviceAccount: ["update"] },
-  [RouteId.DeleteServiceAccount]: {
-    serviceAccount: ["delete"],
-  },
-  [RouteId.CreateServiceAccountToken]: {
-    serviceAccount: ["update"],
-  },
-  [RouteId.UpdateServiceAccountToken]: {
-    serviceAccount: ["update"],
-  },
-  [RouteId.DeleteServiceAccountToken]: {
-    serviceAccount: ["update"],
-  },
+  [RouteId.UpdateServiceAccount]: {},
+  [RouteId.BulkDeleteServiceAccounts]: {},
+  [RouteId.BulkSetServiceAccountsDisabled]: {},
+  [RouteId.DeleteServiceAccount]: {},
+  // A key authenticates as the account with the account's full role set, so
+  // minting, renaming or revoking one is editing the account.
+  [RouteId.CreateServiceAccountToken]: {},
+  [RouteId.UpdateServiceAccountToken]: {},
+  [RouteId.DeleteServiceAccountToken]: {},
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },

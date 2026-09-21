@@ -90,7 +90,9 @@ const RESOURCE_LABELS: Record<ScopedResource, string> = {
   knowledgeFile: "Files",
   llmVirtualKey: "Virtual keys",
   llmProviderApiKey: "Provider keys",
+  environment: "Environments",
   scheduledTask: "Scheduled tasks",
   log: "LLM and MCP logs",
   auditLog: "Audit log",
+  serviceAccount: "Service accounts",
 };

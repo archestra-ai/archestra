@@ -365,9 +365,11 @@ const scopedResourceNouns: Record<ScopedResource, string> = {
   knowledgeFile: "file",
   llmVirtualKey: "virtual key",
   llmProviderApiKey: "provider key",
+  environment: "environment",
   scheduledTask: "scheduled task",
   log: "log",
   auditLog: "audit log entry",
+  serviceAccount: "service account",
 };
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {

@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { userHasPermission } from "@/auth/utils";
+import db, { schema } from "@/database";
 import AgentTeamModel from "@/models/agent-team";
 import AgentUserModel from "@/models/agent-user";
 import AppAccessModel from "@/models/app-access";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import OrganizationModel from "@/models/organization";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
+import {
+  assertCanAssignEnvironment,
+  createEnvironment,
+} from "@/services/environments/environment";
 import { describe, expect, test } from "@/test";
+import { ResourcePermissions } from "./resource-permissions";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 /**
@@ -36,6 +43,7 @@ describe("upgrade access preservation", () => {
     makeAgent,
     makeApp,
     makeInternalMcpCatalog,
+    makeServiceAccount,
   }) => {
     // Seed the world as it stands before the upgrade. Nothing has converted
     // this deployment yet, so `createInitial` writes no policy and every
@@ -150,6 +158,29 @@ describe("upgrade access preservation", () => {
       enabled: true,
     });
 
+    // Service accounts have no audience of their own: who reaches one was
+    // decided by the caller's role actions alone. Two of them, so the matrix
+    // cannot pass by accident on a single row.
+    const serviceAccounts = {
+      first: await makeServiceAccount(org.id, { createdBy: creator.id }),
+      second: await makeServiceAccount(org.id, { createdBy: null }),
+    };
+
+    // Two environments and a restricted org default, so the deploy rows below
+    // cover all three shapes the gate has: an open environment, a restricted
+    // one, and the implicit Default.
+    const openEnvironment = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Sandbox" },
+    });
+    const restrictedEnvironment = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", restricted: true },
+    });
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentRestricted: true,
+    });
+
     const principals = {
       creator,
       teammate,
@@ -237,6 +268,45 @@ describe("upgrade access preservation", () => {
             isAppAdmin: await isAdminFor("app"),
           }),
         );
+        for (const [what, account] of Object.entries(serviceAccounts)) {
+          for (const action of ["read", "update", "delete"] as const) {
+            // Before the conversion the role action IS the answer — there is
+            // no per-account model to ask. Afterwards the grant is, so the
+            // two passes ask the two real authorization paths in turn.
+            rows[`serviceAccount:${what}:${who}:${action}`] = converted
+              ? await ResourcePermissions.allows({
+                  organizationId: org.id,
+                  userId: principal.id,
+                  resource: "serviceAccount",
+                  scope: account.id,
+                  action,
+                })
+              : await userHasPermission(
+                  principal.id,
+                  org.id,
+                  "serviceAccount",
+                  action,
+                );
+          }
+        }
+        // Deploying into a restricted environment. The same call answers on
+        // both passes — from the retired role action before the conversion and
+        // from the environment grant after it — so a mismatch here is somebody
+        // who gained or lost the ability to deploy.
+        for (const [what, environmentId] of [
+          ["open", openEnvironment.id],
+          ["restricted", restrictedEnvironment.id],
+          ["default", null],
+        ] as const) {
+          rows[`deploy:${what}:${who}`] = await assertCanAssignEnvironment({
+            environmentId,
+            organizationId: org.id,
+            userId: principal.id,
+          }).then(
+            () => true,
+            () => false,
+          );
+        }
         // List filtering has its own query, so a matching single check is not
         // enough: a resource missing from the list is just as inaccessible.
         const listed = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -265,6 +335,17 @@ describe("upgrade access preservation", () => {
     expect(before["agent:strandedTeam:teammate:read"]).toBe(false);
     expect(before["skill:personal:teammate"]).toBe(false);
     expect(before["catalog:personal:loner"]).toBe(false);
+    // Only the admin tiers carry any service-account action today.
+    expect(before["serviceAccount:first:admin:delete"]).toBe(true);
+    expect(before["serviceAccount:first:teammate:read"]).toBe(false);
+    expect(before["serviceAccount:second:restricted:update"]).toBe(false);
+    // Deploy authority before the conversion: only the admin tier held any
+    // `deploy-to-restricted` action, and an open environment is open to all.
+    expect(before["deploy:open:loner"]).toBe(true);
+    expect(before["deploy:restricted:admin"]).toBe(true);
+    expect(before["deploy:restricted:loner"]).toBe(false);
+    expect(before["deploy:default:admin"]).toBe(true);
+    expect(before["deploy:default:loner"]).toBe(false);
 
     await runScopedResourcePermissionCutover();
     converted = true;
@@ -272,6 +353,92 @@ describe("upgrade access preservation", () => {
     const after = await snapshot();
     const changed = Object.keys(before).filter((k) => before[k] !== after[k]);
     expect(changed.map((k) => `${k}: ${before[k]} -> ${after[k]}`)).toEqual([]);
+
+    // A second run must be a no-op down to the byte. `revision` is the token
+    // the permissions editor holds while somebody is editing, so a statement
+    // that rewrites an unchanged policy fails their save on every restart.
+    const policiesBefore = await readPolicies();
+    await runScopedResourcePermissionCutover();
+    expect(await readPolicies()).toEqual(policiesBefore);
+    expect(await snapshot()).toEqual(after);
+  });
+
+  /**
+   * What the six-way split cost, stated in full.
+   *
+   * `deploy-to-restricted` was one action per kind of thing deployed, so a
+   * role could be allowed to put an agent in a restricted environment and
+   * refused an MCP server in the same one. `environment:use` asks about the
+   * environment instead, and a policy key holds one resource and one scope —
+   * there is no room for both axes. So the split does not survive.
+   *
+   * The consequences are asserted here rather than left to be discovered:
+   *
+   * - A holder of ALL six converts exactly. It could reach every restricted
+   *   environment before and it still can.
+   * - A holder of a STRICT SUBSET widens to the kinds it was refused. This is
+   *   intended. The split is being retired deliberately, and in exchange an
+   *   administrator can now say WHICH restricted environment a subject may
+   *   deploy to, which the retired actions could never express.
+   *
+   * If this test fails because a partial holder no longer widens, do not
+   * "fix" the assertion — someone has changed the upgrade rule, and the docs
+   * and the conversion have to change with it.
+   */
+  test("the six-way split retires: a full holder converts exactly, a partial holder widens", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const restricted = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", restricted: true },
+    });
+
+    // Holds every one of the six, like the built-in Admin and Editor roles.
+    const full = await makeUser();
+    await makeMember(full.id, org.id, { role: "admin" });
+
+    // Holds exactly one. Nothing built-in is shaped like this; it has to be
+    // written by hand, which is why the widening is narrow in practice.
+    const partial = await makeUser();
+    const partialRole = await makeCustomRole(org.id, {
+      permission: { agent: ["read", "deploy-to-restricted"] },
+    });
+    await makeMember(partial.id, org.id, { role: partialRole.role });
+
+    // The historical rule, asked the way the old call sites asked it.
+    const couldDeploy = (userId: string, resource: "agent" | "mcpRegistry") =>
+      userHasPermission(userId, org.id, resource, "deploy-to-restricted");
+    expect(await couldDeploy(full.id, "agent")).toBe(true);
+    expect(await couldDeploy(full.id, "mcpRegistry")).toBe(true);
+    expect(await couldDeploy(partial.id, "agent")).toBe(true);
+    // The refusal that does not survive.
+    expect(await couldDeploy(partial.id, "mcpRegistry")).toBe(false);
+
+    await runScopedResourcePermissionCutover();
+
+    const canDeploy = (userId: string) =>
+      assertCanAssignEnvironment({
+        environmentId: restricted.id,
+        organizationId: org.id,
+        userId,
+      }).then(
+        () => true,
+        () => false,
+      );
+    // Exact for the full holder.
+    expect(await canDeploy(full.id)).toBe(true);
+    // Widened for the partial one, deliberately: it may now deploy an MCP
+    // server into this restricted environment, which it could not before.
+    expect(await canDeploy(partial.id)).toBe(true);
+
+    // And nobody who held none of the six gains anything.
+    const outsider = await makeUser();
+    await makeMember(outsider.id, org.id, { role: "member" });
+    expect(await canDeploy(outsider.id)).toBe(false);
   });
 });
 
@@ -295,4 +462,16 @@ async function seedSkill(
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
+}
+
+/** Every stored policy verbatim, `revision` included. */
+async function readPolicies() {
+  const rows = await db
+    .select()
+    .from(schema.resourcePermissionPoliciesTable)
+    .orderBy(
+      schema.resourcePermissionPoliciesTable.resource,
+      schema.resourcePermissionPoliciesTable.scope,
+    );
+  return rows.map(({ updatedAt: _updatedAt, ...policy }) => policy);
 }

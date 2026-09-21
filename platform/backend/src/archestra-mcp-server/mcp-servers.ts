@@ -1116,14 +1116,6 @@ async function handleCreateMcpServer(
       return errorResult("user/organization context not available.");
     }
 
-    // Deploying a catalog item to a restricted environment requires
-    // mcpRegistry:deploy-to-restricted.
-    const hasDeploy = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpRegistry",
-      "deploy-to-restricted",
-    );
     // A server created by an agent lands in that agent's environment unless the
     // caller names one explicitly, so the creator can still see it through the
     // environment-scoped registry tools (mirrors `scaffold_app`). An agent with
@@ -1136,14 +1128,14 @@ async function handleCreateMcpServer(
           (await resolveDefaultEnvironmentForNewResource({
             organizationId,
             resource: "mcpRegistry",
-            canDeployToRestricted: hasDeploy,
+            userId: context.userId,
           })));
 
     try {
       await assertCanAssignEnvironment({
         environmentId: targetEnvironmentId,
         organizationId,
-        canDeployToRestricted: hasDeploy,
+        userId: context.userId,
       });
     } catch (error) {
       return errorResult(

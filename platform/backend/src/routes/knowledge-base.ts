@@ -3483,17 +3483,7 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const hasKnowledgeDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    "knowledgeSource",
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasKnowledgeDeploy,
-  });
+  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
 }
 
 /**
@@ -3512,12 +3502,7 @@ async function resolveNewConnectorEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource: "knowledgeSource",
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      "knowledgeSource",
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 

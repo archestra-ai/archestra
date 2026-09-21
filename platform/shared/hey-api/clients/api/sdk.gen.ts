@@ -9831,7 +9831,7 @@ export const serviceAccountLabelValues = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `serviceAccount:read`: View service accounts
+ * None (no additional RBAC permission required)
  */
 export const getServiceAccounts = <ThrowOnError extends boolean = false>(options?: Options<GetServiceAccountsData, ThrowOnError>) => (options?.client ?? client).get<GetServiceAccountsResponses, GetServiceAccountsErrors, ThrowOnError>({ url: '/api/service-accounts', ...options });
 
@@ -9864,7 +9864,7 @@ export const createServiceAccount = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `serviceAccount:delete`: Delete service accounts
+ * None (no additional RBAC permission required)
  */
 export const deleteServiceAccount = <ThrowOnError extends boolean = false>(options: Options<DeleteServiceAccountData, ThrowOnError>) => (options.client ?? client).delete<DeleteServiceAccountResponses, DeleteServiceAccountErrors, ThrowOnError>({ url: '/api/service-accounts/{id}', ...options });
 
@@ -9877,7 +9877,7 @@ export const deleteServiceAccount = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `serviceAccount:read`: View service accounts
+ * None (no additional RBAC permission required)
  */
 export const getServiceAccount = <ThrowOnError extends boolean = false>(options: Options<GetServiceAccountData, ThrowOnError>) => (options.client ?? client).get<GetServiceAccountResponses, GetServiceAccountErrors, ThrowOnError>({ url: '/api/service-accounts/{id}', ...options });
 
@@ -9890,7 +9890,7 @@ export const getServiceAccount = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `serviceAccount:update`: Modify service accounts
+ * None (no additional RBAC permission required)
  */
 export const updateServiceAccount = <ThrowOnError extends boolean = false>(options: Options<UpdateServiceAccountData, ThrowOnError>) => (options.client ?? client).patch<UpdateServiceAccountResponses, UpdateServiceAccountErrors, ThrowOnError>({
     url: '/api/service-accounts/{id}',
@@ -9910,7 +9910,7 @@ export const updateServiceAccount = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `serviceAccount:delete`: Delete service accounts
+ * None (no additional RBAC permission required)
  */
 export const bulkDeleteServiceAccounts = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteServiceAccountsData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteServiceAccountsResponses, BulkDeleteServiceAccountsErrors, ThrowOnError>({
     url: '/api/service-accounts/bulk',
@@ -9930,7 +9930,7 @@ export const bulkDeleteServiceAccounts = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `serviceAccount:update`: Modify service accounts
+ * None (no additional RBAC permission required)
  */
 export const bulkSetServiceAccountsDisabled = <ThrowOnError extends boolean = false>(options: Options<BulkSetServiceAccountsDisabledData, ThrowOnError>) => (options.client ?? client).patch<BulkSetServiceAccountsDisabledResponses, BulkSetServiceAccountsDisabledErrors, ThrowOnError>({
     url: '/api/service-accounts/bulk',
@@ -9950,7 +9950,7 @@ export const bulkSetServiceAccountsDisabled = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `serviceAccount:update`: Modify service accounts
+ * None (no additional RBAC permission required)
  */
 export const createServiceAccountToken = <ThrowOnError extends boolean = false>(options: Options<CreateServiceAccountTokenData, ThrowOnError>) => (options.client ?? client).post<CreateServiceAccountTokenResponses, CreateServiceAccountTokenErrors, ThrowOnError>({
     url: '/api/service-accounts/{id}/tokens',
@@ -9970,7 +9970,7 @@ export const createServiceAccountToken = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `serviceAccount:update`: Modify service accounts
+ * None (no additional RBAC permission required)
  */
 export const deleteServiceAccountToken = <ThrowOnError extends boolean = false>(options: Options<DeleteServiceAccountTokenData, ThrowOnError>) => (options.client ?? client).delete<DeleteServiceAccountTokenResponses, DeleteServiceAccountTokenErrors, ThrowOnError>({ url: '/api/service-accounts/{id}/tokens/{tokenId}', ...options });
 
@@ -9983,7 +9983,7 @@ export const deleteServiceAccountToken = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `serviceAccount:update`: Modify service accounts
+ * None (no additional RBAC permission required)
  */
 export const updateServiceAccountToken = <ThrowOnError extends boolean = false>(options: Options<UpdateServiceAccountTokenData, ThrowOnError>) => (options.client ?? client).patch<UpdateServiceAccountTokenResponses, UpdateServiceAccountTokenErrors, ThrowOnError>({
     url: '/api/service-accounts/{id}/tokens/{tokenId}',

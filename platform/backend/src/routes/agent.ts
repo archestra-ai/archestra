@@ -19,7 +19,6 @@ import {
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
   requireAgentModifyPermission,
-  userHasPermission,
 } from "@/auth";
 // Imported from the module rather than the `@/auth` barrel on purpose: route
 // tests mock `@/auth` wholesale to open up permissions, and these are
@@ -722,11 +721,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       // Always assert on create: a null environment still lands on the org
       // default, which may itself be restricted (mirrors the MCP-catalog path).
-      await assertEnvironmentAssignable({
+      await assertCanAssignEnvironment({
         userId: user.id,
         organizationId,
         environmentId,
-        agentType,
       });
       if (body.activationSkillPolicy) {
         await agentActivationSkillPolicyService.validatePolicyForDraft({
@@ -1619,12 +1617,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await assertCanAssignEnvironment({
             environmentId: resolvedEnvironmentId,
             organizationId,
-            canDeployToRestricted: await userHasPermission(
-              user.id,
-              organizationId,
-              "agent",
-              "deploy-to-restricted",
-            ),
+            userId: user.id,
           });
         }
         enabled = await isArchestraToolAvailableToAgent({
@@ -1645,12 +1638,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId: resolvedEnvironmentId,
           organizationId,
-          canDeployToRestricted: await userHasPermission(
-            user.id,
-            organizationId,
-            "agent",
-            "deploy-to-restricted",
-          ),
+          userId: user.id,
         });
         enabled =
           (await OrganizationModel.getById(organizationId))
@@ -2203,11 +2191,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (body.environmentId !== undefined) {
-        await assertEnvironmentAssignable({
+        await assertCanAssignEnvironment({
           userId: user.id,
           organizationId,
           environmentId: body.environmentId,
-          agentType: existingAgent.agentType,
         });
       }
 
@@ -3060,32 +3047,6 @@ function getPermittedAgentTypesForList(params: {
 }
 
 /**
- * Binding an agent to a restricted environment routes its code sandbox to that
- * environment's isolated runtime, so it is gated by the resource-specific
- * deploy-to-restricted permission for the agent's type — agent or
- * mcpGateway. Throws 403/404 if the caller may not assign the environment.
- */
-async function assertEnvironmentAssignable(params: {
-  userId: string;
-  organizationId: string;
-  environmentId: string | null;
-  agentType: AgentType;
-}): Promise<void> {
-  const { userId, organizationId, environmentId, agentType } = params;
-  const hasResourceDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    getResourceForAgentType(agentType),
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasResourceDeploy,
-  });
-}
-
-/**
  * The environment a new agent binds to. An explicit value in the body wins
  * (including a deliberate null, which means the default environment); omitting
  * the field defers to the org's configured landing environment for the agent's
@@ -3108,12 +3069,7 @@ async function resolveNewAgentEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      resource,
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 

@@ -42466,6 +42466,7 @@ export type ListEnvironmentsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            canDeploy: boolean;
         }>;
         defaultAssignedCatalogCount: number;
         resourceDefaults: {
@@ -42475,6 +42476,7 @@ export type ListEnvironmentsResponses = {
             mcpGateway: string | null;
             knowledgeSource: string | null;
         };
+        canDeployToDefault: boolean;
     };
 };
 
@@ -66500,6 +66502,25 @@ export type CreateKnowledgeBaseData = {
         }>;
         visibility?: 'private' | 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -67774,6 +67795,25 @@ export type CreateConnectorData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -71482,6 +71522,25 @@ export type UploadKnowledgeFileData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -75688,6 +75747,25 @@ export type CreateLlmProviderApiKeyData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -91513,6 +91591,25 @@ export type CreatePluginData = {
             keyId?: string;
             valueId?: string;
         }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -93838,6 +93935,25 @@ export type CreateProjectData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -98394,6 +98510,25 @@ export type CreateServiceAccountData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -107796,6 +107931,25 @@ export type CreateVirtualApiKeyData = {
             valueId?: string;
         }>;
         ownerId?: string;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -111327,7 +111481,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
     };
     query?: {
         query?: string;
@@ -111505,7 +111659,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
     }>;
@@ -111516,7 +111670,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
     };
     query?: {
@@ -111620,7 +111774,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
     };
     query?: never;
@@ -111697,7 +111851,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
         name: string;
         revision: number;
@@ -111792,7 +111946,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
     };
     query?: never;
@@ -111869,7 +112023,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | 'teams:*' | string;
         name: string;
         revision: number;

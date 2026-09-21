@@ -529,10 +529,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
-      const canDeployToRestricted = await callerCanDeployToRestricted(
-        request.headers,
-      );
-
       // No environment chosen at all (as opposed to an explicit null, which
       // picks the default environment on purpose) hands the choice to the org's
       // configured landing environment for new MCP servers.
@@ -540,17 +536,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.environmentId = await resolveDefaultEnvironmentForNewResource({
           organizationId: request.organizationId,
           resource: "mcpRegistry",
-          canDeployToRestricted,
+          userId: request.user.id,
         });
       }
 
-      // Gate assigning a restricted environment. Requires
-      // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
-      // environments are open.
+      // Gate assigning a restricted environment. Requires a `use` grant on
+      // that environment. Unrestricted and default (null) environments are
+      // open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
-        canDeployToRestricted,
+        userId: request.user.id,
       });
 
       let clientSecretId: string | undefined;
@@ -1366,7 +1362,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires mcpRegistry:deploy-to-restricted.
+      // (or restricted default) requires a `use` grant on that environment.
       const environmentChanged =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId;
@@ -1374,9 +1370,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
-          canDeployToRestricted: await callerCanDeployToRestricted(
-            request.headers,
-          ),
+          userId: request.user.id,
         });
       }
 
@@ -2229,20 +2223,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-/**
- * Whether the caller may deploy catalog items to restricted environments.
- * Gated by `mcpRegistry:deploy-to-restricted`.
- */
-async function callerCanDeployToRestricted(
-  headers: FastifyRequest["headers"],
-): Promise<boolean> {
-  const { success: hasDeploy } = await hasPermission(
-    { mcpRegistry: ["deploy-to-restricted"] },
-    headers,
-  );
-  return hasDeploy;
-}
 
 /**
  * Whether a requested team list leaves the stored assignments untouched. An

@@ -28,6 +28,7 @@ import {
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
 import { type Agent, ApiError } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
 import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
@@ -1258,27 +1259,60 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       offerSigningSecret: "test-context-secret-with-32-characters",
     };
     options = { includeToolUse: false, streamStopReason: "end_turn" };
-    const response = await app.inject({
-      method: "POST",
-      url: url(),
-      remoteAddress: "127.0.0.1",
-      headers: {
-        ...externalClientHeaders(),
-        "user-agent": "claude-cli/2.1.278 (external, cli)",
-        "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
-      },
-      payload: payload(false, [
-        { role: "assistant", content: "Earlier answer" },
-        {
-          role: "user",
-          content:
-            "CRITICAL: Respond with TEXT ONLY. Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests.",
-        },
-      ]),
-    });
+    const headers = {
+      ...externalClientHeaders(),
+      "user-agent": "claude-cli/2.1.278 (external, cli)",
+      "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+    };
+    const postSession = (messages: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers,
+        payload: payload(false, messages),
+      });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.body).toContain("protected session");
+    const first = await postSession([
+      { role: "user", content: "Check the weather" },
+    ]);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.body).toContain("protected session");
+    await drainBackgroundWork();
+
+    const followUp = await postSession([
+      { role: "user", content: "and tomorrow?" },
+    ]);
+    expect(followUp.statusCode, followUp.body).toBe(200);
+    expect(followUp.body).not.toContain("protected session");
+
+    const compact = await postSession([
+      { role: "assistant", content: "Earlier answer" },
+      {
+        role: "user",
+        content:
+          "CRITICAL: Respond with TEXT ONLY. Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests.",
+      },
+    ]);
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(compact.body).toContain("protected session");
+
+    const toolEcho = await postSession([
+      { role: "user", content: "continue" },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_1",
+            content:
+              "Your task is to create a detailed summary of the conversation so far",
+          },
+        ],
+      },
+    ]);
+    expect(toolEcho.statusCode, toolEcho.body).toBe(200);
+    expect(toolEcho.body).not.toContain("protected session");
   });
 
   test("treats a broken or old-format marker as inert text", async () => {

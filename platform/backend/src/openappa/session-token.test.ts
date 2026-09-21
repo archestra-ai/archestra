@@ -115,12 +115,13 @@ describe("session receipt storage", () => {
       sessionId,
       secret,
     });
-    expect(first).toMatch(CROCKFORD);
-    expect(second).toBe(first);
+    expect(first?.token).toMatch(CROCKFORD);
+    expect(first?.receiptIssuedAt).toBeNull();
+    expect(second?.token).toBe(first?.token);
     expect(
       await OpenAppaSessionModel.receiptTokenOwner({
         organizationId,
-        token: first ?? "",
+        token: first?.token ?? "",
       }),
     ).toEqual({ sessionId, callerId });
   });
@@ -176,10 +177,10 @@ describe("session receipt restore", () => {
       sessionId,
       secret,
     });
-    expect(code).toBeTruthy();
-    const text = appendSessionReceipt("hello", code ?? "");
+    expect(code?.token).toBeTruthy();
+    const text = appendSessionReceipt("hello", code?.token ?? "");
     const stripped = stripSessionReceipts(text);
-    expect(stripped).toEqual({ text: "hello", codes: [code] });
+    expect(stripped).toEqual({ text: "hello", codes: [code?.token] });
     const body = { messages: [{ role: "assistant", content: text }] };
     const codes = stripSessionReceiptsFromRequest({
       family: "anthropic:messages",

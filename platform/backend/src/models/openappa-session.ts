@@ -50,7 +50,7 @@ class OpenAppaSessionModel {
     callerId: string;
     sessionId: string;
     secret: string;
-  }): Promise<string | null> {
+  }): Promise<{ token: string; receiptIssuedAt: Date | null } | null> {
     for (let attempt = 0; attempt < MAX_RECEIPT_MINT_ATTEMPTS; attempt++) {
       const token = mintReceiptCode({
         secret: params.secret,
@@ -70,15 +70,27 @@ class OpenAppaSessionModel {
               isNull(table.receiptToken),
             ),
           )
-          .returning({ receiptToken: table.receiptToken });
-        if (assigned?.receiptToken) return assigned.receiptToken;
+          .returning({
+            receiptToken: table.receiptToken,
+            receiptIssuedAt: table.receiptIssuedAt,
+          });
+        if (assigned?.receiptToken) {
+          return {
+            token: assigned.receiptToken,
+            receiptIssuedAt: assigned.receiptIssuedAt ?? null,
+          };
+        }
         // No row updated: the session row is missing, or a concurrent writer
-        // already assigned its token - read once to tell the two apart.
+        // already assigned its token — read once to tell the two apart.
         const raced = await OpenAppaSessionModel.find({
           organizationId: params.organizationId,
           sessionId: params.sessionId,
         });
-        return raced?.receiptToken ?? null;
+        if (!raced?.receiptToken) return null;
+        return {
+          token: raced.receiptToken,
+          receiptIssuedAt: raced.receiptIssuedAt ?? null,
+        };
       } catch (error) {
         if (!isUniqueConstraintError(error)) throw error;
       }

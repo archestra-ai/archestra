@@ -395,13 +395,50 @@ function markSessionReceiptIssued(receipt: SessionReceiptOutput): void {
   );
 }
 
-/** Detects Claude Code client compaction summary requests. */
+/**
+ * Detects Claude Code compaction summary requests. Claude Code puts the
+ * instruction on a user turn (sometimes also in `system`); scan those text
+ * sites only so a large tool result cannot trigger a false re-issue and so
+ * the body is never serialized just to search it.
+ */
 function isClientCompactionRequest(body: unknown): boolean {
-  return (
-    typeof body === "object" &&
-    body !== null &&
-    JSON.stringify(body).includes(CLAUDE_COMPACTION_INSTRUCTION)
-  );
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const request = body as Record<string, unknown>;
+  if (containsCompactionInstruction(request.system)) return true;
+  if (!Array.isArray(request.messages)) return false;
+  for (const message of request.messages) {
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      continue;
+    }
+    const role = (message as Record<string, unknown>).role;
+    if (role !== "user" && role !== "system") continue;
+    if (
+      containsCompactionInstruction(
+        (message as Record<string, unknown>).content,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function containsCompactionInstruction(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.includes(CLAUDE_COMPACTION_INSTRUCTION);
+  }
+  if (!Array.isArray(value)) return false;
+  for (const block of value) {
+    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
+    const text = (block as Record<string, unknown>).text;
+    if (
+      typeof text === "string" &&
+      text.includes(CLAUDE_COMPACTION_INSTRUCTION)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const CLAUDE_COMPACTION_INSTRUCTION =
@@ -1605,27 +1642,22 @@ export async function handleLLMProxy<
         appaFamily &&
         config.openappa.offerSigningSecret.length > 0
       ) {
-        const code = await OpenAppaSessionModel.ensureReceiptToken({
+        const receipt = await OpenAppaSessionModel.ensureReceiptToken({
           organizationId: resolvedAgent.organizationId,
           callerId: appaCallerId,
           sessionId: openappaSession.session_id,
           secret: config.openappa.offerSigningSecret,
         });
-        const row = await OpenAppaSessionModel.find({
-          organizationId: resolvedAgent.organizationId,
-          sessionId: openappaSession.session_id,
-        });
         if (
-          code &&
-          row &&
-          (row.receiptIssuedAt == null || isClientCompactionRequest(body))
+          receipt &&
+          (receipt.receiptIssuedAt == null || isClientCompactionRequest(body))
         ) {
           sessionReceipt = {
             family: appaFamily,
             organizationId: resolvedAgent.organizationId,
             sessionId: openappaSession.session_id,
-            code,
-            footer: formatSessionReceipt(code),
+            code: receipt.token,
+            footer: formatSessionReceipt(receipt.token),
           };
         }
       }

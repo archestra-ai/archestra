@@ -763,6 +763,28 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // The passthrough proxy can wrap a provider connect timeout in its
+      // generic 500 error, losing the original network error code. Keep the
+      // response retryable and point the caller at the configured upstream.
+      if (
+        request.url.startsWith("/v1/") &&
+        (error as { code?: string }).code ===
+          "FST_REPLY_FROM_INTERNAL_SERVER_ERROR" &&
+        error.message === "Connect Timeout Error"
+      ) {
+        this.log.warn(
+          { ...requestContext, statusCode: 503 },
+          "HTTP 503 model provider connection timed out",
+        );
+        return reply.status(503).send({
+          error: {
+            message:
+              "Could not connect to the model provider. Check its base URL and network access, then retry.",
+            type: "api_service_unavailable_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;

@@ -368,7 +368,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
     title: "Read Workspace File",
     description:
-      "Read a file from your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access.",
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access.",
     schema: z.object({
       task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
@@ -495,7 +495,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
     title: "Write Workspace File",
     description:
-      "Create a file in your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace. Accepts UTF-8 text or base64 binary uploads, maximum 4 MiB decoded. Existing files are preserved unless overwrite=true. Parent directories must exist. This changes the runtime filesystem; it does not post a file to Slack or the conversation's skill sandbox.",
+      "Create a file in your Agent Runtime's retained workspace using a run ID. Use this for content you are composing here, such as a note or a short config. To put a file that already exists on this machine into the workspace, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and needs no base64 encoding. Paths are relative to /home/node/workspace. Accepts UTF-8 text or base64 binary uploads, maximum 4 MiB decoded. Existing files are preserved unless overwrite=true. Parent directories must exist. This changes the runtime filesystem; it does not post a file to Slack or the conversation's skill sandbox.",
     schema: z.object({
       task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),

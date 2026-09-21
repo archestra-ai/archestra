@@ -65,6 +65,19 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
 });
 
+test('a fork keeps its parent policy revision when its dispatch carries newer text', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2, allow);
+  const scope = () => ({ organization_id: 'fork-policy-test', caller_id: 'user:test', session_id: randomUUID() });
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
+
+  const parent = scope();
+  assert.equal((await hook(parent, { event: 'session_start' }, allow)).decision, 'ack');
+  assert.equal((await hook(parent, call, allow)).decision, 'allow_call');
+  const fork = { ...scope(), fork_of: parent.session_id };
+  assert.equal((await hook(fork, call, deny)).decision, 'allow_call');
+});
+
 test('a new session opens under the text its dispatch carried while a stale sibling reloads', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
   // A pool of one would serialize fresh and stale on the same connection,
   // masking the race: this needs both to hold a connection at once.

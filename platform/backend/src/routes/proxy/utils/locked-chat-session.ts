@@ -96,6 +96,16 @@ export async function resolveLockedChatAuditContext(params: {
   ) {
     return { kind: "none" };
   }
+  // Conversation ids are UUIDs. A Claude Code / Codex session id on a
+  // spoofable chat source must not be looked up as a conversation (the
+  // query errors, and that error was treated as locked).
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      sessionId,
+    )
+  ) {
+    return { kind: "none" };
+  }
 
   const cacheKey =
     `${CacheKey.LockedChatSession}-${sessionId}:${userId}` as const;

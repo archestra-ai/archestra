@@ -163,4 +163,35 @@ describe("AnthropicOpenaiStreamAdapter tool-call release", () => {
         .content.some((block) => block.type === "tool_use"),
     ).toBe(false);
   });
+
+  // A rewritten call can carry the id the client is given in place of the
+  // provider's (OpenAPPA's trajectory stamp); the non-streamed turn writes it,
+  // so a streamed one must too, while the record keeps the provider's.
+  it("gives the client each rewritten call's own id, and records the provider's", () => {
+    const adapter = makeAdapter();
+    feedParallelToolCalls(adapter);
+
+    const wire =
+      adapter.formatToolCallsSSE?.([
+        {
+          id: "toolu_A",
+          wireId: "appat1-stamped-A",
+          name: "run_command",
+          arguments: '{"cmd":"ls"}',
+        },
+        { id: "toolu_B", name: "run_command", arguments: '{"cmd":"pwd"}' },
+      ]) ?? [];
+
+    const [chunk] = wire.map((sse) =>
+      JSON.parse(String(sse).replace(/^data: /, "")),
+    );
+    expect(
+      chunk.choices[0].delta.tool_calls.map((call: { id: string }) => call.id),
+    ).toEqual(["appat1-stamped-A", "toolu_B"]);
+    expect(
+      adapter
+        .toProviderResponse()
+        .content.filter((block) => block.type === "tool_use"),
+    ).toMatchObject([{ id: "toolu_A" }, { id: "toolu_B" }]);
+  });
 });

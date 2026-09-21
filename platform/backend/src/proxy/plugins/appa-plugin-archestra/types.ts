@@ -1,5 +1,6 @@
 import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
+import type { AppaSessionIdentity } from "@/openappa/wire";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
   "archestra.appa.trusted-context",
@@ -35,6 +36,21 @@ export type AppaClientAdapter = {
     toolName: string;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
   };
+  /**
+   * Reads the trajectory identity the client itself puts on the wire: the id
+   * it keeps stable across a resumed or compacted conversation, so a resume
+   * reopens the same OpenAPPA root. A fork or an out-of-band summarizer gets a
+   * new id, but the history it replays carries the parent's trajectory stamps,
+   * which continue the parent's root instead (`openappa/trajectory-stamp.ts`).
+   * Runs before the generic wire-family fallbacks; returning
+   * `undefined` defers to them. A request whose native signals contradict
+   * each other is refused rather than bound to a trajectory chosen by
+   * precedence.
+   */
+  extractSessionIdentity?(context: {
+    headers: Readonly<Record<string, string | string[] | undefined>>;
+    requestBody: unknown;
+  }): AppaSessionIdentity | undefined;
 };
 
 /** The arguments of the platform's ask_user tool. */

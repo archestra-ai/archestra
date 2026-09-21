@@ -73,6 +73,11 @@ export function buildFullToolName(
   return `${serverName}__${toolName}`;
 }
 
+/** Whether a value has the canonical 8-4-4-4-12 hexadecimal UUID shape. */
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 // ============================================================================
 // Text shaping
 // ============================================================================
@@ -160,3 +165,6 @@ export function truncateCharsWithEllipsis(
 function boundedHead(value: string, maxChars: number): string {
   return value.slice(0, maxChars * 2 + 2);
 }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

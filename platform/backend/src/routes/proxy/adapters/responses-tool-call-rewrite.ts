@@ -21,7 +21,15 @@
 
 import type { HostedToolCall } from "@/types";
 
-type RewrittenToolCall = { id: string; name: string; arguments: string };
+type RewrittenToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+  /** The namespace the client declared the tool in (Codex MCP servers). */
+  namespace?: string;
+  /** Written to the client as `call_id` in place of `id` (OpenAPPA's trajectory stamp). */
+  wireId?: string;
+};
 
 type ResponsesFunctionCallItem = {
   id?: string;
@@ -55,11 +63,13 @@ export function responsesFunctionCallItem(
 ): ResponsesFunctionCallItem {
   return {
     id: itemId ?? `fc_${toolCall.id}`,
-    call_id: toolCall.id,
+    call_id: toolCall.wireId ?? toolCall.id,
     type: "function_call" as const,
     name: toolCall.name,
     arguments: toolCall.arguments,
-    ...(namespace ? { namespace } : {}),
+    ...((toolCall.namespace ?? namespace)
+      ? { namespace: toolCall.namespace ?? namespace }
+      : {}),
     status: "completed" as const,
   };
 }
@@ -135,9 +145,10 @@ export function formatResponsesFunctionCallFrames(params: {
 
 /**
  * A response `output` with its function-call items replaced by the rewritten
- * calls, matched by `call_id` so ids — what the client correlates tool results
- * by — are untouched. Non-call items (text, reasoning) pass through in place; a
- * rewritten call with no upstream item to replace is appended.
+ * calls, matched by the provider's `call_id`. That id — what the client
+ * correlates tool results by — is kept unless the call carries the one the
+ * client is given instead. Non-call items (text, reasoning) pass through in
+ * place; a rewritten call with no upstream item to replace is appended.
  */
 export function rewriteResponsesOutput<TItem extends { type?: string }>(
   output: readonly TItem[],
@@ -163,12 +174,23 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
                 namespaceOf(item).namespace,
               ) as unknown as TItem)
             : item.type === "custom_tool_call"
-              ? item
-              : ({
+              ? ({
                   ...item,
-                  name: rewritten.name,
-                  arguments: rewritten.arguments,
-                } as TItem),
+                  call_id: rewritten.wireId ?? callId,
+                } as TItem)
+              : (withNamespace(
+                  {
+                    ...item,
+                    call_id: rewritten.wireId ?? callId,
+                    name: rewritten.name,
+                    arguments: rewritten.arguments,
+                  },
+                  // A notice lives in its own tool's namespace, not the
+                  // denied call's.
+                  isNotice
+                    ? rewritten.namespace
+                    : (rewritten.namespace ?? namespaceOf(item).namespace),
+                ) as TItem),
         );
         continue;
       }
@@ -251,7 +273,7 @@ function formatCustomToolCallFrames(params: {
   const input = customToolInput(toolCall.arguments) ?? toolCall.arguments;
   const item: ResponsesCustomCallItem = {
     id,
-    call_id: toolCall.id,
+    call_id: toolCall.wireId ?? toolCall.id,
     type: "custom_tool_call" as const,
     name: toolCall.name,
     input,
@@ -348,3 +370,12 @@ function hostedToolName(item: { type?: string }): string | undefined {
 const HOSTED_TOOL_NAME_BY_ITEM_TYPE: Partial<Record<string, string>> = {
   web_search_call: "web_search",
 };
+
+function withNamespace<T extends object>(
+  item: T,
+  namespace: string | undefined,
+): T {
+  if (namespace) return { ...item, namespace };
+  const { namespace: _dropped, ...rest } = item as T & { namespace?: unknown };
+  return rest as T;
+}

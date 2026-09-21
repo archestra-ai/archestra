@@ -79,7 +79,12 @@ class ResponsesFromChatAdapter<TResponse>
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): TResponse {
     const inner =
       this.inner.withRewrittenToolCalls?.(toolCalls) ??
@@ -117,6 +122,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   private outputCompleted = false;
   private sequenceNumber = 0;
   private readonly itemId = `msg_${randomUUID()}`;
+  private getTextSuffix: ((completedText: string) => string) | null = null;
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so the terminal response.completed (and the persisted response)
   // carry only the refusal message — not the original text or the blocked tool
@@ -134,6 +140,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   get state() {
     return this.inner.state;
+  }
+
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
   }
 
   processChunk(chunk: TChunk): ChunkProcessingResult {
@@ -166,7 +176,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       });
     }
 
-    if (result.isFinal) {
+    if (result.isFinal && !this.getTextSuffix) {
       sseData += this.completeOutput();
     }
 
@@ -276,11 +286,24 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         },
       }),
     );
+    this.outputCompleted = true;
     return frames;
   }
 
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    if (!this.getTextSuffix || this.outputCompleted) {
+      return "data: [DONE]\n\n";
+    }
+    const suffix =
+      this.replacedText === null &&
+      this.state.toolCalls.length === 0 &&
+      this.state.stopReason === "stop" &&
+      this.state.text
+        ? this.getTextSuffix(this.state.text)
+        : "";
+    const text = `${this.state.text}${suffix}`;
+    const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
+    return `${suffixDelta}${this.completeOutput(text)}data: [DONE]\n\n`;
   }
 
   toProviderResponse(): TResponse {
@@ -388,7 +411,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         // fine for the non-streaming body but not here: a terminal frame
         // without numeric usage is silently dropped by the Responses parser.
         response: {
-          ...this.buildResponsesResponse(),
+          ...this.buildResponsesResponse(undefined, text),
           usage: toResponsesUsage(this.state.usage),
         },
       }),
@@ -397,12 +420,14 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   private buildResponsesResponse(
     toolCallsOverride?: StreamAccumulatorState["toolCalls"],
+    messageTextOverride?: string,
   ) {
     const output = [];
 
     // On a refusal the blocked tool calls are dropped and the refusal message
     // is the only output — never the original text the model streamed.
-    const messageText = this.replacedText ?? this.state.text;
+    const messageText =
+      messageTextOverride ?? this.replacedText ?? this.state.text;
     if (messageText) {
       output.push({
         id: this.itemId,
@@ -423,7 +448,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       output.push(
         ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
           id: toolCall.id,
-          call_id: toolCall.id,
+          call_id: toolCall.wireId ?? toolCall.id,
           type: "function_call",
           name: toolCall.name,
           arguments: toolCall.arguments,

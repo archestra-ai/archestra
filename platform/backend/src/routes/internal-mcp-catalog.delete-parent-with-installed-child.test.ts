@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -31,6 +32,9 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(McpServerRuntimeManager, "removeMcpServer").mockResolvedValue(
+      undefined,
+    );
 
     user = await makeUser();
     const organization = await makeOrganization();
@@ -94,6 +98,9 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
     });
 
     expect(deleteResponse.statusCode).toBe(200);
+    expect(McpServerRuntimeManager.removeMcpServer).toHaveBeenCalledWith(
+      installedServer.id,
+    );
     expect(lifecycleBroadcast).toHaveBeenCalledWith({
       organizationId,
       catalogIds: [parent.id, child.id],

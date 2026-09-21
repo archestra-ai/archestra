@@ -78,8 +78,8 @@ export const CURSOR_CLIENT_ID = "cursor";
 
 /**
  * `external_agent_id` value for OpenCode. The connection setup writes this value
- * to proxy provider request headers. Native OpenCode signals provide a fallback
- * when users configure the proxy manually.
+ * to proxy provider request headers. The OpenCode User-Agent or `originator`
+ * provides a fallback when users configure the proxy manually.
  */
 export const OPENCODE_CLIENT_ID = "opencode";
 
@@ -133,6 +133,20 @@ export function isCursorUserAgent(
 ): boolean {
   return (
     !!userAgent && userAgent.split("/", 1)[0]?.trim().toLowerCase() === "cursor"
+  );
+}
+
+/**
+ * Whether a request's User-Agent or `originator` denotes OpenCode. OpenCode
+ * leads its User-Agent with `opencode/<version>` on every provider, and adds
+ * `originator: opencode` on the OpenAI Responses wire.
+ */
+export function isOpenCodeUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return (
+    !!userAgent &&
+    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "opencode"
   );
 }
 
@@ -254,7 +268,10 @@ export function isCursorClientAgentId(
   return CURSOR_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
 }
 
-/** `external_agent_id` values for OpenCode clients. */
+/**
+ * `external_agent_id` values for OpenCode clients. Only the one auto-discovered
+ * id exists today, but this stays a set to mirror the other client families.
+ */
 export const OPENCODE_CLIENT_AGENT_IDS = [OPENCODE_CLIENT_ID] as const;
 
 const OPENCODE_CLIENT_AGENT_ID_SET = new Set<string>(OPENCODE_CLIENT_AGENT_IDS);

@@ -140,6 +140,12 @@ export interface AccumulatedToolCall {
   arguments: string;
   /** The namespace the model called the tool in, on a wire that has them. */
   namespace?: string;
+  /**
+   * The id the client is given for this call when it is not the provider's:
+   * OpenAPPA's trajectory stamp. Matching against the provider's response
+   * stays on `id`; only what is written to the client changes.
+   */
+  wireId?: string;
 }
 
 /**
@@ -499,6 +505,35 @@ export function buildInteractionRecord(params: {
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
   };
+}
+
+/**
+ * Restores original provider tool-call IDs for interaction logging.
+ * Replaces proxy trajectory stamps (`wireId`) with provider call IDs, ensuring
+ * logged requests and responses match across turns.
+ */
+export function withProviderToolCallIds<T>(
+  response: T,
+  toolCalls: readonly { id: string; wireId?: string }[],
+): T {
+  const providerIds = new Map(
+    toolCalls.flatMap((call) =>
+      call.wireId && call.wireId !== call.id
+        ? [[call.wireId, call.id] as const]
+        : [],
+    ),
+  );
+  if (providerIds.size === 0) return response;
+  const restore = (value: unknown): unknown => {
+    if (typeof value === "string") return providerIds.get(value) ?? value;
+    if (Array.isArray(value)) return value.map(restore);
+    if (typeof value === "object" && value !== null)
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, restore(entry)]),
+      );
+    return value;
+  };
+  return restore(response) as T;
 }
 
 /**

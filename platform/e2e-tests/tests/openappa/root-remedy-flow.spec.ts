@@ -235,9 +235,16 @@ test("denies a tool call, rules on it, and releases it after the model executes 
       request,
       method: "post",
       urlSuffix: "/api/chat/conversations",
-      data: { agentId },
+      // An explicit selection keeps saved member preferences from routing this
+      // fixture to a real provider instead of WireMock on retained stacks.
+      data: { agentId, modelId: runtimeModel.dbId, chatApiKeyId: apiKeyId },
     });
-    conversationId = ((await conversationResponse.json()) as { id: string }).id;
+    const conversation = (await conversationResponse.json()) as { id: string };
+    expect(conversation).toMatchObject({
+      modelId: runtimeModel.dbId,
+      chatApiKeyId: apiKeyId,
+    });
+    conversationId = conversation.id;
 
     const events = await runChatTurn(request, {
       conversationId,
@@ -474,9 +481,14 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
       request,
       method: "post",
       urlSuffix: "/api/chat/conversations",
-      data: { agentId },
+      data: { agentId, modelId: runtimeModel.dbId, chatApiKeyId: apiKeyId },
     });
-    conversationId = ((await conversationResponse.json()) as { id: string }).id;
+    const conversation = (await conversationResponse.json()) as { id: string };
+    expect(conversation).toMatchObject({
+      modelId: runtimeModel.dbId,
+      chatApiKeyId: apiKeyId,
+    });
+    conversationId = conversation.id;
 
     const events = await runChatTurn(request, {
       conversationId,

@@ -561,10 +561,16 @@ class AnthropicResponseAdapter
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): AnthropicResponse {
     // Positional: one rewritten entry per call this response carries, in
-    // order, so ids the client correlates by are untouched.
+    // order. The id the client correlates by is the provider's unless the
+    // call carries the one it is given instead.
     let next = 0;
     const content = this.response.content.map((block) => {
       if (block.type !== "tool_use") return block;
@@ -572,6 +578,7 @@ class AnthropicResponseAdapter
       if (!rewritten) return block;
       return {
         ...block,
+        id: rewritten.wireId ?? block.id,
         name: rewritten.name,
         input: parseArgs(rewritten.arguments),
       };
@@ -649,6 +656,12 @@ class AnthropicStreamAdapter
         data: string;
       }
   >();
+  private textBlockIndices = new Set<number>();
+  private textByBlock = new Map<number, string>();
+  private pendingTextBlockStop = "";
+  private pendingTextBlockIndex: number | null = null;
+  private pendingTextBlockText = "";
+  private getTextSuffix: ((completedText: string) => string) | null = null;
 
   private startReasoningBlock(
     index: number,
@@ -726,6 +739,10 @@ class AnthropicStreamAdapter
     };
   }
 
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
+  }
+
   processChunk(chunk: AnthropicStreamChunk): ChunkProcessingResult {
     // Track first chunk time
     if (this.state.timing.firstChunkTime === null) {
@@ -768,6 +785,9 @@ class AnthropicStreamAdapter
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
         } else {
+          if (chunk.content_block.type === "text") {
+            this.textBlockIndices.add(chunk.index);
+          }
           this.startReasoningBlock(chunk.index, chunk.content_block);
           // Everything except client tool calls (text, thinking,
           // redacted_thinking, server_tool_use, ...) streams through
@@ -797,6 +817,10 @@ class AnthropicStreamAdapter
           // server-side tool and is not subject to invocation policies.
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
+            this.textByBlock.set(
+              chunk.index,
+              `${this.textByBlock.get(chunk.index) ?? ""}${chunk.delta.text}`,
+            );
           }
           this.appendReasoningDelta(chunk.index, chunk.delta);
           sseData = `event: content_block_delta\ndata: ${JSON.stringify(
@@ -807,10 +831,21 @@ class AnthropicStreamAdapter
 
       case "content_block_stop":
         if (!this.toolUseBlockIndices.has(chunk.index)) {
-          sseData = `event: content_block_stop\ndata: ${JSON.stringify(
+          const event = `event: content_block_stop\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
+          if (this.getTextSuffix && this.textBlockIndices.has(chunk.index)) {
+            this.pendingTextBlockStop = event;
+            this.pendingTextBlockIndex = this.outIndexFor(chunk.index);
+            this.pendingTextBlockText = this.textByBlock.get(chunk.index) ?? "";
+          } else {
+            sseData = event;
+          }
         } else {
+          // A tool called with no input streams no `partial_json`; its input
+          // is `{}`, not the empty string policy evaluation would reject.
+          const call = this.state.toolCalls[this.currentToolCallIndex];
+          if (call?.arguments === "") call.arguments = "{}";
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
@@ -830,9 +865,14 @@ class AnthropicStreamAdapter
         break;
 
       case "message_stop":
+        sseData = this.formatPendingTextBlockStop();
         isFinal = true;
         // Don't send message_stop yet - we'll send it after policy evaluation
         break;
+    }
+
+    if (!isFinal && sseData) {
+      sseData = this.flushPendingTextBlockStop(sseData);
     }
 
     return { sseData, isToolCallChunk, isFinal };
@@ -907,7 +947,7 @@ class AnthropicStreamAdapter
           index,
           content_block: {
             type: "tool_use",
-            id: toolCall.id,
+            id: toolCall.wireId ?? toolCall.id,
             name: toolCall.name,
             input: {},
           },
@@ -1111,6 +1151,39 @@ class AnthropicStreamAdapter
     };
   }
 
+  private formatPendingTextBlockStop(): string | null {
+    if (!this.pendingTextBlockStop) return null;
+    const suffix =
+      this.getTextSuffix &&
+      !this.responseReplacedWithText &&
+      this.state.toolCalls.length === 0 &&
+      isCompleteTextStopReason(this.state.stopReason) &&
+      this.pendingTextBlockText
+        ? this.getTextSuffix(this.pendingTextBlockText)
+        : "";
+    const textEvent = suffix
+      ? `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index: this.pendingTextBlockIndex,
+          delta: { type: "text_delta", text: suffix },
+        })}\n\n`
+      : "";
+    const stop = this.pendingTextBlockStop;
+    this.pendingTextBlockStop = "";
+    this.pendingTextBlockIndex = null;
+    this.pendingTextBlockText = "";
+    return `${textEvent}${stop}`;
+  }
+
+  private flushPendingTextBlockStop(sseData: string): string {
+    if (!this.pendingTextBlockStop) return sseData;
+    const pending = this.pendingTextBlockStop;
+    this.pendingTextBlockStop = "";
+    this.pendingTextBlockIndex = null;
+    this.pendingTextBlockText = "";
+    return `${pending}${sseData}`;
+  }
+
   /** Rewrite a block event's index to the one the client knows it by. */
   private withOutIndex<T extends { index: number }>(event: T): T {
     return { ...event, index: this.outIndexFor(event.index) };
@@ -1123,6 +1196,18 @@ class AnthropicStreamAdapter
     this.outIndexByUpstream.set(upstreamIndex, assigned);
     return assigned;
   }
+}
+
+function isCompleteTextStopReason(stopReason: string | null): boolean {
+  // content_block_stop arrives before message_delta, so a missing stop reason
+  // is not evidence of an incomplete turn. Suppress only known non-text ends.
+  return ![
+    "max_tokens",
+    "model_context_window_exceeded",
+    "pause_turn",
+    "refusal",
+    "tool_use",
+  ].includes(stopReason ?? "");
 }
 
 // =============================================================================

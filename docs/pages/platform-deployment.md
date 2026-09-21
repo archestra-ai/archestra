@@ -1005,6 +1005,8 @@ A warm pool keeps Kubernetes containers running before anyone starts a task. A n
 
 Agents in the same Environment share a pool when their container settings match. These include the image, CPU, memory, storage, node placement, and network policy. For example, two Agents using the same Claude Code setup share one pool. They do not each need a spare container.
 
+Images tagged `:latest` start in a new container. This ensures new workspaces pull the current image after a stable release updates the tag.
+
 Warm pools are disabled by default. After installing the controller extensions above, add this to your Helm values:
 
 ```yaml

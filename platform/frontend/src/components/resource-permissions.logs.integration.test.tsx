@@ -54,7 +54,6 @@ it.each([
       },
     ],
     inheritedGrants: [],
-    legacyAccess: [],
     effectiveActions: ["read", "manage-permissions"],
   };
   server.use(

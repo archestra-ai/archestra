@@ -200,6 +200,27 @@ describe("upgrade access preservation", () => {
       restricted,
     };
 
+    const heldDeployToRestricted = async (userId: string) => {
+      for (const resource of [
+        "agent",
+        "skill",
+        "app",
+        "mcpGateway",
+        "mcpRegistry",
+        "knowledgeSource",
+      ] as const)
+        if (
+          await userHasPermission(
+            userId,
+            org.id,
+            resource,
+            "deploy-to-restricted",
+          )
+        )
+          return true;
+      return false;
+    };
+
     const snapshot = async () => {
       const rows: Record<string, boolean> = {};
       for (const [who, principal] of Object.entries(principals)) {
@@ -299,23 +320,27 @@ describe("upgrade access preservation", () => {
                 );
           }
         }
-        // Deploying into a restricted environment. The same call answers on
-        // both passes — from the retired role action before the conversion and
-        // from the environment grant after it — so a mismatch here is somebody
+        // Deploying into a restricted environment. Before the conversion the
+        // retired `deploy-to-restricted` role action IS the answer — holding
+        // it on any one of the six kinds of deployable object was enough, and
+        // an open environment was open to all. Afterwards the environment
+        // grant is, asked through the real gate. A mismatch here is somebody
         // who gained or lost the ability to deploy.
-        for (const [what, environmentId] of [
-          ["open", openEnvironment.id],
-          ["restricted", restrictedEnvironment.id],
-          ["default", null],
+        for (const [what, environmentId, restricted] of [
+          ["open", openEnvironment.id, false],
+          ["restricted", restrictedEnvironment.id, true],
+          ["default", null, true],
         ] as const) {
-          rows[`deploy:${what}:${who}`] = await assertCanAssignEnvironment({
-            environmentId,
-            organizationId: org.id,
-            userId: principal.id,
-          }).then(
-            () => true,
-            () => false,
-          );
+          rows[`deploy:${what}:${who}`] = converted
+            ? await assertCanAssignEnvironment({
+                environmentId,
+                organizationId: org.id,
+                userId: principal.id,
+              }).then(
+                () => true,
+                () => false,
+              )
+            : !restricted || (await heldDeployToRestricted(principal.id));
         }
         // List filtering has its own query, so a matching single check is not
         // enough: a resource missing from the list is just as inaccessible.

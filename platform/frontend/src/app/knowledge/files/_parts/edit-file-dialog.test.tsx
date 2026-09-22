@@ -58,7 +58,6 @@ beforeEach(() => {
           },
         ],
         inheritedGrants: [],
-        legacyAccess: [],
         effectiveActions: ["read", "update", "manage-permissions"],
       }),
     ),

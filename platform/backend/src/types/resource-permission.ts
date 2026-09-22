@@ -40,9 +40,6 @@ export const ResourcePermissionsResponseSchema = z.object({
       sourceScope: ResourcePermissionScopeSchema.optional(),
     }),
   ),
-  legacyAccess: z.array(
-    ResourcePermissionGrantSchema.extend({ name: z.string() }),
-  ),
   effectiveActions: z.array(ResourcePermissionActionSchema),
 });
 

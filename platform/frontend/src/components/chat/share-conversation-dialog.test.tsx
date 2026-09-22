@@ -40,7 +40,6 @@ it.each([
     revision: 1,
     grants: [ownerGrant],
     inheritedGrants: [],
-    legacyAccess: [],
     effectiveActions: ["read", "manage-permissions"],
   };
   let saved: unknown;

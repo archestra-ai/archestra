@@ -4,58 +4,6 @@ import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 export default class ResourcePermissionSubjectModel {
-  /** Snapshot the legacy inputs in four queries, independent of actor count. */
-  static async getLegacyAccessInputs(organizationId: string) {
-    const [members, accounts, teams, memberships] = await Promise.all([
-      db
-        .select({
-          id: schema.usersTable.id,
-          name: schema.usersTable.name,
-          role: schema.membersTable.role,
-        })
-        .from(schema.membersTable)
-        .innerJoin(
-          schema.usersTable,
-          eq(schema.usersTable.id, schema.membersTable.userId),
-        )
-        .where(eq(schema.membersTable.organizationId, organizationId)),
-      db
-        .select({
-          id: schema.serviceAccountsTable.id,
-          name: schema.serviceAccountsTable.name,
-          role: schema.serviceAccountsTable.role,
-        })
-        .from(schema.serviceAccountsTable)
-        .where(
-          and(
-            eq(schema.serviceAccountsTable.organizationId, organizationId),
-            eq(schema.serviceAccountsTable.disabled, false),
-          ),
-        ),
-      db
-        .select({
-          id: schema.teamsTable.id,
-          parentId: schema.teamsTable.parentId,
-          roles: schema.teamsTable.roles,
-        })
-        .from(schema.teamsTable)
-        .where(eq(schema.teamsTable.organizationId, organizationId)),
-      db
-        .select({
-          userId: schema.teamMembersTable.userId,
-          teamId: schema.teamMembersTable.teamId,
-          role: schema.teamMembersTable.role,
-        })
-        .from(schema.teamMembersTable)
-        .innerJoin(
-          schema.teamsTable,
-          eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
-        )
-        .where(eq(schema.teamsTable.organizationId, organizationId)),
-    ]);
-    return { members, accounts, teams, memberships };
-  }
-
   static async search(params: { organizationId: string; query: string }) {
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
     const [users, teams, accounts, roles] = await Promise.all([

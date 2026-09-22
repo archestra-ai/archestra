@@ -46,10 +46,11 @@ class ServiceAccountModel {
      * here would report a refused id as "not found" instead.
      *
      * `legacyRead` is the caller's `serviceAccount:read` role action, and it
-     * decides this query only while no policy has been written yet. It must
-     * agree with the `serviceAccount` branch of
-     * `resolveLegacyResourcePermissions`, which is what the single-object gate
-     * falls back to in the same state; change the two together.
+     * decides this query only while no policy has been written yet. The
+     * single-object gate no longer has that fallback: it reads the stored
+     * grants alone, so in that state this list is the more permissive of the
+     * two. The startup conversion writes the policy before anything is
+     * served, and the legacy half below goes with the SQL read-path cleanup.
      */
     viewer?: { userId: string; legacyRead: boolean },
   ): Promise<ServiceAccountResponse[]> {
@@ -114,7 +115,9 @@ class ServiceAccountModel {
                   // check was still standing in front of it. This route has no
                   // such check any more, so the unconverted branch has to
                   // carry the role action itself or the list is open to
-                  // everyone for as long as the policies are missing.
+                  // everyone for as long as the policies are missing. Dropping
+                  // the legacy half must drop `legacyRead` with it, never the
+                  // whole `or` arm on its own terms.
                   return or(
                     and(
                       ResourcePermissionPolicyModel.legacySharingCondition(key),

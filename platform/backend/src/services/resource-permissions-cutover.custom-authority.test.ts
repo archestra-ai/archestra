@@ -32,20 +32,8 @@ test("catalog admin scope preserves a read-only custom role without manufacturin
     resource: "mcpRegistry" as const,
     scope: catalog.id,
   };
-  expect(
-    await ResourcePermissions.require({ ...access, action: "read" }).then(
-      () => true,
-      () => false,
-    ),
-  ).toBe(true);
-  for (const action of ["update", "delete", "manage-permissions"] as const) {
-    expect(
-      await ResourcePermissions.require({ ...access, action }).then(
-        () => true,
-        () => false,
-      ),
-    ).toBe(false);
-  }
+  // Before the upgrade this role read every catalog item and wrote none;
+  // the conversion has to land it in exactly that place.
   await runScopedResourcePermissionCutover();
   expect(
     await ResourcePermissions.require({ ...access, action: "read" }).then(
@@ -91,16 +79,15 @@ test("project admin scope preserves read-only custom authority", async ({
     resource: "project" as const,
     scope: project.id,
   };
-  for (const migrated of [false, true]) {
-    if (migrated) await runScopedResourcePermissionCutover();
+  // Before the upgrade this role read every project and wrote none.
+  await runScopedResourcePermissionCutover();
+  await expect(
+    ResourcePermissions.require({ ...access, action: "read" }),
+  ).resolves.toBeUndefined();
+  for (const action of ["update", "delete", "manage-permissions"] as const) {
     await expect(
-      ResourcePermissions.require({ ...access, action: "read" }),
-    ).resolves.toBeUndefined();
-    for (const action of ["update", "delete", "manage-permissions"] as const) {
-      await expect(
-        ResourcePermissions.require({ ...access, action }),
-      ).rejects.toThrow();
-    }
+      ResourcePermissions.require({ ...access, action }),
+    ).rejects.toThrow();
   }
 });
 
@@ -129,27 +116,22 @@ test("installation-only catalog administrators keep use, widened to the use pres
     resource: "mcpRegistry" as const,
     scope: catalog.id,
   };
-  for (const migrated of [false, true]) {
-    if (migrated) await runScopedResourcePermissionCutover();
+  // Before the upgrade this role could install (use) every catalog item and
+  // could not read or write one.
+  await runScopedResourcePermissionCutover();
+  await expect(
+    ResourcePermissions.require({ ...access, action: "use" }),
+  ).resolves.toBeUndefined();
+  // The converted `use` grant is widened to the `use` preset [read, use], so
+  // after the upgrade this role can also read the catalog it could only use
+  // before. That widening to the nearest preset is deliberate; the write
+  // actions stay refused.
+  await expect(
+    ResourcePermissions.require({ ...access, action: "read" }),
+  ).resolves.toBeUndefined();
+  for (const action of ["update", "delete", "manage-permissions"] as const) {
     await expect(
-      ResourcePermissions.require({ ...access, action: "use" }),
-    ).resolves.toBeUndefined();
-    // The converted `use` grant is widened to the `use` preset [read, use],
-    // so after the upgrade this role can also read the catalog it could only
-    // use before. That widening to the nearest preset is deliberate; the
-    // write actions stay refused.
-    if (migrated) {
-      await expect(
-        ResourcePermissions.require({ ...access, action: "read" }),
-      ).resolves.toBeUndefined();
-    }
-    const refused = migrated
-      ? (["update", "delete", "manage-permissions"] as const)
-      : (["read", "update", "delete", "manage-permissions"] as const);
-    for (const action of refused) {
-      await expect(
-        ResourcePermissions.require({ ...access, action }),
-      ).rejects.toThrow();
-    }
+      ResourcePermissions.require({ ...access, action }),
+    ).rejects.toThrow();
   }
 });

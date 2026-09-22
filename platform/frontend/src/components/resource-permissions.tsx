@@ -358,30 +358,19 @@ function PermissionsEditor({
     registerSave?.(saveIfDirty);
     return () => registerSave?.(null);
   }, [registerSave, saveIfDirty]);
-  // Direct grants are editable here; everything below them is explanation of
-  // access that exists anyway. One list, ordered by who can change what, reads
-  // as a single answer to "who has access" instead of three parallel boxes.
-  const indirect = [
-    ...(showInherited ? policy.inheritedGrants : []).map((grant) => ({
+  // Direct grants are editable here; the inherited grants below them explain
+  // access that exists anyway, in the same list, so it reads as one answer to
+  // "who has access".
+  const indirect = (showInherited ? policy.inheritedGrants : []).map(
+    (grant) => ({
       key: `inherited:${grant.sourceScope}:${subjectKey(grant.subject)}`,
       name: grant.name,
       type: grant.subject.type,
       actions: grant.actions,
-      source: "all" as const,
       via: `Every ${scopedResourceNouns[policy.resource]}`,
       explanation: `Applies to every ${scopedResourceNouns[policy.resource]}, including new ones.`,
-    })),
-    ...policy.legacyAccess.map((grant) => ({
-      key: `legacy:${subjectKey(grant.subject)}`,
-      name: grant.name,
-      type: grant.subject.type,
-      actions: grant.actions,
-      source: "legacy" as const,
-      via: "Existing access",
-      explanation:
-        "This access comes from existing roles and sharing settings. It cannot be changed in this list.",
-    })),
-  ];
+    }),
+  );
   const Container = embedded ? "div" : "form";
   const noun = scopedResourceNouns[policy.resource];
   const explanation =
@@ -628,7 +617,7 @@ function PermissionsEditor({
                     >
                       <p>
                         <span>{grant.explanation}</span>
-                        {grant.source !== "legacy" && canEditAll && (
+                        {canEditAll && (
                           <span>
                             {" Edit in "}
                             <Button

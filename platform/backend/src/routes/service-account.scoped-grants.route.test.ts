@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
 import db from "@/database";
@@ -364,13 +364,11 @@ describe("service account object grants", () => {
 /**
  * The window before the conversion has written any policy.
  *
- * `ResourcePermissions.allows` reads stored grants only. A gate built on it
- * answers "no" to everyone while the policies are absent — administrators
- * included — so the whole feature reads as "no service accounts exist". The
- * web process converts before it registers routes or listens, so a deployed
- * replica should never serve a request in this state; this describe block
- * exists because that is an argument about a startup sequence in a file this
- * code does not own, and the failure it guards against is silent and total.
+ * Stored grants are the only authority, so in this state every gate refuses —
+ * administrators included. The web process converts before it registers
+ * routes or listens, so a deployed replica never serves a request here. What
+ * must still hold is that the list's pre-policy branch does not open the
+ * accounts to a role without the action.
  */
 describe("service accounts before the conversion has run", () => {
   let app: FastifyInstanceWithZod;
@@ -404,31 +402,6 @@ describe("service accounts before the conversion has run", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app?.close();
-  });
-
-  test("an admin still reaches every account", async ({
-    makeMember,
-    makeServiceAccount,
-  }) => {
-    await boot(makeMember, ADMIN_ROLE_NAME);
-    const account = await makeServiceAccount(organizationId, { name: "ci" });
-
-    const read = await app.inject({
-      url: `/api/service-accounts/${account.id}`,
-    });
-    expect(read.statusCode, read.body).toBe(200);
-
-    const renamed = await app.inject({
-      method: "PATCH",
-      url: `/api/service-accounts/${account.id}`,
-      payload: { name: "renamed" },
-    });
-    expect(renamed.statusCode, renamed.body).toBe(200);
-
-    const listed = await app.inject({ url: "/api/service-accounts" });
-    expect(listed.json().map((row: { id: string }) => row.id)).toEqual([
-      account.id,
-    ]);
   });
 
   test("a role without the action still reaches nothing", async ({

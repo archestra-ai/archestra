@@ -495,11 +495,9 @@ async function resolveEnvironmentValidationRegex(params: {
 /**
  * Whether the caller may deploy into one environment, or into every one.
  *
- * Asks `getEffective` rather than `allows`, because only the former consults
- * the compatibility layer. A deployment that has not run the conversion yet
- * has no environment policy at all, and reading the stored grants alone would
- * answer "no" for everyone — locking every restricted environment until the
- * conversion runs.
+ * Deploying is `use` on the environment, and only a stored grant confers it.
+ * No role action stands in for it: `environment:read` is held by every custom
+ * role, and reading it as `use` would open every restricted environment.
  */
 async function canDeployToEnvironment(params: {
   organizationId: string;

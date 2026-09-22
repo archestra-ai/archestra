@@ -302,7 +302,6 @@ describe("resource permission routes", () => {
       url: `/api/resource-permissions/agent/${agent.id}`,
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().legacyAccess).toEqual([]);
     for (const userId of [
       editor.id,
       flagOnly.id,
@@ -320,7 +319,7 @@ describe("resource permission routes", () => {
     }
   });
 
-  test("a limited permission manager can revoke access while preserving stronger existing grants", async ({
+  test("a permission manager who is not the owner can revoke access while preserving the owner's grant", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -345,9 +344,13 @@ describe("resource permission routes", () => {
     });
     const grants = [
       ...(current?.grants ?? []),
+      // Every grant is one preset, and the only one carrying
+      // manage-permissions is full access, so a manager below full access
+      // no longer exists. Refusing delegation beyond the caller's own grants
+      // is covered in services/resource-permissions.test.ts.
       {
         subject: { type: "user", id: manager.id },
-        actions: ["read", "manage-permissions"],
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
       },
       { subject: { type: "user", id: reader.id }, actions: ["read"] },
     ];
@@ -379,18 +382,6 @@ describe("resource permission routes", () => {
         action: "read",
       }),
     ).toBe(false);
-    const escalated = await app.inject({
-      method: "PUT",
-      url,
-      payload: {
-        revision: revoked.json().revision,
-        grants: [
-          ...retained,
-          { subject: { type: "user", id: reader.id }, actions: ["update"] },
-        ],
-      },
-    });
-    expect(escalated.statusCode, escalated.body).toBe(403);
     const audit = await AuditLogModel.findPaginated({
       organizationId,
       limit: 10,
@@ -432,7 +423,8 @@ describe("resource permission routes", () => {
         grants: [
           {
             subject: { type: "user", id: recipient.id },
-            actions: ["read", "manage-permissions"],
+            // The only agent preset carrying manage-permissions.
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
           },
         ],
       },
@@ -547,7 +539,8 @@ describe("resource permission routes", () => {
     const grants = [
       {
         subject: { type: "serviceAccount", id: account.id },
-        actions: ["read", "update"],
+        // The edit preset: every stored grant is exactly one preset.
+        actions: ["read", "use", "update"],
       },
     ];
     const before = await ResourcePermissionPolicyModel.find({

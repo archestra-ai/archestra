@@ -23,7 +23,6 @@ import {
 } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
 import MemberModel from "@/models/member";
-import OrganizationRoleModel from "@/models/organization-role";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -33,7 +32,6 @@ import TeamModel from "@/models/team";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
-import { resolveLegacyResourcePermissions } from "./resource-permission-compatibility";
 
 export class ResourcePermissions {
   /** Assigning a role or team also delegates every scoped grant it carries. */
@@ -151,9 +149,8 @@ export class ResourcePermissions {
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return result;
     const subjectKeys = new Set(subjects.map(subjectKey));
-    const [permissions, teamIds, policies] = await Promise.all([
+    const [permissions, policies] = await Promise.all([
       getPermissionsForUserContext(params),
-      TeamModel.getUserTeamIds(params.userId),
       ResourcePermissionPolicyModel.findApplicableBatch({
         ...params,
         resource: "mcpRegistry",
@@ -176,27 +173,17 @@ export class ResourcePermissions {
         );
         continue;
       }
-      const context = {
+      const required = {
         ...params,
         resource: "mcpRegistry" as const,
         scope: target.id,
       };
-      const legacy = policies.some(
-        (policy) => policy.scope === target.id && policy.legacySharingMigrated,
-      )
-        ? []
-        : resolveLegacyResourcePermissions({
-            ...context,
-            permissions,
-            teamIds,
-            target: { ...target, users: [] },
-          });
       result.set(
         target.id,
         ResourcePermissionActionSchema.options.filter((action) =>
           hasScopedPermission({
-            grants: [...legacy, ...explicit],
-            required: { ...context, action },
+            grants: explicit,
+            required: { ...required, action },
           }),
         ),
       );
@@ -326,33 +313,9 @@ export class ResourcePermissions {
       target.authorId !== params.userId
     )
       return { target, grants: [] as ScopedPermission[] };
-    // Legacy role resolution must not reintroduce access for a disabled service
-    // account or a user whose organization membership has been removed.
-    if ((await ResourcePermissions.getSubjects(params)).length === 0)
-      return { target, grants: [] as ScopedPermission[] };
-    const policy = await ResourcePermissionPolicyModel.find(params);
-    const organizationPolicy = await ResourcePermissionPolicyModel.find({
-      ...params,
-      scope: "*",
-    });
-    if (
-      policy?.legacySharingMigrated ||
-      organizationPolicy?.legacySharingMigrated
-    ) {
-      return { target, grants: await ResourcePermissions.resolve(params) };
-    }
-    const [permissions, teamIds, explicit] = await Promise.all([
-      getPermissionsForUserContext(params),
-      TeamModel.getUserTeamIds(params.userId),
-      ResourcePermissions.resolve(params),
-    ]);
-    const legacy = resolveLegacyResourcePermissions({
-      ...params,
-      permissions,
-      teamIds,
-      target,
-    });
-    return { target, grants: [...legacy, ...explicit] };
+    // Stored grants are authoritative. `resolve` answers nothing for a
+    // disabled service account or a user whose membership has been removed.
+    return { target, grants: await ResourcePermissions.resolve(params) };
   }
 
   static async getPolicy(params: PermissionContext) {
@@ -395,15 +358,6 @@ export class ResourcePermissions {
         organizationId: params.organizationId,
         grants: inherited,
       }),
-      legacyAccess:
-        policy?.legacySharingMigrated ||
-        params.resource === "conversation" ||
-        params.resource === "agentRun"
-          ? []
-          : await ResourcePermissions.describeLegacyAccess({
-              ...params,
-              target: effective.target,
-            }),
       effectiveActions: effectiveActionsForPolicy({
         ...params,
         grants: effective.grants,
@@ -458,15 +412,6 @@ export class ResourcePermissions {
           scope: params.scope,
         }),
       }),
-      legacyAccess:
-        policy?.legacySharingMigrated ||
-        params.resource === "conversation" ||
-        params.resource === "agentRun"
-          ? []
-          : await ResourcePermissions.describeLegacyAccess({
-              ...params,
-              target: effective.target,
-            }),
       effectiveActions: effectiveActionsForPolicy({
         ...params,
         grants: updated.grants,
@@ -474,15 +419,10 @@ export class ResourcePermissions {
     };
   }
   /**
-   * Whether the stored grants allow this action. Reads policies ONLY.
-   *
-   * A deployment that has not run the conversion yet has no policy for the
-   * resource, and this answers "no" for everyone — including administrators.
-   * A gate written on `allows` therefore fails closed for the whole
-   * pre-cutover window, which is silent and looks like a permissions bug.
-   * `getEffective` is the one that also consults the compatibility layer, so
-   * prefer it for anything guarding a user-facing action, and keep `allows`
-   * for checks that are meaningful only once grants are authoritative.
+   * Whether the stored grants allow this action, without loading the object.
+   * `getEffective` answers the same question from the same grants, and also
+   * 404s a missing object and hides a locked app or chat from everyone but
+   * its author.
    */
   static async allows(
     params: PermissionContext & { action: ResourcePermissionAction },
@@ -637,85 +577,6 @@ export class ResourcePermissions {
       )
       .concat(recipients);
   }
-  private static async describeLegacyAccess(
-    params: PermissionContext & {
-      target: Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>;
-    },
-  ) {
-    const inputs = await ResourcePermissionSubjectModel.getLegacyAccessInputs(
-      params.organizationId,
-    );
-    const teamsById = new Map(inputs.teams.map((team) => [team.id, team]));
-    const membershipsByUser = new Map<string, typeof inputs.memberships>();
-    for (const membership of inputs.memberships) {
-      const existing = membershipsByUser.get(membership.userId) ?? [];
-      existing.push(membership);
-      membershipsByUser.set(membership.userId, existing);
-    }
-    const actors = [
-      ...inputs.members.map((member) => ({
-        ...member,
-        subject: { type: "user" as const, id: member.id },
-        userId: member.id,
-      })),
-      ...inputs.accounts.map((account) => ({
-        ...account,
-        subject: { type: "serviceAccount" as const, id: account.id },
-        userId: `${SERVICE_ACCOUNT_USER_ID_PREFIX}${account.id}`,
-      })),
-    ].map((actor) => {
-      const memberships = membershipsByUser.get(actor.userId) ?? [];
-      const teamIds = new Set<string>();
-      for (const membership of memberships) {
-        let id: string | null = membership.teamId;
-        while (id && !teamIds.has(id)) {
-          teamIds.add(id);
-          id = teamsById.get(id)?.parentId ?? null;
-        }
-      }
-      return {
-        ...actor,
-        teamIds: [...teamIds],
-        roles: [
-          ...new Set([
-            ...actor.role
-              .split(",")
-              .map((role) => role.trim())
-              .filter(Boolean),
-            ...[...teamIds].flatMap((id) => teamsById.get(id)?.roles ?? []),
-          ]),
-        ],
-      };
-    });
-    const permissions = await OrganizationRoleModel.getPermissionsBatch({
-      organizationId: params.organizationId,
-      identifiers: actors.flatMap((actor) => actor.roles),
-    });
-    return actors
-      .flatMap((actor) => {
-        const grants = resolveLegacyResourcePermissions({
-          ...params,
-          userId: actor.userId,
-          teamIds: actor.teamIds,
-          permissions: RoleCompositionModel.mergePermissions(
-            actor.roles.map((role) => permissions[role] ?? {}),
-          ),
-        });
-        return grants.length
-          ? [
-              {
-                subject: actor.subject,
-                name: actor.name,
-                actions: ResourcePermissionActionSchema.options.filter(
-                  (action) => grants.some((grant) => grant.action === action),
-                ),
-              },
-            ]
-          : [];
-      })
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }
-
   private static async describeGrants(params: {
     organizationId: string;
     grants: (ResourcePermissionGrant & {

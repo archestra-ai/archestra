@@ -410,6 +410,36 @@ describe("EnvironmentService", () => {
   });
 
   /**
+   * Every custom role holds `environment:read`. Deploying is `use`, and only
+   * a stored grant confers it, so reading environments must never be taken
+   * as licence to deploy into a restricted one.
+   */
+  test("a custom role holding only environment:read cannot use a restricted environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", restricted: true },
+    });
+    const role = await makeCustomRole(org.id, {
+      permission: { environment: ["read"] },
+    });
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: role.role });
+    await expect(
+      assertCanAssignEnvironment({
+        environmentId: env.id,
+        organizationId: org.id,
+        userId: member.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  /**
    * The axis the retired action could not express: authority over ONE
    * restricted environment, and not over its neighbour.
    */

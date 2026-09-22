@@ -111174,26 +111174,6 @@ export type GetResourcePermissionsResponses = {
             name: string;
             sourceScope?: '*' | string;
         }>;
-        legacyAccess: Array<{
-            subject: {
-                type: 'user';
-                id: string;
-            } | {
-                type: 'team';
-                id: string;
-            } | {
-                type: 'serviceAccount';
-                id: string;
-            } | {
-                type: 'role';
-                id: string;
-            } | {
-                type: 'organization';
-                id: '*';
-            };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
-            name: string;
-        }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
     };
 };
@@ -111345,26 +111325,6 @@ export type UpdateResourcePermissionsResponses = {
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
             name: string;
             sourceScope?: '*' | string;
-        }>;
-        legacyAccess: Array<{
-            subject: {
-                type: 'user';
-                id: string;
-            } | {
-                type: 'team';
-                id: string;
-            } | {
-                type: 'serviceAccount';
-                id: string;
-            } | {
-                type: 'role';
-                id: string;
-            } | {
-                type: 'organization';
-                id: '*';
-            };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
-            name: string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
     };

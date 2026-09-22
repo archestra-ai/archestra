@@ -38,7 +38,6 @@ beforeEach(() => {
         actions: ["read"],
       },
     ],
-    legacyAccess: [],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
   };
   server.use(

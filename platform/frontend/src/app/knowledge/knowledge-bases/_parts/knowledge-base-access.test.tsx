@@ -141,7 +141,6 @@ it("edits access through the knowledge base's own policy, not its sharing column
           },
         ],
         inheritedGrants: [],
-        legacyAccess: [],
         effectiveActions: [
           "read",
           "use",

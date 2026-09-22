@@ -80,11 +80,6 @@ export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 export const BatterySourceSchema = z.enum(["bundled", "upload"]);
 export type BatterySource = z.infer<typeof BatterySourceSchema>;
 
-export const BatteryInstallViewSchema = BatteryInstallSchema.extend({
-  status: BatteryInstallStatusSchema,
-});
-export type BatteryInstallView = z.infer<typeof BatteryInstallViewSchema>;
-
 /** What a catalog entry was matched on; a name alone is a weak signal. */
 export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
 export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;
@@ -93,7 +88,7 @@ export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;
 export const BatteryMatchSchema = z.object({
   battery: z.string(),
   evidence: BatteryMatchEvidenceSchema,
-  install: BatteryInstallViewSchema.nullable(),
+  install: BatteryInstallSchema.nullable(),
 });
 export type BatteryMatch = z.infer<typeof BatteryMatchSchema>;
 
@@ -107,7 +102,7 @@ export const BatterySummarySchema = z.object({
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
-  installs: z.array(BatteryInstallViewSchema),
+  installs: z.array(BatteryInstallSchema),
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 

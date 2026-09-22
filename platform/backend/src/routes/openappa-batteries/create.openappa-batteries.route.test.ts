@@ -457,6 +457,67 @@ describe("guardrails batteries", () => {
     });
   });
 
+  test("a second catalog installs an included battery under the entry the text has", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalogs = [];
+    for (const name of ["GitHub Prod", "GitHub Staging"]) {
+      const catalog = await makeInternalMcpCatalog({ organizationId, name });
+      await makeTool({
+        catalogId: catalog.id,
+        name: `${name.toLowerCase().replace(" ", "_")}__get_me`,
+        rawName: "get_me",
+      });
+      catalogs.push(catalog);
+    }
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/github",
+      payload: { files: PACKAGE_FILES },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    const packageHash = uploaded.json().contentHash;
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: {
+        batteryName: "github",
+        catalogId: catalogs[0].id,
+        packageHash,
+      },
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const root = await guardrailsPolicyService.get(organizationId);
+    // The bundled spelling would bind the second catalog under the upload.
+    const other = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalogs[1].id },
+    });
+    expect(other.statusCode, other.body).toBe(409);
+    expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
+      root.revision,
+    );
+    const same = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: {
+        batteryName: "github",
+        catalogId: catalogs[1].id,
+        packageHash,
+      },
+    });
+    expect(same.statusCode, same.body).toBe(200);
+    expect(same.json()).toMatchObject({
+      entry: `batteries/github@sha256-${packageHash}/appa.toml`,
+      servers: [
+        { target: "github_prod", catalogId: catalogs[0].id },
+        { target: "github_staging", catalogId: catalogs[1].id },
+      ],
+    });
+  });
+
   test("a tool namespace holding a double underscore is no alias target", async ({
     makeInternalMcpCatalog,
     makeTool,

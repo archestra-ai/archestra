@@ -170,7 +170,10 @@ async function planFor(params: {
     organizationId,
     content,
   });
-  const prefixes = await catalogToolPrefixes(organizationId);
+  const prefixes = await catalogToolPrefixes(organizationId, {
+    targets: [],
+    catalogIds: [...new Set(rows.map((row) => row.catalogId))],
+  });
   const includes: PolicyEditInput[] = [];
   const batteries: string[] = [];
   /** Namespace → its alias targets, the declared ones first, in order. */
@@ -182,10 +185,16 @@ async function planFor(params: {
 
   // `list` orders by `createdAt` then id, so the first enabled row of a battery
   // is the helper owner the bridge chose for it.
-  for (const [name, batteryRows] of groupByBattery(
-    rows.filter((row) => row.enabled),
-  )) {
-    const resolved = await resolveBattery({ organizationId, name });
+  const groups = [...groupByBattery(rows.filter((row) => row.enabled))];
+  const resolutions = await mapWithConcurrency(
+    groups,
+    DECLARE_CONCURRENCY,
+    ([name]) => resolveBattery({ organizationId, name }),
+  );
+  for (const [index, [name, batteryRows]] of groups.entries()) {
+    const settled = resolutions[index];
+    if (settled.status === "rejected") throw settled.reason;
+    const resolved = settled.value;
     if (!resolved) {
       for (const row of batteryRows)
         drop({ organizationId, row, reason: "unresolved", log });

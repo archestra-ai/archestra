@@ -30,7 +30,6 @@ import type {
   BatteryInstall,
   BatteryInstallRow,
   BatteryInstallStatus,
-  BatteryInstallView,
   BatteryMatch,
   BatteryPackageFile,
   BatterySummary,
@@ -73,7 +72,7 @@ class OpenAppaBatteriesService {
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
     const { installs } = await this.current(organizationId);
-    const installsByBattery = new Map<string, BatteryInstallView[]>();
+    const installsByBattery = new Map<string, BatteryInstall[]>();
     for (const install of installs) {
       const views = installsByBattery.get(install.batteryName) ?? [];
       views.push(install);
@@ -236,19 +235,30 @@ class OpenAppaBatteriesService {
         ? await OrganizationModel.findAllIds()
         : [params.organizationId];
     const renames = prefixRenames(params.renamedTools);
-    if (renames.size > 0)
-      for (const organizationId of organizationIds)
-        await this.reconcileAliases({
-          organizationId,
-          catalogId: params.catalogId,
-          userId: params.userId,
-          renames,
-        }).catch((error) => {
+    if (renames.size > 0) {
+      const results = await mapWithConcurrency(
+        organizationIds,
+        RECOMPILE_CONCURRENCY,
+        (organizationId) =>
+          this.reconcileAliases({
+            organizationId,
+            catalogId: params.catalogId,
+            userId: params.userId,
+            renames,
+          }),
+      );
+      results.forEach((result, index) => {
+        if (result.status === "rejected")
           logger.warn(
-            { organizationId, catalogId: params.catalogId, error },
+            {
+              organizationId: organizationIds[index],
+              catalogId: params.catalogId,
+              error: result.reason,
+            },
             "OpenAPPA alias reconciliation after a catalog rename failed",
           );
-        });
+      });
+    }
     await this.recompileOrganizations(organizationIds);
   }
 
@@ -284,6 +294,18 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
+        // A battery is included once. The editor would keep the entry the text
+        // already has and quietly bind this catalog under bytes the request did
+        // not name, so the request has to name the included entry.
+        const included = resolution.entries.find(
+          (candidate) =>
+            candidate.name === install.batteryName && candidate.entry !== entry,
+        );
+        if (included)
+          throw new ApiError(
+            409,
+            `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
+          );
         const prefixes = await catalogToolPrefixes(organizationId, {
           targets: [],
           catalogIds: [catalog.id],

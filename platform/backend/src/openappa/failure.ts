@@ -62,8 +62,6 @@ function classify(error: unknown): { statusCode: 500 | 503; detail: string } {
       statusCode: 500,
       detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the OpenAPPA page.`,
     };
-  if (message === "Guardrails v2 is disabled")
-    return { statusCode: 503, detail: "Guardrails v2 is not enabled." };
   if (message.startsWith("OpenAPPA had no free PostgreSQL connection"))
     return {
       statusCode: 503,

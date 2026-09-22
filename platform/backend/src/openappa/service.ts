@@ -290,11 +290,15 @@ async function withRuntime(
   }
 }
 
-/** The organization's effective policy content, or the refusal every dispatch shares. */
+/**
+ * The organization's effective policy content, or the refusal every dispatch shares.
+ *
+ * The deployment switch is not read here. Each entry point reads it once at its
+ * request boundary, so a turn that began governed finishes under its policy even
+ * when the switch turns off mid-request.
+ */
 async function effectivePolicy(organizationId: string): Promise<string> {
   try {
-    if (!(await isGuardrailsV2Active()))
-      throw new Error("Guardrails v2 is disabled");
     return (await openappaBatteriesService.getEffectivePolicy(organizationId))
       .content;
   } catch (error) {

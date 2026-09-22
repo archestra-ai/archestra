@@ -611,31 +611,16 @@ async function updateVirtualApiKey(params: {
       providerApiKeys: [],
     });
   } else {
-    if (
-      body.scope !== accessContext.scope ||
-      [...body.teams].sort().join() !== [...accessContext.teamIds].sort().join()
-    ) {
-      await ResourcePermissions.rejectLegacySharing({
-        organizationId,
-        resource: "llmVirtualKey",
-        scope: id,
-      });
-    }
-    await validateVirtualKeyScope({
-      scope: body.scope,
-      teamIds: body.teams,
-      userId: user.id,
-      organizationId,
-      userTeamIds,
-      isAdmin: isVirtualKeyAdmin,
-    });
+    // An edit changes the key itself, never who can reach it. Access lives in
+    // the key's permission policy, which the permissions editor writes on its
+    // own. The stored sharing columns are carried through untouched.
     await validateProviderApiKeys({
       retainedProviderApiKeyIds: (
         await VirtualApiKeyModel.getProviderApiKeys(id)
       ).map((key) => key.providerApiKeyId),
       mappings: body.providerApiKeys,
       organizationId,
-      scope: body.scope,
+      scope: accessContext.scope,
       userId: user.id,
     });
     await CredentialResourcePermissions.validateVirtual({
@@ -654,11 +639,11 @@ async function updateVirtualApiKey(params: {
       id,
       name: body.name,
       expiresAt: body.expiresAt ?? null,
-      scope: body.scope,
+      scope: accessContext.scope,
       // Preserve the key's owner; an edit must not transfer it to the editor
       // (e.g. an admin editing a key minted on behalf of another user).
       authorId: accessContext.authorId,
-      teamIds: body.teams,
+      teamIds: accessContext.teamIds,
       providerApiKeys: body.providerApiKeys,
     });
   }

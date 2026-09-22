@@ -331,7 +331,6 @@ export function EditModelDialog({
   const navItems = useMemo(
     () => [
       { id: "availability" as const, label: "Availability" },
-      { id: "permissions" as const, label: "Permissions" },
       { id: "pricing" as const, label: "Pricing" },
       { id: "limits" as const, label: "Limits" },
       { id: "modalities" as const, label: "Modalities" },
@@ -339,6 +338,9 @@ export function EditModelDialog({
       ...(showsParameters
         ? [{ id: "parameters" as const, label: "Parameters" }]
         : []),
+      // Access is about who reaches the model, not about the model itself, so
+      // it sits after every page that configures it.
+      { id: "permissions" as const, label: "Permissions" },
     ],
     [showsParameters],
   );
@@ -454,7 +456,7 @@ export function EditModelDialog({
       </DialogSection>
 
       <DialogSection id="permissions" activeSection={activeSection}>
-        <ResourceAccessSection resource="llmModel" id={model.id} />
+        <ResourceAccessSection resource="llmModel" id={model.id} standalone />
       </DialogSection>
       <DialogSection id="pricing" activeSection={activeSection}>
         {/* Pricing */}

@@ -67,11 +67,15 @@ import {
 export function PermissionsPanel({
   children,
   embedded,
+  standalone,
 }: {
   children: ReactNode;
   embedded: boolean;
+  /** The section fills its container, so it needs no rule to separate it. */
+  standalone?: boolean;
 }) {
   if (!embedded) return <>{children}</>;
+  if (standalone) return <section className="space-y-3">{children}</section>;
   return <section className="space-y-3 border-t pt-4">{children}</section>;
 }
 
@@ -84,6 +88,7 @@ export function ResourcePermissions({
   description,
   showInherited = true,
   registerSave,
+  standalone = false,
 }: {
   resource: ScopedResource;
   scope: string;
@@ -98,6 +103,8 @@ export function ResourcePermissions({
    * becomes the only place the edits are committed.
    */
   registerSave?: (save: (() => Promise<void>) | null) => void;
+  /** The section is a pane of its own, so it draws no separating rule. */
+  standalone?: boolean;
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -139,6 +146,7 @@ export function ResourcePermissions({
       description={description}
       showInherited={showInherited}
       registerSave={registerSave}
+      standalone={standalone}
     />
   );
 }
@@ -249,6 +257,7 @@ function PermissionsEditor({
   description,
   showInherited,
   registerSave,
+  standalone = false,
 }: {
   policy: Policy;
   refreshFailed: boolean;
@@ -259,6 +268,7 @@ function PermissionsEditor({
   description?: ReactNode;
   showInherited: boolean;
   registerSave?: (save: (() => Promise<void>) | null) => void;
+  standalone?: boolean;
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -292,6 +302,20 @@ function PermissionsEditor({
     dialog?.setAccessOpen(open);
   };
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
+  // "Edit in permissions for all X" writes the organization-wide policy, so
+  // the viewer's authority there decides whether the way in is offered. The
+  // query is the same one that dialog uses, so it is already cached.
+  const organizationPolicy = useResourcePermissions(
+    policy.resource,
+    "*",
+    policy.scope !== "*",
+  );
+  const canEditAll =
+    policy.scope === "*"
+      ? policy.effectiveActions.includes("manage-permissions")
+      : (organizationPolicy.data?.effectiveActions.includes(
+          "manage-permissions",
+        ) ?? false);
   const canManage = policy.effectiveActions.includes("manage-permissions");
   const presets = presetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
@@ -423,7 +447,7 @@ function PermissionsEditor({
         onSubmit={embedded ? undefined : submit}
         className={embedded ? undefined : "space-y-3"}
       >
-       <PermissionsPanel embedded={embedded && !dialog}>
+       <PermissionsPanel embedded={embedded && !dialog} standalone={standalone}>
         {/* In a dialog the action takes the close button's corner, so it
             costs no vertical space above the table. */}
         {title === null &&
@@ -591,7 +615,7 @@ function PermissionsEditor({
                   >
                     <p>
                       <span>{grant.explanation}</span>
-                      {grant.source !== "legacy" && (
+                      {grant.source !== "legacy" && canEditAll && (
                         <span>
                           {" Edit in "}
                           <Button
@@ -611,7 +635,7 @@ function PermissionsEditor({
                 </Popover>
               </div>
               <p
-                className="w-36 shrink-0 truncate border border-transparent px-3 text-sm text-foreground"
+                className="w-36 shrink-0 truncate border border-transparent px-3 text-sm"
                 title={actionDetail(grant.actions, policy.resource)}
               >
                 {actionSummary(grant.actions, policy.resource)}
@@ -810,7 +834,7 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   "manage-permissions": "Manage permissions",
 };
 
-const resourcePluralNames: Record<ScopedResource, string> = {
+export const resourcePluralNames: Record<ScopedResource, string> = {
   conversation: "chat sessions",
   agentRun: "runtime sessions",
   agent: "agents",

@@ -6,7 +6,7 @@ import {
   resourcePermissionPresets,
   type ScopedResource,
 } from "@archestra/shared";
-import { Plus, Trash2, UserRound } from "lucide-react";
+import { Info, Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
 import {
@@ -14,12 +14,19 @@ import {
   PermissionsPanel,
   presetDescription,
   presetFor,
+  ResourcePermissionsDialog,
+  resourcePluralNames,
   scopedResourceNouns,
   SubjectIcon,
   subjectLabels,
 } from "@/components/resource-permissions";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,11 +52,17 @@ export function InitialResourcePermissions({
   onChange: (grants: InitialPermissionGrant[]) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
   // Organization-wide grants already reach this object the moment it exists.
   // The edit form shows them, so the create form has to as well, or the
   // author believes only the owner can see what they are about to make.
   const organizationPolicy = useResourcePermissions(resource, "*");
   const inherited = organizationPolicy.data?.grants ?? [];
+  // Only offer the way in when the viewer could actually save there. The
+  // organization-wide policy reports what this viewer may do with it.
+  const canEditAll =
+    organizationPolicy.data?.effectiveActions.includes("manage-permissions") ??
+    false;
   return (
     <PermissionsPanel embedded>
       <div className="flex items-start justify-between gap-3">
@@ -171,9 +184,47 @@ export function InitialResourcePermissions({
                 <span className="text-xs">
                   {subjectLabels[grant.subject.type]}
                 </span>
-                <span className="text-xs">
-                  Every {scopedResourceNouns[resource]}
-                </span>
+                {/* The source of the access carries its own affordance, so it
+                    does not read as a continuation of the subject label. */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                      aria-label={`Why ${grant.name} has access: every ${scopedResourceNouns[resource]}`}
+                    >
+                      <span>Every {scopedResourceNouns[resource]}</span>
+                      <Info className="size-3" aria-hidden="true" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
+                    aria-label={`Access source for ${grant.name}`}
+                  >
+                    <p>
+                      <span>
+                        Applies to every {scopedResourceNouns[resource]},
+                        including this one once it is created.
+                      </span>
+                      {canEditAll && (
+                        <>
+                          {" Edit in "}
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0 text-xs underline underline-offset-2"
+                            onClick={() => setAllPermissionsOpen(true)}
+                          >
+                            permissions for all {resourcePluralNames[resource]}
+                          </Button>
+                          .
+                        </>
+                      )}
+                    </p>
+                  </PopoverContent>
+                </Popover>
               </div>
               <span className="w-36 shrink-0 px-3 text-sm text-muted-foreground">
                 {actionSummary(grant.actions, resource)}
@@ -182,6 +233,13 @@ export function InitialResourcePermissions({
             </div>
           ))}
         </div>
+      )}
+      {allPermissionsOpen && (
+        <ResourcePermissionsDialog
+          resource={resource}
+          open={allPermissionsOpen}
+          onOpenChange={setAllPermissionsOpen}
+        />
       )}
       <AddResourceAccessDialog
         open={addOpen}

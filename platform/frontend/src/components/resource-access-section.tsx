@@ -27,6 +27,7 @@ export function ResourceAccessSection({
   onGrantsChange,
   onDirtyChange,
   registerSave,
+  standalone,
 }: {
   resource: ScopedResource;
   /** Omitted while the object is still being created. */
@@ -40,6 +41,8 @@ export function ResourceAccessSection({
    * function it receives here. Without it the section saves itself.
    */
   registerSave?: (save: (() => Promise<void>) | null) => void;
+  /** Set when the section is a tab pane of its own, not one field among many. */
+  standalone?: boolean;
 }) {
   if (!id)
     return (
@@ -57,6 +60,7 @@ export function ResourceAccessSection({
       scope={id}
       onDirtyChange={onDirtyChange}
       registerSave={registerSave}
+      standalone={standalone}
       title="Permissions"
       embedded
     />

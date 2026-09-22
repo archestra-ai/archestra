@@ -24,21 +24,7 @@ You can find the entire development team in our [Slack Community](https://arches
 
 Our engineers will join the conversation, greet you, and share the context you need to get started.
 
-Before you can comment, open issues, or open PRs, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
-
-## Contribute Responsibly
-
-You are welcome to use AI tools on your contribution. The project only benefits from contributions that meet its quality bar.
-
-We sometimes have to reject contributions that show signs of unreviewed AI-generated code, such as:
-
-1. Massive AI-generated descriptions and comments.
-2. Code that doesn't follow the existing patterns and conventions of the project.
-3. Code that doesn't follow reasonable clean code best practices.
-4. Code that was not tested before contribution.
-5. Or other noticeable signs of rushed or unreviewed AI generation.
-
-From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves.
+Before you can comment or open issues, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
 
 ## Pull Requests
 

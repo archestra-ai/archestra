@@ -263,6 +263,7 @@ test("project permission revocation removes inherited session reads and project 
   makeUser,
   makeMember,
   makeAgent,
+  removeObjectPolicies,
 }) => {
   enterpriseTier.setUserCountForTesting(0);
   const org = await makeOrganization({ legacyPermissions: true });
@@ -291,6 +292,7 @@ test("project permission revocation removes inherited session reads and project 
     agentId: agent.id,
     projectId: project.id,
   });
+  await removeObjectPolicies(org.id);
   await runScopedResourcePermissionCutover();
   const readChat = () =>
     ConversationModel.findAccessibleById({

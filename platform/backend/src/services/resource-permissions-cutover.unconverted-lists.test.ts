@@ -25,6 +25,7 @@ describe("lists whose role gate moved to grants, before the conversion", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
@@ -45,6 +46,7 @@ describe("lists whose role gate moved to grants, before the conversion", () => {
       files: [],
     });
     if (!skill) throw new Error("failed to seed skill");
+    await removeObjectPolicies(org.id);
 
     // What the route passes when `skill:read` is absent.
     expect(
@@ -73,6 +75,7 @@ describe("lists whose role gate moved to grants, before the conversion", () => {
     makeUser,
     makeMember,
     makeInternalMcpCatalog,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
@@ -82,6 +85,7 @@ describe("lists whose role gate moved to grants, before the conversion", () => {
       authorId: user.id,
       scope: "org",
     });
+    await removeObjectPolicies(org.id);
 
     // What the route passes when `mcpRegistry:read` is absent.
     const withoutAction = await InternalMcpCatalogModel.findAll({

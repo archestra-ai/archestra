@@ -16,6 +16,7 @@ describe("credential sharing conversion", () => {
     makeMember,
     makeTeam,
     makeVirtualApiKey,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const foreign = await makeOrganization({ legacyPermissions: true });
@@ -33,6 +34,7 @@ describe("credential sharing conversion", () => {
       { virtualApiKeyId: key.id, teamId: local.id },
       { virtualApiKeyId: key.id, teamId: elsewhere.id },
     ]);
+    await removeObjectPolicies(org.id);
 
     await runScopedResourcePermissionCutover();
 
@@ -56,6 +58,7 @@ describe("credential sharing conversion", () => {
     makeTeam,
     makeSecret,
     makeLlmProviderApiKey,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
@@ -70,6 +73,7 @@ describe("credential sharing conversion", () => {
       scope: "personal",
       userId: owner.id,
     });
+    await removeObjectPolicies(org.id);
 
     await runScopedResourcePermissionCutover();
 
@@ -97,6 +101,7 @@ describe("credential sharing conversion", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     // Never a member: the author grant joins `member`, so nothing survives.
@@ -106,6 +111,7 @@ describe("credential sharing conversion", () => {
       scope: "personal",
       userId: stranger.id,
     });
+    await removeObjectPolicies(org.id);
 
     await runScopedResourcePermissionCutover();
 

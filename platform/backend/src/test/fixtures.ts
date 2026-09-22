@@ -8,6 +8,7 @@ import {
   MEMBER_ROLE_NAME,
   type SupportedProvider,
 } from "@archestra/shared";
+import { and, eq, ne } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -121,6 +122,11 @@ interface TestFixtures {
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
   makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  removeObjectPolicies: typeof removeObjectPolicies;
+  // SPDX-SnippetEnd
 }
 
 async function _makeUser(
@@ -1394,6 +1400,31 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
   );
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Removes the per-object permission policies that creation wrote in an
+ * organization, keeping its `*` policies. Pair it with
+ * `makeOrganization({ legacyPermissions: true })` to simulate data written
+ * before the upgrade, when objects carried no policy. Call it after creating
+ * the objects and before writing any policy the test models on purpose.
+ */
+async function removeObjectPolicies(organizationId: string): Promise<void> {
+  await db
+    .delete(schema.resourcePermissionPoliciesTable)
+    .where(
+      and(
+        eq(
+          schema.resourcePermissionPoliciesTable.organizationId,
+          organizationId,
+        ),
+        ne(schema.resourcePermissionPoliciesTable.scope, "*"),
+      ),
+    );
+}
+// SPDX-SnippetEnd
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -1513,4 +1544,11 @@ export const test = baseTest.extend<TestFixtures>({
   seedAndAssignArchestraTools: async ({}, use) => {
     await use(seedAndAssignArchestraTools);
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  removeObjectPolicies: async ({}, use) => {
+    await use(removeObjectPolicies);
+  },
+  // SPDX-SnippetEnd
 });

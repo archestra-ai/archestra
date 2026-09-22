@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Maintainers add the catalog entry from this issue.
+        Maintainers add the catalog entry from this issue. The entry format is described in the [catalog entry reference](https://github.com/archestra-ai/archestra/blob/main/.agents/skills/archestra-mcp-catalog-entry/SKILL.md).
   - type: input
     id: server_url
     attributes:

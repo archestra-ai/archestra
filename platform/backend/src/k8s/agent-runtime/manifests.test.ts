@@ -333,7 +333,7 @@ describe("buildAgentRuntimeSandbox", () => {
     );
   });
 
-  it("falls back to the runtime-agent entrypoint when no command is set", () => {
+  it("keeps the legacy entrypoint for a saved runtime with no command", () => {
     const entrypoint = buildAgentRuntimeSandbox(
       SPEC,
     ).spec?.podTemplate.spec?.containers[0]?.env?.find(

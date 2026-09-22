@@ -601,10 +601,15 @@ vi.mock("./agent-runtime-fields", async (importOriginal) => {
         <button
           type="button"
           onClick={() =>
-            value && onChange({ ...value, image: "example.com/custom:v1" })
+            value &&
+            onChange({
+              ...value,
+              image: "example.com/custom:v1",
+              command: ["my-agent"],
+            })
           }
         >
-          Set runtime image
+          Set runtime image and command
         </button>
         <button
           type="button"
@@ -3490,7 +3495,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(savedBody()).toEqual({ runtime: null });
   });
 
-  it("requires an image before saving a runtime newly enabled on an existing agent", async () => {
+  it("requires an image and a command before saving a runtime newly enabled on an existing agent", async () => {
     vi.mocked(useFeature).mockImplementation(
       ((flag: string) =>
         flag === "agentRuntime") as unknown as typeof useFeature,
@@ -3505,15 +3510,17 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    // Enabling a runtime no longer prefills the platform's own image.
+    // Enabling a runtime prefills no image and no command.
     await user.click(screen.getByRole("button", { name: "Enable runtime" }));
     expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Set runtime image" }));
+    await user.click(
+      screen.getByRole("button", { name: "Set runtime image and command" }),
+    );
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /update/i }));
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody()).toMatchObject({
-      runtime: { image: "example.com/custom:v1" },
+      runtime: { image: "example.com/custom:v1", command: ["my-agent"] },
     });
   });
 
@@ -4539,7 +4546,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
-  it("marks the image row until a required container image is supplied", async () => {
+  it("marks the image row until a container image and command are supplied", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
     render(
@@ -4565,16 +4572,24 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByLabelText(/Container image/),
       "example.com/custom:v1",
     );
+    // The image alone is not enough: nothing supplies a default command.
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(
+      screen.getByRole("img", {
+        name: "Set a command before creating the agent",
+      }),
+    ).toBeVisible();
+    await user.type(screen.getByLabelText("Command"), "my-agent");
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     expect(
       screen.queryByRole("img", {
-        name: "Set a container image before creating the agent",
+        name: /^Set a (container image|command) before creating the agent$/,
       }),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalled());
     expect(createAgent.mock.calls[0][0]).toMatchObject({
-      runtime: { image: "example.com/custom:v1" },
+      runtime: { image: "example.com/custom:v1", command: ["my-agent"] },
     });
   });
 

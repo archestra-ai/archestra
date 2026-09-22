@@ -189,9 +189,11 @@ export function AgentRuntimePicker({
               attention={
                 !value.image.trim()
                   ? "Set a container image before creating the agent"
-                  : undefined
+                  : !value.command?.length
+                    ? "Set a command before creating the agent"
+                    : undefined
               }
-              summary={`${value.image.split("/").slice(-2).join("/") || "No image set"}. ${value.command?.join(" ") || "Image default command"}`}
+              summary={`${value.image.split("/").slice(-2).join("/") || "No image set"}. ${value.command?.join(" ") || "No command set"}`}
             >
               <AgentRuntimeImageFields
                 value={value}

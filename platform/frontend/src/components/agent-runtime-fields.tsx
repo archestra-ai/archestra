@@ -204,8 +204,8 @@ export function AgentRuntimeImageFields({
       }
       image={{ placeholder: "registry.example.com/my-agent:latest" }}
       command={{
-        placeholder: "Use the image's default command",
-        description: "Leave blank to use the image's default command.",
+        placeholder: "my-agent",
+        description: "The executable that starts your Agent client.",
       }}
       arguments={{
         placeholder: "--permission-mode\nbypassPermissions",

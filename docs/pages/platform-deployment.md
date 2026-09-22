@@ -989,9 +989,9 @@ Check **Settings → Agents → Runtime Backend** if the runtime is unavailable.
 <!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
 #### Runtime Image Cache
 
-Archestra automatically prefetches the six popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
+Archestra automatically prefetches the five popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
 
-Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog image versions follow `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
+Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog images follow `ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY` and `ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
 
 The prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Bootstrap image, registry secrets, resources, and priority reuse the MCP image pre-pull settings below. Each image consumes disk on every matching node.
 
@@ -1040,8 +1040,11 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.18` <!-- x-release-please-version -->
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry that the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from. Set it when you mirror these images to a private registry.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
+
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images. Set it to pin a mirrored release.
+  - Default: `latest` on stable releases, otherwise the platform version
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`

@@ -296,9 +296,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
-          // Both the Archestra runtime-agent and bring-your-own CLIs read the
-          // provider variables, so the standard virtual key is presented in
-          // each native shape. The upstream provider secret stays server-side.
+          // Maintained and bring-your-own CLIs read the provider variables,
+          // so the standard virtual key is presented in each native shape.
+          // The upstream provider secret stays server-side.
           ANTHROPIC_API_KEY: virtualKeyValue,
           ANTHROPIC_AUTH_TOKEN: virtualKeyValue,
           OPENAI_API_KEY: virtualKeyValue,

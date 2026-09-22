@@ -121,7 +121,9 @@ export function SystemPromptEditor({
                   : "text-xs text-muted-foreground"
               }
             >
-              {description && <span className="mb-1 block">{description}</span>}
+              {/* The description and the templating note read as one
+                  sentence run, so they share a line instead of stacking. */}
+              {description && <span>{description}</span>}{" "}
               {templating && (
                 <>
                   <span>Supports Handlebars templating.</span>{" "}

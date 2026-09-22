@@ -71,9 +71,10 @@ export function useAcceptHeldPull() {
 }
 
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
-export function useBatteries() {
+export function useBatteries(enabled = true) {
   return useQuery({
     queryKey: batteriesQueryKey,
+    enabled,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOpenappaBatteries();
       throwOnApiError(error, { toastOnError: false });
@@ -106,8 +107,13 @@ export function useSetBatteryEnabled(catalogId: string) {
       // A battery is off by being absent from the policy, so turning an
       // unattached one off is nothing to write.
       if (!enabled) return null;
+      const packageHash = await includedPackageHash(match.battery);
       const created = await archestraApiSdk.createOpenappaBatteryInstall({
-        body: { batteryName: match.battery, catalogId },
+        body: {
+          batteryName: match.battery,
+          catalogId,
+          ...(packageHash === null ? {} : { packageHash }),
+        },
       });
       if (getApiErrorType(created.error) !== "api_conflict_error")
         return settled(created);
@@ -179,6 +185,25 @@ export function useDeleteBatteryPackage() {
       ),
     () => toast.success("Battery package deleted"),
   );
+}
+
+/**
+ * The bytes a fresh include has to spell. A battery is included once, so a
+ * second server joining one the policy already includes has to name that
+ * entry's package — the server refuses any other spelling. Read at write time,
+ * not from a render's data, so a policy that moved meanwhile still lands.
+ */
+async function includedPackageHash(name: string): Promise<string | null> {
+  const declarations = settled(
+    await archestraApiSdk.getOpenappaPolicyDeclarations(),
+  );
+  const included = declarations.batteries.find(
+    (battery) => battery.name === name,
+  );
+  if (included) return included.packageHash;
+  const batteries = settled(await archestraApiSdk.getOpenappaBatteries());
+  const battery = batteries.find((candidate) => candidate.name === name);
+  return battery?.source === "upload" ? battery.contentHash : null;
 }
 
 async function setInstallEnabled(id: string, enabled: boolean) {

@@ -1479,6 +1479,19 @@ describe("handleError", () => {
     expect(headers["retry-after"]).toBe("1");
   });
 
+  test("keeps the retry guidance an Archestra error carries", () => {
+    const { reply } = makeReply(false);
+    const error = new ApiError(500, "OpenAPPA refused the policy");
+    error.shouldRetry = false;
+    error.retryAfterSeconds = 7;
+
+    const thrown = throwErrorFor(error, reply);
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.shouldRetry).toBe(false);
+    expect(thrown.retryAfterSeconds).toBe(7);
+  });
+
   test("drops a Retry-After value that is neither seconds nor a date", () => {
     const { reply, headers } = makeReply(false);
     const error = Object.assign(new Error("rate limited"), {

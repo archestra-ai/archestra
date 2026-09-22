@@ -66,6 +66,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let events: Array<Record<string, unknown>>;
   let block: boolean;
   let fail: boolean;
+  let failure: string;
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
@@ -115,6 +116,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     events = [];
     block = false;
     fail = false;
+    failure = "private native database error";
     native.initializeOpenappa.mockResolvedValue(undefined);
     // Mirrors the real binding closely enough to be regression coverage: the
     // runtime remembers which call it denied, and answers that call's result
@@ -141,7 +143,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           .onConflictDoNothing();
       }
       if (event.event === "tool_call") {
-        if (fail) throw new Error("private native database error");
+        if (fail) throw new Error(failure);
         if (!block || event.tool === "allowed_first")
           return JSON.stringify({ decision: "allow_call" });
         denied.add(String(event.operation_id).replace(/^call:/, ""));
@@ -904,6 +906,19 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.statusCode).toBe(503);
     expect(response.body).not.toContain("private native database error");
     expect(response.body).toContain("OpenAPPA could not safely complete");
+  });
+
+  test("a refused policy names what to fix and is not a retryable outage", async () => {
+    fail = true;
+    failure =
+      'unsupported policy: tool "grain__*" has an invalid qualified identity';
+
+    const response = await post(payload(false));
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.message).toContain(
+      'the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+    );
   });
 
   test("does not trust a remote caller's delegation chain", async () => {

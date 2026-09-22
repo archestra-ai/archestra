@@ -18,6 +18,7 @@ import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
+import { openappaFailure } from "@/openappa/failure";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -285,7 +286,7 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
@@ -297,18 +298,8 @@ async function effectivePolicy(organizationId: string): Promise<string> {
     return (await openappaBatteriesService.getEffectivePolicy(organizationId))
       .content;
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
-}
-
-/** Do not forward internal diagnostics or credentials to clients. */
-function unsafeToProceed(error: unknown): ApiError {
-  const failure = new ApiError(
-    503,
-    "OpenAPPA could not safely complete this operation",
-  );
-  failure.cause = error;
-  return failure;
 }
 
 export function chatOpenAppaSession(
@@ -920,7 +911,7 @@ export async function loadOfferReview(params: {
       { err: error, offerId: params.offerId },
       "Failed to load OpenAPPA offer review",
     );
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 

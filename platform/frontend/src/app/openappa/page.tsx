@@ -1,4 +1,5 @@
 import { archestraApiSdk, type ErrorExtended } from "@archestra/shared";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { PageLayout } from "@/components/page-layout";
@@ -28,6 +29,16 @@ export default async function OpenAppaPage() {
       description="Edit the policy that governs tool calls and their results."
     >
       <div className="space-y-6">
+        <p className="text-sm text-muted-foreground">
+          <span>
+            Using Claude Code? Configure policies here, then install the client
+            integration from{" "}
+          </span>
+          <Link href="/plugins" className="underline underline-offset-4">
+            Plugins
+          </Link>
+          <span>.</span>
+        </p>
         <GuardrailsDeploymentToggle />
         <GuardrailsPolicyEditor />
         <AppaGithubSyncPanel />

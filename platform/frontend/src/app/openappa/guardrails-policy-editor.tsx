@@ -1,8 +1,17 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { OnMount } from "@monaco-editor/react";
-import { Check, FileCode2, Loader2, LockKeyhole, Save } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  ExternalLink,
+  FileCode2,
+  Loader2,
+  LockKeyhole,
+  Save,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -11,6 +20,12 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type GuardrailsPolicy,
@@ -97,6 +112,29 @@ function PolicyForm({
   const changedElsewhere = policy.revision !== revision;
   const checked =
     validation.variables === content ? validation.data : undefined;
+  const router = useRouter();
+  const pendingHrefRef = useRef<string | null>(null);
+  useBeforeUnloadWhileDirty(dirty);
+  const navigationGuard = useUnsavedChangesGuard({
+    isDirty: dirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) router.push(href);
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      navigationGuard.requestClose();
+    },
+    [navigationGuard],
+  );
+  useGuardedInAppNavigation({
+    isDirty: dirty,
+    onRequestNavigate: requestNavigate,
+  });
 
   useEffect(() => {
     if (!dirty && policy.revision !== form.getValues("expectedRevision"))
@@ -105,15 +143,6 @@ function PolicyForm({
         expectedRevision: policy.revision,
       });
   }, [dirty, policy, form]);
-  useEffect(() => {
-    if (!dirty) return;
-    const onUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [dirty]);
-
   const submit = form.handleSubmit((values) =>
     save.mutate(values, {
       onSuccess: (saved) => {
@@ -128,121 +157,147 @@ function PolicyForm({
   );
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-lg border bg-background">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex items-center gap-3">
-            <FileCode2 className="size-4 text-muted-foreground" />
-            <div>
-              <h2 className="text-sm font-medium">Policy editor</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                organization.appa.toml
-              </p>
+    <>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <div className="overflow-hidden rounded-lg border bg-background">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex items-center gap-3">
+              <FileCode2 className="size-4 text-muted-foreground" />
+              <div>
+                <h2 className="text-sm font-medium">Policy editor</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  organization.appa.toml
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button asChild variant="ghost" size="sm">
+                <a
+                  href={getDocsUrl(
+                    DocsPage.PlatformAiToolGuardrails,
+                    "guardrails-v2-preview",
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Policy guide</span>
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+              <output className="text-xs text-muted-foreground">
+                {dirty
+                  ? "Unsaved changes"
+                  : revision === 0
+                    ? "Not yet saved"
+                    : `Revision ${revision}`}
+              </output>
+              {!canEdit && (
+                <Badge variant="secondary">
+                  <LockKeyhole className="mr-1 size-3" />
+                  <span>{synced ? "Synced from GitHub" : "Read only"}</span>
+                </Badge>
+              )}
+              {canEdit && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || !content.trim()}
+                    onClick={() => validation.mutate(content)}
+                  >
+                    {validation.isPending && (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    )}
+                    <span>Validate</span>
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={
+                      busy ||
+                      !content.trim() ||
+                      checked?.valid === false ||
+                      (!dirty && revision > 0)
+                    }
+                  >
+                    {save.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Save className="size-3.5" />
+                    )}
+                    <span>Save &amp; apply</span>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <output className="text-xs text-muted-foreground">
-              {dirty
-                ? "Unsaved changes"
-                : revision === 0
-                  ? "Not yet saved"
-                  : `Revision ${revision}`}
-            </output>
-            {!canEdit && (
-              <Badge variant="secondary">
-                <LockKeyhole className="mr-1 size-3" />
-                <span>{synced ? "Synced from GitHub" : "Read only"}</span>
-              </Badge>
-            )}
-            {canEdit && (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || !content.trim()}
-                  onClick={() => validation.mutate(content)}
-                >
-                  {validation.isPending && (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  )}
-                  <span>Validate</span>
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={busy || !content.trim() || (!dirty && revision > 0)}
-                >
-                  {save.isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Save className="size-3.5" />
-                  )}
-                  <span>Save &amp; apply</span>
-                </Button>
-              </>
-            )}
+          {checked && (
+            <div className="px-4 pt-3">
+              <InlineNotice variant={checked.valid ? "neutral" : "error"}>
+                {checked.valid && <Check />}
+                <InlineNoticeText className="whitespace-pre-wrap font-mono">
+                  {checked.valid
+                    ? "Policy is valid."
+                    : checked.errors.join("\n")}
+                </InlineNoticeText>
+              </InlineNotice>
+            </div>
+          )}
+          <AnnotatedEditor
+            content={content}
+            readOnly={!canEdit || save.isPending}
+            declarations={
+              // The annotations are line numbers into the revision they were read
+              // at. An edit moves every line below it, so a dirty buffer gets none.
+              !dirty && declarations.data?.rootRevision === policy.revision
+                ? declarations.data
+                : null
+            }
+            onChange={(value) => {
+              form.setValue("content", value, { shouldDirty: true });
+              save.reset();
+            }}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
+            <span>
+              Saved changes apply to new conversations. Existing conversations
+              keep their original policy.
+            </span>
+            <CompositionSummary declarations={declarations.data} />
           </div>
         </div>
-        <AnnotatedEditor
-          content={content}
-          readOnly={!canEdit || save.isPending}
-          declarations={
-            // The annotations are line numbers into the revision they were read
-            // at. An edit moves every line below it, so a dirty buffer gets none.
-            !dirty && declarations.data?.rootRevision === policy.revision
-              ? declarations.data
-              : null
-          }
-          onChange={(value) => {
-            form.setValue("content", value, { shouldDirty: true });
-            save.reset();
-          }}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
-          <span>
-            Saved changes apply to new conversations. Existing conversations
-            keep their original policy.
-          </span>
-          <CompositionSummary declarations={declarations.data} />
-        </div>
-      </div>
-      {changedElsewhere && dirty && (
-        <InlineNotice variant="neutral">
-          <InlineNoticeText>
-            A newer revision is available. Your edits are preserved. Copy your
-            changes before reloading this page to reconcile them.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-      {checked && (
-        <InlineNotice variant={checked.valid ? "neutral" : "error"}>
-          {checked.valid && <Check />}
-          {/* No role here: the InlineNotice around it is already role="alert",
-              and a polite "status" nested inside an assertive "alert" does
-              nothing but confuse a screen reader. */}
-          <InlineNoticeText className="whitespace-pre-wrap font-mono">
-            {checked.valid ? "Policy is valid." : checked.errors.join("\n")}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-      {checked && checked.warnings.length > 0 && (
-        // Its own notice: these entries parse, they just compose to nothing.
-        // Folding them into the error strip would read as a refusal to save.
-        <InlineNotice variant="neutral" data-testid="policy-warnings">
-          <InlineNoticeText className="whitespace-pre-wrap font-mono">
-            {checked.warnings.join("\n")}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-      {save.isError && (
-        <InlineNotice variant="error">
-          <InlineNoticeText className="whitespace-pre-wrap">
-            {save.error.message}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-    </form>
+        {changedElsewhere && dirty && (
+          <InlineNotice variant="neutral">
+            <InlineNoticeText>
+              A newer revision is available. Your edits are preserved. Copy your
+              changes before reloading this page to reconcile them.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
+        {checked && checked.warnings.length > 0 && (
+          // Its own notice: these entries parse, they just compose to nothing.
+          // Folding them into the error strip would read as a refusal to save.
+          <InlineNotice variant="neutral" data-testid="policy-warnings">
+            <InlineNoticeText className="whitespace-pre-wrap font-mono">
+              {checked.warnings.join("\n")}
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
+        {save.isError && (
+          <InlineNotice variant="error">
+            <InlineNoticeText className="whitespace-pre-wrap">
+              {save.error.message}
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
+      </form>
+      <UnsavedChangesDialog
+        open={navigationGuard.confirmOpen}
+        onKeepEditing={navigationGuard.keepEditing}
+        onDiscard={navigationGuard.discardChanges}
+      />
+    </>
   );
 }
 

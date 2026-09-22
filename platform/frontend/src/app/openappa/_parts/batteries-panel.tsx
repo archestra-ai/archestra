@@ -1,13 +1,16 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import {
   AlertTriangle,
   BatteryCharging,
+  ExternalLink,
   GitPullRequestArrow,
   LockKeyhole,
   Trash2,
   Upload,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -156,9 +159,14 @@ export function BatteriesPanel() {
           />
         )}
         {included.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            The policy includes no battery yet. Attach one to a server below.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              The policy includes no battery yet. Attach one to a server below.
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/mcp/registry">Browse MCP servers</Link>
+            </Button>
+          </div>
         ) : (
           <ul className="divide-y">
             {included.map((battery) => (
@@ -619,6 +627,7 @@ function UploadPackageDialog({
     <StandardFormDialog
       open
       onOpenChange={onOpenChange}
+      isDirty={name.trim().length > 0 || files.length > 0}
       title="Upload a battery package"
       description="Pick the package folder: its manifest, policy and helper scripts."
       size="medium"
@@ -662,7 +671,29 @@ function UploadPackageDialog({
           ref={picker}
           onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
         />
+        {files.length > 0 && (
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>{files.length} files selected</p>
+            <ul className="max-h-24 overflow-auto font-mono">
+              {files.slice(0, 5).map((file) => (
+                <li key={file.webkitRelativePath || file.name}>
+                  {file.webkitRelativePath || file.name}
+                </li>
+              ))}
+            </ul>
+            {files.length > 5 && <p>And {files.length - 5} more files</p>}
+          </div>
+        )}
       </div>
+      <a
+        href={getDocsUrl(DocsPage.PlatformAiToolGuardrails, "batteries")}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-sm underline underline-offset-4"
+      >
+        <span>About batteries</span>
+        <ExternalLink className="size-3.5" />
+      </a>
     </StandardFormDialog>
   );
 }

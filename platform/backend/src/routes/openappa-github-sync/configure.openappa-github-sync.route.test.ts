@@ -79,6 +79,12 @@ describe("APPA GitHub sync", () => {
       url: "/api/openappa/github-sync",
       payload: body,
     });
+  /** The state the declaration migration leaves: declarations the repository never learned. */
+  const flagDeclarationsPendingPublish = () =>
+    db
+      .update(schema.openappaGithubSyncTable)
+      .set({ declarationsPendingPublish: true })
+      .where(eq(schema.openappaGithubSyncTable.organizationId, organizationId));
 
   test("saves, audits and pulls a pinned, natively validated policy without exposing its content", async () => {
     expect((await configure()).statusCode).toBe(200);
@@ -428,10 +434,7 @@ describe("APPA GitHub sync", () => {
     ).toMatchObject({ content: declared, revision: 1 });
     // Declarations written here are not in the repository yet, so a pull that
     // lacks them is a rollback nobody asked for.
-    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-      organizationId,
-      true,
-    );
+    await flagDeclarationsPendingPublish();
     const second = "c".repeat(40);
     upstream(policy, second);
     await syncAppaGithubPolicy(organizationId);
@@ -510,10 +513,7 @@ describe("APPA GitHub sync", () => {
 
   test("a pull that loses the revision race publishes nothing and keeps the declarations pending", async () => {
     await configure();
-    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-      organizationId,
-      true,
-    );
+    await flagDeclarationsPendingPublish();
     server.use(
       http.get(
         "https://api.github.com/repos/example/policies/contents/guardrails/appa.toml",

@@ -230,11 +230,6 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       );
       return;
     }
-    if (row.declarationsPendingPublish)
-      await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-        organizationId,
-        false,
-      );
     await openappaBatteriesService.recompileOrganizations([organizationId]);
   } catch (error) {
     // Never persist raw transport/native diagnostics, which can contain credentials or policy bytes.

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { desc, eq, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { guardrailsPolicyRevisionsTable as table } from "@/database/schemas/guardrails-policy";
@@ -22,7 +23,7 @@ class GuardrailsPolicyModel {
     expectedRevision: number;
   }): Promise<GuardrailsPolicy | null> {
     return db.transaction(async (tx) => {
-      await lockPolicy(tx, params.organizationId);
+      await lockGuardrailsPolicy(tx, params.organizationId);
       const [source] = await tx
         .select()
         .from(schema.openappaGithubSyncTable)
@@ -58,7 +59,7 @@ class GuardrailsPolicyModel {
     expectedRevision: number;
   }): Promise<GuardrailsPolicy | null> {
     return db.transaction(async (tx) => {
-      await lockPolicy(tx, params.organizationId);
+      await lockGuardrailsPolicy(tx, params.organizationId);
       const saved = await insertRevision(tx, { ...params, updatedBy: null });
       if (saved)
         await markDeclarationsPendingPublish(tx, params.organizationId);
@@ -84,8 +85,15 @@ class GuardrailsPolicyModel {
 }
 export default GuardrailsPolicyModel;
 
-/** Serialize the initial insert too: there is no policy row to lock yet. */
-async function lockPolicy(tx: Transaction, organizationId: string) {
+/**
+ * The one lock every write of an organization's policy takes: revisions, source
+ * changes, pulls, accepted holds and the declaration migration serialize here.
+ * An advisory lock, since the initial insert has no policy row to lock yet.
+ */
+export async function lockGuardrailsPolicy(
+  tx: Transaction,
+  organizationId: string,
+) {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
   );
@@ -101,13 +109,13 @@ async function markDeclarationsPendingPublish(
   organizationId: string,
 ) {
   const sync = schema.openappaGithubSyncTable;
+  // A pull that read the row before this flag was set must not clear it: the
+  // revision it keys its write on changes here.
+  const flagged = { declarationsPendingPublish: true, revision: randomUUID() };
   await tx
     .insert(sync)
-    .values({ organizationId, declarationsPendingPublish: true })
-    .onConflictDoUpdate({
-      target: sync.organizationId,
-      set: { declarationsPendingPublish: true },
-    });
+    .values({ organizationId, ...flagged })
+    .onConflictDoUpdate({ target: sync.organizationId, set: flagged });
 }
 
 /** The revision after `expectedRevision`, or nothing when that race was lost. */

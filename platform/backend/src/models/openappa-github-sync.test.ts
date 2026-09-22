@@ -226,11 +226,55 @@ describe("OpenAppaGithubSyncModel held pulls", () => {
       }),
     ).toMatchObject({ contentHash: heldPull.contentHash });
   });
+
+  test("resaving the schedule it was held under keeps the held pull", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await OpenAppaGithubSyncModel.save(organizationId, { ...source });
+    const { revision } = mustExist(
+      await OpenAppaGithubSyncModel.find(organizationId),
+    );
+    await OpenAppaGithubSyncModel.hold({
+      organizationId,
+      revision,
+      ...heldPull,
+      reasons: [...heldPull.reasons],
+    });
+    const held = mustExist(await OpenAppaGithubSyncModel.find(organizationId));
+
+    await OpenAppaGithubSyncModel.setInterval(organizationId, source.interval);
+    expect(
+      mustExist(await OpenAppaGithubSyncModel.find(organizationId)),
+    ).toMatchObject({
+      revision: held.revision,
+      heldContent: heldPull.content,
+      heldReasons: [...heldPull.reasons],
+    });
+  });
 });
 
 describe("declaration revisions and the pending-publish flag", () => {
   const declared =
     'include = ["batteries/github/appa.toml"]\n\n[policy]\nversion = 2\n';
+  /** Connect a source and publish one pull of the declared text under it. */
+  const publish = async (organizationId: string) => {
+    await OpenAppaGithubSyncModel.save(organizationId, { ...source });
+    const { revision } = mustExist(
+      await OpenAppaGithubSyncModel.find(organizationId),
+    );
+    expect(
+      await OpenAppaGithubSyncModel.finish({
+        organizationId,
+        revision,
+        outcome: {
+          content: declared,
+          contentHash: createHash("sha256").update(declared).digest("hex"),
+          sourceCommit: "e".repeat(40),
+        },
+      }),
+    ).toBe(true);
+  };
 
   test("the migration's revision and its flag are one write", async ({
     makeOrganization,
@@ -260,14 +304,43 @@ describe("declaration revisions and the pending-publish flag", () => {
       ),
     ).not.toContain(organizationId);
 
-    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-      organizationId,
-      false,
-    );
+    // A pull that publishes carries the declarations the flag was guarding.
+    await publish(organizationId);
     expect(
       mustExist(await OpenAppaGithubSyncModel.find(organizationId))
         .declarationsPendingPublish,
     ).toBe(false);
+  });
+
+  test("a pull that read the row before the migration flagged it records nothing", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await OpenAppaGithubSyncModel.save(organizationId, { ...source });
+    const { revision } = mustExist(
+      await OpenAppaGithubSyncModel.find(organizationId),
+    );
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: declared,
+      contentHash: createHash("sha256").update(declared).digest("hex"),
+      expectedRevision: 0,
+    });
+
+    expect(
+      await OpenAppaGithubSyncModel.finish({
+        organizationId,
+        revision,
+        outcome: {
+          content: "[policy]\nversion = 2\n",
+          contentHash: "hash-of-a-pull-lacking-the-declarations",
+          sourceCommit: "d".repeat(40),
+        },
+      }),
+    ).toBe(false);
+    expect(
+      mustExist(await OpenAppaGithubSyncModel.find(organizationId)),
+    ).toMatchObject({ content: null, declarationsPendingPublish: true });
   });
 
   test("a revision that lost its race flags nothing", async ({
@@ -280,10 +353,7 @@ describe("declaration revisions and the pending-publish flag", () => {
       contentHash: createHash("sha256").update(declared).digest("hex"),
       expectedRevision: 0,
     });
-    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-      organizationId,
-      false,
-    );
+    await publish(organizationId);
 
     expect(
       await GuardrailsPolicyModel.saveDeclarationMigration({

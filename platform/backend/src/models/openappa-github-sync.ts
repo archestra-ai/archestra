@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema } from "@/database";
+import { lockGuardrailsPolicy } from "@/models/guardrails-policy";
 import type {
   AppaGithubSource,
   HeldPullReason,
@@ -16,16 +17,6 @@ const NO_HOLD = {
 
 const table = schema.openappaGithubSyncTable;
 
-/**
- * Share the editor's lock: source changes, manual edits, imported revisions and
- * accepted holds serialize against one another.
- */
-function lockPolicy(tx: Transaction, organizationId: string) {
-  return tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-  );
-}
-
 class OpenAppaGithubSyncModel {
   static async find(organizationId: string) {
     const [row] = await db
@@ -33,15 +24,6 @@ class OpenAppaGithubSyncModel {
       .from(table)
       .where(eq(table.organizationId, organizationId));
     return row ?? null;
-  }
-  static async setDeclarationsPendingPublish(
-    organizationId: string,
-    value: boolean,
-  ) {
-    await db
-      .update(table)
-      .set({ declarationsPendingPublish: value })
-      .where(eq(table.organizationId, organizationId));
   }
   static async save(organizationId: string, source: AppaGithubSource) {
     const values = {
@@ -54,7 +36,7 @@ class OpenAppaGithubSyncModel {
       ...NO_HOLD,
     };
     await db.transaction(async (tx) => {
-      await lockPolicy(tx, organizationId);
+      await lockGuardrailsPolicy(tx, organizationId);
       await tx
         .insert(table)
         .values({ organizationId, ...values })
@@ -71,17 +53,22 @@ class OpenAppaGithubSyncModel {
     interval: AppaGithubSource["interval"] | null,
   ) {
     await db.transaction(async (tx) => {
-      await lockPolicy(tx, organizationId);
+      await lockGuardrailsPolicy(tx, organizationId);
       await tx
         .update(table)
         .set({ interval, revision: randomUUID(), ...NO_HOLD })
-        .where(eq(table.organizationId, organizationId));
+        .where(
+          and(
+            eq(table.organizationId, organizationId),
+            sql`${table.interval} is distinct from ${interval}`,
+          ),
+        );
     });
   }
   /**
    * Record a pull's outcome, answering whether it was still the pull this row
-   * expected: a download that raced a source edit or a disconnect records
-   * nothing, and its caller must not act as though it had.
+   * expected: a download that raced a source edit, a disconnect or a declaration
+   * migration records nothing, and its caller must not act as though it had.
    */
   static async finish(params: {
     organizationId: string;
@@ -92,7 +79,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<boolean> {
     const { organizationId, revision, outcome } = params;
     return db.transaction(async (tx) => {
-      await lockPolicy(tx, organizationId);
+      await lockGuardrailsPolicy(tx, organizationId);
       const [source] = await tx
         .update(table)
         .set({
@@ -102,7 +89,10 @@ class OpenAppaGithubSyncModel {
                 content: outcome.content,
                 sourceCommit: outcome.sourceCommit,
                 lastSyncError: null,
-                // A pull that publishes supersedes whatever was held.
+                // A pull that publishes supersedes whatever was held, and it
+                // carried every declaration the flag was guarding: a migration
+                // that flagged more since rotated the revision this write keys on.
+                declarationsPendingPublish: false,
                 ...NO_HOLD,
               }),
           lastSyncedAt: new Date(),
@@ -155,7 +145,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<boolean> {
     const { organizationId, revision, ...held } = params;
     return db.transaction(async (tx) => {
-      await lockPolicy(tx, organizationId);
+      await lockGuardrailsPolicy(tx, organizationId);
       const [row] = await tx
         .update(table)
         .set({
@@ -193,7 +183,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<{ contentHash: string; sourceCommit: string } | null> {
     const { organizationId, userId } = params;
     return db.transaction(async (tx) => {
-      await lockPolicy(tx, organizationId);
+      await lockGuardrailsPolicy(tx, organizationId);
       const [row] = await tx
         .select()
         .from(table)

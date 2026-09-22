@@ -14,7 +14,7 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -329,40 +329,46 @@ function IncludedBattery({
           </Button>
         )}
       </div>
-      {battery.servers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No alias points this battery at a server.
-        </p>
-      ) : (
-        battery.servers.map((server) => (
-          <ServerRow
-            key={server.target}
-            batteryName={battery.name}
-            target={server.target}
-            name={
-              server.catalogId === null
-                ? "Removed server"
-                : catalogName(server.catalogId)
-            }
-            install={
-              installs.find(
-                ({ catalogId }) => catalogId === server.catalogId,
-              ) ?? null
-            }
-            writable={writable}
-          />
-        ))
-      )}
-      {battery.credentials.map((credential) => (
-        <CredentialRow
-          key={credential.variable}
-          batteryName={battery.name}
-          credential={credential}
-          bindings={bindingsOf(battery)}
-          install={installs[0] ?? null}
-          bindable={bindable}
-        />
-      ))}
+      <Section title="Governs">
+        {battery.servers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No alias points this battery at a server.
+          </p>
+        ) : (
+          battery.servers.map((server) => (
+            <ServerRow
+              key={server.target}
+              batteryName={battery.name}
+              target={server.target}
+              name={
+                server.catalogId === null
+                  ? "Removed server"
+                  : catalogName(server.catalogId)
+              }
+              install={
+                installs.find(
+                  ({ catalogId }) => catalogId === server.catalogId,
+                ) ?? null
+              }
+              writable={writable}
+            />
+          ))
+        )}
+      </Section>
+      {battery.credentials.length > 0 ? (
+        <Section title="Credentials">
+          {battery.credentials.map((credential) => (
+            <CredentialRow
+              key={credential.variable}
+              batteryName={battery.name}
+              credential={credential}
+              bindings={bindingsOf(battery)}
+              install={installs[0] ?? null}
+              bindable={bindable}
+            />
+          ))}
+        </Section>
+      ) : null}
       <DeleteConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
@@ -385,6 +391,18 @@ function IncludedBattery({
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/** One server the battery governs: the entry's name, then the tool prefix its alias points at. */
 function ServerRow({
   batteryName,
   target,
@@ -401,8 +419,10 @@ function ServerRow({
   const remove = useDeleteBatteryInstall();
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="font-mono text-xs">{target}</span>
-      <span className="text-muted-foreground">{name}</span>
+      <span>{name}</span>
+      <span className="font-mono text-xs text-muted-foreground">
+        {target}__*
+      </span>
       {writable && install !== null && (
         <Button
           variant="ghost"

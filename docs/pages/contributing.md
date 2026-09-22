@@ -38,7 +38,15 @@ We sometimes have to reject contributions that show signs of unreviewed AI-gener
 4. Code that was not tested before contribution.
 5. Or other noticeable signs of rushed or unreviewed AI generation.
 
-From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves. For this reason, we may close the pull request. If this happens to you, please don't be discouraged. We kindly ask that you rework your changes and reopen the pull request when you're ready.
+From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves.
+
+## Pull Requests
+
+We take contributions as human-written text, not code. Pull requests from non-maintainers are closed automatically by CI.
+
+Describe the change you want informally in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose). If we agree, we handle the implementation with our coding agents. A precise issue lands faster.
+
+Report vulnerabilities privately to security@archestra.ai, not in a public issue.
 
 ## Bounties
 

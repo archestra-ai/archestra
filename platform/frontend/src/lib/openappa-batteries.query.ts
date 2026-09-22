@@ -15,8 +15,9 @@ import {
 } from "@/lib/openappa-policy-views";
 import { getApiErrorType, reportApiError, throwOnApiError } from "@/lib/utils";
 
-export type BatteryMatch =
-  archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"][number];
+export type BatteryMatches =
+  archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];
+export type BatteryMatch = BatteryMatches["matches"][number];
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 export type PolicyDeclarations =
@@ -24,6 +25,17 @@ export type PolicyDeclarations =
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
 export type EffectivePolicy =
   archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
+
+/** Why a catalog cannot take a battery yet, for the surfaces that offer one. */
+export const ATTACH_NOTES: Record<
+  Exclude<BatteryMatches["attach"], "ready">,
+  string
+> = {
+  unsynced:
+    "Sync the server's tools first: the battery attaches to their prefix.",
+  conflicting:
+    "This server cannot take a battery: one of its tool prefixes holds a double underscore, which an alias cannot target.",
+};
 
 export const batteryMatchesQueryKey = (catalogId: string) => [
   batteryMatchesPrefix,
@@ -74,17 +86,20 @@ export function useBatteries(enabled = true) {
   return useQuery({ ...batteriesQuery, enabled });
 }
 
-/** The guardrails batteries a catalog entry stands for, with their installs. */
+/**
+ * The guardrails batteries a catalog entry stands for, with their installs,
+ * and whether the entry can take one at all.
+ */
 export function useBatteryMatches(catalogId: string, enabled: boolean) {
   return useQuery({
     queryKey: batteryMatchesQueryKey(catalogId),
     enabled,
-    queryFn: async () => {
+    queryFn: async (): Promise<BatteryMatches> => {
       const { data, error } = await archestraApiSdk.getOpenappaBatteryMatches({
         query: { catalogId },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      return answered(data);
     },
   });
 }
@@ -111,7 +126,7 @@ export function useSetBatteryEnabled(catalogId: string) {
           query: { catalogId },
         }),
       );
-      const install = matches.find(
+      const install = matches.matches.find(
         (fresh) => fresh.battery === match.battery,
       )?.install;
       return install
@@ -151,6 +166,17 @@ export function useDeleteBatteryInstall() {
     async (id: string) =>
       settled(
         await archestraApiSdk.deleteOpenappaBatteryInstall({ path: { id } }),
+      ),
+    () => toast.success("Battery removed"),
+  );
+}
+
+/** Take a battery out of the policy text, install rows or not. */
+export function useRemoveBatteryInclude() {
+  return useBatteryMutation(
+    async (name: string) =>
+      settled(
+        await archestraApiSdk.deleteOpenappaBatteryInclude({ path: { name } }),
       ),
     () => toast.success("Battery removed"),
   );
@@ -257,9 +283,14 @@ async function setInstallEnabled(id: string, enabled: boolean) {
 /** The SDK call's data, or its refusal toasted and thrown. */
 function settled<T>(result: { data?: T; error?: unknown }): T {
   if (result.error !== undefined) throw reportApiError(result.error);
-  if (result.data === undefined)
+  return answered(result.data);
+}
+
+/** A response with no error carries data; one with neither is a failure, not an empty answer. */
+function answered<T>(data: T | undefined): T {
+  if (data === undefined)
     throw new Error("The API answered with neither data nor an error");
-  return result.data;
+  return data;
 }
 
 /**

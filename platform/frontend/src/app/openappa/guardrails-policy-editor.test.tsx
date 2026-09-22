@@ -363,6 +363,48 @@ test("the effective policy is fetched only once its tab is opened", async () => 
   ).toHaveAttribute("readonly");
 });
 
+test("the composed view names the batteries that fold in as empty stubs", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          battery("acme", "active", 3),
+          battery("globex", "missing_credentials", 5),
+          battery("initech", "server_missing", 7),
+        ],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  const stubs = await screen.findByTestId("effective-policy-stubs");
+  expect(stubs).toHaveTextContent("globex");
+  expect(stubs).toHaveTextContent("initech");
+  expect(stubs).not.toHaveTextContent("acme");
+});
+
+test("the composed view lists no stub while every battery is active", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [battery("acme", "active", 3)],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  await screen.findByRole("textbox", { name: "Effective guardrails policy" });
+  expect(
+    screen.queryByTestId("effective-policy-stubs"),
+  ).not.toBeInTheDocument();
+});
+
 test("switching to the composed view and back keeps an unsaved draft", async () => {
   mount();
   const editor = await screen.findByRole("textbox", {

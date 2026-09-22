@@ -528,17 +528,174 @@ describe("guardrails batteries", () => {
       name: "notion__prod__search",
       rawName: "prod__search",
     });
-    // The runtime refuses such a target outright, so nothing is bound for it.
+    // The runtime refuses such a target outright, so the attach is refused
+    // rather than left as an include governing nothing.
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
       payload: { batteryName: "notion", catalogId: catalog.id },
     });
-    expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({
-      status: "server_missing",
-      servers: [],
+    expect(created.statusCode).toBe(409);
+    expect(await declarations()).toMatchObject({ batteries: [] });
+  });
+
+  test("a catalog with no synced tools takes no battery", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Fresh GitHub",
     });
+    const before = (await guardrailsPolicyService.get(organizationId)).content;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode).toBe(409);
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      before,
+    );
+    expect(await declarations()).toMatchObject({ batteries: [] });
+  });
+
+  test("a row that outlived its catalog's tools is not detached but removed with its include", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const [row] = await installRows();
+    if (!row) throw new Error("the github battery derived no row");
+    // The tools go without a recompose: the row stays, its prefix does not.
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalog.id));
+    const before = (await guardrailsPolicyService.get(organizationId)).content;
+    for (const request of [
+      {
+        method: "DELETE" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: false },
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: true },
+      },
+    ]) {
+      const refused = await app.inject(request);
+      expect(refused.statusCode, refused.body).toBe(409);
+    }
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      before,
+    );
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/github",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).not.toContain("github_prod");
+    expect(await installRows()).toEqual([]);
+  });
+
+  test("removing an include drops the entry and the alias no catalog answers to", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/acme",
+      payload: { files: sharedNamespacePackage("acme", "list") },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    // An alias written by hand to a server nothing carries: the entry composes
+    // as server_missing and derives no row, so no install can remove it.
+    const declared = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: `include = ["batteries/acme@sha256-${uploaded.json().contentHash}/appa.toml"]\n\n[server_aliases]\nacme = ["acme_gone"]\n\n${declared.content}`,
+      expectedRevision: declared.revision,
+    });
+    expect(await declarations()).toMatchObject({
+      batteries: [
+        {
+          name: "acme",
+          status: "server_missing",
+          servers: [{ target: "acme_gone", catalogId: null }],
+        },
+      ],
+    });
+    expect(await installRows()).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/acme",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await declarations()).toMatchObject({
+      batteries: [],
+      unusedAliases: [],
+    });
+    const content = (await guardrailsPolicyService.get(organizationId)).content;
+    expect(content).not.toContain("batteries/acme@");
+    expect(content).not.toContain("acme_gone");
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/acme",
+        })
+      ).statusCode,
+    ).toBe(404);
+    const records = (
+      await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId))
+    ).filter((record) => record.action === "guardrailsPolicy.updated");
+    expect(records.map((record) => record.outcome).sort()).toEqual([
+      "failure",
+      "success",
+    ]);
+    expect(records.map((record) => record.resourceId)).toEqual([
+      organizationId,
+      organizationId,
+    ]);
   });
 
   test("one prefix two catalogs carry leaves the battery in a naming conflict", async ({
@@ -569,8 +726,14 @@ describe("guardrails batteries", () => {
 
   test("the root revision moving recomposes the effective policy on the next read", async ({
     makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github__get_me",
+      rawName: "get_me",
+    });
     expect(
       (
         await app.inject({

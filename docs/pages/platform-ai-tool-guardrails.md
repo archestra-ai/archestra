@@ -54,8 +54,10 @@ A battery is a ready-made policy package for one provider, such as GitHub. Your 
 Nothing includes a battery on its own. You add one in three places:
 
 - the **Add the … battery** checkbox in the MCP server setup wizard, which is off until you turn it on;
-- **Attach to server** in the Batteries panel of the OpenAPPA page;
+- **Attach a battery** in the Batteries panel of the OpenAPPA page: pick the battery, then one of your installed servers;
 - the policy editor, where you write the include line yourself.
+
+A server takes a battery once its tools are synced. Until then the checkbox and the server list say so.
 
 ![The setup wizard offering the matching battery](/docs/automated_screenshots/platform-ai-tool-guardrails_wizard-battery.webp)
 
@@ -78,7 +80,7 @@ You can upload your own battery package. The policy includes an upload by its co
 
 While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that binds a credential variable to a new key is held instead of published, and so is one that drops a battery your deployment declared before its declarations first reached the repository. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
 
-The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. When the current text fails to compose, the tab shows the last document that opened and says so.
+The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. A battery that is not active folds in as an empty stub, and the tab names each one with the reason. When the current text fails to compose, the tab shows the last document that opened and says so.
 
 ![The policy editor with a status mark on the include line](/docs/automated_screenshots/platform-ai-tool-guardrails_policy-annotations.webp)
 

@@ -6,7 +6,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
-  BatteryMatchSchema,
+  BatteryMatchesSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   EffectivePolicySchema,
@@ -95,7 +95,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.GetOpenappaBatteryMatches,
         tags: ["OpenAPPA"],
         querystring: MatchesQuerySchema,
-        response: constructResponseSchema(z.array(BatteryMatchSchema)),
+        response: constructResponseSchema(BatteryMatchesSchema),
       },
     },
     async (request) =>
@@ -167,6 +167,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         userId: request.user.id,
         organizationId: request.organizationId,
         id: request.params.id,
+      });
+      return { success: true as const };
+    },
+  );
+  app.delete(
+    "/api/openappa/battery-includes/:name",
+    {
+      schema: {
+        operationId: RouteId.DeleteOpenappaBatteryInclude,
+        tags: ["OpenAPPA"],
+        params: PackageNameParamsSchema,
+        response: constructResponseSchema(DeletedSchema),
+      },
+    },
+    async (request) => {
+      await openappaBatteriesService.removeInclude({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        name: request.params.name,
       });
       return { success: true as const };
     },

@@ -95,6 +95,25 @@ export const BatteryMatchSchema = z.object({
 });
 export type BatteryMatch = z.infer<typeof BatteryMatchSchema>;
 
+/**
+ * Whether an attach to a catalog has an alias target: `unsynced` while none of
+ * its tools are synced, `conflicting` when a tool prefix holds `__`, which a
+ * composed alias cannot tell apart. An attach is refused in both.
+ */
+export const AttachReadinessSchema = z.enum([
+  "ready",
+  "unsynced",
+  "conflicting",
+]);
+export type AttachReadiness = z.infer<typeof AttachReadinessSchema>;
+
+/** The batteries a catalog entry stands for, and whether one can be attached. */
+export const BatteryMatchesSchema = z.object({
+  attach: AttachReadinessSchema,
+  matches: z.array(BatteryMatchSchema),
+});
+export type BatteryMatches = z.infer<typeof BatteryMatchesSchema>;
+
 export const BatterySummarySchema = z.object({
   name: z.string(),
   description: z.string(),

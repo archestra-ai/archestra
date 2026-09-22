@@ -41,6 +41,10 @@ coverage
 
 # dotenv environment variable files
 .env
+# Backups and variants of a real env file carry the same live secrets.
+.env.bak*
+.env.*.bak
+.env.backup*
 .env.development.local
 .env.test.local
 .env.production.local

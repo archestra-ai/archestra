@@ -17,9 +17,7 @@ maintained by hand — there is no evaluation or scoring pipeline.
 
 Open an [Add an MCP server](https://github.com/archestra-ai/archestra/issues/new?template=add-mcp-server.yml)
 issue with the server URL, description, and category. Maintainers add the entry.
-To change an existing entry, open an
-[Update an MCP server](https://github.com/archestra-ai/archestra/issues/new?template=edit-mcp-server.yml)
-issue.
+To change an existing entry, open a plain issue that names the entry.
 
 The entry format is described in the
 [catalog entry skill](../.agents/skills/archestra-mcp-catalog-entry/SKILL.md).

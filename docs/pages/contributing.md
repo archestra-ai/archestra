@@ -46,8 +46,6 @@ We take contributions as human-written text, not code. Pull requests from non-ma
 
 Describe the change you want informally in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose). If we agree, we handle the implementation with our coding agents. A precise issue lands faster.
 
-Report vulnerabilities privately to security@archestra.ai, not in a public issue.
-
 ## Bounties
 
 We use bounties as an optional way to thank contributors for meaningful work. They are not contract jobs, and they do not replace coordination with maintainers and other contributors.

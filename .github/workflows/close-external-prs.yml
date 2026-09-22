@@ -30,8 +30,6 @@ env:
 
     Describe the change you'd like informally in a GitHub issue (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents. Link this PR from the issue so the context is not lost.
 
-    Report vulnerabilities privately to security@archestra.ai, not in a public issue.
-
     This PR is closed automatically.
 
 concurrency:

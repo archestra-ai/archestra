@@ -63,7 +63,7 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
         <div className="border-b px-4 py-3">
           <InlineNotice variant="warning" data-testid="effective-policy-stubs">
             <InlineNoticeText>
-              <span>Composed as an empty stub, its rules left out: </span>
+              <span>Composed as empty stubs, their rules left out: </span>
               {stubs.map((battery, index) => (
                 <span key={battery.name}>
                   {index > 0 ? <span>, </span> : null}

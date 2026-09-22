@@ -35,6 +35,8 @@ const install = (fields: Partial<Install>): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  packageHash: null,
+  lastError: null,
   credentialBindings: {},
   createdAt: "2026-09-18T12:00:00Z",
   updatedAt: "2026-09-18T12:00:00Z",
@@ -89,7 +91,7 @@ test("an installed battery follows its install and is switched through it", asyn
           {
             battery: "github",
             evidence: "host",
-            install: install({ enabled: false, status: "disabled" }),
+            install: install({ enabled: false, status: "server_missing" }),
           },
         ];
         return HttpResponse.json(matches[0].install);
@@ -114,7 +116,6 @@ test("a battery matched by name alone starts off and is installed when turned on
         expect(await request.json()).toEqual({
           batteryName: "slack",
           catalogId,
-          enabled: true,
         });
         const created = install({
           id: "install-2",
@@ -136,7 +137,7 @@ test("a battery matched by name alone starts off and is installed when turned on
   expect(screen.getByRole("link")).toHaveAttribute("href", "/openappa");
 });
 
-test("a choice made while a tool sync attaches the battery lands on the new install", async () => {
+test("a choice made while another write installs the battery lands on its install", async () => {
   matches = [{ battery: "github", evidence: "host", install: null }];
   server.use(
     http.post(`${baseUrl}/api/openappa/battery-installs`, () => {
@@ -144,7 +145,11 @@ test("a choice made while a tool sync attaches the battery lands on the new inst
         {
           battery: "github",
           evidence: "host",
-          install: install({ id: "install-3" }),
+          install: install({
+            id: "install-3",
+            enabled: false,
+            status: "server_missing",
+          }),
         },
       ];
       return HttpResponse.json(
@@ -160,28 +165,28 @@ test("a choice made while a tool sync attaches the battery lands on the new inst
     http.patch(
       `${baseUrl}/api/openappa/battery-installs/install-3`,
       async ({ request }) => {
-        expect(await request.json()).toEqual({ enabled: false });
-        const updated = install({
-          id: "install-3",
-          enabled: false,
-          status: "disabled",
-        });
+        expect(await request.json()).toEqual({ enabled: true });
+        const updated = install({ id: "install-3" });
         matches = [{ battery: "github", evidence: "host", install: updated }];
         return HttpResponse.json(updated);
       },
     ),
   );
   show();
-  fireEvent.click(await screen.findByRole("checkbox", { name: /github/ }));
+  const checkbox = await screen.findByRole("checkbox", { name: /github/ });
+  expect(checkbox).not.toBeChecked();
+  fireEvent.click(checkbox);
   await waitFor(() =>
-    expect(screen.getByRole("checkbox", { name: /github/ })).not.toBeChecked(),
+    expect(screen.getByRole("checkbox", { name: /github/ })).toBeChecked(),
   );
 });
 
-test("a battery matched by host is on by default before its install exists", async () => {
+test("a battery is off until the policy declares it, whatever matched it", async () => {
   matches = [{ battery: "linear", evidence: "host", install: null }];
   show();
-  expect(await screen.findByRole("checkbox", { name: /linear/ })).toBeChecked();
+  expect(
+    await screen.findByRole("checkbox", { name: /linear/ }),
+  ).not.toBeChecked();
 });
 
 test("renders nothing when the server matches no battery or guardrails v2 is off", async () => {
@@ -212,7 +217,9 @@ test("a failed lookup shows an error with a retry instead of nothing", async () 
   );
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
-  expect(await screen.findByRole("checkbox", { name: /github/ })).toBeChecked();
+  expect(
+    await screen.findByRole("checkbox", { name: /github/ }),
+  ).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 

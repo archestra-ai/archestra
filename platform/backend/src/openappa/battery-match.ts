@@ -8,11 +8,6 @@ type BatteryMatchCatalog = Pick<
 
 type BatteryMatch = { battery: string; evidence: BatteryMatchEvidence };
 
-/** Whether any battery rule at all could match the catalog entry. */
-export function matchesAnyRule(catalog: BatteryMatchCatalog): boolean {
-  return matchBatteries(catalog, RULE_BATTERIES).length > 0;
-}
-
 /**
  * The batteries a catalog entry stands for, strongest evidence first: a known
  * server URL host or container image outweighs a name, and a name match only
@@ -173,7 +168,3 @@ function normalizeName(name: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
-
-const RULE_BATTERIES: ReadonlySet<string> = new Set(
-  BATTERY_MATCH_RULES.map((rule) => rule.battery),
-);

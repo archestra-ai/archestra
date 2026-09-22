@@ -792,17 +792,31 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  // A POST walk-up is discarded, so the accept action registers its own path.
+  "/api/openappa/github-sync/accept-held": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+  },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",
     fetchById: (id, orgId) =>
       OpenAppaBatteryInstallModel.findByIdForAudit(id, orgId),
   },
+  // Uploads are named, deletes are by the bytes: a name has as many stored
+  // versions as it has been uploaded, and only the hash says which one.
   "/api/openappa/battery-packages/:name": {
     resourceType: "openappaBatteryPackage",
     resourceIdParam: "name",
     actionByMethod: { PUT: "openappaBatteryPackage.updated" },
     fetchById: (name, orgId) =>
-      OpenAppaBatteryPackageModel.findByIdForAudit(name, orgId),
+      OpenAppaBatteryPackageModel.findNewestByNameForAudit(name, orgId),
+  },
+  "/api/openappa/battery-packages/:contentHash": {
+    resourceType: "openappaBatteryPackage",
+    resourceIdParam: "contentHash",
+    fetchById: (contentHash, orgId) =>
+      OpenAppaBatteryPackageModel.findByIdForAudit(contentHash, orgId),
   },
   // Bulk import creates multiple skills, so there is no single resourceId and
   // fetchById can't represent the result. The route handler sets

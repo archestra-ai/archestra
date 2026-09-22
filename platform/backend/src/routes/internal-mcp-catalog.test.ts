@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
@@ -15,8 +16,10 @@ import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
 import config from "@/config";
 import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
-import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -36,6 +39,7 @@ describe("internal MCP catalog routes", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     const user = await makeUser();
+    policyAuthor = user.id;
     await makeMember(user.id, organization.id, { role: "admin" });
 
     app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -111,12 +115,10 @@ describe("internal MCP catalog routes", () => {
         name: "notion__search",
         rawName: "search",
       });
-      await OpenAppaBatteryInstallModel.createIfAbsent({
+      await declarePolicy({
         organizationId,
-        batteryName: "notion",
-        catalogId: catalog.id,
-        enabled: true,
-        credentialBindings: {},
+        namespace: "notion",
+        targets: ["notion"],
       });
       const installed =
         await openappaBatteriesService.recompile(organizationId);
@@ -138,6 +140,99 @@ describe("internal MCP catalog routes", () => {
         (await openappaBatteriesService.getEffectivePolicy(organizationId))
           .installFingerprint,
       ).toBe(installed.installFingerprint);
+    } finally {
+      config.openappa.enabled = wasEnabled;
+    }
+  });
+
+  test("renaming a server moves the alias targets its guardrails policy spells", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const wasEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    try {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: "Cloud prod",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "cloud_prod__list",
+        rawName: "list",
+      });
+      await declarePolicy({
+        organizationId,
+        namespace: "cloudflare",
+        targets: ["cloud_prod"],
+      });
+      expect(await batteryStatus(organizationId)).toBe("active");
+
+      const renamed = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { name: "Cloud staging" },
+      });
+      expect(renamed.statusCode).toBe(200);
+
+      const latest = await guardrailsPolicyService.get(organizationId);
+      const declarations = await import("@/openappa/declarations").then(
+        (module) =>
+          module.openappaDeclarations.resolve({
+            organizationId,
+            content: latest.content,
+          }),
+      );
+      expect(declarations.aliases).toEqual([
+        { namespace: "cloudflare", servers: ["cloud_staging"], line: 4 },
+      ]);
+      expect(await batteryStatus(organizationId)).toBe("active");
+    } finally {
+      config.openappa.enabled = wasEnabled;
+    }
+  });
+
+  test("a rename leaves a repository-managed policy alone and its battery without a server", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const wasEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    try {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: "Cloud prod",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "cloud_prod__list",
+        rawName: "list",
+      });
+      await declarePolicy({
+        organizationId,
+        namespace: "cloudflare",
+        targets: ["cloud_prod"],
+      });
+      // The repository owns the text from here on, so nothing may rewrite it.
+      await OpenAppaGithubSyncModel.save(organizationId, {
+        repo: "example/policies",
+        ref: null,
+        path: "appa.toml",
+        interval: "1h",
+        githubPatId: null,
+        githubAppConfigId: null,
+      });
+
+      const renamed = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { name: "Cloud staging" },
+      });
+      expect(renamed.statusCode).toBe(200);
+
+      const latest = await guardrailsPolicyService.get(organizationId);
+      expect(latest.content).toContain('cloudflare = ["cloud_prod"]');
+      expect(await batteryStatus(organizationId)).toBe("server_missing");
     } finally {
       config.openappa.enabled = wasEnabled;
     }
@@ -689,3 +784,38 @@ describe("internal MCP catalog routes", () => {
     expect(created.localConfigSecretId).toBeNull();
   });
 });
+
+let policyAuthor: string;
+
+/** A policy revision including one bundled battery and pointing it at `targets`. */
+async function declarePolicy(params: {
+  organizationId: string;
+  namespace: string;
+  targets: string[];
+}) {
+  const { organizationId, namespace, targets } = params;
+  const latest = await guardrailsPolicyService.get(organizationId);
+  const content = `include = ["batteries/${namespace}/appa.toml"]
+
+[server_aliases]
+${namespace} = [${targets.map((target) => `"${target}"`).join(", ")}]
+
+${latest.content}`;
+  const saved = await GuardrailsPolicyModel.save({
+    organizationId,
+    updatedBy: policyAuthor,
+    content,
+    contentHash: createHash("sha256").update(content).digest("hex"),
+    expectedRevision: latest.revision,
+  });
+  if (!saved) throw new Error("the policy revision was not saved");
+  await openappaBatteriesService.recompile(organizationId);
+}
+
+async function batteryStatus(organizationId: string): Promise<string> {
+  const declarations =
+    await openappaBatteriesService.policyDeclarations(organizationId);
+  const [battery] = declarations.batteries;
+  if (!battery) throw new Error("the policy includes no battery");
+  return battery.status;
+}

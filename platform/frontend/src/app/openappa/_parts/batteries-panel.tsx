@@ -59,7 +59,7 @@ export function BatteriesPanel() {
     battery.installs.map((install) => ({ battery, install })),
   );
   const uploaded = batteries.data.filter(
-    (battery) => battery.source === "organization",
+    (battery) => battery.source === "upload",
   );
   const serverName = (catalogId: string) =>
     catalog.data
@@ -278,7 +278,8 @@ function PackageRow({
         description="Every install of this battery loses its policy until the package is uploaded again."
         isPending={remove.isPending}
         onConfirm={async () => {
-          await remove.mutateAsync(battery.name);
+          if (battery.contentHash)
+            await remove.mutateAsync(battery.contentHash);
           setRemoving(false);
         }}
       />
@@ -354,10 +355,10 @@ const STATUS_BADGES: Record<
   { label: string; variant: "secondary" | "outline" | "destructive" }
 > = {
   active: { label: "Active", variant: "secondary" },
-  disabled: { label: "Off", variant: "outline" },
   missing_credentials: { label: "Needs a credential", variant: "destructive" },
   naming_conflict: { label: "Tool name conflict", variant: "destructive" },
-  superseded: { label: "Owned by another server", variant: "outline" },
+  server_missing: { label: "No server bound", variant: "outline" },
+  refused: { label: "Not enforced", variant: "destructive" },
   unavailable: { label: "Package missing", variant: "destructive" },
 };
 

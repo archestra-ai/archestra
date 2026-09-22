@@ -9,14 +9,14 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main at the merge of #384 (a host that embeds the runtime
-# brings its own adapter; hosted composition; bundled batteries) on top of
+# Pinned to OpenAPPA main at the merge of #386 (a hosted root document declares
+# its batteries and their credentials; on top of #384's embedded host) on top of
 # v0.24.0. Re-pin to the first release that includes it. The embedded reporting helper
 # currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4f2b89e05baef8a74c4a4ded3b8214996de01ae5" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -24,6 +24,9 @@ serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.11"
 tempfile = "3"
 toml = "1.1"
+# The runtime's own editor speaks this document type; reading a root's declarations
+# with their spans needs the same version the runtime holds.
+toml_edit = "0.25"
 tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
 

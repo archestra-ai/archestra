@@ -54,7 +54,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
             <Checkbox
               id={id}
               className="mt-0.5"
-              checked={match.install?.enabled ?? match.evidence !== "name"}
+              checked={match.install?.enabled ?? false}
               disabled={canManage !== true || setEnabled.isPending}
               onCheckedChange={(checked) =>
                 setEnabled.mutate({ match, enabled: checked === true })
@@ -87,17 +87,17 @@ type InstallStatus = NonNullable<BatteryMatch["install"]>["status"];
 
 const STATUS_NOTES: Record<InstallStatus, string> = {
   active: "Its guardrails apply to this server's tools.",
-  disabled: "Off. Its guardrails do not apply.",
   missing_credentials: "Needs a credential before its helpers can run.",
   naming_conflict: "Off: its tool names clash with another battery.",
-  superseded: "Off: another server already owns this battery's helpers.",
+  server_missing: "Off: it is bound to no server this deployment carries.",
+  refused: "Off: the policy it composes into was refused.",
   unavailable: "Off: the battery package is gone.",
 };
 
 const EVIDENCE_NOTES: Record<BatteryMatch["evidence"], string> = {
-  host: "Matched by the server's host. Applies once its tools are synced.",
-  image: "Matched by the server's image. Applies once its tools are synced.",
-  name: "Matched by name only, so it stays off unless you turn it on.",
+  host: "Matched by the server's host. Off until you turn it on.",
+  image: "Matched by the server's image. Off until you turn it on.",
+  name: "Matched by name only. Off until you turn it on.",
 };
 
 function describe(match: BatteryMatch): string {

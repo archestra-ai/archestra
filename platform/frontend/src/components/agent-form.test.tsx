@@ -27,6 +27,7 @@ import {
   AgentForm as AgentFormWithoutFooter,
 } from "./agent-form";
 import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
+import { defaultAgentRuntime } from "./agent-runtime-fields";
 
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -4005,6 +4006,67 @@ describe("AgentForm save payload and failure handling", () => {
       // they are written with it. `environmentId` only travels when it moved.
       "suggestedPrompts",
     ]);
+  });
+
+  it("describes the environment's sandbox and network egress for an agent with no dedicated runtime", async () => {
+    // baseAgent.runtime is null — this agent has no dedicated Agent
+    // Runtime, but it still runs its tools (including bash) through the
+    // sandbox and is subject to its network egress controls, so the
+    // description should mention that regardless.
+    renderAdvanced();
+
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("describes the environment's sandbox and network egress for an agent with a dedicated runtime", async () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          runtime: defaultAgentRuntime("example.com/runtime:latest"),
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+    // Agent Runtime is not limited to coding agents, so the description
+    // should not single out a "code sandbox".
+    expect(screen.queryByText(/code sandbox/)).not.toBeInTheDocument();
+  });
+
+  it("keeps describing the environment's sandbox as a new agent's own runtime choice changes, not a global or existing-agent setting", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const user = userEvent.setup();
+    render(<AgentForm agentType="agent" submitEnabled={false} />);
+
+    // No runtime picked yet for this to-be-created agent, and the org-wide
+    // agentRuntime feature is enabled — neither changes the description.
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "OpenCode" }));
+
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("sends the tools step's own fields, and none of the configuration behind it", async () => {

@@ -1695,14 +1695,16 @@ export function AgentForm({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents and MCP gateways can be assigned a deployment environment. For
-  // agents it binds the code sandbox runtime; for MCP gateways it is an
-  // attribution label so their usage falls under environment-scoped cost
+  // agents it binds the sandbox (every agent runs its tools, including bash,
+  // through the sandbox and is subject to its network egress controls,
+  // whether or not it has a dedicated Agent Runtime); for MCP gateways it is
+  // an attribution label so their usage falls under environment-scoped cost
   // limits.
   const supportsEnvironment = isInternalAgent || agentType === "mcp_gateway";
   const environmentHelpText =
     agentType === "mcp_gateway"
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
-      : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
+      : "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const showActivationSkills =
     showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;

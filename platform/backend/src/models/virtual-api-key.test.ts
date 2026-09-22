@@ -316,7 +316,7 @@ describe("VirtualApiKeyModel", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Parent Key",
@@ -370,7 +370,7 @@ describe("VirtualApiKeyModel", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const anthropicKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Anthropic Parent",
@@ -418,7 +418,7 @@ describe("VirtualApiKeyModel", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Parent Key",
@@ -456,7 +456,7 @@ describe("VirtualApiKeyModel", () => {
     makeUser,
     makeTeam,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser({ email: "owner@test.com" });
     const otherUser = await makeUser({ email: "other@test.com" });
     const team = await makeTeam(org.id, owner.id, { name: "Platform Team" });
@@ -533,7 +533,7 @@ describe("VirtualApiKeyModel", () => {
     makeLlmProviderApiKey,
     makeUser,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     const otherUser = await makeUser({ email: "other-admin@test.com" });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });

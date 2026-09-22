@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -71,10 +72,11 @@ describe("promote a chat attachment into the knowledge repository", () => {
     });
   }
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
     await bootAs(user, organizationId);
   });
 
@@ -97,6 +99,41 @@ describe("promote a chat attachment into the knowledge repository", () => {
       visibility: "org-wide",
       knowledgeBases: [],
     });
+  });
+
+  test("shares a promoted attachment with explicit recipients without publishing it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const { attachment } = await makeAttachment({
+      ownerId: user.id,
+      orgId: organizationId,
+    });
+    const initialGrants = [
+      { subject: { type: "user", id: recipient.id }, actions: ["read", "use"] },
+    ];
+    const response = await promote({
+      attachmentId: attachment.id,
+      visibility: "private",
+      initialGrants,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const id = response.json().id;
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "knowledgeFile",
+      scope: id,
+    });
+    expect(policy?.grants).toEqual(expect.arrayContaining(initialGrants));
+    await bootAs(recipient, organizationId);
+    const content = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-files/${id}/content`,
+    });
+    expect(content.statusCode, content.body).toBe(200);
+    expect(content.body).toContain("Retention is 90 days.");
   });
 
   test("stores the bytes, so deleting the chat cannot empty the document", async () => {

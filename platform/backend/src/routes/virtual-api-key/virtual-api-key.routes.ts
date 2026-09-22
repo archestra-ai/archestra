@@ -21,8 +21,10 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -383,6 +385,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         describe: (key) => key.name,
         authorize: async (key) => {
           await requireVirtualKeyModifyPermission({
+            action: "delete",
             virtualKey: key,
             userId: user.id,
             organizationId,
@@ -532,6 +535,14 @@ async function validateVirtualKeyInitialGrants(params: {
   scope: ResourceVisibilityScope;
   teamIds: string[];
 }): Promise<void> {
+  await CredentialResourcePermissions.validateVirtual({
+    keyType: params.body.keyType,
+    ownerId: params.ownerId,
+    grants: params.body.initialGrants ?? [],
+    providerApiKeyIds: params.body.providerApiKeys.map(
+      (mapping) => mapping.providerApiKeyId,
+    ),
+  });
   if (!params.body.initialGrants?.length) return;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -600,6 +611,16 @@ async function updateVirtualApiKey(params: {
       providerApiKeys: [],
     });
   } else {
+    if (
+      body.scope !== accessContext.scope ||
+      [...body.teams].sort().join() !== [...accessContext.teamIds].sort().join()
+    ) {
+      await ResourcePermissions.rejectLegacySharing({
+        organizationId,
+        resource: "llmVirtualKey",
+        scope: id,
+      });
+    }
     await validateVirtualKeyScope({
       scope: body.scope,
       teamIds: body.teams,
@@ -609,10 +630,25 @@ async function updateVirtualApiKey(params: {
       isAdmin: isVirtualKeyAdmin,
     });
     await validateProviderApiKeys({
+      retainedProviderApiKeyIds: (
+        await VirtualApiKeyModel.getProviderApiKeys(id)
+      ).map((key) => key.providerApiKeyId),
       mappings: body.providerApiKeys,
       organizationId,
       scope: body.scope,
       userId: user.id,
+    });
+    await CredentialResourcePermissions.validateVirtual({
+      keyType: accessContext.keyType,
+      ownerId: accessContext.authorId,
+      grants: await CredentialResourcePermissions.currentGrants({
+        organizationId,
+        resource: "llmVirtualKey",
+        scope: id,
+      }),
+      providerApiKeyIds: body.providerApiKeys.map(
+        (mapping) => mapping.providerApiKeyId,
+      ),
     });
     updatedVirtualKey = await VirtualApiKeyModel.update({
       id,
@@ -679,6 +715,7 @@ async function deleteVirtualApiKey(params: {
 
   const userTeamIds = await TeamModel.getUserTeamIds(user.id);
   await requireVirtualKeyModifyPermission({
+    action: "delete",
     virtualKey: accessContext,
     userId: user.id,
     organizationId,
@@ -772,6 +809,7 @@ async function validateVirtualKeyScope(params: {
 }
 
 async function validateProviderApiKeys(params: {
+  retainedProviderApiKeyIds?: string[];
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
   scope: ResourceVisibilityScope;
@@ -857,11 +895,29 @@ async function validateProviderApiKeys(params: {
         );
       }
     }
+    if (
+      !params.retainedProviderApiKeyIds?.includes(apiKey.id) &&
+      !(await LlmProviderApiKeyModel.canUseKey(
+        apiKey,
+        userId,
+        await TeamModel.getUserTeamIds(userId),
+      ))
+    ) {
+      throw new ApiError(
+        403,
+        "You do not have permission to use this provider API key",
+      );
+    }
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function requireVirtualKeyModifyPermission(params: {
+  action?: "update" | "delete";
   virtualKey: {
+    id: string;
     scope: ResourceVisibilityScope;
     authorId: string | null;
     teamIds: string[];
@@ -871,6 +927,24 @@ async function requireVirtualKeyModifyPermission(params: {
   userTeamIds: string[];
 }): Promise<void> {
   const { virtualKey, userId, organizationId, userTeamIds } = params;
+
+  const context = {
+    organizationId,
+    userId,
+    resource: "llmVirtualKey" as const,
+    scope: virtualKey.id,
+  };
+  const [policy, allPolicy] = await Promise.all([
+    ResourcePermissionPolicyModel.find(context),
+    ResourcePermissionPolicyModel.find({ ...context, scope: "*" }),
+  ]);
+  if (policy?.legacySharingMigrated || allPolicy?.legacySharingMigrated) {
+    await ResourcePermissions.require({
+      ...context,
+      action: params.action ?? "update",
+    });
+    return;
+  }
 
   const isAdmin = await userHasPermission(
     userId,
@@ -911,3 +985,4 @@ async function requireVirtualKeyModifyPermission(params: {
       return;
   }
 }
+// SPDX-SnippetEnd

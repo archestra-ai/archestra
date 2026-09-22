@@ -16,7 +16,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -80,7 +80,6 @@ import {
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useBulkDeleteProjects,
-  useBulkUpdateProjectVisibility,
   useCreateProject,
   useDeleteProject,
   usePermanentlyDeleteProject,
@@ -387,7 +386,6 @@ function ProjectSection({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
   const bulkDelete = useBulkDeleteProjects();
-  const bulkShare = useBulkUpdateProjectVisibility();
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   const { data: canUpdateProjects } = useHasPermissions({
@@ -453,7 +451,7 @@ function ProjectSection({
         count={selectedProjects.length}
         noun="project"
         onClear={clearSelection}
-        busy={bulkDelete.isPending || bulkShare.isPending}
+        busy={bulkDelete.isPending}
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
@@ -545,41 +543,12 @@ function ProjectSection({
         />
       )}
       {bulkShareOpen && (
-        <BulkVisibilityDialog
+        <BulkResourceAccessDialog
+          resource="project"
+          items={selectedForSharing}
           open={bulkShareOpen}
           onOpenChange={setBulkShareOpen}
-          noun="project"
-          isPending={bulkShare.isPending}
-          items={selectedForSharing.map((project) => ({
-            id: project.id,
-            // A project's list row carries names rather than audience ids, so
-            // the dialog starts at the agreed scope and asks for the audience.
-            scope:
-              project.visibility === "organization"
-                ? "org"
-                : project.visibility === "team"
-                  ? "team"
-                  : "personal",
-            teams: [],
-            users: [],
-          }))}
-          onApply={async (change) => {
-            const outcome = await bulkShare.mutateAsync({
-              projects: selectedForSharing,
-              scope: change.scope,
-              teamIds: change.teamIds,
-              userIds: change.userIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated sharing for",
-              failureVerb: "update",
-              noun: "project",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
+          onApplied={clearSelection}
         />
       )}
     </section>

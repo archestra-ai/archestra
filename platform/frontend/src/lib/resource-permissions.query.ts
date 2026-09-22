@@ -2,10 +2,12 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type ResourcePermissionGrant,
   type ScopedResource,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { reportBulkOutcome, runBulkAction } from "./bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ResourcePermissions =
@@ -16,8 +18,10 @@ export type PermissionRecipient =
 export function useResourcePermissions(
   resource: ScopedResource,
   scope: string,
+  enabled = true,
 ) {
   return useQuery({
+    enabled,
     queryKey: ["resource-permissions", resource, scope],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getResourcePermissions({
@@ -91,6 +95,9 @@ export function useUpdateResourcePermissions(
         client.invalidateQueries({ queryKey: ["skills"] }),
         client.invalidateQueries({ queryKey: ["apps"] }),
         client.invalidateQueries({ queryKey: ["agents"] }),
+        client.invalidateQueries({ queryKey: ["conversation"] }),
+        client.invalidateQueries({ queryKey: ["conversations"] }),
+        client.invalidateQueries({ queryKey: ["agent-runs"] }),
         client.invalidateQueries({ queryKey: ["llm-models"] }),
         client.invalidateQueries({ queryKey: ["models-with-api-keys"] }),
       ]);
@@ -99,6 +106,66 @@ export function useUpdateResourcePermissions(
     onError: async () => {
       await client.invalidateQueries({
         queryKey: ["resource-permissions", resource, scope],
+      });
+    },
+  });
+}
+
+/** Merge additions against each current revision, preserving stronger access. */
+export function useAddBulkResourceAccess(resource: ScopedResource) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      items,
+      grants,
+    }: {
+      items: readonly { id: string; name: string }[];
+      grants: ResourcePermissionGrant[];
+    }) =>
+      runBulkAction({
+        items,
+        describe: (item) => item.name,
+        run: async (item) => {
+          const { data: policy, error } =
+            await archestraApiSdk.getResourcePermissions({
+              path: { resource, scope: item.id },
+            });
+          throwOnApiError(error, { toastOnError: false });
+          if (!policy) throw new Error("Permissions response is missing");
+          const merged = policy.grants.map(({ subject, actions }) => ({
+            subject,
+            actions: [...actions],
+          }));
+          for (const grant of grants) {
+            const existing = merged.find(
+              (entry) =>
+                entry.subject.type === grant.subject.type &&
+                entry.subject.id === grant.subject.id,
+            );
+            if (existing)
+              existing.actions = [
+                ...new Set([...existing.actions, ...grant.actions]),
+              ];
+            else
+              merged.push({
+                subject: grant.subject,
+                actions: [...grant.actions],
+              });
+          }
+          const result = await archestraApiSdk.updateResourcePermissions({
+            path: { resource, scope: item.id },
+            body: { revision: policy.revision, grants: merged },
+          });
+          throwOnApiError(result.error, { toastOnError: false });
+        },
+      }),
+    onSuccess: async (outcome) => {
+      await client.invalidateQueries();
+      reportBulkOutcome({
+        outcome,
+        verb: "Added access to",
+        failureVerb: "update permissions for",
+        noun: "resource",
       });
     },
   });

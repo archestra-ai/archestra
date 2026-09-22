@@ -115,51 +115,56 @@ export default class ResourcePermissionPolicyModel {
     await params.tx
       .insert(schema.resourcePermissionPoliciesTable)
       .values([
-        ...ScopedResourceSchema.options.map((resource) => ({
-          organizationId: params.organizationId,
-          resource,
-          scope: "*",
-          legacySharingMigrated: true,
-          grants: [
-            ...(resource === "log" || resource === "auditLog"
-              ? ["admin"]
-              : ["admin", "platform_admin"]
-            ).map((id) => ({
-              subject: { type: "role" as const, id },
-              actions:
-                resource === "log" || resource === "auditLog"
-                  ? ([
-                      "read",
-                      "manage-permissions",
-                    ] as ResourcePermissionAction[])
-                  : resourcePermissionPresets.manage.actions,
-            })),
-            ...(resource === "llmModel"
-              ? [
-                  {
-                    subject: { type: "role" as const, id: "editor" },
-                    actions: [
-                      "read",
-                      "use",
-                      "update",
-                      "manage-permissions",
-                    ] as ResourcePermissionAction[],
-                  },
-                ]
-              : []),
-            // Editors could always deploy into a restricted environment, back
-            // when that was a `deploy-to-restricted` action on each kind of
-            // thing deployed. `use` on every environment is that same reach.
-            ...(resource === "environment"
-              ? [
-                  {
-                    subject: { type: "role" as const, id: "editor" },
-                    actions: ["read", "use"] as ResourcePermissionAction[],
-                  },
-                ]
-              : []),
-          ],
-        })),
+        ...ScopedResourceSchema.options
+          .filter(
+            (resource) =>
+              resource !== "conversation" && resource !== "agentRun",
+          )
+          .map((resource) => ({
+            organizationId: params.organizationId,
+            resource,
+            scope: "*",
+            legacySharingMigrated: true,
+            grants: [
+              ...(resource === "log" || resource === "auditLog"
+                ? ["admin"]
+                : ["admin", "platform_admin"]
+              ).map((id) => ({
+                subject: { type: "role" as const, id },
+                actions:
+                  resource === "log" || resource === "auditLog"
+                    ? ([
+                        "read",
+                        "manage-permissions",
+                      ] as ResourcePermissionAction[])
+                    : resourcePermissionPresets.manage.actions,
+              })),
+              ...(resource === "llmModel"
+                ? [
+                    {
+                      subject: { type: "role" as const, id: "editor" },
+                      actions: [
+                        "read",
+                        "use",
+                        "update",
+                        "manage-permissions",
+                      ] as ResourcePermissionAction[],
+                    },
+                  ]
+                : []),
+              // Editors could always deploy into a restricted environment, back
+              // when that was a `deploy-to-restricted` action on each kind of
+              // thing deployed. `use` on every environment is that same reach.
+              ...(resource === "environment"
+                ? [
+                    {
+                      subject: { type: "role" as const, id: "editor" },
+                      actions: ["read", "use"] as ResourcePermissionAction[],
+                    },
+                  ]
+                : []),
+            ],
+          })),
       ])
       .onConflictDoNothing();
     const models = await params.tx
@@ -406,6 +411,23 @@ export default class ResourcePermissionPolicyModel {
     });
   }
 
+  static async findMigratedScopes(params: {
+    organizationId: string;
+    resources: ScopedResource[];
+  }) {
+    const table = schema.resourcePermissionPoliciesTable;
+    return db
+      .select({ resource: table.resource, scope: table.scope })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          inArray(table.resource, params.resources),
+          eq(table.legacySharingMigrated, true),
+        ),
+      );
+  }
+
   static async findForSubjects(params: {
     organizationId: string;
     subjects: PermissionSubject[];
@@ -436,6 +458,7 @@ export default class ResourcePermissionPolicyModel {
     resource: ScopedResource;
     scopeColumn: SQLWrapper;
     action: ResourcePermissionAction;
+    includeWildcard?: boolean;
   }) {
     const serviceAccountId = params.userId.startsWith("service-account:")
       ? params.userId.slice("service-account:".length)
@@ -460,7 +483,7 @@ export default class ResourcePermissionPolicyModel {
         jsonb_array_elements(grant_policy.grants) grant_entry
       WHERE grant_policy.organization_id = ${params.organizationId}
         AND grant_policy.resource = ${params.resource}
-        AND (grant_policy.scope = '*' OR grant_policy.scope = ${params.scopeColumn}::text)
+        AND ((${params.includeWildcard !== false} AND grant_policy.scope = '*') OR grant_policy.scope = ${params.scopeColumn}::text)
         AND (grant_entry->'actions') ? ${params.action}
         AND (
           (grant_entry->'subject'->>'type' = 'organization' AND grant_entry->'subject'->>'id' = '*')
@@ -537,6 +560,9 @@ export default class ResourcePermissionPolicyModel {
           resource: params.resource,
           scope: params.scope,
           grants: params.grants,
+          legacySharingMigrated:
+            params.resource === "conversation" ||
+            params.resource === "agentRun",
         })
         .onConflictDoNothing()
         .returning();
@@ -546,6 +572,9 @@ export default class ResourcePermissionPolicyModel {
       .update(table)
       .set({
         grants: params.grants,
+        ...(params.resource === "conversation" || params.resource === "agentRun"
+          ? { legacySharingMigrated: true }
+          : {}),
         // An explicit edit makes the selected recipients authoritative. A
         // role grant must no longer retain the old organization audience.
         legacyOrganizationAudience: false,

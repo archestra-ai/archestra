@@ -382,7 +382,6 @@ describe("useSettingsTabs", () => {
         "Users",
         "Teams",
         "Roles",
-        "Permissions",
         "Credentials",
         "Identity Providers",
         "Secrets",

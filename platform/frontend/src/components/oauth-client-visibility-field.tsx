@@ -6,13 +6,19 @@ import {
   formatPermissionRequirement,
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
+import { SearchableMultiSelect } from "@/components/searchable-multi-select";
+import { FieldDescription } from "@/components/ui/field-description";
+import { Label } from "@/components/ui/label";
 import {
-  TeamVisibilityPicker,
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
+import { formatTeamPath } from "@/lib/teams/team-hierarchy";
 
 /**
  * Scope + teams picker for OAuth client create/edit dialogs (both the LLM
@@ -73,7 +79,12 @@ export function OauthClientVisibilityField({
     return "";
   };
 
-  const baseOptions: VisibilityOption<ResourceVisibilityScope>[] = [
+  const baseOptions: {
+    value: ResourceVisibilityScope;
+    label: string;
+    description: string;
+    icon: typeof User;
+  }[] = [
     {
       value: "personal",
       label: "Personal",
@@ -102,29 +113,55 @@ export function OauthClientVisibilityField({
   }));
 
   return (
-    <VisibilitySelector
-      heading="Who can see and manage this OAuth client"
-      value={scope}
-      options={options}
-      onValueChange={onScopeChange}
-    >
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`${resource}-sharing`}>
+          Who can manage this OAuth client
+        </Label>
+        <Select value={scope} onValueChange={onScopeChange}>
+          <SelectTrigger id={`${resource}-sharing`}>
+            <SelectValue>
+              {options.find((option) => option.value === scope)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+              >
+                <option.icon className="size-4" />
+                <div className="text-left">
+                  <div>{option.label}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {option.disabledReason ?? option.description}
+                  </div>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Sharing this credential does not change what its tokens can access.
+        </FieldDescription>
+      </div>
       {scope === "team" && (
         <div className="space-y-2">
-          <TeamVisibilityPicker
+          <SearchableMultiSelect
+            ariaLabel="Teams"
+            placeholder="Select teams"
+            searchPlaceholder="Search teams..."
             disabled={
               !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
             }
-            teams={teams ?? []}
+            items={(teams ?? []).map((team) => ({
+              value: team.id,
+              label: team.name,
+              description: formatTeamPath(teams ?? [], team.id),
+            }))}
             value={teamIds}
-            onChange={onTeamIdsChange}
-            required
-            unavailableMessage={
-              !canReadTeams
-                ? "Teams unavailable"
-                : hasNoAvailableTeams
-                  ? "No teams available"
-                  : undefined
-            }
+            onValueChange={onTeamIdsChange}
           />
           {!canReadTeams && (
             <PermissionRequirementHint
@@ -134,6 +171,6 @@ export function OauthClientVisibilityField({
           )}
         </div>
       )}
-    </VisibilitySelector>
+    </div>
   );
 }

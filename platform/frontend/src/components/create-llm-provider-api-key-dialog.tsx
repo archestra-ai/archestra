@@ -2,6 +2,7 @@
 
 import {
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
 } from "@archestra/shared";
@@ -24,7 +25,6 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
@@ -80,9 +80,6 @@ export function CreateLlmProviderApiKeyDialog({
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
-  const { data: canCreateOrgScopedKey } = useHasPermissions({
-    llmProviderApiKey: ["admin"],
-  });
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
@@ -116,11 +113,10 @@ export function CreateLlmProviderApiKeyDialog({
       availableProviders.length > 0
         ? getDefaultFormValues({
             defaultValues,
-            canCreateOrgScopedKey: canCreateOrgScopedKey === true,
             availableProviders,
           })
         : null,
-    [availableProviders, canCreateOrgScopedKey, defaultValues],
+    [availableProviders, defaultValues],
   );
   const resetKey = JSON.stringify(defaultFormValues);
 
@@ -179,6 +175,16 @@ export function CreateLlmProviderApiKeyDialog({
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
         scope,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialGrants:
+          subscriptionKind || providerRequiresPerUserCredential(values.provider)
+            ? []
+            : (values.initialGrants ?? []).map(
+                ({ name: _name, ...grant }) => grant,
+              ),
+        // SPDX-SnippetEnd
         teamId: scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
@@ -321,11 +327,10 @@ export function CreateLlmProviderApiKeyDialog({
 
 function getDefaultFormValues(params: {
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
-  canCreateOrgScopedKey: boolean;
   /** Providers the organization still allows, in catalog order. */
   availableProviders: LlmProviderApiKeyFormValues["provider"][];
 }): LlmProviderApiKeyFormValues {
-  const { defaultValues, canCreateOrgScopedKey, availableProviders } = params;
+  const { defaultValues, availableProviders } = params;
   const provider =
     defaultValues?.provider &&
     availableProviders.includes(defaultValues.provider)
@@ -339,7 +344,8 @@ function getDefaultFormValues(params: {
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    scope: canCreateOrgScopedKey ? "org" : "personal",
+    scope: "personal",
+    initialGrants: [],
     teamId: null,
     vaultSecretPath: null,
     vaultSecretKey: null,

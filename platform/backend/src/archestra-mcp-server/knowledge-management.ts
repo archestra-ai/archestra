@@ -591,6 +591,7 @@ async function handleQueryKnowledgeSources(params: {
           organizationId,
           canReadAll: access.canReadAll,
           viewerTeamIds: access.teamIds,
+          viewerUserId: access.userId,
           // Query scope: auto-sync-permissions connectors stay searchable for
           // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
           visibilityScope: "query",
@@ -631,9 +632,11 @@ async function handleQueryKnowledgeSources(params: {
         ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
         : [];
       const visibleKbs = access
-        ? knowledgeSourceAccessControlService.filterKnowledgeBases(
-            access,
-            validKbs,
+        ? validKbs.filter((kb) =>
+            knowledgeSourceAccessControlService.canQueryKnowledgeBase(
+              access,
+              kb,
+            ),
           )
         : validKbs.filter((kb) => kb.visibility === "org-wide");
 
@@ -658,6 +661,7 @@ async function handleQueryKnowledgeSources(params: {
                 KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
+                  viewerUserId: access?.userId,
                   visibilityScope: "query",
                   environmentId: agentEnvironmentId,
                 }),
@@ -721,6 +725,8 @@ async function handleQueryKnowledgeSources(params: {
         metrics.rag.reportKnowledgeQueryUnresolvedIdentity();
       }
     }
+
+    if (context.userId) userAcl.push(`principal:${context.userId}`);
 
     const bypassAcl = access?.canReadAll ?? false;
     const documentFilter = args.documentFilter;
@@ -1202,6 +1208,7 @@ async function handleGetKnowledgeConnectors(params: {
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
       viewerTeamIds: access?.teamIds,
+      viewerUserId: access?.userId,
       environmentId: agentEnvironmentId,
     });
     if (connectors.length === 0) {

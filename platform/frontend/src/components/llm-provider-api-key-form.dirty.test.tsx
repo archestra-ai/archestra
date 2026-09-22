@@ -102,23 +102,23 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyForm dirty tracking", () => {
-  // The unsaved-changes guard keys off formState.isDirty; the scope selector
-  // updates the form via setValue, which only marks dirty when shouldDirty is
-  // passed — otherwise the guard never fires for a scope change.
-  it("marks the form dirty when the scope changes", async () => {
+  it("marks permission changes dirty so closing cannot silently discard them", async () => {
     const user = userEvent.setup();
-    renderForm();
-
-    expect(screen.getByTestId("is-dirty")).toHaveTextContent("false");
-
-    // The scope selector is collapsed to the current choice ("Personal");
-    // expand it, then pick "Organization" — that change must dirty the form.
-    await user.click(screen.getByRole("button", { name: /personal/i }));
-    await user.click(screen.getByRole("button", { name: /organization/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-dirty")).toHaveTextContent("true");
+    renderForm({
+      initialGrants: [
+        {
+          subject: { type: "team", id: "support" },
+          name: "Support",
+          actions: ["read"],
+        },
+      ],
     });
+    expect(screen.getByTestId("is-dirty")).toHaveTextContent("false");
+    await user.click(
+      screen.getByRole("button", { name: "Remove access for Support" }),
+    );
+    expect(screen.getByTestId("is-dirty")).toHaveTextContent("true");
+    expect(form.getValues("initialGrants")).toEqual([]);
   });
 
   // The transport tabs write `provider` without shouldDirty on purpose: they

@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { createGithubPat } from "@/services/github-pat";
@@ -623,7 +624,11 @@ describe("plugin routes", () => {
     });
   });
 
-  test("discovers and batch-imports selected marketplace plugins", async () => {
+  test("discovers and batch-imports selected marketplace plugins with explicit permissions", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    registerAuditLogHook(ctx.app);
     stubGithub([
       {
         owner: "plugin-marketplace",
@@ -696,9 +701,9 @@ describe("plugin routes", () => {
       approvedCommitSha: STUB_COMMIT_SHA,
       trackingRef: "main",
       selected,
-      scope: "org",
-      teamIds: [],
-      userIds: [],
+      initialGrants: [
+        { subject: { type: "role", id: "member" }, actions: ["read"] },
+      ],
       syncInterval: "1d",
     } as const;
     const imported = await ctx.app.inject({
@@ -726,6 +731,41 @@ describe("plugin routes", () => {
         ]),
       }),
     ]);
+
+    for (const plugin of imported.json().created) {
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: ctx.organizationId,
+        resource: "plugin",
+        scope: plugin.id,
+      });
+      expect(policy?.grants).toEqual(
+        expect.arrayContaining([...importPayload.initialGrants]),
+      );
+      expect(
+        policy?.grants.find(
+          (grant) =>
+            grant.subject.type === "role" && grant.subject.id === "member",
+        )?.actions,
+      ).toEqual(["read"]);
+    }
+    await vi.waitFor(async () => {
+      const audit = await AuditLogModel.findPaginated({
+        organizationId: ctx.organizationId,
+        resourceType: "plugin",
+        limit: 20,
+        offset: 0,
+      });
+      expect(audit.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "plugin.created",
+            outcome: "success",
+            before: null,
+            after: expect.any(Object),
+          }),
+        ]),
+      );
+    });
 
     const duplicate = await ctx.app.inject({
       method: "POST",

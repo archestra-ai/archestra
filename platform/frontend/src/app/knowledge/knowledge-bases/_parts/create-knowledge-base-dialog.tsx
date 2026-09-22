@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import { useRef, useState } from "react";
@@ -37,8 +38,7 @@ export function CreateKnowledgeBaseDialog({
     defaultValues: {
       name: "",
       description: "",
-      visibility: "org-wide",
-      teamIds: [],
+      initialGrants: [],
     },
   });
 
@@ -48,8 +48,11 @@ export function CreateKnowledgeBaseDialog({
       name: values.name,
       ...(values.description && { description: values.description }),
       labels: finalLabels,
-      visibility: values.visibility,
-      teamIds: values.visibility === "team-scoped" ? values.teamIds : [],
+      visibility: "private",
+      initialGrants: values.initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
     });
     if (result) {
       form.reset();

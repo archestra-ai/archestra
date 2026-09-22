@@ -26,7 +26,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -58,7 +58,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -85,7 +85,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -115,7 +115,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
@@ -141,7 +141,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -159,7 +159,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -184,7 +184,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
@@ -210,7 +210,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -231,7 +231,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -252,7 +252,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -268,7 +268,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
@@ -325,7 +325,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
         connectorType: "github",
@@ -384,7 +384,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -421,7 +421,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -477,7 +477,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
         connectorType: "github",
@@ -528,7 +528,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const targetConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Target Connector",
@@ -579,7 +579,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const targetConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Target Connector",
@@ -643,7 +643,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
         ftsLanguage: "german",
@@ -678,7 +678,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -709,7 +709,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const german = await makeKnowledgeBaseConnector(kb.id, org.id, {
         ftsLanguage: "german",
@@ -762,7 +762,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -792,7 +792,7 @@ describe("KbChunkModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
@@ -885,7 +885,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     await seedCorpus(connector.id, org.id);
@@ -904,7 +904,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     const { current, legacy } = await seedCorpus(connector.id, org.id);
@@ -926,7 +926,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     const { current, otherSpace } = await seedCorpus(connector.id, org.id);
@@ -948,7 +948,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     const { current } = await seedCorpus(connector.id, org.id);
@@ -969,7 +969,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     const { current, legacy, otherSpace } = await seedCorpus(
@@ -997,7 +997,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     await seedCorpus(connector.id, org.id);
@@ -1017,7 +1017,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     await seedCorpus(connector.id, org.id);
@@ -1037,7 +1037,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
@@ -1095,7 +1095,7 @@ describe("KbChunkModel document metadata filtering", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     const readable = await KbDocumentModel.create(

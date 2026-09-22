@@ -10,7 +10,7 @@ import {
 import { ArrowLeft } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
-import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { AutoSyncPermissionsToggle } from "@/app/knowledge/_parts/auto-sync-permissions-toggle";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -18,6 +18,10 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { SearchInput } from "@/components/search-input";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -108,7 +112,9 @@ export function CreateConnectorDialog({
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
   const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [activeSection, setActiveSection] = useState<"general" | "advanced">(
@@ -222,7 +228,10 @@ export function CreateConnectorDialog({
       name: values.name,
       description: values.description || null,
       visibility,
-      teamIds: visibility === "team-scoped" ? teamIds : [],
+      initialGrants: initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       environmentId: values.environmentId,
@@ -248,7 +257,7 @@ export function CreateConnectorDialog({
       setStep("select");
       setSelectedType(null);
       setVisibility("org-wide");
-      setTeamIds([]);
+      setInitialGrants([]);
       setLabels([]);
       onOpenChange(false);
 
@@ -272,7 +281,7 @@ export function CreateConnectorDialog({
       setSelectedType(null);
       setLabels([]);
       setVisibility("org-wide");
-      setTeamIds([]);
+      setInitialGrants([]);
     }
     onOpenChange(isOpen);
   };
@@ -502,17 +511,21 @@ export function CreateConnectorDialog({
           )}
         />
 
-        <KnowledgeSourceVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          showTeamRequired
-          supportsAutoSync={connectorSupportsAutoSync(
+        <InitialResourcePermissions
+          resource="knowledgeConnector"
+          grants={initialGrants}
+          onChange={setInitialGrants}
+        />
+        <AutoSyncPermissionsToggle
+          enabled={visibility === "auto-sync-permissions"}
+          onEnabledChange={(enabled) =>
+            setVisibility(enabled ? "auto-sync-permissions" : "org-wide")
+          }
+          supported={connectorSupportsAutoSync(
             connectorType,
             orchestratorK8sRuntime,
           )}
-          autoSyncPermissionAction="create"
+          permissionAction="create"
         />
 
         {visibility === "auto-sync-permissions" &&

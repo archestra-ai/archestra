@@ -37,8 +37,6 @@ import {
   Plus,
   RotateCcw,
   Settings2,
-  User,
-  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -107,10 +105,6 @@ import {
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
 import { PageHeaderBanner } from "@/components/page-header-banner";
-import {
-  formatPermissionRequirement,
-  PermissionRequirementHint,
-} from "@/components/permission-requirement-hint";
 import { SettingIcon } from "@/components/setting-icon";
 import {
   SettingsSection,
@@ -158,22 +152,6 @@ import {
 } from "@/components/ui/tooltip";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
-import {
-  UserShareField,
-  useUserShareChoice,
-  useUserShareOption,
-} from "@/components/user-share-field";
-import {
-  VisibilitySelector as SharedVisibilitySelector,
-  TeamVisibilityPicker,
-  type VisibilityOption,
-} from "@/components/visibility-selector";
-
-/**
- * What the agent visibility control offers. Wider than the stored scope: an
- * agent shared with named people persists as `personal` plus grants.
- */
-type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useA2aRemoteAgents,
@@ -890,209 +868,6 @@ export const agentTypeDisplayName: Record<string, string> = {
   mcp_gateway: "MCP Gateway",
   profile: "profile",
 };
-
-function getScopeOptions(agentType: string) {
-  const name = agentTypeDisplayName[agentType] || "agent";
-  return [
-    {
-      value: "personal" as const,
-      label: "Personal",
-      description: `Only you can access this ${name}`,
-      icon: User,
-    },
-    {
-      value: "team" as const,
-      label: "Teams",
-      description: `Share ${name} with selected teams`,
-      icon: Users,
-    },
-    {
-      value: "org" as const,
-      label: "Organization",
-      description: `Anyone in your org can access this ${name}`,
-      icon: Globe,
-    },
-  ];
-}
-
-export function AccessLevelSelector({
-  scope,
-  onScopeChange,
-  isAdmin,
-  isTeamAdmin,
-  canReadTeams,
-  initialScope,
-  agentType,
-  teams,
-  assignedTeamIds,
-  assignedUserIds = [],
-  onUserIdsChange,
-  onChoiceChange,
-  onTeamIdsChange,
-  hasNoAvailableTeams,
-  showTeamRequired,
-}: {
-  scope: AgentScope;
-  onScopeChange: (scope: AgentScope) => void;
-  isAdmin: boolean;
-  isTeamAdmin: boolean;
-  canReadTeams: boolean;
-  initialScope?: AgentScope;
-  agentType: AgentType;
-  teams: Array<{ id: string; name: string }> | undefined;
-  assignedTeamIds: string[];
-  /**
-   * Per-user sharing. Omitted by surfaces that cannot persist grants (the
-   * clone dialog), which then simply do not offer the option — better than
-   * showing a control whose selection would be silently dropped.
-   */
-  assignedUserIds?: string[];
-  onUserIdsChange?: (ids: string[]) => void;
-  onChoiceChange?: (choice: AgentVisibilityChoice) => void;
-  onTeamIdsChange: (ids: string[]) => void;
-  hasNoAvailableTeams: boolean;
-  showTeamRequired: boolean;
-}) {
-  const scopeOptions = getScopeOptions(agentType);
-  const canShareWithTeams = isAdmin || isTeamAdmin;
-  const userOption = useUserShareOption<AgentVisibilityChoice>("user");
-  // An agent shared with named people stays `personal` in storage and carries
-  // grants beside it, so "user" is a synthetic choice rather than a scope.
-  const { isUserChoice, selectChoice } = useUserShareChoice<AgentScope>({
-    scope,
-    personalScope: "personal",
-    userIds: assignedUserIds,
-    onScopeChange,
-    onUserIdsChange,
-  });
-  const choice: AgentVisibilityChoice = isUserChoice ? "user" : scope;
-
-  const isOptionDisabled = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return true;
-    if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
-    // Nothing to share with: keep the option visible but inert and explained,
-    // rather than offering a choice that cannot be completed.
-    if (value === "team" && hasNoAvailableTeams) return true;
-    if (value === "org" && !isAdmin) return true;
-    return false;
-  };
-
-  const resourceMap: Record<string, string> = {
-    agent: "agent",
-    mcp_gateway: "mcpGateway",
-    profile: "agent",
-  };
-  const resourceName = resourceMap[agentType] || "agent";
-
-  const getDisabledReason = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return "Shared agents cannot be made personal";
-    if (value === "team" && !canReadTeams)
-      return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
-    if (value === "team" && !canShareWithTeams)
-      return `You need ${resourceName}:team-admin permission to share with teams`;
-    if (value === "team" && hasNoAvailableTeams)
-      return "There are no teams to share with yet. Create one from Settings → Teams.";
-    if (value === "org" && !isAdmin)
-      return `You need ${resourceName}:admin permission to make this available org-wide`;
-    return "";
-  };
-
-  /** The short note beside the label; the reason itself sits under it. */
-  const getDisabledLabel = (value: string) => {
-    if (value === "personal") return "Unavailable";
-    if (value === "team" && (!canReadTeams || !canShareWithTeams))
-      return "Requires permission";
-    if (value === "team" && hasNoAvailableTeams) return "No teams available";
-    if (value === "org") return "Requires permission";
-    return undefined;
-  };
-
-  const scopedOptions: VisibilityOption<AgentVisibilityChoice>[] =
-    scopeOptions.map((option) => ({
-      ...option,
-      disabled: isOptionDisabled(option.value),
-      disabledLabel: isOptionDisabled(option.value)
-        ? getDisabledLabel(option.value)
-        : undefined,
-      disabledReason: isOptionDisabled(option.value)
-        ? getDisabledReason(option.value)
-        : undefined,
-    }));
-  // Users sits next to Personal: both keep the agent out of team/org reach.
-  const personalIndex = scopedOptions.findIndex(
-    (option) => option.value === "personal",
-  );
-  // Sharing with named people is stored as `personal` plus grants, so it is
-  // bound by whatever bars Personal itself. Without this an already-shared
-  // agent offered the option and then refused the save.
-  const personalLocked = isOptionDisabled("personal");
-  const userChoiceOption: VisibilityOption<AgentVisibilityChoice> =
-    personalLocked
-      ? {
-          ...userOption,
-          disabled: true,
-          disabledLabel: "Unavailable",
-          disabledReason:
-            "Sharing with named people keeps this personal, and a shared agent cannot be made personal again.",
-        }
-      : userOption;
-  const options: VisibilityOption<AgentVisibilityChoice>[] =
-    personalIndex === -1 || !onUserIdsChange
-      ? scopedOptions
-      : [
-          ...scopedOptions.slice(0, personalIndex + 1),
-          userChoiceOption,
-          ...scopedOptions.slice(personalIndex + 1),
-        ];
-
-  return (
-    <SharedVisibilitySelector
-      label="Visibility"
-      value={choice}
-      options={options}
-      onValueChange={(nextChoice) => {
-        onChoiceChange?.(nextChoice);
-        selectChoice(nextChoice);
-      }}
-    >
-      {choice === "user" && onUserIdsChange && (
-        <UserShareField
-          value={assignedUserIds}
-          onValueChange={onUserIdsChange}
-        />
-      )}
-
-      {choice === "team" && (
-        <div className="space-y-2">
-          <TeamVisibilityPicker
-            disabled={
-              !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
-            }
-            teams={teams ?? []}
-            value={assignedTeamIds}
-            onChange={onTeamIdsChange}
-            required={showTeamRequired}
-            unavailableMessage={
-              !canReadTeams
-                ? "Teams unavailable"
-                : hasNoAvailableTeams
-                  ? "No teams available"
-                  : undefined
-            }
-          />
-          {!canReadTeams && (
-            <PermissionRequirementHint
-              message="Team selection is unavailable without"
-              permissions={[{ resource: "team", action: "read" }]}
-            />
-          )}
-        </div>
-      )}
-    </SharedVisibilitySelector>
-  );
-}
 
 /**
  * The form's top-level section groups — the setup wizard's steps. The edit

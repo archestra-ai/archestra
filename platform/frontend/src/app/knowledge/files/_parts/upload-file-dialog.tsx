@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import { FolderPlus, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
-import {
-  FileVisibilitySelector,
-  type KnowledgeFileVisibility,
-} from "@/app/knowledge/files/_parts/file-visibility-selector";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
@@ -15,6 +12,10 @@ import {
   StagedFileList,
 } from "@/components/files/file-drop-input";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -54,9 +55,9 @@ export function UploadFileDialog({
   const [directoryId, setDirectoryId] = useState<string>(
     defaultDirectoryId ?? ROOT_VALUE,
   );
-  const [visibility, setVisibility] =
-    useState<KnowledgeFileVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [failures, setFailures] = useState<string[]>([]);
@@ -85,8 +86,7 @@ export function UploadFileDialog({
     setFiles([]);
     setFailures([]);
     setProgress(undefined);
-    setVisibility("org-wide");
-    setTeamIds([]);
+    setInitialGrants([]);
     setLabels([]);
   };
 
@@ -101,10 +101,7 @@ export function UploadFileDialog({
     });
   }, []);
 
-  const canSubmit =
-    files.length > 0 &&
-    (visibility !== "team-scoped" || teamIds.length > 0) &&
-    !upload.isPending;
+  const canSubmit = files.length > 0 && !upload.isPending;
 
   const handleDirectoryChange = (value: string) => {
     if (value === CREATE_DIRECTORY_VALUE) {
@@ -129,8 +126,11 @@ export function UploadFileDialog({
           mimeType: file.type || "application/octet-stream",
           content: await fileToBase64(file),
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
-          visibility,
-          teamIds: visibility === "team-scoped" ? teamIds : [],
+          visibility: "private",
+          initialGrants: initialGrants.map(({ subject, actions }) => ({
+            subject,
+            actions,
+          })),
           labels: finalLabels,
         });
       } catch {
@@ -197,11 +197,10 @@ export function UploadFileDialog({
             </Select>
           </div>
 
-          <FileVisibilitySelector
-            visibility={visibility}
-            onVisibilityChange={setVisibility}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
+          <InitialResourcePermissions
+            resource="knowledgeFile"
+            grants={initialGrants}
+            onChange={setInitialGrants}
           />
 
           <AdvancedLabelsSection

@@ -42,6 +42,7 @@ export async function buildKnowledgeSourcesDescription(
         organizationId,
         canReadAll: access.canReadAll,
         viewerTeamIds: access.teamIds,
+        viewerUserId: access.userId,
         visibilityScope: "query",
         environmentId: agent.environmentId,
         // Enough rows to detect overflow even if every excluded source is first.
@@ -60,7 +61,7 @@ export async function buildKnowledgeSourcesDescription(
       (kb) =>
         kb.organizationId === organizationId &&
         (access
-          ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+          ? knowledgeSourceAccessControlService.canQueryKnowledgeBase(
               access,
               kb,
             )
@@ -72,6 +73,7 @@ export async function buildKnowledgeSourcesDescription(
         {
           canReadAll: access?.canReadAll,
           viewerTeamIds: access?.teamIds,
+          viewerUserId: access?.userId,
           visibilityScope: "query",
         },
       ),

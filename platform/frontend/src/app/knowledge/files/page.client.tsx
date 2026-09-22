@@ -16,7 +16,7 @@ import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-kn
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -54,11 +54,11 @@ import {
   ROOT_DIRECTORY,
   useAllMatchingKnowledgeFiles,
   useBulkDeleteKnowledgeItems,
-  useBulkUpdateKnowledgeVisibility,
   useDeleteKnowledgeDirectory,
   useDeleteKnowledgeFile,
   useKnowledgeDirectories,
   useKnowledgeFiles,
+  useKnowledgePermissionSelection,
 } from "@/lib/knowledge/knowledge-file.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
@@ -85,11 +85,6 @@ function _rowCreatedBy(row: Row) {
  * document's visibility reads exactly like an agent's or a project's instead of
  * inventing a second badge style for the same idea.
  */
-const VISIBILITY_BY_SCOPE = {
-  org: "org-wide",
-  team: "team-scoped",
-  personal: "private",
-} as const;
 
 export default function KnowledgeFilesPage() {
   const {
@@ -135,7 +130,6 @@ export default function KnowledgeFilesPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteKnowledgeItems();
-  const bulkVisibility = useBulkUpdateKnowledgeVisibility();
   const deleteFile = useDeleteKnowledgeFile();
   const deleteDirectory = useDeleteKnowledgeDirectory();
 
@@ -271,6 +265,10 @@ export default function KnowledgeFilesPage() {
       ];
 
   const actionFileIds = escalatedFileIds ?? selectedFileIds;
+  const permissionSelection = useKnowledgePermissionSelection(
+    selectionItems,
+    bulkVisibilityOpen,
+  );
   const actionDirectoryIds = escalatedFileIds ? [] : selectedDirectoryIds;
   const actionDocumentCount = escalatedFileIds
     ? escalatedFileIds.length
@@ -559,10 +557,11 @@ export default function KnowledgeFilesPage() {
             permissions={{ knowledgeSource: ["update"] }}
             variant="outline"
             size="sm"
+            disabled={actionDocumentCount === 0}
             onClick={() => setBulkVisibilityOpen(true)}
           >
             <Pencil className="h-4 w-4" />
-            <span>Edit visibility</span>
+            <span>Add access</span>
           </PermissionButton>
           <PermissionButton
             permissions={{ knowledgeSource: ["delete"] }}
@@ -678,35 +677,17 @@ export default function KnowledgeFilesPage() {
       )}
 
       {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          // Documents carry team scoping but no per-person grants, so the
-          // dialog's Users choice resolves to "private" — visible to you alone.
-          items={selectionItems.map((item) => ({
-            id: item.id,
-            scope: "org" as const,
-            teams: [],
-            users: [],
-          }))}
-          noun="item"
+        <BulkResourceAccessDialog
+          resource="knowledgeFile"
+          items={permissionSelection.data ?? []}
+          isLoading={permissionSelection.isLoading}
+          loadError={permissionSelection.error}
+          onRetry={() => {
+            void permissionSelection.refetch();
+          }}
           open={bulkVisibilityOpen}
           onOpenChange={setBulkVisibilityOpen}
-          isPending={bulkVisibility.isPending}
-          onApply={async (change) => {
-            const outcome = await bulkVisibility.mutateAsync({
-              items: selectionItems,
-              visibility: VISIBILITY_BY_SCOPE[change.scope],
-              teamIds: change.teamIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated",
-              failureVerb: "update",
-              noun: "item",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
+          onApplied={clearSelection}
         />
       )}
 

@@ -680,12 +680,6 @@ vi.mock("@/components/share-personal-credentials-dialog", () => ({
   SharePersonalCredentialsDialog: () => null,
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="visibility-selector">{children}</div>
-  ),
-}));
-
 vi.mock("@/components/environment-selector", () => ({
   EnvironmentSelector: ({
     disabled,

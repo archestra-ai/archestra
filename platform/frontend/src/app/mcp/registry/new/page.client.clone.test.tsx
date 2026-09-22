@@ -100,10 +100,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   ),
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: () => <div data-testid="visibility-selector" />,
-}));
-
 // Minimal remote catalog item the ?clone= param resolves to.
 const cloneSource = {
   id: "clone-source-id",

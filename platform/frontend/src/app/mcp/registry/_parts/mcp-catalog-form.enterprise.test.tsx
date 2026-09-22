@@ -87,10 +87,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   ),
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: () => <div data-testid="visibility-selector" />,
-}));
-
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();

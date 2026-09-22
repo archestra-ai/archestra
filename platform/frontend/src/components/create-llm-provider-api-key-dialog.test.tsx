@@ -111,6 +111,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       inferenceBaseUrl: undefined,
       extraHeaders: undefined,
       scope: "personal",
+      initialGrants: [],
       teamId: undefined,
       isPrimary: false,
       vaultSecretPath: undefined,
@@ -224,7 +225,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("defaults the scope to org when the user has llmProviderApiKey:admin", async () => {
+  it("does not publish a new key merely because its creator is an admin", async () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
@@ -244,7 +245,47 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: /test & create/i }));
 
     expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: "org" }),
+      expect.objectContaining({ scope: "personal", initialGrants: [] }),
+    );
+  });
+
+  it("submits explicit per-recipient access without display-only names", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Create a key"
+        defaultValues={{
+          name: "Build service",
+          apiKey: "test-key",
+          initialGrants: [
+            {
+              subject: { type: "team", id: "support" },
+              name: "Support",
+              actions: ["read", "use", "update"],
+            },
+            {
+              subject: { type: "user", id: "reviewer" },
+              name: "Reviewer",
+              actions: ["read"],
+            },
+          ],
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialGrants: [
+          {
+            subject: { type: "team", id: "support" },
+            actions: ["read", "use", "update"],
+          },
+          { subject: { type: "user", id: "reviewer" }, actions: ["read"] },
+        ],
+      }),
     );
   });
 

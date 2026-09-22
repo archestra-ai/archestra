@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import { FileText } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  FileVisibilitySelector,
-  type KnowledgeFileVisibility,
-} from "@/app/knowledge/files/_parts/file-visibility-selector";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -54,9 +55,9 @@ export function SaveToKnowledgeDialog({
 
   const [filename, setFilename] = useState(single?.name ?? "");
   const [directoryId, setDirectoryId] = useState(ROOT_VALUE);
-  const [visibility, setVisibility] =
-    useState<KnowledgeFileVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [knowledgeBaseId, setKnowledgeBaseId] = useState(NO_KNOWLEDGE_BASE);
   const [failures, setFailures] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>();
@@ -70,8 +71,7 @@ export function SaveToKnowledgeDialog({
     if (!open) return;
     setFilename(single?.name ?? "");
     setDirectoryId(ROOT_VALUE);
-    setVisibility("org-wide");
-    setTeamIds([]);
+    setInitialGrants([]);
     setKnowledgeBaseId(NO_KNOWLEDGE_BASE);
     setFailures([]);
     setProgress(undefined);
@@ -80,7 +80,6 @@ export function SaveToKnowledgeDialog({
   const canSubmit =
     attachments.length > 0 &&
     (!single || filename.trim().length > 0) &&
-    (visibility !== "team-scoped" || teamIds.length > 0) &&
     !promote.isPending;
 
   const handleSubmit = async () => {
@@ -97,8 +96,11 @@ export function SaveToKnowledgeDialog({
           attachmentId: attachment.id,
           ...(single ? { filename: filename.trim() } : {}),
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
-          visibility,
-          teamIds: visibility === "team-scoped" ? teamIds : [],
+          visibility: "private",
+          initialGrants: initialGrants.map(({ subject, actions }) => ({
+            subject,
+            actions,
+          })),
           ...(knowledgeBaseId === NO_KNOWLEDGE_BASE ? {} : { knowledgeBaseId }),
         });
       } catch {
@@ -167,11 +169,10 @@ export function SaveToKnowledgeDialog({
           </Select>
         </div>
 
-        <FileVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
+        <InitialResourcePermissions
+          resource="knowledgeFile"
+          grants={initialGrants}
+          onChange={setInitialGrants}
         />
 
         <div className="space-y-1.5">

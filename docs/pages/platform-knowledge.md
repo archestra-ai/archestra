@@ -3,14 +3,14 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and M-Files. An agent assigned a Knowledge Base can query that data to answer questions.
 
-> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
+> **Enterprise feature** (granular access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
@@ -243,11 +243,11 @@ Knowledge Files is a repository for documents you upload directly — a signed c
 
 Upload PDF, Word, Markdown, CSV, JSON, HTML or plain text. The text is read at upload, and a file that cannot be read is refused right there — so nothing lands in the repository that would retrieve nothing later. A scanned PDF is accepted when [Document OCR](#document-ocr) is configured; its pages are transcribed when the file is indexed.
 
-Directories group documents and are flat — no sub-directories. Create one from **Files** or from the directory menu while uploading. Every document and directory has an audience: **Organization**, **Teams**, or **Only me**. Visibility follows the document into retrieval, so sharing a Knowledge Base with an agent does not widen who can read what is inside it.
+Directories group documents and are flat — no sub-directories. Each document has its own permissions. Sharing a Knowledge Base does not widen access to its documents.
 
 Uploading stores a document; indexing makes it retrievable. Select documents or whole directories, choose **Add to knowledge base**, and pick an existing base or create one from the selection.
 
-A file attached to a chat belongs to that conversation. To keep it, save it to the repository — from the attachment in the message, or from the Files panel, where you can select several at once. You choose the name, directory and visibility as you save, and can index it in one step.
+A file attached to a chat belongs to that conversation. To keep it, save it to the repository — from the attachment in the message, or from the Files panel, where you can select several at once. You choose the name, directory and permissions when saving. You can index the copy in the same step.
 
 ### External Ingestion
 
@@ -258,7 +258,7 @@ External pipelines can upload through the authenticated Knowledge Files API.
 For recurring imports, use `PUT /api/knowledge-files/:fileId/content`.
 Generate a UUID once for each source document and reuse it for later imports.
 The request creates or replaces the file, then indexes its content.
-Existing audiences and labels stay unchanged. New files use organization-wide visibility.
+Existing permissions and labels stay unchanged. New files give their uploader full access.
 Only the original uploader can replace a file.
 
 ```python
@@ -363,7 +363,7 @@ That searches only pages in the DEV space labelled `release-2.0`. One agent can 
 
 A filter reads single values and lists the same way. Confluence stores one `spaceKey` per page and many `labels`, and the syntax above matches both.
 
-Filtering never widens access. [Visibility](#visibility) is applied separately, so a filter only ever removes documents from what you could already read.
+Filtering never widens access. [Permissions](#permissions) is applied separately, so a filter only ever removes documents from what you could already read.
 
 If a filter matches nothing, the reply names the values that do exist for the keys you used. The agent retries with a real one instead of reporting that it found nothing.
 
@@ -375,31 +375,23 @@ Open a connector to review its document sync runs and progress. You can cancel a
 
 Open a run's details to review warnings and connector errors. The logs name documents whose content exceeded an indexing limit. Unsupported file types are counted as skipped. A document that produces no chunks finishes with an error.
 
-## Visibility
+## Permissions
 
-Knowledge Bases can be personal, shared with selected teams, or available across the organization. Personal collections belong to their creator. Team sharing includes members of descendant teams. Existing collections remain organization-wide.
+Knowledge Bases, connectors, and uploaded files each have [per-resource permissions](/docs/platform-access-control). You can give people, teams, roles, or service accounts different access levels. Organization-wide permissions also apply.
 
-Sharing a collection does not change connector or document permissions. Sources remain available through other authorized collections or direct assignments. Agents in Auto mode search accessible sources independently of collection sharing. Access does not grant permission to manage a collection.
+**Can view** allows browsing a resource. **Can use** also allows retrieving its content. Changes apply to indexed content without reindexing.
 
-Connector visibility controls which documents users can retrieve:
+Sharing a collection does not change connector or document permissions. Sources can remain accessible through other authorized collections or direct assignments.
 
-| Mode                      | Behavior                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| **Org-wide**              | All documents accessible to every user in the organization.                       |
-| **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
-| **Auto-sync permissions** | Per-document ACLs synced from the source system, so each user sees only what they can see upstream. See [Auto-Sync Permissions](#auto-sync-permissions). |
+Connectors can preserve document permissions from their source system. Those restrictions apply independently of access to the connector itself.
 
-Users with `knowledgeSource:admin` can access all collections, including personal ones. They also bypass document ACLs while querying. This permission does not grant access to manage auto-sync connectors.
-
-Auto-sync connectors use dedicated `knowledgeSourceAutoSync` permissions for read, create, update, and delete actions. Admin and Platform Admin roles receive all four actions by default. Grant them to other users through a [custom role](/docs/platform-access-control). Users without these management actions can still query documents allowed by the synced ACLs.
-
-> **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
+> **Enterprise feature** (granular access control and source permission sync) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ### Auto-Sync Permissions
 
-> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the visibility option and its Users and Groups tabs. See [Deployment](/docs/platform-deployment).
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to enable source permission sync and its Users and Groups tabs. See [Deployment](/docs/platform-deployment).
 
-Auto-sync permissions mirrors the source system's access control into Archestra. Each query returns only documents allowed by the latest permission snapshot. Users with `knowledgeSource:admin` bypass this filter.
+Auto-sync permissions mirrors the source system's access control into Archestra. Each query returns only documents allowed by the latest permission snapshot.
 
 The option appears when the beta flag and Knowledge enterprise feature are enabled. It also requires a supported connector and the applicable `knowledgeSourceAutoSync:create` or `update` action.
 

@@ -16,10 +16,11 @@ describe("GET /api/llm-virtual-keys", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 
@@ -54,7 +55,7 @@ describe("GET /api/llm-virtual-keys", () => {
   }) => {
     const owner = user;
     const outsider = await makeUser();
-    const outsiderOrg = await makeOrganization();
+    const outsiderOrg = await makeOrganization({ legacyPermissions: true });
     const team = await makeTeam(organizationId, owner.id, {
       name: "Platform Team",
     });

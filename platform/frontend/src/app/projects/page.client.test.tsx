@@ -153,28 +153,6 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
     ) : null,
 }));
 
-vi.mock("@/components/bulk-visibility-dialog", () => ({
-  BulkVisibilityDialog: ({
-    open,
-    onApply,
-  }: {
-    open: boolean;
-    onApply: (change: {
-      scope: "personal";
-      teamIds: string[];
-      userIds: string[];
-    }) => void;
-  }) =>
-    open ? (
-      <button
-        type="button"
-        onClick={() => onApply({ scope: "personal", teamIds: [], userIds: [] })}
-      >
-        Apply sharing
-      </button>
-    ) : null,
-}));
-
 vi.mock("@/components/standard-dialog", () => ({
   StandardFormDialog: ({
     open,
@@ -816,26 +794,11 @@ describe("ProjectsPageClient", () => {
     );
 
     expect(screen.getAllByText("1 project selected")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Edit sharing" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply sharing" }));
-
-    await waitFor(() =>
-      expect(mockBulkUpdateVisibilityMutateAsync).toHaveBeenCalledWith({
-        projects: [expect.objectContaining({ id: "first" })],
-        scope: "personal",
-        teamIds: [],
-        userIds: [],
-      }),
-    );
-
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Select Second project" }),
-    );
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(mockBulkDeleteMutate).toHaveBeenCalledWith(
-      [{ id: "second", name: "Second project" }],
+      [{ id: "first", name: "First project" }],
       expect.any(Object),
     );
   });

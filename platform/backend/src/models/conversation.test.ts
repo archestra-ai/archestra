@@ -894,7 +894,7 @@ describe("ConversationModel", () => {
   }) => {
     const owner = await makeUser();
     const viewer = await makeUser();
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const agent = await makeAgent({ name: "Project Agent", teams: [] });
 
     const project = await ProjectModel.create({
@@ -946,7 +946,7 @@ describe("ConversationModel", () => {
   }) => {
     const owner = await makeUser();
     const author = await makeUser();
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const agent = await makeAgent({ name: "Owner Project Agent", teams: [] });
 
     const project = await ProjectModel.create({

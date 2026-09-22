@@ -410,6 +410,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
           }),
           KbDocumentModel.countByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
@@ -940,6 +941,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
           },
         );
         total = data.length;
@@ -959,6 +961,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
             status,
           });
         data = result.data;

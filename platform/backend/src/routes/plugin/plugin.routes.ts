@@ -167,6 +167,7 @@ const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
     scope: ResourceVisibilityScopeSchema.default("personal"),
     teamIds: z.array(z.string().min(1)).max(100).default([]),
     userIds: z.array(z.string().min(1)).max(100).default([]),
+    initialGrants: CreatePluginSchema.shape.initialGrants,
     syncInterval: z
       .union([PluginGithubSyncIntervalSchema, z.null()])
       .default("1d"),
@@ -312,6 +313,26 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         userIds: body.userIds,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.initialGrants?.length) {
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "plugin",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: "Imported plugin",
+            authorId: user.id,
+            scope: body.scope,
+            teams: body.teamIds.map((id) => ({ id })),
+            users: body.userIds.map((id) => ({ id })),
+          },
+        });
+      }
+      // SPDX-SnippetEnd
       const githubToken = await resolveGithubToken({
         ...body,
         organizationId,
@@ -355,6 +376,14 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
               userIds: body.userIds,
               files: imported.files,
             },
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            initialPermissionGrants: ResourcePermissions.grantsForCreation({
+              grants: body.initialGrants,
+              visibility: body.scope,
+            }),
+            // SPDX-SnippetEnd
             source: {
               repo: imported.repo,
               ref: selection.sourceRef,

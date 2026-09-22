@@ -21,7 +21,7 @@ describe("POST /api/llm-virtual-keys", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
     mockUserHasPermission.mockReset();
@@ -892,6 +892,106 @@ describe("scoped virtual key grants", () => {
         })
       ).grants,
     ).toEqual([]);
+    user = recipient;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/llm-virtual-keys/${id}` }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/llm-virtual-keys/${id}/value`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/llm-virtual-keys/${id}`,
+          payload: {
+            name: "Not allowed",
+            scope: "personal",
+            providerApiKeys: [
+              { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+            ],
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/llm-virtual-keys/${id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    user = outsider;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/llm-virtual-keys/${id}` }))
+        .statusCode,
+    ).toBe(404);
+  });
+  test("rejects private provider mapping and sharing a personal subscription or passthrough credential", async ({
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const grants = [
+      { subject: { type: "user", id: recipient.id }, actions: ["read", "use"] },
+    ];
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "gho_private" } });
+    const privateKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: recipient.id,
+    });
+    const privateMapping = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Invalid private mapping",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: privateKey.id },
+        ],
+      },
+    });
+    expect(privateMapping.statusCode).toBe(403);
+    const subscription = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      { provider: "github-copilot", scope: "personal", userId: user.id },
+    );
+    for (const body of [
+      {
+        keyType: "standard",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: subscription.id },
+        ],
+      },
+      { keyType: "passthrough", providerApiKeys: [] },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-virtual-keys",
+        payload: {
+          name: "Invalid shared credential",
+          scope: "personal",
+          initialGrants: grants,
+          ...body,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain("cannot be shared");
+    }
   });
 });
 // SPDX-SnippetEnd

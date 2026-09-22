@@ -738,25 +738,13 @@ describe("CreateConnectorDialog", () => {
       mockHasPermissions.mockReturnValue({ data: false });
     });
 
-    const AUTO_SYNC_DESCRIPTION =
-      "Sync access from the source system's own permissions";
-    const ORG_WIDE_DESCRIPTION =
-      "Anyone in your org can access this knowledge source";
-
-    it("defaults a supported type to auto-sync permissions and lists it first", async () => {
-      const { user } = await renderConfigureStep(); // Jira supports auto-sync
-
-      // The collapsed selector shows the default selection.
-      expect(screen.getByText(AUTO_SYNC_DESCRIPTION)).toBeInTheDocument();
-
-      // Expanded, the enabled auto-sync option leads the list.
-      await user.click(screen.getByText(AUTO_SYNC_DESCRIPTION));
-      const autoSync = screen.getByText("Auto-sync permissions");
-      const orgWide = screen.getByText("Organization");
+    it("defaults supported connectors to source permission sync", async () => {
+      await renderConfigureStep();
       expect(
-        autoSync.compareDocumentPosition(orgWide) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).toBeChecked();
     });
 
     it("keeps org-wide for a type without permission-sync support", async () => {
@@ -767,7 +755,11 @@ describe("CreateConnectorDialog", () => {
         expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
       });
 
-      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+      expect(
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).not.toBeChecked();
     });
 
     it("keeps org-wide when the auto-sync feature flag is off", async () => {
@@ -776,7 +768,11 @@ describe("CreateConnectorDialog", () => {
       );
 
       await renderConfigureStep();
-      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).not.toBeInTheDocument();
 
       mockUseFeature.mockImplementation(() => true);
     });
@@ -1328,11 +1324,10 @@ describe("CreateConnectorDialog", () => {
       const { user } = await renderConfigureStep(); // Jira defaults to auto-sync
 
       await user.click(
-        screen.getByText(
-          "Sync access from the source system's own permissions",
-        ),
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
       );
-      await user.click(screen.getByText("Organization"));
 
       const apiToken = screen.getByLabelText("API Token");
       const formItem = apiToken.closest(

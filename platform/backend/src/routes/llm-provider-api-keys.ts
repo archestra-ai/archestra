@@ -42,6 +42,7 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SecretModel from "@/models/secret";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
@@ -50,6 +51,7 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
+import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
 import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -491,6 +493,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
+      CredentialResourcePermissions.validateProvider({
+        provider: body.provider,
+        apiKey: body.apiKey,
+        ownerId: user.id,
+        grants: body.initialGrants ?? [],
+      });
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
       // …and providers the organization's admins switched off entirely.
@@ -606,6 +614,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
           );
         }
+        assertPerUserCredentialScope({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          scope: body.scope,
+        });
+        CredentialResourcePermissions.validateProvider({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          ownerId: user.id,
+          grants: body.initialGrants ?? [],
+        });
         // then test the API key
         await testApiKeyOrThrow({
           organizationId,
@@ -861,23 +880,15 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      // Personal keys: only visible to owner
-      if (
-        storedApiKey.scope === "personal" &&
-        storedApiKey.userId !== user.id
-      ) {
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        organizationId,
+        user.id,
+        userTeamIds,
+        isLlmProviderApiKeyAdmin,
+        { ids: [storedApiKey.id] },
+      );
+      if (!visible.length)
         throw new ApiError(404, "LLM provider API key not found");
-      }
-
-      // Team keys: visible to team members or admins
-      if (storedApiKey.scope === "team" && !isLlmProviderApiKeyAdmin) {
-        if (
-          !storedApiKey.teamId ||
-          !userTeamIds.includes(storedApiKey.teamId)
-        ) {
-          throw new ApiError(404, "LLM provider API key not found");
-        }
-      }
 
       // Resolve Vault-backed subscription metadata only after organization and
       // scope authorization. The edit dialog needs it, but an unauthorized ID
@@ -995,6 +1006,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const newScope = body.scope ?? apiKeyFromDB.scope;
       const newTeamId =
         body.teamId !== undefined ? body.teamId : apiKeyFromDB.teamId;
+      if (
+        (body.scope !== undefined && body.scope !== apiKeyFromDB.scope) ||
+        (body.teamId !== undefined && body.teamId !== apiKeyFromDB.teamId)
+      ) {
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource: "llmProviderApiKey",
+          scope: apiKeyFromDB.id,
+        });
+      }
+
       let newSecretId: string | null = null;
 
       if (body.scope !== undefined || body.teamId !== undefined) {
@@ -1045,6 +1067,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (body.apiKey) {
+        CredentialResourcePermissions.validateProvider({
+          provider: apiKeyFromDB.provider,
+          apiKey: body.apiKey,
+          ownerId: apiKeyFromDB.userId,
+          grants: await CredentialResourcePermissions.currentGrants({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scope: apiKeyFromDB.id,
+          }),
+        });
+      }
       // Update the secret if a new API key is provided (via direct value, vault reference, or SigV4 credentials)
       if (
         body.apiKey ||
@@ -1091,6 +1125,21 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "API key or vault reference is required");
         }
 
+        assertPerUserCredentialScope({
+          provider: apiKeyFromDB.provider,
+          apiKey: testValue,
+          scope: newScope,
+        });
+        CredentialResourcePermissions.validateProvider({
+          provider: apiKeyFromDB.provider,
+          apiKey: testValue,
+          ownerId: apiKeyFromDB.userId,
+          grants: await CredentialResourcePermissions.currentGrants({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scope: apiKeyFromDB.id,
+          }),
+        });
         // Test the API key before saving
         // Use user-provided baseUrl/extraHeaders if present, otherwise fall
         // back to what's stored on the API key record.
@@ -1256,7 +1305,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.scope !== undefined) {
         updateData.scope = body.scope;
         // Set userId/teamId based on new scope
-        updateData.userId = body.scope === "personal" ? user.id : null;
+        updateData.userId =
+          body.scope === "personal"
+            ? apiKeyFromDB.scope === "personal"
+              ? apiKeyFromDB.userId
+              : user.id
+            : null;
         updateData.teamId = body.scope === "team" ? newTeamId : null;
       } else if (body.teamId !== undefined && apiKeyFromDB.scope === "team") {
         // Only update teamId if scope is team and not changing
@@ -1485,6 +1539,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorize: async (apiKey) => {
           assertApiKeyIsNotSystem(apiKey);
           await authorizeApiKeyAccess({
+            action: "delete",
             apiKey,
             userId: user.id,
             organizationId,
@@ -1564,6 +1619,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check authorization based on scope
       await authorizeApiKeyAccess({
+        action: "delete",
         apiKey,
         userId: user.id,
         organizationId,
@@ -1694,13 +1750,40 @@ function assertPerUserCredentialScope(params: {
 /**
  * Helper to check if a user is authorized to modify an API key based on scope
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function authorizeApiKeyAccess(params: {
-  apiKey: { scope: string; userId: string | null; teamId: string | null };
+  action?: "update" | "delete";
+  apiKey: {
+    id: string;
+    scope: string;
+    userId: string | null;
+    teamId: string | null;
+  };
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
   const { apiKey, userId, organizationId, headers } = params;
+
+  const context = {
+    organizationId,
+    userId,
+    resource: "llmProviderApiKey" as const,
+    scope: apiKey.id,
+  };
+  const [policy, allPolicy] = await Promise.all([
+    ResourcePermissionPolicyModel.find(context),
+    ResourcePermissionPolicyModel.find({ ...context, scope: "*" }),
+  ]);
+  if (policy?.legacySharingMigrated || allPolicy?.legacySharingMigrated) {
+    await ResourcePermissions.require({
+      ...context,
+      action: params.action ?? "update",
+    });
+    return;
+  }
 
   // Personal keys: only owner can modify
   if (apiKey.scope === "personal") {
@@ -1746,6 +1829,7 @@ async function authorizeApiKeyAccess(params: {
     return;
   }
 }
+// SPDX-SnippetEnd
 
 function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
   if (apiKey.isSystem) {
@@ -1838,6 +1922,7 @@ async function deleteProviderApiKeyAtomically(params: {
 
           assertApiKeyIsNotSystem(apiKey);
           await authorizeApiKeyAccess({
+            action: "delete",
             apiKey,
             userId: params.userId,
             organizationId: params.organizationId,
@@ -1886,6 +1971,7 @@ async function deleteProviderApiKeyInPglite(params: {
   }
   assertApiKeyIsNotSystem(apiKey);
   await authorizeApiKeyAccess({
+    action: "delete",
     apiKey,
     userId: params.userId,
     organizationId: params.organizationId,

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, type ReactNode } from "react";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -20,8 +20,12 @@ export const AdvancedLabelsSection = forwardRef<
     labels: ProfileLabel[];
     onLabelsChange: (labels: ProfileLabel[]) => void;
     className?: string;
+    children?: ReactNode;
   }
->(function AdvancedLabelsSection({ labels, onLabelsChange, className }, ref) {
+>(function AdvancedLabelsSection(
+  { labels, onLabelsChange, className, children },
+  ref,
+) {
   return (
     <Collapsible className={cn("border-t pt-3", className)}>
       <CollapsibleTrigger
@@ -31,7 +35,8 @@ export const AdvancedLabelsSection = forwardRef<
         <span className="text-sm font-medium">Advanced</span>
         <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-4">
+      <CollapsibleContent className="space-y-4 pt-4">
+        {children}
         <ProfileLabels
           ref={ref}
           labels={labels}

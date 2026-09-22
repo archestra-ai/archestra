@@ -1,12 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  act,
-  fireEvent,
-  render,
-  renderHook,
-  screen,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -19,11 +13,7 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  type AgentRunListItem,
-  useShareAgentRun,
-  useUnshareAgentRun,
-} from "@/lib/agent-runtime.query";
+import type { AgentRunListItem } from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
 
 const state = { runs: [] as AgentRunListItem[] };
@@ -105,13 +95,15 @@ describe("AgentRuns", () => {
     expect(
       await screen.findByText("Started by Alex Rivera (you)"),
     ).toBeVisible();
-    expect(screen.getByLabelText("Team: Platform, Security")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
   });
 
-  it("labels an unshared run as personal without promising owner-only output access", async () => {
+  it("explains session access without deriving visibility from retired share fields", async () => {
     renderRuns();
 
-    expect(await screen.findByLabelText("Personal")).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "Permissions" }),
+    ).toBeVisible();
     fireEvent.focus(
       screen.getByRole("button", { name: "Who can access this run?" }),
     );
@@ -137,85 +129,11 @@ describe("AgentRuns", () => {
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
     expect(screen.getByText("Started by Sam Chen")).toBeVisible();
-    expect(screen.getByLabelText("Organization")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Retained output")).toBeVisible();
     expect(screen.queryByText("Live terminal")).not.toBeInTheDocument();
-  });
-
-  it("shows named recipients instead of calling a user-shared run personal", async () => {
-    state.runs = [
-      {
-        ...createRun(null),
-        shareVisibility: "user",
-        shareUserNames: ["Sam Chen", "Taylor Morgan"],
-      },
-    ];
-    renderRuns();
-    expect(
-      await screen.findByLabelText("Shared with: Sam Chen, Taylor Morgan"),
-    ).toBeVisible();
-    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
-  });
-
-  it.each([
-    "user",
-    "team",
-  ] as const)("keeps a redacted %s audience distinct from personal or empty sharing", async (shareVisibility) => {
-    state.runs = [
-      {
-        ...createRun(null),
-        actorUserId: "another-owner",
-        shareVisibility,
-        shareUserNames: null,
-        shareTeamNames: null,
-      },
-    ];
-    renderRuns();
-    const badge = await screen.findByText(
-      shareVisibility === "team" ? "Team" : "Shared",
-      { exact: true },
-    );
-    expect(badge).toBeVisible();
-    expect(screen.queryByText("No recipients")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
-    fireEvent.focus(badge);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Only the run owner can see sharing recipients.",
-    );
-  });
-
-  it("refreshes the visible audience as soon as sharing is changed or removed", async () => {
-    server.use(
-      http.put("http://localhost:9000/api/agent-runs/:taskId/share", () => {
-        state.runs = [{ ...state.runs[0], shareVisibility: "organization" }];
-        return HttpResponse.json({ visibility: "organization" });
-      }),
-      http.delete("http://localhost:9000/api/agent-runs/:taskId/share", () => {
-        state.runs = [{ ...state.runs[0], shareVisibility: null }];
-        return HttpResponse.json({ success: true });
-      }),
-    );
-    renderRuns();
-    const { result } = renderHook(
-      () => ({ share: useShareAgentRun(), unshare: useUnshareAgentRun() }),
-      {
-        wrapper: ({ children }) => (
-          <QueryClientProvider client={queryClient}>
-            {children}
-          </QueryClientProvider>
-        ),
-      },
-    );
-    expect(await screen.findByLabelText("Personal")).toBeVisible();
-    await act(() =>
-      result.current.share.mutateAsync({
-        taskId: state.runs[0].taskId,
-        visibility: "organization",
-      }),
-    );
-    expect(await screen.findByLabelText("Organization")).toBeVisible();
-    await act(() => result.current.unshare.mutateAsync(state.runs[0].taskId));
-    expect(await screen.findByLabelText("Personal")).toBeVisible();
   });
 
   it("identifies additional project access without treating it as a run share", async () => {
@@ -228,16 +146,6 @@ describe("AgentRuns", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "permission to read all project sessions",
     );
-  });
-
-  it.each([
-    "user",
-    "team",
-  ] as const)("does not imply access when a %s share has no remaining recipients", async (shareVisibility) => {
-    state.runs = [{ ...createRun(null), shareVisibility }];
-    renderRuns();
-    expect(await screen.findByText("No recipients")).toBeVisible();
-    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
   });
 
   it("identifies automation when no initiating user exists", async () => {

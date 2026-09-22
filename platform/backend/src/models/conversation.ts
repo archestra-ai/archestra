@@ -668,6 +668,7 @@ class ConversationModel {
     if (
       !project ||
       !(await ProjectShareModel.userCanAccessProject({
+        sessionAccess: true,
         project,
         userId: params.userId,
         organizationId: params.organizationId,

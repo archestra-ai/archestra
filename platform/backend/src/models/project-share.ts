@@ -7,6 +7,8 @@ import type {
   ProjectShare,
   ProjectShareVisibility,
 } from "@/types";
+import ResourcePermissionAccessModel from "./resource-permission-access";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 
 /** A project's share row with its team targets resolved. */
@@ -114,9 +116,23 @@ class ProjectShareModel {
     project: Project;
     userId: string;
     organizationId: string;
+    sessionAccess?: boolean;
   }): Promise<boolean> {
     const { project } = params;
     if (project.organizationId !== params.organizationId) return false;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policyAccess = await ResourcePermissionAccessModel.canRead({
+      ...params,
+      resource: "project",
+      scope: project.id,
+      // Project-wide oversight does not reveal private session contents.
+      includeWildcard: !params.sessionAccess,
+    });
+    if (policyAccess !== null) return policyAccess;
+    // SPDX-SnippetEnd
+
     if (project.userId === params.userId) return true;
 
     const share = await ProjectShareModel.findByProjectId(project.id);
@@ -221,11 +237,46 @@ class ProjectShareModel {
         ),
       );
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const current = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
+          ResourcePermissionPolicyModel.grantCondition({
+            ...params,
+            resource: "project",
+            scopeColumn: schema.projectsTable.id,
+            action: "read",
+          }),
+        ),
+      );
+    const legacy = await db
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          ResourcePermissionPolicyModel.legacySharingCondition({
+            organizationId: params.organizationId,
+            resource: "project",
+            scopeColumn: schema.projectsTable.id,
+          }),
+        ),
+      );
+    const legacyIds = new Set(legacy.map((project) => project.id));
     const byId = new Map<string, Project>();
-    for (const p of own) byId.set(p.id, p);
+    for (const p of own) if (legacyIds.has(p.id)) byId.set(p.id, p);
     for (const { project } of [...orgShared, ...teamShared, ...userShared]) {
-      if (!byId.has(project.id)) byId.set(project.id, project);
+      if (legacyIds.has(project.id) && !byId.has(project.id))
+        byId.set(project.id, project);
     }
+    for (const project of current) byId.set(project.id, project);
+    // SPDX-SnippetEnd
     const projects = [...byId.values()];
 
     return (await ProjectShareModel.attachVisibility(projects)).sort((a, b) => {

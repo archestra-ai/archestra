@@ -12,7 +12,7 @@ describe("LlmProviderApiKeyModel", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret();
     const key = await makeLlmProviderApiKey(org.id, secret.id);
     vi.useFakeTimers();
@@ -41,7 +41,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const apiKey = await LlmProviderApiKeyModel.create({
@@ -67,7 +67,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeTeam,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
 
@@ -87,7 +87,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("can create an org-wide LLM provider API key", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -105,7 +105,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const key1 = await LlmProviderApiKeyModel.create({
@@ -133,7 +133,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const key = await LlmProviderApiKeyModel.create({
@@ -151,7 +151,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("creating a new primary demotes the current primary in the same scope", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const first = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -179,7 +179,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const personalPrimary = await LlmProviderApiKeyModel.create({
@@ -219,7 +219,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const anthropicKey = await LlmProviderApiKeyModel.create({
@@ -246,7 +246,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       // Key without baseUrl should have null
@@ -287,7 +287,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const created = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -317,7 +317,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       await LlmProviderApiKeyModel.create({
@@ -344,7 +344,7 @@ describe("LlmProviderApiKeyModel", () => {
 
   describe("findByScope", () => {
     test("can find org-wide key by scope", async ({ makeOrganization }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const orgWideKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -366,7 +366,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("returns null when no key exists for scope", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const found = await LlmProviderApiKeyModel.findByScope(
         org.id,
@@ -383,7 +383,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -404,7 +404,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("promoting a key to primary demotes the current primary in its scope", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const currentPrimary = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Current Primary",
@@ -433,7 +433,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("re-promoting the current primary is a no-op that keeps it primary", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const primary = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Primary",
@@ -455,7 +455,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -478,7 +478,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user1 = await makeUser({ email: "user1@test.com" });
       const user2 = await makeUser({ email: "user2@test.com" });
 
@@ -513,7 +513,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeTeam,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
 
@@ -537,7 +537,7 @@ describe("LlmProviderApiKeyModel", () => {
     });
 
     test("user sees org-wide keys", async ({ makeOrganization, makeUser }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       await LlmProviderApiKeyModel.create({
@@ -562,7 +562,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const admin = await makeUser({ email: "admin@test.com" });
       const user = await makeUser({ email: "user@test.com" });
 
@@ -605,7 +605,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       await LlmProviderApiKeyModel.create({
@@ -642,7 +642,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       await LlmProviderApiKeyModel.create({
@@ -680,7 +680,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeSecret,
       makeLlmProviderApiKey,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const codexSecret = await makeSecret({
@@ -727,7 +727,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeSecret,
       makeLlmProviderApiKey,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const secret = await makeSecret({ secret: { apiKey: "sk-old" } });
@@ -774,7 +774,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
@@ -812,7 +812,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeTeam,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
       const secret1 = await makeSecret();
@@ -850,7 +850,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret = await makeSecret();
 
@@ -880,7 +880,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeAgent,
       makeConversation,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
@@ -924,7 +924,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
@@ -943,7 +943,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
@@ -984,7 +984,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
@@ -1025,7 +1025,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const secret = await makeSecret();
 
@@ -1054,7 +1054,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const owner = await makeUser();
       const otherUser = await makeUser();
       const ownerSecret = await makeSecret();
@@ -1098,7 +1098,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("returns true when organization has API keys", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -1115,7 +1115,7 @@ describe("LlmProviderApiKeyModel", () => {
     test("returns false when organization has no API keys", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const hasKeys = await LlmProviderApiKeyModel.hasAnyApiKey(org.id);
 
@@ -1128,7 +1128,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeSecret,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const secret = await makeSecret();
 
       await LlmProviderApiKeyModel.create({
@@ -1158,7 +1158,7 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const key = await LlmProviderApiKeyModel.create({

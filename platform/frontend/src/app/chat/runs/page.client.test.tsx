@@ -28,6 +28,8 @@ const terminalState = vi.hoisted(() => ({
   } | null,
 }));
 
+vi.mock("@/lib/auth/auth.query");
+
 vi.mock("next/navigation");
 
 vi.mock("@/lib/agent-runtime.query", () => ({

@@ -27,6 +27,7 @@ export async function runScopedResourcePermissionCutover(
     );
     for (const statement of [
       ...SHARING_CONVERSION_STATEMENTS,
+      SESSION_SHARING_CONVERSION,
       ...ROLE_RETIREMENT_STATEMENTS,
     ])
       await tx.execute(statement);
@@ -840,3 +841,70 @@ UPDATE organization_role r SET permission = converted.permission::text, updated_
 FROM converted WHERE r.id = converted.id AND r.permission::jsonb IS DISTINCT FROM converted.permission;
 `),
 ];
+
+// Session shares grant output visibility, never the owner's credentials or write authority.
+const SESSION_SHARING_CONVERSION = sql.raw(`
+WITH targets AS (
+  SELECT c.organization_id, 'conversation' AS resource, c.id::text AS scope,
+    c.user_id AS owner_id, c.locked_chat AS locked, s.id AS share_id, s.visibility::text
+  FROM conversations c LEFT JOIN conversation_shares s
+    ON s.conversation_id = c.id AND s.organization_id = c.organization_id
+  UNION ALL
+  SELECT r.organization_id, 'agentRun', r.task_id::text, r.actor_user_id,
+    false, s.id, s.visibility::text
+  FROM agent_runs r LEFT JOIN agent_run_shares s
+    ON s.task_id = r.task_id AND s.organization_id = r.organization_id
+), pending AS (
+  SELECT t.* FROM targets t WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = t.organization_id AND p.resource = t.resource
+      AND p.scope = t.scope AND p.legacy_sharing_migrated
+  )
+), entries AS (
+  SELECT t.organization_id, t.resource, t.scope, 'user' AS subject_type,
+    t.owner_id AS subject_id, unnest(ARRAY['read', 'manage-permissions']) AS action
+  FROM pending t WHERE t.owner_id IS NOT NULL
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'organization', '*', 'read'
+  FROM pending t WHERE t.visibility = 'organization' AND NOT t.locked
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', st.team_id, 'read'
+  FROM pending t JOIN conversation_share_team st ON st.share_id = t.share_id
+    JOIN team tm ON tm.id = st.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'conversation' AND t.visibility = 'team' AND NOT t.locked
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', su.user_id, 'read'
+  FROM pending t JOIN conversation_share_user su ON su.share_id = t.share_id
+  WHERE t.resource = 'conversation' AND t.visibility = 'user' AND NOT t.locked
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', st.team_id, 'read'
+  FROM pending t JOIN agent_run_share_team st ON st.share_id = t.share_id
+    JOIN team tm ON tm.id = st.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'agentRun' AND t.visibility = 'team'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', su.user_id, 'read'
+  FROM pending t JOIN agent_run_share_user su ON su.share_id = t.share_id
+  WHERE t.resource = 'agentRun' AND t.visibility = 'user'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope,
+    g->'subject'->>'type', g->'subject'->>'id', a
+  FROM pending t JOIN resource_permission_policies p
+    ON p.organization_id = t.organization_id AND p.resource = t.resource AND p.scope = t.scope,
+    jsonb_array_elements(p.grants) g, jsonb_array_elements_text(g->'actions') a
+), grouped AS (
+  SELECT organization_id, resource, scope, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, resource, scope, subject_type, subject_id
+), policies AS (
+  SELECT organization_id, resource, scope,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM grouped GROUP BY organization_id, resource, scope
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT t.organization_id, t.resource, t.scope, coalesce(p.grants, '[]'::jsonb), true
+FROM pending t LEFT JOIN policies p USING (organization_id, resource, scope)
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true,
+  revision = resource_permission_policies.revision + 1, updated_at = now()
+`);

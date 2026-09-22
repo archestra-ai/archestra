@@ -1,5 +1,6 @@
 import { providerDisplayNames } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -164,11 +165,12 @@ describe("GET /api/llm-provider-api-keys/available", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
     setupAdminApp();
     app = await createApp(organizationId, user);
   });
@@ -1201,6 +1203,7 @@ describe("LLM Provider API Keys CRUD", () => {
   });
 
   test("rejects keyless Anthropic keys when Workload Identity Federation is not configured", async () => {
+    config.llm.anthropic.vertexAi.enabled = false;
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1585,7 +1588,7 @@ describe("LLM Provider API Keys Scope Update", () => {
     await app.close();
   });
 
-  test("should update scope from personal to org", async () => {
+  test("rejects legacy scope updates after permissions become authoritative", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1606,10 +1609,13 @@ describe("LLM Provider API Keys Scope Update", () => {
       },
     });
 
-    expect(updateResponse.statusCode).toBe(200);
-    const updatedKey = updateResponse.json();
-    expect(updatedKey.scope).toBe("org");
-    expect(updatedKey.userId).toBeNull();
+    expect(updateResponse.statusCode).toBe(400);
+    expect(updateResponse.json().error.message).toContain(
+      "resource permissions API",
+    );
+    expect((await LlmProviderApiKeyModel.findById(createdKey.id))?.userId).toBe(
+      user.id,
+    );
   });
 
   test("rejects a ChatGPT-subscription credential pasted into an org key without a scope change", async () => {
@@ -2230,6 +2236,39 @@ describe("scoped provider key grants", () => {
           userId: outsider.id,
         })
       ).grants,
+    ).toEqual([]);
+  });
+  test("rejects sharing a personal subscription at creation before creating its secret", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Personal subscription",
+        provider: "github-copilot",
+        apiKey: "gho_test",
+        scope: "personal",
+        initialGrants: [
+          {
+            subject: { type: "user", id: recipient.id },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("cannot be shared");
+    expect(
+      await LlmProviderApiKeyModel.getVisibleKeys(
+        organizationId,
+        user.id,
+        [],
+        true,
+      ),
     ).toEqual([]);
   });
 });

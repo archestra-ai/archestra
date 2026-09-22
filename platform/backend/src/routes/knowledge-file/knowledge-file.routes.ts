@@ -366,6 +366,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Knowledge Files"],
         body: VisibilityBodySchema.extend({
           attachmentId: z.string().uuid(),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
           /** Defaults to the attachment's own name. */
           filename: z.string().trim().min(1).max(512).optional(),
           directoryId: z.string().uuid().nullable().default(null),
@@ -446,6 +450,28 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
+      const scope = knowledgeScope(body.visibility);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.initialGrants?.length) {
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeFile",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: filename,
+            authorId: user.id,
+            scope,
+            teams: body.teamIds.map((id) => ({ id })),
+            users: [],
+          },
+        });
+      }
+      // SPDX-SnippetEnd
+
       let file: Awaited<ReturnType<typeof KbFileModel.create>>;
       try {
         file = await KbFileModel.create({
@@ -462,6 +488,14 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // they chose its audience, and for a private one they are the only
           // person its ACL will name.
           uploadedBy: user.id,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: body.initialGrants,
+            visibility: scope,
+          }),
+          // SPDX-SnippetEnd
         });
       } catch (error) {
         if (isUniqueConstraintError(error)) {

@@ -31,6 +31,7 @@ import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
+import { CredentialResourcePermissions } from "./credential-resource-permissions";
 import { resolveLegacyResourcePermissions } from "./resource-permission-compatibility";
 
 export class ResourcePermissions {
@@ -334,7 +335,7 @@ export class ResourcePermissions {
     if (params.scope !== "*" && !target)
       throw new ApiError(404, "Resource not found");
     if (
-      params.resource === "app" &&
+      (params.resource === "app" || params.resource === "conversation") &&
       target?.enabled === false &&
       target.authorId !== params.userId
     )
@@ -398,18 +399,25 @@ export class ResourcePermissions {
       revision: policy?.revision ?? 0,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
-        grants: policy?.grants ?? [],
+        grants:
+          policy?.grants ??
+          (params.resource === "conversation" || params.resource === "agentRun"
+            ? sessionLegacyGrants(effective.target)
+            : []),
       }),
       inheritedGrants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
         grants: inherited,
       }),
-      legacyAccess: policy?.legacySharingMigrated
-        ? []
-        : await ResourcePermissions.describeLegacyAccess({
-            ...params,
-            target: effective.target,
-          }),
+      legacyAccess:
+        policy?.legacySharingMigrated ||
+        params.resource === "conversation" ||
+        params.resource === "agentRun"
+          ? []
+          : await ResourcePermissions.describeLegacyAccess({
+              ...params,
+              target: effective.target,
+            }),
       effectiveActions: effectiveActionsForPolicy({
         ...params,
         grants: effective.grants,
@@ -423,6 +431,25 @@ export class ResourcePermissions {
       grants: ResourcePermissionGrant[];
     },
   ) {
+    if (params.resource === "conversation" || params.resource === "agentRun") {
+      if (
+        params.grants.some((grant) =>
+          grant.actions.some(
+            (action) => action !== "read" && action !== "manage-permissions",
+          ),
+        )
+      )
+        throw new ApiError(
+          400,
+          "Sessions support viewing and managing access only",
+        );
+      const target = await ResourcePermissionTargetModel.find({
+        ...params,
+        id: params.scope,
+      });
+      if (target?.enabled === false)
+        throw new ApiError(400, "Locked chats cannot be shared");
+    }
     const effective = await ResourcePermissions.getEffective(params);
     const policy = await ResourcePermissions.replace({
       ...params,
@@ -445,12 +472,15 @@ export class ResourcePermissions {
           scope: params.scope,
         }),
       }),
-      legacyAccess: policy?.legacySharingMigrated
-        ? []
-        : await ResourcePermissions.describeLegacyAccess({
-            ...params,
-            target: effective.target,
-          }),
+      legacyAccess:
+        policy?.legacySharingMigrated ||
+        params.resource === "conversation" ||
+        params.resource === "agentRun"
+          ? []
+          : await ResourcePermissions.describeLegacyAccess({
+              ...params,
+              target: effective.target,
+            }),
       effectiveActions: effectiveActionsForPolicy({
         ...params,
         grants: updated.grants,
@@ -521,6 +551,7 @@ export class ResourcePermissions {
       authority: readonly ScopedPermission[];
     },
   ) {
+    await CredentialResourcePermissions.validatePolicy(params);
     const current = await ResourcePermissionPolicyModel.find(params);
     // Retaining an existing grant does not delegate new authority. A limited
     // permission manager may revoke access without removing stronger grants
@@ -829,4 +860,31 @@ function effectiveActionsForPolicy(
       },
     }),
   );
+}
+
+function sessionLegacyGrants(
+  target: Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>,
+): ResourcePermissionGrant[] {
+  if (!target) return [];
+  const grants: ResourcePermissionGrant[] = [];
+  if (target.authorId)
+    grants.push({
+      subject: { type: "user", id: target.authorId },
+      actions: ["read", "manage-permissions"],
+    });
+  if (target.enabled === false) return grants;
+  if (target.scope === "org")
+    grants.push({
+      subject: { type: "organization", id: "*" },
+      actions: ["read"],
+    });
+  for (const team of target.teams)
+    grants.push({ subject: { type: "team", id: team.id }, actions: ["read"] });
+  for (const user of target.users)
+    if (user.id !== target.authorId)
+      grants.push({
+        subject: { type: "user", id: user.id },
+        actions: ["read"],
+      });
+  return grants;
 }

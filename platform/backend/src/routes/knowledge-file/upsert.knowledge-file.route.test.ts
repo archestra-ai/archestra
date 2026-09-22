@@ -15,9 +15,10 @@ describe("PUT knowledge file content", () => {
   let organizationId: string;
   let knowledgeBaseId: string;
   const id = randomUUID();
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     knowledgeBaseId = (
       await KnowledgeBaseModel.create({
         organizationId,
@@ -131,10 +132,22 @@ describe("PUT knowledge file content", () => {
 
   test("refuses another uploader and leaves the original bytes intact", async ({
     makeUser,
+    makeMember,
   }) => {
     await put();
+    const owner = user;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
+    knowledgeBaseId = (
+      await KnowledgeBaseModel.create({
+        organizationId,
+        createdBy: user.id,
+        name: "Recipient base",
+      })
+    ).id;
     expect((await put("Unauthorized replacement")).statusCode).toBe(409);
+    expect(await stored()).toBeNull();
+    user = owner;
     expect(Buffer.from((await stored())?.data ?? []).toString()).toBe(
       "First market report",
     );
@@ -157,12 +170,18 @@ describe("PUT knowledge file content", () => {
   test("does not overwrite a foreign organization UUID", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     await put();
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     knowledgeBaseId = (
-      await KnowledgeBaseModel.create({ organizationId, name: "Other base" })
+      await KnowledgeBaseModel.create({
+        organizationId,
+        createdBy: user.id,
+        name: "Other base",
+      })
     ).id;
     expect((await put()).statusCode).toBe(409);
     expect(await stored()).toBeNull();

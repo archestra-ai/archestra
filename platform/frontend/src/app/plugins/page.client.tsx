@@ -16,7 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -69,7 +69,6 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type PluginListItem,
   useBulkDeletePlugins,
-  useBulkUpdatePluginVisibility,
   useDeletePlugin,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
@@ -260,7 +259,6 @@ function PluginsList() {
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkInstallOpen, setBulkInstallOpen] = useState(false);
-  const bulkVisibility = useBulkUpdatePluginVisibility();
   const bulkDelete = useBulkDeletePlugins();
   const { rangeSelection, ...bulkSelection } = useBulkSelection({
     rows: filteredPlugins,
@@ -650,7 +648,7 @@ function PluginsList() {
                 count={bulkSelection.selected.length}
                 noun="plugin"
                 onClear={bulkSelection.clearSelection}
-                busy={bulkVisibility.isPending || bulkDelete.isPending}
+                busy={bulkDelete.isPending}
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
                 <PermissionButton
@@ -671,7 +669,7 @@ function PluginsList() {
                   onClick={() => setBulkVisibilityOpen(true)}
                 >
                   <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
+                  <span>Add access</span>
                 </PermissionButton>
                 <PermissionButton
                   permissions={{ plugin: ["delete", "admin"] }}
@@ -807,23 +805,15 @@ function PluginsList() {
         />
       )}
       {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          items={bulkSelection.selected}
-          noun="plugin"
+        <BulkResourceAccessDialog
+          resource="plugin"
+          items={bulkSelection.selected.map((plugin) => ({
+            id: plugin.id,
+            name: plugin.displayName,
+          }))}
           open={bulkVisibilityOpen}
           onOpenChange={setBulkVisibilityOpen}
-          isPending={bulkVisibility.isPending}
-          onApply={async (change) => {
-            const result = await bulkVisibility.mutateAsync({
-              plugins: bulkSelection.selected.map((plugin) => ({
-                id: plugin.id,
-                name: plugin.displayName,
-              })),
-              ...change,
-            });
-            if (result.succeeded.length > 0) bulkSelection.clearSelection();
-            return result.succeeded.length > 0;
-          }}
+          onApplied={bulkSelection.clearSelection}
         />
       )}
       {bulkInstallOpen && (

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 import { enterpriseTier } from "@/enterprise-tier";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import { KbFileModel, KnowledgeBaseModel, TeamModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ApiError, type KnowledgeBase } from "@/types";
 
 export async function canAccessKnowledgeBase(params: {
@@ -11,7 +13,21 @@ export async function canAccessKnowledgeBase(params: {
 }): Promise<boolean> {
   if (params.knowledgeBase.organizationId !== params.organizationId)
     return false;
-  if (!params.userId) return params.knowledgeBase.visibility === "org-wide";
+  if (!params.userId) {
+    const key = {
+      organizationId: params.organizationId,
+      resource: "knowledgeBase" as const,
+      scope: params.knowledgeBase.id,
+    };
+    const policies = await ResourcePermissionPolicyModel.findApplicable(key);
+    if (policies.some((policy) => policy.legacySharingMigrated))
+      return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
+        ...key,
+        teamId: null,
+        action: "read",
+      });
+    return params.knowledgeBase.visibility === "org-wide";
+  }
   const access =
     await knowledgeSourceAccessControlService.buildAccessControlContext({
       userId: params.userId,

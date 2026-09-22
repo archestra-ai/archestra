@@ -123,12 +123,16 @@ export function ResourcePermissionsDialog({
   resource,
   scope = "*",
   title,
+  description,
+  children,
   open,
   onOpenChange,
 }: {
   resource: ScopedResource;
   scope?: string;
   title?: string;
+  description?: string;
+  children?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -156,12 +160,13 @@ export function ResourcePermissionsDialog({
       description={
         accessOpen
           ? "Choose who to add and set what each recipient can do."
-          : scope !== "*"
-            ? `Choose who can access this ${noun} and what they can do.`
-            : `Give access to every ${noun} in the organization, including ones created later.` +
-              (ORGANIZATION_WIDE_RESOURCES.has(resource)
-                ? ""
-                : " Permissions on individual resources can add access, but cannot reduce access given here.")
+          : (description ??
+            (scope !== "*"
+              ? `Choose who can access this ${noun} and what they can do.`
+              : `Give access to every ${noun} in the organization, including ones created later.` +
+                (ORGANIZATION_WIDE_RESOURCES.has(resource)
+                  ? ""
+                  : " Permissions on individual resources can add access, but cannot reduce access given here.")))
       }
       isDirty={isDirty || accessDirty}
       className="sm:max-w-3xl"
@@ -189,6 +194,7 @@ export function ResourcePermissionsDialog({
             onDirtyChange={setIsDirty}
           />
         )}
+        {!accessOpen && children}
       </ResourcePermissionsDialogContext.Provider>
     </StandardDialog>
   );
@@ -638,6 +644,15 @@ function presetsFor(
   string,
   { label: string; actions: readonly ResourcePermissionAction[] }
 > {
+  if (resource === "conversation" || resource === "agentRun") {
+    return {
+      view: resourcePermissionPresets.view,
+      manage: {
+        label: "Can manage access",
+        actions: ["read", "manage-permissions"],
+      },
+    };
+  }
   if (resource === "log" || resource === "auditLog") {
     return {
       view: resourcePermissionPresets.view,
@@ -651,12 +666,19 @@ function presetsFor(
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {
+  if (
+    preset === "manage" &&
+    (resource === "conversation" || resource === "agentRun")
+  )
+    return "View the session and manage who can access it";
   return preset === "manage" && (resource === "log" || resource === "auditLog")
     ? "View logs and manage who can access them"
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
 /** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
 const scopedResourceNouns: Record<ScopedResource, string> = {
+  conversation: "chat session",
+  agentRun: "runtime session",
   agent: "agent",
   skill: "skill",
   app: "app",
@@ -702,6 +724,8 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
 };
 
 const resourcePluralNames: Record<ScopedResource, string> = {
+  conversation: "chat sessions",
+  agentRun: "runtime sessions",
   agent: "agents",
   skill: "skills",
   app: "apps",

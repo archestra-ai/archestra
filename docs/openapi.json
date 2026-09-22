@@ -281497,6 +281497,136 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
+                  },
                   "filename": {
                     "type": "string",
                     "minLength": 1,
@@ -295675,7 +295805,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Get all LLM provider API keys visible to the current user based on scope access\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Get all LLM provider API keys visible to the current user based on scope access\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -296197,10 +296327,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -297478,7 +297607,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Get a specific LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Get a specific LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -297956,10 +298085,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "patch": {
@@ -297967,7 +298095,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Update an LLM provider API key (name, API key value, visibility, or team)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:update`: Modify LLM provider API key configuration and visibility",
+        "description": "Update an LLM provider API key (name, API key value, visibility, or team)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -298550,10 +298678,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -298561,7 +298688,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete an LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:delete`: Remove LLM provider API keys",
+        "description": "Delete an LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -298824,10 +298951,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -299346,7 +299472,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still in use are reported in `failed` while the remaining keys are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:delete`: Remove LLM provider API keys\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still in use are reported in `failed` while the remaining keys are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -299666,11 +299792,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:delete",
-            "llmProviderApiKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -357380,6 +357504,136 @@
                         "items": {
                           "type": "string",
                           "minLength": 1
+                        }
+                      },
+                      "initialGrants": {
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "team"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "serviceAccount"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "role"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "organization"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "enum": [
+                                        "*"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            },
+                            "actions": {
+                              "minItems": 1,
+                              "maxItems": 5,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "read",
+                                  "use",
+                                  "update",
+                                  "delete",
+                                  "manage-permissions"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "actions"
+                          ]
                         }
                       },
                       "syncInterval": {
@@ -415437,7 +415691,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get virtual API keys visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get virtual API keys visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -416025,10 +416279,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -416767,7 +417020,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get a virtual API key visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get a virtual API key visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -417237,10 +417490,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "patch": {
@@ -417248,7 +417500,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Update a virtual API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:update`: Modify LLM virtual keys and their visibility",
+        "description": "Update a virtual API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -417841,10 +418093,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -417852,7 +418103,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Delete a virtual API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:delete`: Delete LLM virtual keys",
+        "description": "Delete a virtual API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -418115,10 +418366,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -418128,7 +418378,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -418391,10 +418641,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -418404,7 +418653,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Delete several virtual API keys in one request. Each id is authorized exactly as the single-key delete authorizes its own, so a key the caller cannot see or manage is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:delete`: Delete LLM virtual keys",
+        "description": "Delete several virtual API keys in one request. Each id is authorized exactly as the single-key delete authorizes its own, so a key the caller cannot see or manage is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -418723,10 +418972,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmVirtualKey:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -428073,6 +428321,8 @@
                 "app",
                 "llmModel",
                 "project",
+                "conversation",
+                "agentRun",
                 "plugin",
                 "knowledgeBase",
                 "knowledgeConnector",
@@ -428492,6 +428742,8 @@
                           "app",
                           "llmModel",
                           "project",
+                          "conversation",
+                          "agentRun",
                           "plugin",
                           "knowledgeBase",
                           "knowledgeConnector",
@@ -428807,6 +429059,8 @@
                 "app",
                 "llmModel",
                 "project",
+                "conversation",
+                "agentRun",
                 "plugin",
                 "knowledgeBase",
                 "knowledgeConnector",
@@ -429235,6 +429489,8 @@
                 "app",
                 "llmModel",
                 "project",
+                "conversation",
+                "agentRun",
                 "plugin",
                 "knowledgeBase",
                 "knowledgeConnector",
@@ -429291,6 +429547,8 @@
                         "app",
                         "llmModel",
                         "project",
+                        "conversation",
+                        "agentRun",
                         "plugin",
                         "knowledgeBase",
                         "knowledgeConnector",
@@ -430192,6 +430450,8 @@
                 "app",
                 "llmModel",
                 "project",
+                "conversation",
+                "agentRun",
                 "plugin",
                 "knowledgeBase",
                 "knowledgeConnector",
@@ -430248,6 +430508,8 @@
                         "app",
                         "llmModel",
                         "project",
+                        "conversation",
+                        "agentRun",
                         "plugin",
                         "knowledgeBase",
                         "knowledgeConnector",

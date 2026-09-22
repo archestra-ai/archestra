@@ -105,7 +105,11 @@ import {
 } from "@/lib/agent-runtime.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
   getOAuthPendingChatResume,
@@ -143,7 +147,6 @@ import {
   subscribeReviewContext,
 } from "@/lib/chat/chat-review-context";
 import {
-  useConversationShare,
   useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
@@ -204,6 +207,7 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
@@ -826,24 +830,48 @@ export function ChatPageContent({
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
       : "Chat",
   );
+  const sessionCapabilities = useScopedCapabilities();
   const canManageShare =
     !!conversationId &&
     !!conversation &&
-    conversation.userId === session?.user.id &&
+    (conversation.userId === session?.user.id ||
+      sessionCapabilities.data?.some(
+        (grant) =>
+          grant.resource === "conversation" &&
+          grant.action === "manage-permissions" &&
+          (grant.scope === conversationId || grant.scope === "*"),
+      ) === true) &&
     // Locked chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
-  useConversationShare(canManageShare ? conversationId : undefined);
 
   // Turning this chat into a project is owner-only (same as sharing) and
   // restricted to a user chat not already in a project.
   const canCreateProjectFromThisChat =
     canManageShare &&
     !!conversation &&
+    conversation.userId === session?.user.id &&
     canCreateProjectFromChat({
       hasCreatePermission: canCreateProjectPerm === true,
       conversation,
     });
-  const isShared = !!conversation?.share;
+  const sharingPolicy = useResourcePermissions(
+    "conversation",
+    conversationId ?? "",
+    canManageShare === true,
+  );
+  const isShared = sharingPolicy.data
+    ? [
+        ...sharingPolicy.data.grants,
+        ...sharingPolicy.data.inheritedGrants,
+      ].some(
+        (grant) =>
+          grant.actions.includes("read") &&
+          !(
+            grant.subject.type === "user" &&
+            grant.subject.id === conversation?.userId
+          ),
+      )
+    : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
     !!conversation &&

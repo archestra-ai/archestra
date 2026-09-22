@@ -252,7 +252,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     expect(screen.getByLabelText("Provider")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
-    expect(screen.getByText("Scope")).toBeInTheDocument();
+    expect(screen.getByText("Permissions")).toBeInTheDocument();
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
     expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
     expect(screen.queryByText("Base URL")).not.toBeInTheDocument();

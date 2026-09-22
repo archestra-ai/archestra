@@ -292,9 +292,6 @@ function PluginDetailView({
               supportedPlatforms: submitted.supportedPlatforms,
               files: submitted.files,
             }),
-        scope: submitted.scope,
-        teamIds: submitted.scope === "team" ? submitted.teamIds : [],
-        userIds: submitted.scope === "personal" ? submitted.userIds : [],
         labels: submitted.labels,
       })
       .catch(() => null);

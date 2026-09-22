@@ -1056,7 +1056,10 @@ class ProjectService {
     // part of admin oversight), so a `project:admin` viewing a foreign project
     // still cannot list its chats (requireReadable already excludes them).
     const project = await this.requireReadable(params);
-    const canReadAllChats = await this.callerCanReadAllProjectSessions(params);
+    const canReadAllChats = await this.callerCanReadAllProjectSessions({
+      ...params,
+      project,
+    });
     // Without `project:read-all`, scope the query to the caller's own chats in
     // SQL rather than fetching every project chat and filtering in memory.
     const rows = await ProjectModel.listConversations(
@@ -1075,7 +1078,10 @@ class ProjectService {
     userId: string;
   }): Promise<Omit<GetAgentRunResponse, "terminalRetained">[]> {
     const project = await this.requireReadable(params);
-    const canReadAll = await this.callerCanReadAllProjectSessions(params);
+    const canReadAll = await this.callerCanReadAllProjectSessions({
+      ...params,
+      project,
+    });
     const rows = await AgentRunModel.listForProject({
       projectId: project.id,
       organizationId: params.organizationId,
@@ -1452,9 +1458,21 @@ class ProjectService {
   }
 
   private async callerCanReadAllProjectSessions(params: {
+    project: Project;
     organizationId: string;
     userId: string;
   }): Promise<boolean> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (
+      !(await ProjectShareModel.userCanAccessProject({
+        ...params,
+        sessionAccess: true,
+      }))
+    )
+      return false;
+    // SPDX-SnippetEnd
     return userHasPermission(
       params.userId,
       params.organizationId,

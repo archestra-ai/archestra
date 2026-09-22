@@ -1075,6 +1075,15 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.rejectLegacySharing({
+        organizationId: request.organizationId,
+        resource: "agentRun",
+        scope: run.taskId,
+      });
+      // SPDX-SnippetEnd
       const teamIds = Array.from(new Set(request.body.teamIds ?? []));
       const userIds = Array.from(new Set(request.body.userIds ?? []));
 
@@ -1134,6 +1143,15 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.rejectLegacySharing({
+        organizationId: request.organizationId,
+        resource: "agentRun",
+        scope: run.taskId,
+      });
+      // SPDX-SnippetEnd
       const deleted = await AgentRunShareModel.delete({
         taskId: run.taskId,
         organizationId: request.organizationId,
@@ -1359,6 +1377,7 @@ async function mayReadProjectSession(params: {
   if (
     !project ||
     !(await ProjectShareModel.userCanAccessProject({
+      sessionAccess: true,
       project,
       userId: params.userId,
       organizationId: params.organizationId,

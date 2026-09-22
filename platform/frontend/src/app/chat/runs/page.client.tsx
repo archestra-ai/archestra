@@ -37,11 +37,19 @@ import {
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
 import { useRuntimeClock } from "@/lib/agent-runtime-time";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const query = useMyAgentRun(taskId);
+  const capabilities = useScopedCapabilities();
+  const canManageAccess = capabilities.data?.some(
+    (grant) =>
+      grant.resource === "agentRun" &&
+      grant.action === "manage-permissions" &&
+      (grant.scope === taskId || grant.scope === "*"),
+  );
   const cancelRun = useCancelAgentRun();
   const deleteWorkspace = useDeleteAgentWorkspace();
   const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
@@ -181,6 +189,15 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                 >
                   <Square className="size-3.5 fill-current" />
                   <span>Stop</span>
+                </Button>
+              )}
+              {!isOwner && canManageAccess && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShareDialogOpen(true)}
+                >
+                  Permissions
                 </Button>
               )}
               {isOwner && (

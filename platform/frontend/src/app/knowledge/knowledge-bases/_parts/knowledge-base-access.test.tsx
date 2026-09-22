@@ -37,6 +37,9 @@ beforeEach(() => {
     },
   );
   Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
   submitted = undefined;
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
@@ -49,6 +52,14 @@ beforeEach(() => {
         ],
         pagination: { total: 2 },
       }),
+    ),
+    http.get(
+      `${origin}/api/resource-permissions/knowledgeBase/creation-subjects`,
+      () =>
+        HttpResponse.json([
+          { subject: { type: "team", id: "engineering" }, name: "Engineering" },
+          { subject: { type: "team", id: "support" }, name: "Support" },
+        ]),
     ),
     http.post(`${origin}/api/knowledge-bases`, async ({ request }) => {
       submitted = (await request.json()) as Record<string, unknown>;
@@ -78,35 +89,39 @@ function wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-it("requires a team and submits both selected teams through the real mutation", async () => {
+it("creates a knowledge base with different permissions for selected teams", async () => {
   const user = userEvent.setup();
-  const onOpenChange = vi.fn();
-  render(<CreateKnowledgeBaseDialog open onOpenChange={onOpenChange} />, {
+  render(<CreateKnowledgeBaseDialog open onOpenChange={vi.fn()} />, {
     wrapper,
   });
   await user.type(screen.getByLabelText("Name"), "Shared handbook");
-  await user.click(screen.getByRole("button", { name: /Organization Anyone/ }));
-  await user.click(screen.getByRole("button", { name: /Teams Share/ }));
+  await user.click(screen.getByRole("button", { name: "Add access" }));
+  await user.click(screen.getByRole("button", { name: /Teams/ }));
+  await user.click(await screen.findByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Engineering/ }));
+  await user.click(await screen.findByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Support/ }));
   await user.click(
-    screen.getByRole("button", { name: "Create Knowledge Base" }),
+    screen.getByRole("combobox", { name: "Permission for Engineering" }),
   );
-  expect(await screen.findByText("Select at least one team")).toBeVisible();
-  expect(submitted).toBeUndefined();
-  await user.click(screen.getByRole("combobox"));
-  await user.click(await screen.findByRole("option", { name: "Engineering" }));
-  await user.click(await screen.findByRole("option", { name: "Support" }));
-  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("button", { name: "Add access" }));
   await user.click(
     screen.getByRole("button", { name: "Create Knowledge Base" }),
   );
   await waitFor(() =>
     expect(submitted).toMatchObject({
       name: "Shared handbook",
-      visibility: "team-scoped",
-      teamIds: ["engineering", "support"],
+      visibility: "private",
+      initialGrants: [
+        {
+          subject: { type: "team", id: "engineering" },
+          actions: ["read", "use", "update"],
+        },
+        { subject: { type: "team", id: "support" }, actions: ["read"] },
+      ],
     }),
   );
-  await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
 });
 
 it("edits access through the knowledge base's own policy, not its sharing columns", async () => {
@@ -172,8 +187,6 @@ it("creates a personal knowledge base without requiring a team", async () => {
     wrapper,
   });
   await user.type(screen.getByLabelText("Name"), "Research notes");
-  await user.click(screen.getByRole("button", { name: /Organization Anyone/ }));
-  await user.click(screen.getByRole("button", { name: /Personal Only you/ }));
   await user.click(
     screen.getByRole("button", { name: "Create Knowledge Base" }),
   );
@@ -181,7 +194,7 @@ it("creates a personal knowledge base without requiring a team", async () => {
     expect(submitted).toMatchObject({
       name: "Research notes",
       visibility: "private",
-      teamIds: [],
+      initialGrants: [],
     }),
   );
 });

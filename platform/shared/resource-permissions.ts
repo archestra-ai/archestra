@@ -10,6 +10,8 @@ export const ScopedResourceSchema = z.enum([
   "llmModel",
   // Objects with their own audience, the same shape as the six above.
   "project",
+  "conversation",
+  "agentRun",
   "plugin",
   "knowledgeBase",
   "knowledgeConnector",

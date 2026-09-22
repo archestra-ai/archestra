@@ -1048,6 +1048,7 @@ class WebSocketService {
     if (
       !project ||
       !(await ProjectShareModel.userCanAccessProject({
+        sessionAccess: true,
         project,
         userId: clientContext.userId,
         organizationId: clientContext.organizationId,

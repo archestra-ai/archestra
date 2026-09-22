@@ -29,6 +29,7 @@ import {
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { Agent, User } from "@/types";
@@ -706,6 +707,14 @@ describe("Agent Runtime routes", () => {
   test("does not start a run inside a project the caller cannot read", async ({
     makeUser,
   }) => {
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: user.id,
+      resource: "project",
+      scope: "*",
+      revision: 1,
+      grants: [],
+    });
     const otherUser = await makeUser();
     const project = await projectService.create({
       organizationId,
@@ -1280,6 +1289,84 @@ describe("Agent Runtime routes", () => {
     );
   });
 
+  test("project wildcard access and read-all do not reveal private runs", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const owner = user;
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "Private runtime project",
+      description: null,
+    });
+    const task = await createTask(agent.id);
+    await createRun({
+      taskId: task.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+    });
+    const role = await makeCustomRole(organizationId, {
+      permission: { project: ["read", "read-all"] },
+    });
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId, { role: role.role });
+    const key = { organizationId, resource: "project" as const, scope: "*" };
+    const wildcard = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: wildcard?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    user = reader;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toEqual([]);
+    const directKey = { ...key, scope: project.id };
+    const direct = await ResourcePermissionPolicyModel.find(directKey);
+    const shared = await ResourcePermissionPolicyModel.replace({
+      ...directKey,
+      revision: direct?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toHaveLength(1);
+    await ResourcePermissionPolicyModel.replace({
+      ...directKey,
+      revision: shared?.revision ?? 0,
+      grants: [],
+    });
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toEqual([]);
+  });
+
   test("opens a run read-only through a shared project for a read-all member", async ({
     makeUser,
     makeMember,
@@ -1291,12 +1378,15 @@ describe("Agent Runtime routes", () => {
       name: "Shared project run",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await ResourcePermissions.updatePolicy({
       organizationId,
       userId: user.id,
-      visibility: "organization",
-      teamIds: [],
+      resource: "project",
+      scope: project.id,
+      revision: 1,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
     });
     const task = await createTask(agent.id);
     await createRun({
@@ -1470,6 +1560,86 @@ describe("Agent Runtime routes", () => {
       url: `/api/agent-runs/${task.id}`,
     });
     expect(uninvitedView.statusCode).toBe(404);
+  });
+
+  test("session grants unlock output without lending the owner's terminal or continuation", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const owner = user;
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: owner.id,
+      resource: "agentRun",
+      scope: task.id,
+      revision: 0,
+      grants: [
+        {
+          subject: { type: "user", id: owner.id },
+          actions: ["read", "manage-permissions"],
+        },
+        {
+          subject: { type: "user", id: reader.id },
+          actions: ["read", "manage-permissions"],
+        },
+      ],
+    });
+    user = reader;
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(view.statusCode, view.body).toBe(200);
+    expect(view.json().viewerRole).toBe("shared");
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agent-runs/${task.id}/continue`,
+          payload: { message: "continue" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/agent-runs/${task.id}`,
+        })
+      ).statusCode,
+    ).toBe(404);
+    user = owner;
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/api/agent-runs/${task.id}/share`,
+          payload: { visibility: "organization" },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: owner.id,
+      resource: "agentRun",
+      scope: task.id,
+      revision: 1,
+      grants: [
+        {
+          subject: { type: "user", id: owner.id },
+          actions: ["read", "manage-permissions"],
+        },
+      ],
+    });
+    user = reader;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
   });
 
   test("revokes sharing and keeps share management owner-only", async ({

@@ -5,6 +5,7 @@ import type {
   AgentRunShareVisibility,
   AgentRunShareWithTargets,
 } from "@/types";
+import ResourcePermissionAccessModel from "./resource-permission-access";
 import TeamModel from "./team";
 
 class AgentRunShareModel {
@@ -34,7 +35,17 @@ class AgentRunShareModel {
     taskId: string;
     organizationId: string;
     userId: string;
-  }): Promise<AgentRunShareWithTargets | null> {
+  }): Promise<AgentRunShareWithTargets | boolean | null> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policyAccess = await ResourcePermissionAccessModel.canRead({
+      ...params,
+      resource: "agentRun",
+      scope: params.taskId,
+    });
+    if (policyAccess !== null) return policyAccess;
+    // SPDX-SnippetEnd
     const share = await AgentRunShareModel.findByTaskId({
       taskId: params.taskId,
       organizationId: params.organizationId,
@@ -182,6 +193,17 @@ class AgentRunShareModel {
     share: AgentRunShareWithTargets;
     userId: string;
   }): Promise<boolean> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policyAccess = await ResourcePermissionAccessModel.canRead({
+      organizationId: params.share.organizationId,
+      userId: params.userId,
+      resource: "agentRun",
+      scope: params.share.taskId,
+    });
+    if (policyAccess !== null) return policyAccess;
+    // SPDX-SnippetEnd
     if (params.share.createdByUserId === params.userId) {
       return true;
     }

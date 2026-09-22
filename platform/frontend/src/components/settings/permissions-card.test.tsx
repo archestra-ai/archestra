@@ -43,7 +43,7 @@ describe("PermissionsCard", () => {
     renderCard();
 
     expect(
-      screen.getByText("Your roles and teams grant no resource permissions."),
+      screen.getByText(/Your roles and teams do not provide access/),
     ).toBeVisible();
     expect(screen.queryByLabelText("Filter permissions")).toBeNull();
   });

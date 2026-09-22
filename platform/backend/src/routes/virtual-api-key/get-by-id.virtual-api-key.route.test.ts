@@ -18,7 +18,7 @@ describe("GET /api/llm-virtual-keys/:id", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
     mockUserHasPermission.mockReset();

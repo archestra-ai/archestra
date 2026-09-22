@@ -452,6 +452,8 @@ export function roleActionResourceFor(
 
 const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
   {
+    conversation: "chat",
+    agentRun: "agent",
     knowledgeBase: "knowledgeSource",
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
@@ -1323,9 +1325,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ForkSharedConversation]: {
     chat: ["create"],
   },
-  [RouteId.GetLlmProviderApiKeys]: {
-    llmProviderApiKey: ["read"],
-  },
+  [RouteId.GetLlmProviderApiKeys]: {},
   [RouteId.GetLlmProviderApiKeyLabelKeys]: { llmProviderApiKey: ["read"] },
   [RouteId.GetLlmProviderApiKeyLabelValues]: { llmProviderApiKey: ["read"] },
   [RouteId.GetAvailableLlmProviderApiKeys]: {
@@ -1354,24 +1354,16 @@ export const requiredEndpointPermissionsMap: Partial<
   // (SuperGrok subscription) key.
   [RouteId.XaiSubscriptionDeviceAuthStart]: {},
   [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
-  [RouteId.GetLlmProviderApiKey]: {
-    llmProviderApiKey: ["read"],
-  },
-  [RouteId.UpdateLlmProviderApiKey]: {
-    llmProviderApiKey: ["update"],
-  },
+  [RouteId.GetLlmProviderApiKey]: {},
+  [RouteId.UpdateLlmProviderApiKey]: {},
   // Self-service like the create route and the device flows: reconnecting your
   // OWN personal subscription key after its sign-in expires must not require
   // llmProviderApiKey:update, or default members complete the device flow and
   // then can't save the refreshed credential. The handler restricts it to the
   // caller's own personal key holding subscription material.
   [RouteId.ReconnectLlmProviderApiKey]: {},
-  [RouteId.DeleteLlmProviderApiKey]: {
-    llmProviderApiKey: ["delete"],
-  },
-  [RouteId.BulkDeleteLlmProviderApiKeys]: {
-    llmProviderApiKey: ["read", "delete"],
-  },
+  [RouteId.DeleteLlmProviderApiKey]: {},
+  [RouteId.BulkDeleteLlmProviderApiKeys]: {},
   [RouteId.GetApiKeys]: {
     apiKey: ["read"],
   },
@@ -1406,30 +1398,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateServiceAccountToken]: {},
   [RouteId.UpdateServiceAccountToken]: {},
   [RouteId.DeleteServiceAccountToken]: {},
-  [RouteId.GetAllVirtualApiKeys]: {
-    llmVirtualKey: ["read"],
-  },
+  [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },
   [RouteId.GetVirtualApiKeyLabelValues]: { llmVirtualKey: ["read"] },
-  [RouteId.GetVirtualApiKey]: {
-    llmVirtualKey: ["read"],
-  },
+  [RouteId.GetVirtualApiKey]: {},
   // Reveals the raw key value; restricted to the key's author in the handler.
-  [RouteId.GetVirtualApiKeyValue]: {
-    llmVirtualKey: ["read"],
-  },
+  [RouteId.GetVirtualApiKeyValue]: {},
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
-  [RouteId.UpdateVirtualApiKey]: {
-    llmVirtualKey: ["update"],
-  },
-  [RouteId.DeleteVirtualApiKey]: {
-    llmVirtualKey: ["delete"],
-  },
-  [RouteId.BulkDeleteVirtualApiKeys]: {
-    llmVirtualKey: ["delete"],
-  },
+  [RouteId.UpdateVirtualApiKey]: {},
+  [RouteId.DeleteVirtualApiKey]: {},
+  [RouteId.BulkDeleteVirtualApiKeys]: {},
   [RouteId.GetLlmOauthClients]: {
     llmOauthClient: ["read"],
   },

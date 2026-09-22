@@ -54,30 +54,77 @@ function buildOrgFilters(params: {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    ...(params.canReadAll === false
+    ...(params.viewerUserId
       ? [
           or(
-            eq(schema.knowledgeBasesTable.visibility, "org-wide"),
-            ...(params.viewerUserId
-              ? [
-                  and(
-                    eq(schema.knowledgeBasesTable.visibility, "private"),
-                    eq(
-                      schema.knowledgeBasesTable.createdBy,
-                      params.viewerUserId,
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId: params.organizationId,
+              resource: "knowledgeBase",
+              scopeColumn: schema.knowledgeBasesTable.id,
+              userId: params.viewerUserId,
+              action: "read",
+            }),
+            and(
+              ResourcePermissionPolicyModel.legacySharingCondition({
+                organizationId: params.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+              }),
+              params.canReadAll
+                ? sql`true`
+                : or(
+                    eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+                    ...(params.viewerUserId
+                      ? [
+                          and(
+                            eq(
+                              schema.knowledgeBasesTable.visibility,
+                              "private",
+                            ),
+                            eq(
+                              schema.knowledgeBasesTable.createdBy,
+                              params.viewerUserId,
+                            ),
+                          ),
+                        ]
+                      : []),
+                    ...(params.viewerTeamIds ?? []).map((id) =>
+                      and(
+                        eq(
+                          schema.knowledgeBasesTable.visibility,
+                          "team-scoped",
+                        ),
+                        sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+                      ),
                     ),
                   ),
-                ]
-              : []),
-            ...(params.viewerTeamIds ?? []).map((id) =>
-              and(
-                eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
-                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-              ),
             ),
           ),
         ]
-      : []),
+      : params.canReadAll === false
+        ? [
+            or(
+              eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+              ...(params.viewerUserId
+                ? [
+                    and(
+                      eq(schema.knowledgeBasesTable.visibility, "private"),
+                      eq(
+                        schema.knowledgeBasesTable.createdBy,
+                        params.viewerUserId,
+                      ),
+                    ),
+                  ]
+                : []),
+              ...(params.viewerTeamIds ?? []).map((id) =>
+                and(
+                  eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
+                  sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+                ),
+              ),
+            ),
+          ]
+        : []),
     // SPDX-SnippetEnd
     ...(params.scope
       ? [

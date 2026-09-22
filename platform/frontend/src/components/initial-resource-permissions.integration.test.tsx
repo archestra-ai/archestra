@@ -15,11 +15,13 @@ import {
   it,
   vi,
 } from "vitest";
+import { FormDialog } from "./form-dialog";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "./initial-resource-permissions";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -120,4 +122,107 @@ it("adds initial access through recipient types without submitting the resource,
   );
   await user.click(screen.getByRole("button", { name: "Create agent" }));
   expect(submit).toHaveBeenLastCalledWith([]);
+});
+
+it("keeps creation fields and mixed recipient permissions in one dialog until the resource is submitted", async () => {
+  server.use(
+    http.get(
+      `${origin}/api/resource-permissions/llmVirtualKey/creation-subjects`,
+      () =>
+        HttpResponse.json([
+          { subject: { type: "team", id: "support" }, name: "Support" },
+          { subject: { type: "team", id: "design" }, name: "Design" },
+        ]),
+    ),
+  );
+  const submit = vi.fn();
+  function CreationDialog() {
+    const [name, setName] = useState("");
+    const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
+    return (
+      <FormDialog
+        open
+        onOpenChange={() => {}}
+        title="Create virtual key"
+        description="Choose the key name and its initial permissions."
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit({ name, grants });
+          }}
+        >
+          <Input
+            aria-label="Key name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <InitialResourcePermissions
+            resource="llmVirtualKey"
+            grants={grants}
+            onChange={setGrants}
+          />
+          <Button type="submit">Create</Button>
+        </form>
+      </FormDialog>
+    );
+  }
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <CreationDialog />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  const dialog = screen.getByRole("dialog");
+  await user.type(
+    screen.getByRole("textbox", { name: "Key name" }),
+    "Release tooling",
+  );
+  await user.click(screen.getByRole("button", { name: "Add access" }));
+  expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
+  expect(screen.getByRole("dialog", { name: "Add access" })).toBe(dialog);
+  await user.click(screen.getByRole("button", { name: /^Teams/ }));
+  await user.click(screen.getByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Support/ }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Permission for Support" }),
+  );
+  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Design/ }));
+  await user.click(screen.getByRole("button", { name: "Add access" }));
+  expect(screen.getByRole("dialog", { name: "Create virtual key" })).toBe(
+    dialog,
+  );
+  expect(screen.getByRole("textbox", { name: "Key name" })).toHaveValue(
+    "Release tooling",
+  );
+  expect(screen.getByRole("button", { name: "Add access" })).toHaveFocus();
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can edit");
+  expect(
+    screen.getByRole("combobox", { name: "Permission for Design" }),
+  ).toHaveTextContent("Can view");
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(submit).toHaveBeenCalledWith({
+    name: "Release tooling",
+    grants: [
+      {
+        subject: { type: "team", id: "support" },
+        name: "Support",
+        actions: ["read", "use", "update"],
+      },
+      {
+        subject: { type: "team", id: "design" },
+        name: "Design",
+        actions: ["read"],
+      },
+    ],
+  });
 });

@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
+import ResourcePermissionAccessModel from "./resource-permission-access";
 import TeamModel from "./team";
 
 class ConversationShareModel {
@@ -46,7 +47,17 @@ class ConversationShareModel {
     conversationId: string;
     organizationId: string;
     userId: string;
-  }): Promise<ConversationShareWithTargets | null> {
+  }): Promise<ConversationShareWithTargets | boolean | null> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policyAccess = await ResourcePermissionAccessModel.canRead({
+      ...params,
+      resource: "conversation",
+      scope: params.conversationId,
+    });
+    if (policyAccess !== null) return policyAccess;
+    // SPDX-SnippetEnd
     const share = await ConversationShareModel.findByConversationId({
       conversationId: params.conversationId,
       organizationId: params.organizationId,
@@ -287,6 +298,17 @@ class ConversationShareModel {
     share: ConversationShareWithTargets;
     userId: string;
   }): Promise<boolean> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policyAccess = await ResourcePermissionAccessModel.canRead({
+      organizationId: params.share.organizationId,
+      userId: params.userId,
+      resource: "conversation",
+      scope: params.share.conversationId,
+    });
+    if (policyAccess !== null) return policyAccess;
+    // SPDX-SnippetEnd
     if (params.share.createdByUserId === params.userId) {
       return true;
     }

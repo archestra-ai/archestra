@@ -17,6 +17,7 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
+import { useFormDialogView } from "@/components/form-dialog-view";
 import {
   PermissionRecipientIdentity,
   PermissionRecipientSelect,
@@ -41,7 +42,36 @@ import {
 } from "@/lib/resource-permissions.query";
 
 export function AddResourceAccessDialog(props: Props) {
-  return props.open ? <ResourceAccessPicker {...props} /> : null;
+  const dialog = useFormDialogView();
+  const setView = dialog?.setView;
+  const setDirty = dialog?.setDirty;
+  useEffect(() => {
+    if (!props.open || !setView) return;
+    setView({
+      title: "Add access",
+      description: "Choose who to add and set what each recipient can do.",
+    });
+    return () => {
+      setView(null);
+      setDirty?.(false);
+    };
+  }, [props.open, setView, setDirty]);
+  if (!props.open) return null;
+  if (dialog)
+    return (
+      dialog.body &&
+      createPortal(
+        <ResourceAccessPicker
+          {...props}
+          inline={{
+            footerContainer: dialog.footer,
+            onDirtyChange: dialog.setDirty,
+          }}
+        />,
+        dialog.body,
+      )
+    );
+  return <ResourceAccessPicker {...props} />;
 }
 
 type Props = {

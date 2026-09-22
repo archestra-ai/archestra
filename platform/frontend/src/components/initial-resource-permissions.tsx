@@ -6,7 +6,7 @@ import {
   resourcePermissionPresets,
   type ScopedResource,
 } from "@archestra/shared";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
 import {
@@ -28,36 +28,58 @@ export type InitialPermissionGrant = ResourcePermissionGrant & { name: string };
 /** Controlled fields: the owning wizard submits these with the resource. */
 export function InitialResourcePermissions({
   resource,
+  scope,
+  ownerName,
   grants,
   onChange,
 }: {
   resource: ScopedResource;
+  scope?: string;
+  ownerName?: string;
   grants: InitialPermissionGrant[];
   onChange: (grants: InitialPermissionGrant[]) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-sm font-medium">Permissions</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            You’ll have full access. Add others now or later. Organization
-            permissions also apply.
+            {!ownerName && !scope && <span>You’ll have full access. </span>}
+            <span>
+              Add others now or later. Organization permissions also apply.
+            </span>
           </p>
         </div>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="shrink-0"
           onClick={() => setAddOpen(true)}
         >
           <Plus className="size-4" />
           <span>Add access</span>
         </Button>
       </div>
-      {grants.length > 0 && (
+      {(ownerName || grants.length > 0) && (
         <div className="divide-y border-y">
+          {ownerName && (
+            <div className="flex items-center gap-3 py-2 text-sm">
+              <UserRound
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {ownerName}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  Owner
+                </span>
+              </span>
+              <span className="text-muted-foreground">Full access</span>
+            </div>
+          )}
           {grants.map((grant, index) => (
             <div
               key={`${grant.subject.type}:${grant.subject.id}`}
@@ -124,6 +146,7 @@ export function InitialResourcePermissions({
         open={addOpen}
         onOpenChange={setAddOpen}
         resource={resource}
+        scope={scope}
         existingSubjects={grants.map((grant) => grant.subject)}
         presets={Object.entries(resourcePermissionPresets).map(
           ([value, preset]) => ({

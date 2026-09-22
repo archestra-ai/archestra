@@ -25,7 +25,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
-import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import {
   AgentAccessBadges,
   AgentLastUsedFooter,
@@ -46,7 +45,7 @@ import {
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkA2aSharingDialog } from "@/components/bulk-a2a-sharing-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
@@ -1262,7 +1261,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               </div>
 
               {bulkVisibilityOpen && (
-                <BulkVisibilityDialog
+                <BulkA2aSharingDialog
                   items={bulkVisibilityExternalAgents}
                   noun="agent"
                   plural="agents"
@@ -1276,13 +1275,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   }}
                   isPending={bulkExternalAgentVisibility.isPending}
                   applyDisabled={allMatchingSelectionUnavailable}
-                  renderSelector={
-                    bulkVisibilityExternalAgents.length > 0
-                      ? ({ subject: _, ...props }) => (
-                          <A2aRemoteAgentScopeSelector {...props} />
-                        )
-                      : undefined
-                  }
                   onApply={async (change) => {
                     if (allMatchingSelectionUnavailable) return false;
                     const outcomes: BulkOutcome[] = [];

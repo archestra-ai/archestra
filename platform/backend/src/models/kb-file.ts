@@ -191,30 +191,55 @@ class KbFileModel {
       storageProvider: "db" as const,
       objectKey: null,
     };
-    const [file] = await db
-      .insert(schema.kbFilesTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: {
-            ...content,
-            id: params.id,
-            organizationId: params.organizationId,
-            uploadedBy: params.uploadedBy,
-          },
-          userIdField: "uploadedBy",
-        }),
-      )
-      .onConflictDoUpdate({
-        target: schema.kbFilesTable.id,
-        set: content,
-        setWhere: and(
-          eq(schema.kbFilesTable.organizationId, params.organizationId),
-          eq(schema.kbFilesTable.uploadedBy, params.uploadedBy),
-          eq(schema.kbFilesTable.storageProvider, "db"),
-        ),
-      })
-      .returning();
-    return file ?? null;
+    return db.transaction(async (tx) => {
+      const [file] = await tx
+        .insert(schema.kbFilesTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              ...content,
+              id: params.id,
+              organizationId: params.organizationId,
+              uploadedBy: params.uploadedBy,
+            },
+            userIdField: "uploadedBy",
+            transaction: tx,
+          }),
+        )
+        .onConflictDoUpdate({
+          target: schema.kbFilesTable.id,
+          set: content,
+          setWhere: and(
+            eq(schema.kbFilesTable.organizationId, params.organizationId),
+            eq(schema.kbFilesTable.uploadedBy, params.uploadedBy),
+            eq(schema.kbFilesTable.storageProvider, "db"),
+          ),
+        })
+        .returning();
+      if (!file) return null;
+      const policies = schema.resourcePermissionPoliciesTable;
+      const [existing] = await tx
+        .select({ scope: policies.scope })
+        .from(policies)
+        .where(
+          and(
+            eq(policies.organizationId, params.organizationId),
+            eq(policies.resource, "knowledgeFile"),
+            eq(policies.scope, file.id),
+          ),
+        )
+        .limit(1);
+      if (!existing)
+        await ResourcePermissionPolicyModel.createInitial({
+          tx,
+          organizationId: params.organizationId,
+          resource: "knowledgeFile",
+          scope: file.id,
+          authorId: params.uploadedBy,
+          grants: [],
+        });
+      return file;
+    });
   }
 
   static async update(params: {
@@ -334,18 +359,42 @@ class KbFileModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          viewer && !viewer.canManageAll
+          viewer
             ? or(
-                eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+                ResourcePermissionPolicyModel.grantCondition({
+                  organizationId: schema.knowledgeBasesTable.organizationId,
+                  resource: "knowledgeBase",
+                  scopeColumn: schema.knowledgeBasesTable.id,
+                  userId: viewer.userId,
+                  action: "read",
+                }),
                 and(
-                  eq(schema.knowledgeBasesTable.visibility, "private"),
-                  eq(schema.knowledgeBasesTable.createdBy, viewer.userId),
-                ),
-                ...viewer.teamIds.map((id) =>
-                  and(
-                    eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
-                    sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-                  ),
+                  ResourcePermissionPolicyModel.legacySharingCondition({
+                    organizationId: schema.knowledgeBasesTable.organizationId,
+                    resource: "knowledgeBase",
+                    scopeColumn: schema.knowledgeBasesTable.id,
+                  }),
+                  viewer.canManageAll
+                    ? sql`true`
+                    : or(
+                        eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+                        and(
+                          eq(schema.knowledgeBasesTable.visibility, "private"),
+                          eq(
+                            schema.knowledgeBasesTable.createdBy,
+                            viewer.userId,
+                          ),
+                        ),
+                        ...viewer.teamIds.map((id) =>
+                          and(
+                            eq(
+                              schema.knowledgeBasesTable.visibility,
+                              "team-scoped",
+                            ),
+                            sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+                          ),
+                        ),
+                      ),
                 ),
               )
             : undefined,
@@ -501,7 +550,20 @@ class KbFileModel {
    * truthful.
    */
   private static visibleTo(viewer: KbFileViewer) {
-    if (viewer.canManageAll) return undefined;
+    const table = schema.kbFilesTable;
+    const context = {
+      organizationId: table.organizationId,
+      resource: "knowledgeFile" as const,
+      scopeColumn: table.id,
+    };
+    const explicit = ResourcePermissionPolicyModel.grantCondition({
+      ...context,
+      userId: viewer.userId,
+      action: "read",
+    });
+    const legacy =
+      ResourcePermissionPolicyModel.legacySharingCondition(context);
+    if (viewer.canManageAll) return or(legacy, explicit);
 
     const teamClause = viewer.teamIds.length
       ? and(
@@ -515,12 +577,18 @@ class KbFileModel {
       : undefined;
 
     return or(
-      eq(schema.kbFilesTable.visibility, "org-wide"),
+      explicit,
       and(
-        eq(schema.kbFilesTable.visibility, "private"),
-        eq(schema.kbFilesTable.uploadedBy, viewer.userId),
+        legacy,
+        or(
+          eq(schema.kbFilesTable.visibility, "org-wide"),
+          and(
+            eq(schema.kbFilesTable.visibility, "private"),
+            eq(schema.kbFilesTable.uploadedBy, viewer.userId),
+          ),
+          ...(teamClause ? [teamClause] : []),
+        ),
       ),
-      ...(teamClause ? [teamClause] : []),
     );
   }
 }

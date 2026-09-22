@@ -114,9 +114,10 @@ function NewPluginWizard() {
         description: draft.description,
         clientType: draft.clientType,
         supportedPlatforms: draft.supportedPlatforms,
-        scope: draft.scope,
-        teamIds: draft.scope === "team" ? draft.teamIds : [],
-        userIds: draft.scope === "personal" ? draft.userIds : [],
+        initialGrants: draft.initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
         files: draft.files,
         labels: finalLabels,
       })

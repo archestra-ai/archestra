@@ -36,6 +36,7 @@ class KnowledgeBaseConnectorModel {
     offset?: number;
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
@@ -56,6 +57,7 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params.canReadAll,
+            userId: params.viewerUserId,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
           }),
@@ -110,6 +112,7 @@ class KnowledgeBaseConnectorModel {
     excludeConnectorTypes?: ConnectorType[];
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
     status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
@@ -138,6 +141,7 @@ class KnowledgeBaseConnectorModel {
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({
         canReadAll,
+        userId: params.viewerUserId,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
@@ -207,6 +211,7 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
@@ -264,6 +269,7 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
+            userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -280,6 +286,7 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
@@ -338,6 +345,7 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
+            userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -1067,12 +1075,11 @@ type ConnectorVisibilityScope = "management" | "query";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function buildVisibilityFilter(params: {
   canReadAll?: boolean;
+  userId?: string;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
 }) {
-  if (params.canReadAll) {
-    return undefined;
-  }
+  if (params.canReadAll && !params.userId) return undefined;
 
   const conditions = [];
   // Management surfaces (the default) hide auto-sync-permissions connectors
@@ -1102,7 +1109,30 @@ function buildVisibilityFilter(params: {
     )`);
   }
 
-  return and(...conditions);
+  if (!params.userId) return and(...conditions);
+  const table = schema.knowledgeBaseConnectorsTable;
+  const context = {
+    organizationId: table.organizationId,
+    resource: "knowledgeConnector" as const,
+    scopeColumn: table.id,
+  };
+  return or(
+    ResourcePermissionPolicyModel.grantCondition({
+      ...context,
+      userId: params.userId,
+      action: params.scope === "query" ? "use" : "read",
+    }),
+    and(
+      ResourcePermissionPolicyModel.legacySharingCondition(context),
+      params.canReadAll ? sql`true` : and(...conditions),
+    ),
+    params.scope === "query"
+      ? or(
+          eq(table.visibility, "auto-sync-permissions"),
+          eq(table.connectorType, "file_upload"),
+        )
+      : undefined,
+  );
 }
 // SPDX-SnippetEnd
 

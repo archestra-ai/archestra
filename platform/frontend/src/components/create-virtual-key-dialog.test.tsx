@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { User } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCreateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 import { CreateVirtualKeyDialog } from "./create-virtual-key-dialog";
@@ -111,9 +110,8 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen
         .getByText("Provider Keys")
-        .compareDocumentPosition(
-          screen.getByText("Who can use this virtual key"),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(screen.getByText("Permissions")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
@@ -125,7 +123,7 @@ describe("CreateVirtualKeyDialog", () => {
         keyType: "standard",
         expiresAt: undefined,
         scope: "personal",
-        teams: [],
+        initialGrants: [],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },
         ],
@@ -172,6 +170,7 @@ describe("CreateVirtualKeyDialog", () => {
       "Self Admin's virtual key (2)",
     );
 
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "Choose Bob" }));
 
     expect(screen.getByLabelText("Name")).toHaveValue(
@@ -198,16 +197,6 @@ function renderDialog(
       parentableKeys={[]}
       connectionBaseUrl="https://proxy.example.com"
       defaultExpirationSeconds={null}
-      visibilityOptions={[
-        {
-          value: "personal",
-          label: "Personal",
-          description: "Only you can use this key",
-          icon: User,
-        },
-      ]}
-      teams={[]}
-      canReadTeams={false}
       isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
       currentUser={{ id: "u-self", name: "Self Admin" }}
       existingKeys={

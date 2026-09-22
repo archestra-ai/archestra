@@ -215,6 +215,9 @@ describe("PluginDetailPage", () => {
     await user.clear(screen.getByLabelText("Display name"));
     await user.type(screen.getByLabelText("Display name"), "Session sentry");
     await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync.mock.calls[0][0]).not.toHaveProperty("scope");
+    expect(updateMutateAsync.mock.calls[0][0]).not.toHaveProperty("teamIds");
+    expect(updateMutateAsync.mock.calls[0][0]).not.toHaveProperty("userIds");
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );

@@ -5,7 +5,7 @@ import {
   type ResourcePermissionAction,
   type ScopedResource,
 } from "@archestra/shared";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -135,6 +135,84 @@ export default class ResourcePermissionTargetModel {
     // Resources whose authority is organization-wide have no object to name,
     // so there is nothing to resolve. Their grants live at `*` alone.
     if (ORGANIZATION_WIDE_RESOURCES.has(params.resource)) return null;
+    if (params.resource === "conversation" || params.resource === "agentRun") {
+      const conversation = params.resource === "conversation";
+      const table = conversation
+        ? schema.conversationsTable
+        : schema.agentRunsTable;
+      const idColumn = conversation
+        ? schema.conversationsTable.id
+        : schema.agentRunsTable.taskId;
+      const [target] = await db
+        .select({
+          id: idColumn,
+          name: table.title,
+          authorId: conversation
+            ? schema.conversationsTable.userId
+            : schema.agentRunsTable.actorUserId,
+          enabled: conversation
+            ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
+            : sql<boolean>`true`,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(idColumn, params.id),
+            eq(table.organizationId, params.organizationId),
+            conversation
+              ? isNull(schema.conversationsTable.deletedAt)
+              : undefined,
+          ),
+        );
+      if (!target) return null;
+      const shares = conversation
+        ? schema.conversationSharesTable
+        : schema.agentRunSharesTable;
+      const [share] = await db
+        .select()
+        .from(shares)
+        .where(
+          and(
+            eq(
+              conversation
+                ? schema.conversationSharesTable.conversationId
+                : schema.agentRunSharesTable.taskId,
+              params.id,
+            ),
+            eq(shares.organizationId, params.organizationId),
+          ),
+        );
+      const teamTable = conversation
+        ? schema.conversationShareTeamsTable
+        : schema.agentRunShareTeamsTable;
+      const userTable = conversation
+        ? schema.conversationShareUsersTable
+        : schema.agentRunShareUsersTable;
+      const [teams, users] = share
+        ? await Promise.all([
+            db
+              .select({ id: teamTable.teamId })
+              .from(teamTable)
+              .where(eq(teamTable.shareId, share.id)),
+            db
+              .select({ id: userTable.userId })
+              .from(userTable)
+              .where(eq(userTable.shareId, share.id)),
+          ])
+        : [[], []];
+      return {
+        ...target,
+        name: target.name ?? "Chat",
+        scope:
+          share?.visibility === "organization"
+            ? "org"
+            : share?.visibility === "team"
+              ? "team"
+              : "personal",
+        teams: share?.visibility === "team" ? teams : [],
+        users: share?.visibility === "user" ? users : [],
+      };
+    }
     if (params.resource === "project") {
       const table = schema.projectsTable;
       const [target] = await db

@@ -34,21 +34,15 @@ import {
 } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
-import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { providerSearchHaystack } from "@/lib/provider-search";
-import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { LlmProviderOptionLabel } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
@@ -82,6 +76,7 @@ type CreateLlmProviderApiKeyBody =
 
 export type LlmProviderApiKeyFormValues = {
   name: string;
+  initialGrants?: InitialPermissionGrant[];
   provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
   baseUrl: string | null;
@@ -508,11 +503,6 @@ export function LlmProviderApiKeyForm({
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
-    llmProviderApiKey: ["admin"],
-  });
-  const { data: teams = [] } = useTeams();
   const isEditMode = Boolean(existingKey);
   const isSubscriptionFlow = credentialMode === "subscription";
   const hasLabelsEditor = labels !== undefined && onLabelsChange !== undefined;
@@ -828,9 +818,6 @@ export function LlmProviderApiKeyForm({
   const subscriptionHasApiKeyAlternative = activeSubscriptionKind
     ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].marker !== null
     : false;
-  const perUserScopeReason =
-    connectCopy?.perUserScopeReason ??
-    `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
   // The connected card: for provider-level subscriptions (Copilot) editing
   // implies an existing credential. For a credential-level one, editing a key
   // whose stored credential is already that subscription (known from the key
@@ -841,52 +828,6 @@ export function LlmProviderApiKeyForm({
         existingKey?.subscriptionKind === activeSubscriptionKind) ||
       (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER)
     : hasCopilotCredential;
-
-  const visibilityOptions = useMemo(
-    (): Array<
-      VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
-    > => [
-      {
-        value: "personal",
-        label: scopeLabel("personal"),
-        description: "Only you can use this key",
-        icon: SCOPE_META.personal.icon,
-      },
-      {
-        value: "team",
-        label: scopeLabel("team"),
-        description: "Available to members of one selected team",
-        icon: SCOPE_META.team.icon,
-        disabled: isPerUserCredential || !canReadTeams || teams.length === 0,
-        disabledReason: isPerUserCredential
-          ? perUserScopeReason
-          : !canReadTeams
-            ? "Team sharing is unavailable without team:read permission"
-            : teams.length === 0
-              ? "Create a team before using team scope"
-              : undefined,
-      },
-      {
-        value: "org",
-        label: scopeLabel("org"),
-        description: "Available to everyone in the organization",
-        icon: SCOPE_META.org.icon,
-        disabled: isPerUserCredential || !isLlmProviderApiKeyAdmin,
-        disabledReason: isPerUserCredential
-          ? perUserScopeReason
-          : !isLlmProviderApiKeyAdmin
-            ? "You need llmProviderApiKey:admin permission to share org-wide"
-            : undefined,
-      },
-    ],
-    [
-      canReadTeams,
-      isLlmProviderApiKeyAdmin,
-      teams.length,
-      isPerUserCredential,
-      perUserScopeReason,
-    ],
-  );
 
   useEffect(() => {
     if (isEditMode) {
@@ -1543,46 +1484,19 @@ export function LlmProviderApiKeyForm({
           />
         )}
 
-        {!hideScopeAndPrimary && !isSubscriptionFlow && !existingKey?.id && (
-          <VisibilitySelector
-            label="Scope"
-            value={scope}
-            options={visibilityOptions}
-            onValueChange={(nextScope) => {
-              form.setValue("scope", nextScope, { shouldDirty: true });
-              if (nextScope !== "team") {
-                form.setValue("teamId", null, { shouldDirty: true });
-              }
-            }}
-          >
-            {scope === "team" && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-provider-api-key-team">Team</Label>
-                <Select
-                  value={teamId ?? undefined}
-                  onValueChange={(value) =>
-                    form.setValue("teamId", value, { shouldDirty: true })
-                  }
-                  disabled={isPending || !canReadTeams || teams.length === 0}
-                >
-                  <SelectTrigger
-                    id="llm-provider-api-key-team"
-                    className="w-full"
-                  >
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </VisibilitySelector>
+        {/* SPDX-SnippetBegin
+            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
+          <ResourceAccessSection
+            resource="llmProviderApiKey"
+            grants={form.watch("initialGrants") ?? []}
+            onGrantsChange={(grants) =>
+              form.setValue("initialGrants", grants, { shouldDirty: true })
+            }
+          />
         )}
+        {/* SPDX-SnippetEnd */}
 
         {/* Region is a primary Bedrock field, not an advanced one: AWS enables
             models per region, so a key is unusable until it points at the right

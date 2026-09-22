@@ -1,21 +1,21 @@
 "use client";
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { type ReactNode, useState } from "react";
-import { SkillScopeSelector } from "@/app/skills/_parts/skill-scope-selector";
+import { useState } from "react";
+import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 
 /** The visibility fields of one selected row, however its list reports them. */
-export type BulkVisibilityItem = {
+type BulkVisibilityItem = {
   id: string;
   scope: ResourceVisibilityScope;
   teams: Array<{ id: string }>;
   users: Array<{ id: string }>;
 };
 
-export type BulkVisibilityChange = {
+type BulkVisibilityChange = {
   scope: ResourceVisibilityScope;
   teamIds: string[];
   userIds: string[];
@@ -28,21 +28,8 @@ type BulkVisibilitySelectorProps = BulkVisibilityChange & {
   onUserIdsChange: (ids: string[]) => void;
 };
 
-/**
- * Set one visibility across a selection.
- *
- * The form is seeded with what the selection already says when every row
- * agrees, so the default is a no-op and the common edit ("these five team
- * skills go org-wide") is one click from where it started. A mixed selection
- * has no such answer, so it opens on the narrowest scope and says plainly that
- * applying overwrites what is there.
- *
- * The resource decides what "apply" means — skills have a bulk route, profiles
- * fan out over their single-item one — so this owns only the form. Mount it
- * only while it is open: the scope selector holds transient state for the
- * Users choice, which has to start fresh for each new selection.
- */
-export function BulkVisibilityDialog({
+/** Bulk discovery sharing for the separate remote A2A agent API. */
+export function BulkA2aSharingDialog({
   items,
   noun,
   plural,
@@ -51,8 +38,6 @@ export function BulkVisibilityDialog({
   onApply,
   isPending,
   applyDisabled = false,
-  renderSelector,
-  renderTeamSelectionNotice,
 }: {
   items: readonly BulkVisibilityItem[];
   noun: string;
@@ -67,10 +52,6 @@ export function BulkVisibilityDialog({
   onApply: (change: BulkVisibilityChange) => Promise<boolean>;
   isPending: boolean;
   applyDisabled?: boolean;
-  /** Override when a resource has different visibility permission rules. */
-  renderSelector?: (props: BulkVisibilitySelectorProps) => ReactNode;
-  /** Optional resource-specific consequence of the staged team selection. */
-  renderTeamSelectionNotice?: (teamIds: readonly string[]) => ReactNode;
 }) {
   const common = commonVisibility(items);
   const [scope, setScope] = useState<ResourceVisibilityScope>(
@@ -111,23 +92,16 @@ export function BulkVisibilityDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Edit visibility"
+      title="Share remote agents"
       description={
         common
           ? `Applies to ${count(items.length)}.`
-          : `Applies to ${count(items.length)}, which currently have different visibility. This replaces it for all of them.`
+          : `Applies to ${count(items.length)}, which currently have different sharing settings. This replaces sharing for all of them.`
       }
       size="medium"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {renderSelector ? (
-          renderSelector(selectorProps)
-        ) : (
-          <SkillScopeSelector {...selectorProps} />
-        )}
-        {scope === "team" && renderTeamSelectionNotice ? (
-          <div className="mt-3">{renderTeamSelectionNotice(teamIds)}</div>
-        ) : null}
+        <A2aRemoteAgentScopeSelector {...selectorProps} />
       </div>
 
       <DialogStickyFooter>

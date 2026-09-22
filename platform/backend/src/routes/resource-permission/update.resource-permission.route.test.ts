@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { enterpriseTier } from "@/enterprise-tier";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
+import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
@@ -40,6 +41,65 @@ describe("resource permission routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("saves and audits mixed chat recipients and denies changes from a viewer", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeTeam,
+  }) => {
+    const owner = user;
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+    const team = await makeTeam(organizationId, owner.id);
+    const agent = await makeAgent({ organizationId });
+    const conversation = await ConversationModel.create({
+      organizationId,
+      userId: owner.id,
+      agentId: agent.id,
+    });
+    const url = `/api/resource-permissions/conversation/${conversation.id}`;
+    const grants = [
+      {
+        subject: { type: "user", id: owner.id },
+        actions: ["read", "manage-permissions"],
+      },
+      { subject: { type: "user", id: reader.id }, actions: ["read"] },
+      { subject: { type: "team", id: team.id }, actions: ["read"] },
+    ];
+    const saved = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision: 0, grants },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({ revision: 1, grants });
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: conversation.id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "resourcePermissions.updated",
+          after: expect.objectContaining({ grants }),
+        }),
+      ]),
+    );
+    user = reader;
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url,
+          payload: { revision: 1, grants: [] },
+        })
+      ).statusCode,
+    ).toBe(403);
   });
 
   for (const endpoint of ["creation-subjects", "*/subjects"]) {

@@ -35,6 +35,24 @@ export function resolveLegacyResourcePermissions(params: {
     : actions.includes("admin");
   const target = params.target;
   const owner = !!target && target.authorId === params.userId;
+  if (params.resource === "conversation" || params.resource === "agentRun") {
+    const visible =
+      target?.enabled !== false &&
+      (target?.scope === "org" ||
+        target?.teams.some((team) => params.teamIds.includes(team.id)) ||
+        target?.users.some((user) => user.id === params.userId));
+    const sessionActions: ResourcePermissionAction[] = owner
+      ? ["read", "manage-permissions"]
+      : visible
+        ? ["read"]
+        : [];
+    return sessionActions.map((action) => ({
+      organizationId: params.organizationId,
+      resource: params.resource,
+      scope: params.scope,
+      action,
+    }));
+  }
   if (params.resource === "app" && target?.enabled === false && !owner)
     return [];
   const teamMember = !!target?.teams.some((team) =>

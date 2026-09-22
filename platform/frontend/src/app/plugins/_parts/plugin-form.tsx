@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
-import { PluginScopeSelector } from "./plugin-scope-selector";
 
 const SYNCED_FROM_GITHUB =
   "These values are synced from GitHub. Change sync settings below.";
@@ -121,18 +120,12 @@ export function PluginForm({
       {/* No heading: the visibility control names the section itself. */}
       <FormPanel>
         <fieldset disabled={readOnly} className="contents">
-          {pluginId ? (
-            <ResourceAccessSection resource="plugin" id={pluginId} />
-          ) : (
-            <PluginScopeSelector
-              scope={draft.scope}
-              onScopeChange={(scope) => onChange({ scope })}
-              teamIds={draft.teamIds}
-              onTeamIdsChange={(teamIds) => onChange({ teamIds })}
-              userIds={draft.userIds}
-              onUserIdsChange={(userIds) => onChange({ userIds })}
-            />
-          )}
+          <ResourceAccessSection
+            resource="plugin"
+            id={pluginId}
+            grants={draft.initialGrants}
+            onGrantsChange={(initialGrants) => onChange({ initialGrants })}
+          />
           <ProfileLabels
             ref={labelsRef}
             labels={draft.labels}

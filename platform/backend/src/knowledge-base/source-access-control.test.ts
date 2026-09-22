@@ -59,7 +59,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const knowledgeBase = await makeKnowledgeBase(org.id);
@@ -93,7 +93,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const team = await makeTeam(org.id, user.id);
@@ -131,7 +131,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const knowledgeBase = await makeKnowledgeBase(org.id);
@@ -171,7 +171,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const admin = await makeUser();
     await makeMember(admin.id, org.id, { role: "admin" });
     const knowledgeBase = await makeKnowledgeBase(org.id);
@@ -203,7 +203,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
       permission: {
@@ -242,7 +242,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
       permission: { knowledgeSource: ["read", "admin"] },
@@ -298,7 +298,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const team = await makeTeam(org.id, user.id);
@@ -333,7 +333,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const admin = await makeUser();
     await makeMember(admin.id, org.id, { role: "admin" });
     const team = await makeTeam(org.id, admin.id);
@@ -372,7 +372,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeTeam,
     makeUser,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const teamOwner = await makeUser();
     const connectorTeam = await makeTeam(org.id, teamOwner.id, {
       name: "Connector Team",
@@ -402,7 +402,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const knowledgeBase = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
@@ -442,7 +442,7 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const knowledgeBase = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,

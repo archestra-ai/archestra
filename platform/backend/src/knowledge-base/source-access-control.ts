@@ -1,3 +1,4 @@
+import { hasScopedPermission, type ScopedPermission } from "@archestra/shared";
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
@@ -11,7 +12,9 @@ import {
   KnowledgeBaseConnectorModel,
   TeamModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import * as metrics from "@/observability/metrics";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AclEntry,
   ApiError,
@@ -44,6 +47,9 @@ type VisibilityScopedKnowledgeSourceUpdates = Partial<{
 }>;
 
 interface KnowledgeSourceAccessControlContext {
+  organizationId?: string;
+  grants?: ScopedPermission[];
+  migratedScopes?: Set<string>;
   userId?: string;
   canReadAll: boolean;
   canManageAutoSync: boolean;
@@ -236,24 +242,35 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, canManageAutoSync, teamIds] = await Promise.all([
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "knowledgeSource",
-        "admin",
-      ),
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "knowledgeSourceAutoSync",
-        "read",
-      ),
-      TeamModel.getUserTeamIds(params.userId),
-    ]);
+    const [canReadAll, canManageAutoSync, teamIds, grants, migratedScopes] =
+      await Promise.all([
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "knowledgeSource",
+          "admin",
+        ),
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "knowledgeSourceAutoSync",
+          "read",
+        ),
+        TeamModel.getUserTeamIds(params.userId),
+        ResourcePermissions.resolveAll(params),
+        ResourcePermissionPolicyModel.findMigratedScopes({
+          ...params,
+          resources: ["knowledgeBase", "knowledgeConnector"],
+        }),
+      ]);
 
     return {
       userId: params.userId,
+      organizationId: params.organizationId,
+      grants,
+      migratedScopes: new Set(
+        migratedScopes.map((policy) => `${policy.resource}:${policy.scope}`),
+      ),
       canReadAll,
       canManageAutoSync,
       teamIds,
@@ -264,6 +281,17 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     knowledgeBase: KnowledgeBase,
   ) {
+    if (
+      accessControl.migratedScopes?.has(`knowledgeBase:${knowledgeBase.id}`) ||
+      accessControl.migratedScopes?.has("knowledgeBase:*")
+    ) {
+      return this.hasScopedAccess({
+        accessControl,
+        resource: "knowledgeBase",
+        id: knowledgeBase.id,
+        action: "read",
+      });
+    }
     if (knowledgeBase.visibility === "private") {
       return (
         accessControl.canReadAll ||
@@ -281,7 +309,36 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     connector: KnowledgeBaseConnector,
   ) {
+    if (
+      accessControl.migratedScopes?.has(`knowledgeConnector:${connector.id}`) ||
+      accessControl.migratedScopes?.has("knowledgeConnector:*")
+    ) {
+      return this.hasScopedAccess({
+        accessControl,
+        resource: "knowledgeConnector",
+        id: connector.id,
+        action: "read",
+      });
+    }
     return this.canAccessSource(accessControl, connector);
+  }
+
+  canQueryKnowledgeBase(
+    accessControl: KnowledgeSourceAccessControlContext,
+    knowledgeBase: KnowledgeBase,
+  ) {
+    if (
+      accessControl.migratedScopes?.has(`knowledgeBase:${knowledgeBase.id}`) ||
+      accessControl.migratedScopes?.has("knowledgeBase:*")
+    ) {
+      return this.hasScopedAccess({
+        accessControl,
+        resource: "knowledgeBase",
+        id: knowledgeBase.id,
+        action: "use",
+      });
+    }
+    return this.canAccessKnowledgeBase(accessControl, knowledgeBase);
   }
 
   filterKnowledgeBases(
@@ -304,7 +361,19 @@ class KnowledgeSourceAccessControlService {
     connectors: KnowledgeBaseConnector[],
   ) {
     return connectors.filter((connector) =>
-      this.canQuerySource(accessControl, connector),
+      connector.visibility !== "auto-sync-permissions" &&
+      connector.connectorType !== "file_upload" &&
+      (accessControl.migratedScopes?.has(
+        `knowledgeConnector:${connector.id}`,
+      ) ||
+        accessControl.migratedScopes?.has("knowledgeConnector:*"))
+        ? this.hasScopedAccess({
+            accessControl,
+            resource: "knowledgeConnector",
+            id: connector.id,
+            action: "use",
+          })
+        : this.canQuerySource(accessControl, connector),
     );
   }
 
@@ -369,6 +438,25 @@ class KnowledgeSourceAccessControlService {
    * (its config, documents, runs, overrides — everything behind the connector
    * detail surfaces). Query reach is the separate, wider `canQuerySource`.
    */
+  private hasScopedAccess(params: {
+    accessControl: KnowledgeSourceAccessControlContext;
+    resource: "knowledgeBase" | "knowledgeConnector";
+    id: string;
+    action: "read" | "use";
+  }) {
+    const { accessControl } = params;
+    if (!accessControl.organizationId) return false;
+    return hasScopedPermission({
+      grants: accessControl.grants ?? [],
+      required: {
+        organizationId: accessControl.organizationId,
+        resource: params.resource,
+        scope: params.id,
+        action: params.action,
+      },
+    });
+  }
+
   private canAccessSource(
     accessControl: KnowledgeSourceAccessControlContext,
     source: VisibilityScopedKnowledgeSource,

@@ -2,7 +2,7 @@
 title: How to Contribute
 category: Development
 order: 1
-lastUpdated: 2026-07-03
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,11 +39,3 @@ We sometimes have to reject contributions that show signs of unreviewed AI-gener
 5. Or other noticeable signs of rushed or unreviewed AI generation.
 
 From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves. For this reason, we may close the pull request. If this happens to you, please don't be discouraged. We kindly ask that you rework your changes and reopen the pull request when you're ready.
-
-## Bounties
-
-We use bounties as an optional way to thank contributors for meaningful work. They are not contract jobs, and they do not replace coordination with maintainers and other contributors.
-
-Respect assigned work. If an issue already has an assigned contributor, do not open a competing pull request, comment `/attempt`, or otherwise try to take over the bounty. Bots or users that try to steal already assigned bounties will be banned from the repository.
-
-We have to enforce this because irresponsible use of AI bots has made it much easier to spam issues and disrupt contributors who are already doing the work. We wrote more about this in [Let's talk about AI slop](https://archestra.ai/blog/only-responsible-ai). Use AI responsibly, communicate clearly, and help keep the project a high-effort engineering space.

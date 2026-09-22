@@ -329,46 +329,48 @@ function IncludedBattery({
           </Button>
         )}
       </div>
-      <Section title="Governs">
-        {battery.servers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No alias points this battery at a server.
-          </p>
-        ) : (
-          battery.servers.map((server) => (
-            <ServerRow
-              key={server.target}
-              batteryName={battery.name}
-              target={server.target}
-              name={
-                server.catalogId === null
-                  ? "Removed server"
-                  : catalogName(server.catalogId)
-              }
-              install={
-                installs.find(
-                  ({ catalogId }) => catalogId === server.catalogId,
-                ) ?? null
-              }
-              writable={writable}
-            />
-          ))
-        )}
-      </Section>
-      {battery.credentials.length > 0 ? (
-        <Section title="Credentials">
-          {battery.credentials.map((credential) => (
-            <CredentialRow
-              key={credential.variable}
-              batteryName={battery.name}
-              credential={credential}
-              bindings={bindingsOf(battery)}
-              install={installs[0] ?? null}
-              bindable={bindable}
-            />
-          ))}
+      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+        <Section title="Governs">
+          {battery.servers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No alias points this battery at a server.
+            </p>
+          ) : (
+            battery.servers.map((server) => (
+              <ServerRow
+                key={server.target}
+                batteryName={battery.name}
+                target={server.target}
+                name={
+                  server.catalogId === null
+                    ? "Removed server"
+                    : catalogName(server.catalogId)
+                }
+                install={
+                  installs.find(
+                    ({ catalogId }) => catalogId === server.catalogId,
+                  ) ?? null
+                }
+                writable={writable}
+              />
+            ))
+          )}
         </Section>
-      ) : null}
+        {battery.credentials.length > 0 ? (
+          <Section title="Credentials">
+            {battery.credentials.map((credential) => (
+              <CredentialRow
+                key={credential.variable}
+                batteryName={battery.name}
+                credential={credential}
+                bindings={bindingsOf(battery)}
+                install={installs[0] ?? null}
+                bindable={bindable}
+              />
+            ))}
+          </Section>
+        ) : null}
+      </div>
       <DeleteConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
@@ -542,6 +544,7 @@ function AttachForm({
   catalog: { id: string; name: string }[];
 }) {
   const create = useCreateBatteryInstall();
+  const installs = useMcpServers();
   const [batteryName, setBatteryName] = useState("");
   const [catalogId, setCatalogId] = useState("");
   // Whether the chosen server has a tool prefix an alias can point at; the
@@ -554,13 +557,21 @@ function AttachForm({
       .find((entry) => entry.name === batteryName)
       ?.servers.map((server) => server.catalogId) ?? [],
   );
-  const servers = catalog.filter((entry) => !attached.has(entry.id));
-  // A battery attaches to a server's tools; the wizard offers it on install.
-  if (catalog.length === 0)
+  // A battery attaches to the tools an install discovered, so an entry nobody
+  // installed has nothing to attach to; the wizard offers the battery on
+  // install. Whoever cannot list installs is offered every entry.
+  const installed = installs.data
+    ? new Set(installs.data.map((install) => install.catalogId))
+    : null;
+  const installable = catalog.filter(
+    (entry) => installed === null || installed.has(entry.id),
+  );
+  const servers = installable.filter((entry) => !attached.has(entry.id));
+  if (installable.length === 0)
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          There is no MCP server to attach a battery to yet.
+          There is no installed MCP server to attach a battery to yet.
         </p>
         <Button asChild variant="outline" size="sm">
           <Link href="/mcp/registry">Browse MCP servers</Link>

@@ -140,7 +140,9 @@ alias its namespaces bind) or the text is edited. An attach to a catalog with no
 synced tools is refused with 409, since the alias would have no target, and so
 is one to a catalog whose tool prefix holds `__`; `GET /api/openappa/battery-matches`
 answers `attach` (`ready | unsynced | conflicting`) beside the matches, and the
-wizard checkbox and the panel's attach form disable on it with the reason. A
+wizard checkbox and the panel's attach form disable on it with the reason; the
+form lists only catalog entries with an install, since tools are discovered on
+install and an entry nobody installed has no prefix to alias. A
 detach or disable that would edit nothing (the row outlived the prefixes it was
 derived from, or the alias is another included battery's) is refused with 409
 pointing at the include removal rather than answering success over an unchanged

@@ -39,6 +39,7 @@ const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
 const otherCatalogId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const freshCatalogId = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f";
+const bareCatalogId = "7e6d5c4b-3a29-4180-9f7e-6d5c4b3a2918";
 const freshServerId = "3c2b1a09-8f7e-4d6c-9b5a-4e3d2c1b0a9f";
 const uploadHash = "a".repeat(64);
 const server = setupServer();
@@ -160,6 +161,7 @@ beforeEach(() => {
         { id: catalogId, name: "Code" },
         { id: otherCatalogId, name: "Docs" },
         { id: freshCatalogId, name: "Fresh" },
+        { id: bareCatalogId, name: "Bare" },
       ]),
     ),
     http.get(`${baseUrl}/api/openappa/battery-matches`, ({ request }) => {
@@ -170,15 +172,23 @@ beforeEach(() => {
         matches: [],
       });
     }),
+    // Bare is in the catalog but nobody installed it.
     http.get(`${baseUrl}/api/mcp_server`, () =>
-      HttpResponse.json([
-        {
-          id: freshServerId,
-          name: "Fresh",
-          catalogId: freshCatalogId,
-          createdAt: "2026-09-22T12:00:00Z",
-        },
-      ]),
+      HttpResponse.json(
+        [
+          { id: freshServerId, name: "Fresh", catalogId: freshCatalogId },
+          {
+            id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
+            name: "Code",
+            catalogId,
+          },
+          {
+            id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
+            name: "Docs",
+            catalogId: otherCatalogId,
+          },
+        ].map((install) => ({ ...install, createdAt: "2026-09-22T12:00:00Z" })),
+      ),
     ),
     http.get(`${baseUrl}/api/credentials`, () =>
       HttpResponse.json([credential]),
@@ -218,12 +228,10 @@ async function attach(battery: string, serverName: string) {
   await user.click(screen.getByRole("button", { name: "Attach" }));
 }
 
-test("with no server to attach to, the attach form leads to MCP Registry", async () => {
+test("with no installed server to attach to, the attach form leads to MCP Registry", async () => {
   declarations = emptyDeclarations();
   server.use(
-    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
-      HttpResponse.json([]),
-    ),
+    http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
   );
   show();
   expect(
@@ -234,12 +242,17 @@ test("with no server to attach to, the attach form leads to MCP Registry", async
   ).not.toBeInTheDocument();
 });
 
-test("an empty policy still offers the attach form when servers exist", async () => {
+test("an empty policy offers the installed servers to attach to", async () => {
   declarations = emptyDeclarations();
   show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
+  await user.click(screen.getByRole("option", { name: "github" }));
+  await user.click(screen.getByRole("combobox", { name: "Server" }));
   expect(
-    await screen.findByRole("combobox", { name: "Battery" }),
-  ).toBeInTheDocument();
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual(["Code", "Docs", "Fresh"]);
+  await user.keyboard("{Escape}");
   expect(
     screen.queryByRole("link", { name: "Browse MCP servers" }),
   ).not.toBeInTheDocument();

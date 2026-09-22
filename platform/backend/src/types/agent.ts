@@ -451,10 +451,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()).optional(),
-    users: z.array(z.string()).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
-    scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
     connectorIds: z.array(z.string()).optional(),
     suggestedPrompts: z
@@ -471,6 +468,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
+    // Who can reach an agent is decided by its resource permission policy,
+    // which the permissions API writes on its own. The retired visibility
+    // column is carried through an update untouched.
+    scope: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that
@@ -491,15 +492,6 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
 
 export const CloneAgentBodySchema = z.object({
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
-  scope: AgentScopeSchema.optional().describe(
-    "Visibility of the clone. Defaults to the source agent's scope.",
-  ),
-  teams: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.",
-    ),
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

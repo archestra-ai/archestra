@@ -305,7 +305,7 @@ describe("PUT /api/skills/:id", () => {
     );
   });
 
-  test("rejects clearing all teams of a team-scoped skill", async ({
+  test("ignores an attempt to clear all teams of a team-scoped skill", async ({
     makeTeam,
   }) => {
     await MemberModel.updateRole(
@@ -332,8 +332,9 @@ describe("PUT /api/skills/:id", () => {
       },
     });
 
-    expect(response.statusCode).toBe(400);
-    // the existing assignment is left intact
+    // `scope`/`teamIds` left the update body, so the retired fields are
+    // dropped and the existing assignment is left intact.
+    expect(response.statusCode).toBe(200);
     expect(await SkillTeamModel.getTeamsForSkill(skill.id)).toEqual([team.id]);
   });
 });

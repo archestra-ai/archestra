@@ -226,7 +226,7 @@ describe("agents bulk routes", () => {
   });
 
   describe("PATCH /api/agents/bulk", () => {
-    test("rejects retired visibility changes for every agent in the batch", async ({
+    test("moves every agent in the batch to the requested visibility", async ({
       makeAgent,
       makeTeam,
     }) => {
@@ -241,12 +241,12 @@ describe("agents bulk routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toHaveLength(2);
+      expect(response.json().failed).toEqual([]);
+      expect(response.json().succeeded).toHaveLength(2);
       for (const id of [first.id, second.id]) {
         const agent = await AgentModel.findById(id, user.id, true);
-        expect(agent?.scope).toBe("org");
-        expect(agent?.teams).toEqual([]);
+        expect(agent?.scope).toBe("team");
+        expect(agent?.teams.map((t) => t.id)).toEqual([team.id]);
       }
     });
 
@@ -292,8 +292,7 @@ describe("agents bulk routes", () => {
         {
           id: shared.id,
           name: "shared",
-          error:
-            "Use the resource permissions API to change access; visibility and team/user sharing fields are retired.",
+          error: "Shared agents cannot be made personal",
         },
       ]);
       expect((await AgentModel.findById(shared.id, user.id, true))?.scope).toBe(
@@ -320,8 +319,10 @@ describe("agents bulk routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toHaveLength(1);
+      expect(response.json().failed).toEqual([]);
+      expect(response.json().succeeded).toEqual([
+        { id: agent.id, name: "already-team" },
+      ]);
     });
 
     test("reports a foreign-organization id as not found", async ({
@@ -395,8 +396,7 @@ describe("agents bulk routes", () => {
         {
           id: own.id,
           name: "members-own",
-          error:
-            "Use the resource permissions API to change access; visibility and team/user sharing fields are retired.",
+          error: "Only admins can set scope to org",
         },
       ]);
       expect((await AgentModel.findById(own.id, member.id, true))?.scope).toBe(

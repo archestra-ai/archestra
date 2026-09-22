@@ -579,60 +579,6 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "update",
       });
       // SPDX-SnippetEnd
-      const existingTeams =
-        body.teamIds !== undefined
-          ? ((await ModelTeamModel.getTeamIdsForModels([id])).get(id) ?? [])
-          : [];
-      const existingUsers =
-        body.userIds !== undefined
-          ? ((await ModelUserModel.getUserDetailsForModels([id]))
-              .get(id)
-              ?.map((user) => user.id) ?? [])
-          : [];
-      const sharingChanged =
-        (body.teamIds !== undefined &&
-          !sameRecipientIds(body.teamIds, existingTeams)) ||
-        (body.userIds !== undefined &&
-          !sameRecipientIds(body.userIds, existingUsers));
-      if (sharingChanged) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource: "llmModel",
-          scope: id,
-        });
-        // SPDX-SnippetEnd
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.require({
-          organizationId,
-          userId: user.id,
-          resource: "llmModel",
-          scope: id,
-          action: "manage-permissions",
-        });
-        // SPDX-SnippetEnd
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.validateRecipients({
-          organizationId,
-          grants: [
-            ...(body.teamIds ?? []).map((teamId) => ({
-              subject: { type: "team" as const, id: teamId },
-              actions: ["read" as const],
-            })),
-            ...(body.userIds ?? []).map((userId) => ({
-              subject: { type: "user" as const, id: userId },
-              actions: ["read" as const],
-            })),
-          ],
-        });
-        // SPDX-SnippetEnd
-      }
       const existing = await ModelModel.findById(id);
       if (!existing) {
         throw new ApiError(404, "Model not found");
@@ -744,18 +690,10 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { teamIds, userIds, labels, ...modelUpdates } = body;
+      const { labels, ...modelUpdates } = body;
       const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
-      }
-
-      if (teamIds !== undefined) {
-        await ModelTeamModel.syncModelTeams(id, teamIds);
-      }
-
-      if (userIds !== undefined) {
-        await ModelUserModel.syncModelUsers(id, userIds);
       }
 
       // Only touch labels when the caller sent them, so an update that omits
@@ -1130,11 +1068,4 @@ function embeddingClientImageCapable(model: Model): boolean | null {
     model.modelId,
   );
   return clientModalities === null ? null : clientModalities.includes("image");
-}
-
-function sameRecipientIds(next: string[], current: string[]): boolean {
-  return (
-    new Set(next).size === new Set(current).size &&
-    next.every((id) => current.includes(id))
-  );
 }

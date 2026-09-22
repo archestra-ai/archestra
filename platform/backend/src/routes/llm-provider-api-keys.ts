@@ -916,7 +916,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmProviderApiKey,
         description:
-          "Update an LLM provider API key (name, API key value, visibility, or team)",
+          "Update an LLM provider API key (name, API key value, or runtime connection settings)",
         tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -931,8 +931,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .record(z.string(), z.string())
               .nullable()
               .optional(),
-            scope: ResourceVisibilityScopeSchema.optional(),
-            teamId: z.string().uuid().nullable().optional(),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
@@ -1002,48 +1000,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: apiKeyFromDB.provider,
       });
 
-      // If scope is changing, validate the new scope
-      const newScope = body.scope ?? apiKeyFromDB.scope;
-      const newTeamId =
-        body.teamId !== undefined ? body.teamId : apiKeyFromDB.teamId;
-      if (
-        (body.scope !== undefined && body.scope !== apiKeyFromDB.scope) ||
-        (body.teamId !== undefined && body.teamId !== apiKeyFromDB.teamId)
-      ) {
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource: "llmProviderApiKey",
-          scope: apiKeyFromDB.id,
-        });
-      }
+      // Who can reach the key is not editable here: access lives in the key's
+      // permission policy, which the permissions API writes on its own. The
+      // stored visibility columns are carried through untouched.
+      const newScope = apiKeyFromDB.scope;
+      const newTeamId = apiKeyFromDB.teamId;
 
       let newSecretId: string | null = null;
 
-      if (body.scope !== undefined || body.teamId !== undefined) {
-        // A scope change on an existing ChatGPT-subscription (Codex) key must be
-        // rejected too, so classify by the effective secret (new or stored).
-        const effectiveApiKey =
-          body.apiKey ??
-          (apiKeyFromDB.secretId
-            ? ((await getSecretValueForLlmProviderApiKey(
-                apiKeyFromDB.secretId,
-              )) as string | undefined)
-            : undefined);
-        await validateScopeAndAuthorization({
-          scope: newScope,
-          teamId: newTeamId,
-          userId: user.id,
-          organizationId,
-          provider: apiKeyFromDB.provider,
-          apiKey: effectiveApiKey,
-          headers,
-        });
-      } else if (body.apiKey) {
+      if (body.apiKey) {
         // A new secret value alone can flip an existing shared key into a
         // per-user credential (pasting an encoded ChatGPT-subscription
         // credential into a team/org key would share one person's account
-        // with everyone), so classify the new value even when scope/team
-        // don't change.
+        // with everyone), so classify the new value.
         assertPerUserCredentialScope({
           provider: apiKeyFromDB.provider,
           apiKey: body.apiKey,
@@ -1271,9 +1240,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: Record<string, string> | null;
-        scope: ResourceVisibilityScope;
-        userId: string | null;
-        teamId: string | null;
         secretId: string | null;
         isPrimary: boolean;
       }> = {};
@@ -1300,21 +1266,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (newSecretId) {
         updateData.secretId = newSecretId;
-      }
-
-      if (body.scope !== undefined) {
-        updateData.scope = body.scope;
-        // Set userId/teamId based on new scope
-        updateData.userId =
-          body.scope === "personal"
-            ? apiKeyFromDB.scope === "personal"
-              ? apiKeyFromDB.userId
-              : user.id
-            : null;
-        updateData.teamId = body.scope === "team" ? newTeamId : null;
-      } else if (body.teamId !== undefined && apiKeyFromDB.scope === "team") {
-        // Only update teamId if scope is team and not changing
-        updateData.teamId = body.teamId;
       }
 
       if (Object.keys(updateData).length > 0) {

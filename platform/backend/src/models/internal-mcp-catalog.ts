@@ -29,10 +29,12 @@ import { secretManager } from "@/secrets-manager";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
   type CatalogItemApprovalStatus,
+  type CatalogTeamInput,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
   type ListInternalMcpCatalog,
+  type ResourceVisibilityScope,
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
@@ -924,7 +926,15 @@ class InternalMcpCatalogModel {
 
   static async update(
     id: string,
-    catalogItem: Partial<UpdateInternalMcpCatalog>,
+    catalogItem: Partial<UpdateInternalMcpCatalog> & {
+      /**
+       * Retired sharing columns. No longer reachable from a request body —
+       * access lives in the resource permission policy — but still written by
+       * the app-backing sync and by seeding/migration callers.
+       */
+      scope?: ResourceVisibilityScope;
+      teams?: CatalogTeamInput[];
+    },
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
 

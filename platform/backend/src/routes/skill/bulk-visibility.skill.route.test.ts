@@ -50,7 +50,7 @@ describe("POST /api/skills/bulk-visibility", () => {
     });
 
   for (const scope of ["personal", "team", "org"] as const) {
-    test(`rejects retired ${scope} sharing for every selected skill without changing grants`, async ({
+    test(`a retired ${scope} sharing write changes no grants`, async ({
       makeTeam,
       makeUser,
     }) => {
@@ -72,11 +72,16 @@ describe("POST /api/skills/bulk-visibility", () => {
         teamIds: scope === "team" ? [team.id] : [],
         userIds: scope === "personal" ? [recipient.id] : [],
       });
+      // Once a skill answers to grants, this endpoint can no longer place it:
+      // the refusal is a plain permission failure, and — the point of the test
+      // — the authoritative grant policies are left exactly as they were.
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json().succeeded).toEqual([]);
       expect(response.json().failed).toHaveLength(2);
       for (const failure of response.json().failed)
-        expect(failure.error).toContain("resource permissions API");
+        expect(failure.error).toBe(
+          "You do not have permission to modify this skill",
+        );
       expect(
         await Promise.all(
           keys.map((key) => ResourcePermissionPolicyModel.find(key)),

@@ -438,7 +438,6 @@ export const UpdateAppSchema = z.object({
   // Changing this breaks links that used the old slug; /a/<id> keeps working.
   slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).nullable().optional(),
-  scope: AppScopeSchema.optional(),
   // Supplying html forks a new immutable version (no-op forks are suppressed).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),

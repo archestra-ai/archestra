@@ -16,7 +16,6 @@ import { hasPermission } from "@/auth";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
-  type CatalogTeamAccess,
   getMcpCatalogPermissionChecker,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
@@ -78,7 +77,6 @@ import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
-  type CatalogTeamAssignment,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -1012,11 +1010,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(request.user.id);
-      const existingTeams = originalCatalogItem.teams;
-
       // Gate the right to modify this item at its CURRENT scope. This lets an
       // admin of one of the item's `write` teams edit it, and still blocks
       // editing someone else's personal item or a `use`-only team's item.
@@ -1044,78 +1037,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
-
-      // Re-authorize and re-sync teams only when scope, team assignments, or
-      // their access levels actually change. A content-only edit that echoes
-      // the existing teams must not 403 a non-admin author/team-admin or
-      // needlessly rewrite rows.
-      const newScope = restBody.scope ?? originalCatalogItem.scope;
-      // Shared items are one-way: demoting team/org back to personal would yank
-      // the item from everyone it was shared with. Mirrors the agent route.
-      if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
-        throw new ApiError(400, "Shared catalog items cannot be made personal");
-      }
-      const newTeams: CatalogTeamAssignment[] =
-        newScope === "team"
-          ? normalizeCatalogTeamInput(restBody.teams ?? existingTeams)
-          : [];
-      const newTeamIds = newTeams.map((team) => team.id);
-      const scopeChanged = newScope !== originalCatalogItem.scope;
-      const teamsChanged =
-        newScope === "team" && !sameTeamAssignments(newTeams, existingTeams);
-      if (scopeChanged || teamsChanged) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId: request.organizationId,
-          resource: linkedAppId ? "app" : "mcpRegistry",
-          scope: linkedAppId ?? originalCatalogItem.id,
-        });
-        // SPDX-SnippetEnd
-        if (linkedAppId) {
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          await ResourcePermissions.require({
-            organizationId: request.organizationId,
-            userId: request.user.id,
-            resource: "app",
-            scope: linkedAppId,
-            action: "manage-permissions",
-          });
-          // SPDX-SnippetEnd
-        }
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.require({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          resource: "mcpRegistry",
-          scope: originalCatalogItem.id,
-          action: "manage-permissions",
-        });
-        // SPDX-SnippetEnd
-        authorizeMcpCatalogScope({
-          checker,
-          scope: newScope,
-          authorId: originalCatalogItem.authorId,
-          requestedTeamIds: newTeamIds,
-          userTeamIds,
-
-          userId: request.user.id,
-        });
-        await assertMcpCatalogTeams({
-          scope: newScope,
-          teamIds: newTeamIds,
-          organizationId: request.organizationId,
-        });
-      }
-
-      // Only rewrite team assignments when scope/teams/levels actually change;
-      // undefined leaves the existing rows untouched.
-      restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -2221,24 +2142,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-/**
- * Whether a requested team list leaves the stored assignments untouched. An
- * entry carrying no level cannot change one (the sync preserves what is
- * stored), so only an explicit, differing level counts as a change.
- */
-function sameTeamAssignments(
-  requested: CatalogTeamAssignment[],
-  current: CatalogTeamAccess[],
-): boolean {
-  if (requested.length !== current.length) return false;
-  const currentLevels = new Map(current.map((team) => [team.id, team.level]));
-  return requested.every((team) => {
-    const currentLevel = currentLevels.get(team.id);
-    if (currentLevel === undefined) return false;
-    return team.level === undefined || team.level === currentLevel;
-  });
-}
 
 /**
  * Collect the admin-set static config values an environment's validation regex

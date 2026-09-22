@@ -3475,15 +3475,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Locked chats cannot be shared");
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.rejectLegacySharing({
-        organizationId,
-        resource: "conversation",
-        scope: id,
-      });
-      // SPDX-SnippetEnd
       const teamIds = Array.from(new Set(body.teamIds ?? []));
       const userIds = Array.from(new Set(body.userIds ?? []));
 
@@ -3536,15 +3527,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }) => {
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.rejectLegacySharing({
-        organizationId,
-        resource: "conversation",
-        scope: id,
-      });
-      // SPDX-SnippetEnd
       const deleted = await ConversationShareModel.delete({
         conversationId: id,
         organizationId,

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { TeamModel } from "@/models";
 import { ApiError } from "@/types";
-import type { CatalogTeamAccessLevel } from "@/types/catalog-team-level";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isForeignKeyConstraintError } from "@/utils/db";
 import { getPermissionsForUserContext } from "./utils";
@@ -19,12 +18,6 @@ import { getPermissionsForUserContext } from "./utils";
 interface McpCatalogPermissionChecker {
   /** Holds `mcpServerInstallation:admin` — bypasses scope restrictions. */
   isAdmin: boolean;
-}
-
-/** A catalog item's scoped team, with the level resolved (NULL reads as `write`). */
-export interface CatalogTeamAccess {
-  id: string;
-  level: CatalogTeamAccessLevel;
 }
 
 /** Fetch the user's catalog-relevant permissions once for a request. */

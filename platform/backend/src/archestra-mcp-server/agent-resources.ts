@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 import {
   assertAgentTeams,
-  assertAssignableAgentTeams,
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
   requireAgentModifyPermission,
@@ -24,7 +23,6 @@ import {
 } from "@/models";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -627,8 +625,6 @@ export async function handleEditResource<
     name?: string;
     description?: string | null;
     icon?: string | null;
-    scope?: AgentScope;
-    teams?: string[];
     labels?: Array<{ key: string; value: string }>;
     knowledgeBaseIds?: string[];
     connectorIds?: string[];
@@ -683,15 +679,11 @@ export async function handleEditResource<
 
     const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
     const existingTeamIds = existingAgent.teams.map((team) => team.id);
+    // Who can reach the record is not editable here: access lives in its
+    // permission policy, which the resource permissions API writes on its own.
     requireAgentModifyPermission({
       agentId: existingAgent.id,
-      action:
-        (args.scope !== undefined && args.scope !== existingAgent.scope) ||
-        (args.teams !== undefined &&
-          (new Set(args.teams).size !== existingTeamIds.length ||
-            args.teams.some((id) => !existingTeamIds.includes(id))))
-          ? "manage-permissions"
-          : "update",
+      action: "update",
       checker,
       agentType: existingAgent.agentType,
       agentScope: existingAgent.scope,
@@ -701,71 +693,11 @@ export async function handleEditResource<
       userId: context.userId,
     });
 
-    // The check above authorizes the edit against the agent's *current* scope
-    // and teams. The incoming ones need authorizing too: otherwise a team-admin
-    // permitted to edit an agent in a team they belong to could reassign it to
-    // a team they don't, or clear its teams and leave it reachable by nobody.
-    // Mirrors the REST update path.
-    if (args.scope !== undefined || args.teams !== undefined) {
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.rejectLegacySharing({
-        organizationId: context.organizationId,
-        resource:
-          existingAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-        scope: existingAgent.id,
-      });
-      // SPDX-SnippetEnd
-      const scope = args.scope ?? existingAgent.scope;
-      const teamIds = args.teams ?? existingTeamIds;
-
-      try {
-        assertAssignableAgentTeams({
-          checker,
-          agentType: existingAgent.agentType,
-          requestedTeamIds: teamIds,
-          existingTeamIds,
-          userTeamIds,
-        });
-        await assertAgentTeams({
-          scope,
-          teamIds,
-          organizationId: context.organizationId,
-        });
-        // A static tool assignment pins one installed connection, which stays
-        // assignable only while this record shares the connection's team.
-        // Moving its scope or teams would strip the right to a credential its
-        // tools still point at, so the same guard the REST update path runs
-        // refuses the change here too — before anything is written.
-        await assertNoStaticPinsBrokenByTargetChange({
-          agentId: args.id,
-          currentTarget: {
-            organizationId: existingAgent.organizationId,
-            scope: existingAgent.scope,
-            authorId: existingAgent.authorId,
-            teamIds: existingTeamIds,
-          },
-          nextTarget: {
-            organizationId: existingAgent.organizationId,
-            scope,
-            authorId: existingAgent.authorId,
-            teamIds,
-          },
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
-    }
-
     const updateData: Record<string, unknown> = {};
     if (args.name !== undefined) updateData.name = args.name;
     if (args.description !== undefined)
       updateData.description = args.description;
     if (args.icon !== undefined) updateData.icon = args.icon;
-    if (args.scope !== undefined) updateData.scope = args.scope;
-    if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
     }

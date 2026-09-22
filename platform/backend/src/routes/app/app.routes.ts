@@ -109,15 +109,10 @@ const CreateAppBodySchema = CreateAppSchema.extend({
   // the client opens it directly at `/chat/<conversationId>` with no model turn.
   openInChat: z.boolean().optional(),
 });
-const UpdateAppBodySchema = UpdateAppSchema.extend({
-  teamIds: z.array(UuidIdSchema).optional(),
-  // People the app is shared with individually. Additive to `personal` scope
-  // rather than a scope of its own, so a personal app can follow a chat shared
-  // with named colleagues without widening to a team or the organization.
-  // Omitted leaves grants untouched; `[]` revokes them all. Not UUIDs — better-auth
-  // user ids are opaque strings.
-  userIds: z.array(z.string().min(1)).optional(),
-});
+// Who can reach an app is decided by its resource permission policy, which the
+// permissions API writes on its own, so the update body carries no sharing
+// fields: the stored visibility columns are carried through untouched.
+const UpdateAppBodySchema = UpdateAppSchema;
 const RestoreAppVersionBodySchema = z.strictObject({
   baseVersion: z.number().int().positive(),
 });
@@ -955,14 +950,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
-      const nextTeamIds =
-        body.teamIds !== undefined
-          ? await resolveOrgTeams(body.teamIds, organizationId)
-          : undefined;
-      const nextUserIds =
-        body.userIds !== undefined
-          ? await resolveOrgUsers(body.userIds, organizationId)
-          : undefined;
 
       await assertCallerMayModifyApp({
         appId: app.id,
@@ -994,63 +981,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resourceTeamIds,
         });
       }
-      // Authorize the destination whenever the team set or scope changes — a
-      // team admin must not redirect an app to teams they don't administer, even
-      // with the scope unchanged.
-      const destScope = body.scope ?? app.scope;
-      const effectiveTeamIds = nextTeamIds ?? resourceTeamIds;
-      if (destScope === "team" && effectiveTeamIds.length === 0) {
-        throw new ApiError(
-          400,
-          "A team-scoped app requires at least one teamId.",
-        );
-      }
-      const reScoping = body.scope !== undefined && body.scope !== app.scope;
-      // Handing an app to named individuals widens who can reach it just as a
-      // team change does, so it goes through the same destination check rather
-      // than riding along on plain view access.
-      const currentUserIds =
-        nextUserIds !== undefined
-          ? ((await AppAccessModel.getUserDetailsForApps([app.id]))
-              .get(app.id)
-              ?.map((entry) => entry.id) ?? [])
-          : [];
-      const teamSharingChanged =
-        nextTeamIds !== undefined &&
-        !sameRecipientIds(nextTeamIds, resourceTeamIds);
-      const userSharingChanged =
-        nextUserIds !== undefined &&
-        !sameRecipientIds(nextUserIds, currentUserIds);
-      if (reScoping || teamSharingChanged || userSharingChanged) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource: "app",
-          scope: app.id,
-        });
-        // SPDX-SnippetEnd
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.require({
-          organizationId,
-          userId: user.id,
-          resource: "app",
-          scope: app.id,
-          action: "manage-permissions",
-        });
-        // SPDX-SnippetEnd
-        await assertCallerMayModifyApp({
-          userId: user.id,
-          organizationId,
-          scope: destScope,
-          authorId: app.authorId,
-          resourceTeamIds: nextTeamIds ?? resourceTeamIds,
-        });
-      }
-
       // Re-binding the environment is authorized like the initial bind: org
       // membership + the restricted-env permission. Only an actual change is
       // re-authorized — editing other fields of an app bound to a restricted
@@ -1074,7 +1004,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           | "name"
           | "slug"
           | "description"
-          | "scope"
           | "environmentId"
           | "icon"
           | "openInFullscreen"
@@ -1083,7 +1012,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.name !== undefined) patch.name = body.name;
       if (body.slug !== undefined) patch.slug = body.slug;
       if (body.description !== undefined) patch.description = body.description;
-      if (body.scope !== undefined) patch.scope = body.scope;
       if (body.environmentId !== undefined)
         patch.environmentId = body.environmentId;
       if (body.icon !== undefined) patch.icon = body.icon;
@@ -1114,8 +1042,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: appId,
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
-        ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
-        ...(nextUserIds !== undefined ? { userIds: nextUserIds } : {}),
       }).catch((error) => {
         throw appConflictError(error, { name: body.name, slug: body.slug });
       });
@@ -1213,15 +1139,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         describe: (app) => app.name,
         authorize: async (app) => {
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          await ResourcePermissions.rejectLegacySharing({
-            organizationId,
-            resource: "app",
-            scope: app.id,
-          });
-          // SPDX-SnippetEnd
           const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2091,10 +2008,3 @@ async function environmentIsAssignable(params: {
 }
 
 export default appRoutes;
-
-function sameRecipientIds(next: string[], current: string[]): boolean {
-  return (
-    new Set(next).size === new Set(current).size &&
-    next.every((id) => current.includes(id))
-  );
-}

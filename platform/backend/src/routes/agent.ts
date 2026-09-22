@@ -64,7 +64,6 @@ import { transferAgentOwnership } from "@/services/agent-ownership";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
@@ -1158,19 +1157,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (body?.scope !== undefined || body?.teams !== undefined) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource:
-            sourceAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-          scope: sourceAgent.id,
-        });
-        // SPDX-SnippetEnd
-      }
-
       // Delegate cloning logic to the model
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
@@ -1951,33 +1937,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
 
-      const sharingChanged =
-        (body.scope !== undefined && body.scope !== existingAgent.scope) ||
-        (body.teams !== undefined &&
-          !sameRecipientIds(
-            body.teams,
-            existingAgent.teams.map((team) => team.id),
-          )) ||
-        (body.users !== undefined &&
-          !sameRecipientIds(
-            body.users,
-            (existingAgent.users ?? []).map((recipient) => recipient.id),
-          ));
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (sharingChanged)
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource:
-            existingAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-          scope: existingAgent.id,
-        });
-      // SPDX-SnippetEnd
-      // Content editing does not authorize changing who can access the agent.
+      // Who can reach the agent is not editable here: access lives in the
+      // agent's permission policy, which the permissions API writes on its own.
       requireAgentModifyPermission({
         agentId: existingAgent.id,
-        action: sharingChanged ? "manage-permissions" : "update",
+        action: "update",
         checker,
         agentType: existingAgent.agentType,
         agentScope: existingAgent.scope,
@@ -1985,65 +1949,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentTeamIds: existingAgent.teams.map((t) => t.id),
         userTeamIds,
         userId: user.id,
-      });
-
-      // Re-authorize sharing changes; echoed visibility is not a new grant.
-      if (sharingChanged && !checker.isAdmin(existingAgent.agentType)) {
-        if (body.scope === "org") {
-          throw new ApiError(403, "Only admins can set scope to org");
-        }
-        if (body.scope === "team" || (body.teams && body.teams.length > 0)) {
-          if (!checker.isTeamAdmin(existingAgent.agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to set scope to team",
-            );
-          }
-        }
-
-        // team-admin: validate team assignments and preserve teams they don't control
-        if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
-          const userTeamIdSet = new Set(userTeamIds);
-          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
-
-          // Validate newly added teams — must be a member
-          const invalidAdds = body.teams.filter(
-            (id) => !existingTeamIds.has(id) && !userTeamIdSet.has(id),
-          );
-          if (invalidAdds.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-
-          // Preserve existing teams the user doesn't control
-          const preservedTeams = [...existingTeamIds].filter(
-            (id) => !userTeamIdSet.has(id),
-          );
-          const userControlledTeams = body.teams.filter((id) =>
-            userTeamIdSet.has(id),
-          );
-          body.teams = [
-            ...new Set([...userControlledTeams, ...preservedTeams]),
-          ];
-        }
-      }
-
-      // Prevent downgrading shared agents to personal
-      if (body.scope === "personal" && existingAgent.scope !== "personal") {
-        throw new ApiError(400, "Shared agents cannot be made personal");
-      }
-
-      // A team-scoped agent must keep ≥1 team (issue #6624) and may only be
-      // assigned teams in this organization. Evaluate the merged result — the
-      // team-admin path above may have rewritten body.teams — so this catches
-      // switching to team scope with none, or clearing the teams of an already
-      // team-scoped agent. Applies to admins too.
-      await assertAgentTeams({
-        scope: body.scope ?? existingAgent.scope,
-        teamIds: body.teams ?? existingAgent.teams.map((t) => t.id),
-        organizationId,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -2092,23 +1997,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // The advisor is one org-wide row every environment's agents reach
-        // through delegation. A team scope would hide it from everyone
-        // outside that team's delegation surface, and an environment would
-        // re-fence it — reject a narrowing change rather than silently scoping
-        // a shared resource. A no-op that restates org scope or an empty team
-        // list is allowed (the dialog may resend it).
+        // through delegation. An environment would re-fence it, so reject a
+        // narrowing change rather than silently scoping a shared resource.
         if (
           existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
         ) {
-          const narrowsScope = body.scope !== undefined && body.scope !== "org";
-          const assignsTeams =
-            body.teams !== undefined && body.teams.length > 0;
-          if (narrowsScope || assignsTeams) {
-            throw new ApiError(
-              400,
-              "The Advisor is shared by the whole organization and cannot be scoped to teams",
-            );
-          }
           if (body.environmentId !== undefined && body.environmentId !== null) {
             throw new ApiError(
               400,
@@ -2129,21 +2022,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
-          ...(body.scope !== undefined && { scope: body.scope }),
-          ...(body.teams !== undefined && { teams: body.teams }),
         };
       } else {
-        // Omit teams if scope is not 'team' — scope takes precedence.
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
         // the advisor delegation exception), so a client cannot promote an
         // ordinary agent into a built-in by supplying it on update.
         const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
           body;
-        updateData = {
-          ...bodyWithoutBuiltIn,
-          ...((body.scope ?? existingAgent.scope) !== "team" &&
-            body.teams !== undefined && { teams: [] }),
-        };
+        updateData = bodyWithoutBuiltIn;
       }
 
       // A model and its API key are a pair: persist both or neither. Validate
@@ -2197,33 +2083,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: body.environmentId,
         });
       }
-
-      // A static tool assignment pins one installed connection, and a
-      // team-scoped connection is only assignable while the agent shares that
-      // team. Moving the agent's scope or teams therefore silently strips the
-      // right to a credential its tools still point at — the runtime trusts
-      // the persisted mcpServerId — so re-check the pins it already holds and
-      // refuse before anything is written (AgentModel.update syncs teams).
-      // The evaluated scope/team set is the merged one: the team-admin branch
-      // above may have rewritten body.teams to preserve teams it cannot touch.
-      // Known gap: an assignment or team-membership change racing this check
-      // can still land a stale pin; validating at call time is the follow-up.
-      const currentTeamIds = existingAgent.teams.map((team) => team.id);
-      await assertNoStaticPinsBrokenByTargetChange({
-        agentId: id,
-        currentTarget: {
-          organizationId: existingAgent.organizationId,
-          scope: existingAgent.scope,
-          authorId: existingAgent.authorId,
-          teamIds: currentTeamIds,
-        },
-        nextTarget: {
-          organizationId: existingAgent.organizationId,
-          scope: body.scope ?? existingAgent.scope,
-          authorId: existingAgent.authorId,
-          teamIds: body.teams ?? currentTeamIds,
-        },
-      });
 
       const agent = await AgentModel.update(id, updateData);
 
@@ -2318,16 +2177,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         describe: (agent) => agent.name,
         authorize: async (agent) => {
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          await ResourcePermissions.rejectLegacySharing({
-            organizationId,
-            resource:
-              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-            scope: agent.id,
-          });
-          // SPDX-SnippetEnd
           if (agent.agentType === "llm_proxy") {
             throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
           }
@@ -3301,12 +3150,4 @@ function sameIdSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
   return a.every((id) => setB.has(id));
-}
-
-function sameRecipientIds(requested: string[], existing: string[]): boolean {
-  const current = new Set(existing);
-  return (
-    new Set(requested).size === current.size &&
-    requested.every((id) => current.has(id))
-  );
 }

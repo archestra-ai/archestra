@@ -3318,7 +3318,16 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: Partial<UpdateAgent>,
+    }: Partial<UpdateAgent> & {
+      /**
+       * Retired sharing columns. No longer reachable from a request body —
+       * access lives in the resource permission policy — but still written by
+       * the bulk visibility route and by seeding/migration callers.
+       */
+      scope?: AgentScope;
+      teams?: string[];
+      users?: string[];
+    },
     options?: {
       /**
        * Skip the off→on All-tools exclusion pre-fill. Used by clone, which

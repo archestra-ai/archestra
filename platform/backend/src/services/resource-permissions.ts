@@ -35,21 +35,6 @@ import { CredentialResourcePermissions } from "./credential-resource-permissions
 import { resolveLegacyResourcePermissions } from "./resource-permission-compatibility";
 
 export class ResourcePermissions {
-  /** Old sharing fields cannot mutate an authoritative grant policy. */
-  static async rejectLegacySharing(params: {
-    organizationId: string;
-    resource: ScopedResource;
-    scope: string;
-  }): Promise<void> {
-    const policies = await ResourcePermissionPolicyModel.findApplicable(params);
-    if (policies.some((policy) => policy.legacySharingMigrated)) {
-      throw new ApiError(
-        400,
-        "Use the resource permissions API to change access; visibility and team/user sharing fields are retired.",
-      );
-    }
-  }
-
   /** Assigning a role or team also delegates every scoped grant it carries. */
   static async validateSubjectAssignment(params: {
     organizationId: string;

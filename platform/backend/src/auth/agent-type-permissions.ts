@@ -390,35 +390,6 @@ export async function assertAgentTeams(params: {
   }
 }
 
-/**
- * Enforce that a non-admin only assigns teams they belong to. Admins may assign
- * any team in the organization, which is how an agent is set up on a team's
- * behalf.
- *
- * Teams already on the agent are exempt: a team-admin editing an agent that is
- * also shared with teams they don't belong to can still save unrelated changes,
- * and echoing the current assignment back is never rejected. Only newly added
- * teams are checked.
- */
-export function assertAssignableAgentTeams(params: {
-  checker: AgentTypePermissionChecker;
-  agentType: AgentType;
-  requestedTeamIds: string[];
-  existingTeamIds: string[];
-  userTeamIds: string[];
-}): void {
-  if (params.checker.isAdmin(params.agentType)) return;
-
-  const existingTeamIdSet = new Set(params.existingTeamIds);
-  const userTeamIdSet = new Set(params.userTeamIds);
-  const invalidAdds = params.requestedTeamIds.filter(
-    (id) => !existingTeamIdSet.has(id) && !userTeamIdSet.has(id),
-  );
-  if (invalidAdds.length > 0) {
-    throw new ApiError(403, "You can only assign teams you are a member of");
-  }
-}
-
 // ===== Types =====
 
 /** @public — exported for testability */

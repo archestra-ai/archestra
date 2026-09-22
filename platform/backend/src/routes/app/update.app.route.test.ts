@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
+import AppAccessModel from "@/models/app-access";
 import AppVersionModel from "@/models/app-version";
 import EnvironmentModel from "@/models/environment";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -227,14 +228,14 @@ describe("PATCH /api/apps/:appId", () => {
     expect(response.json().latestVersion).toBe(created.latestVersion + 1);
   });
 
-  test("retired visibility writes cannot change another creator’s app", async ({
+  test("a retired visibility write is ignored and leaves the app alone", async ({
     makeUser,
     makeMember,
     makeApp,
   }) => {
-    // `user` is an app admin. Changing a foreign personal app's visibility is a
-    // settings change (allowed via oversight), and it must never reassign
-    // authorship to the acting admin — the app stays the original author's.
+    // `user` is an app admin. `scope` is no longer part of the update body, so
+    // a caller still sending it edits nothing: the app keeps its visibility and
+    // its original author.
     const otherAuthor = await makeUser();
     await makeMember(otherAuthor.id, organizationId);
     const foreign = await makeApp({
@@ -246,10 +247,11 @@ describe("PATCH /api/apps/:appId", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/apps/${foreign.id}`,
-      payload: { scope: "org" },
+      payload: { scope: "org", name: "Renamed by admin" },
     });
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     expect(await AppModel.findById(foreign.id)).toMatchObject({
+      name: "Renamed by admin",
       scope: "personal",
       authorId: otherAuthor.id,
     });
@@ -461,7 +463,7 @@ describe("PATCH /api/apps/:appId", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().name).toBe("Renamed");
   });
-  test("retired named-user sharing writes are rejected", async ({
+  test("retired named-user sharing writes are ignored, not honoured", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -473,39 +475,20 @@ describe("PATCH /api/apps/:appId", () => {
     });
     const colleague = await makeUser();
     await makeMember(colleague.id, organizationId);
-    for (const userIds of [[colleague.id], []]) {
-      const response = await app.inject({
-        method: "PATCH",
-        url: `/api/apps/${created.id}`,
-        payload: { userIds },
-      });
-      expect(response.statusCode).toBe(userIds.length ? 400 : 200);
-      if (userIds.length)
-        expect(response.json().error.message).toContain(
-          "resource permissions API",
-        );
-    }
-  });
-
-  test("rejects sharing with a user outside the organization", async ({
-    makeUser,
-    makeApp,
-  }) => {
-    const created = await makeApp({
-      organizationId,
-      scope: "personal",
-      authorId: user.id,
-    });
-    // A real user, but never made a member of this organization.
-    const outsider = await makeUser();
-
+    // `userIds` left the update body with the rest of the legacy sharing
+    // surface, so a caller still sending it neither shares the app nor fails.
     const response = await app.inject({
       method: "PATCH",
       url: `/api/apps/${created.id}`,
-      payload: { userIds: [outsider.id] },
+      payload: { userIds: [colleague.id], name: "Still mine" },
     });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toMatch(/Unknown user/i);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().name).toBe("Still mine");
+    expect(
+      (await AppAccessModel.getUserDetailsForApps([created.id])).get(
+        created.id,
+      ) ?? [],
+    ).toEqual([]);
   });
 });
 

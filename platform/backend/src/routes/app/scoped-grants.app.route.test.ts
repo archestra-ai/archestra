@@ -149,6 +149,8 @@ describe("scoped app grants", () => {
         }),
       ]),
     );
+    // Sharing is no longer reachable from the update body: the retired field
+    // is dropped and the app stays where it is.
     expect(
       (
         await ctx.app.inject({
@@ -157,7 +159,8 @@ describe("scoped app grants", () => {
           payload: { scope: "org" },
         })
       ).statusCode,
-    ).toBe(400);
+    ).toBe(200);
+    expect((await AppModel.findById(target.id))?.scope).not.toBe("org");
     expect(
       (
         await ctx.app.inject({

@@ -895,7 +895,7 @@ describe("agent RBAC visibility", () => {
 });
 
 describe("edit_agent migrated sharing", () => {
-  test("rejects retired sharing fields and permits a content-only edit", async ({
+  test("ignores retired sharing fields and permits a content-only edit", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -917,6 +917,8 @@ describe("edit_agent migrated sharing", () => {
       userId: user.id,
       agent: { id: agent.id, name: agent.name },
     };
+    // The tool no longer accepts scope/teams at all, so a caller still sending
+    // them is refused by the strict input schema and nothing is written.
     for (const sharing of [
       { teams: [] },
       { scope: "org" },
@@ -928,9 +930,6 @@ describe("edit_agent migrated sharing", () => {
         context,
       );
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "resource permissions API",
-      );
       const unchanged = await AgentModel.findById(agent.id);
       expect(unchanged?.scope).toBe("team");
       expect(unchanged?.teams.map((entry) => entry.id)).toEqual([team.id]);
@@ -944,6 +943,10 @@ describe("edit_agent migrated sharing", () => {
     expect((await AgentModel.findById(agent.id))?.description).toBe(
       "Updated description",
     );
+    // A content-only edit leaves the stored visibility exactly where it was.
+    const after = await AgentModel.findById(agent.id);
+    expect(after?.scope).toBe("team");
+    expect(after?.teams.map((entry) => entry.id)).toEqual([team.id]);
   });
 });
 

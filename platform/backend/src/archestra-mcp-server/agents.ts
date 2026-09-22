@@ -157,9 +157,6 @@ const EditAgentToolArgsSchema = z
             "Replace the agent's directly assigned knowledge connectors with this set.",
           )
           .optional(),
-        scope: AgentScopeSchema.optional().describe(
-          "Updated visibility scope for the agent.",
-        ),
         toolExposureMode: ToolExposureModeSchema.optional().describe(
           "How tools should be loaded for MCP clients and models.",
         ),
@@ -182,10 +179,6 @@ const EditAgentToolArgsSchema = z
         systemPrompt: UpdateAgentSchemaBase.shape.systemPrompt
           .optional()
           .describe("New system prompt for the agent."),
-        teams: z
-          .array(UuidIdSchema)
-          .optional()
-          .describe("Replace the teams attached to a team-scoped agent."),
       })
       .strict(),
   )

@@ -139,7 +139,7 @@ describe("apps bulk routes", () => {
   });
 
   describe("PATCH /api/apps/bulk", () => {
-    test("rejects retired visibility updates for every app without changing access", async ({
+    test("moves every app in the batch to the requested visibility", async ({
       makeApp,
       makeTeam,
     }) => {
@@ -154,10 +154,10 @@ describe("apps bulk routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toHaveLength(2);
+      expect(response.json().failed).toEqual([]);
+      expect(response.json().succeeded).toHaveLength(2);
       for (const id of [first.id, second.id]) {
-        expect((await AppModel.findById(id))?.scope).toBe("org");
+        expect((await AppModel.findById(id))?.scope).toBe("team");
       }
     });
 

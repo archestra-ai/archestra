@@ -60,7 +60,7 @@ describe("per-user skill sharing", () => {
     ).toBe(true);
   });
 
-  test("retired userIds updates cannot replace existing grants", async ({
+  test("retired userIds updates are ignored, leaving grants alone", async ({
     makeUser,
     makeMember,
   }) => {
@@ -75,13 +75,15 @@ describe("per-user skill sharing", () => {
     });
     const skillId = created.json().id;
 
+    // `userIds` left the update body with the rest of the legacy sharing
+    // surface, so a caller still sending it changes nothing.
     const response = await ctx.app.inject({
       method: "PUT",
       url: `/api/skills/${skillId}`,
       payload: { content: MANIFEST, userIds: [second.id] },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     expect(await SkillUserModel.userHasGrant(skillId, first.id)).toBe(true);
     expect(await SkillUserModel.userHasGrant(skillId, second.id)).toBe(false);
   });
@@ -112,7 +114,7 @@ describe("per-user skill sharing", () => {
     ).toEqual([grantee.id]);
   });
 
-  test("retired visibility writes preserve existing grants", async ({
+  test("retired visibility writes are ignored and preserve existing grants", async ({
     makeUser,
     makeMember,
   }) => {
@@ -132,7 +134,7 @@ describe("per-user skill sharing", () => {
       payload: { content: MANIFEST, scope: "org" },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     expect((await SkillModel.findById(skillId))?.scope).toBe("personal");
     expect(await SkillUserModel.userHasGrant(skillId, grantee.id)).toBe(true);
   });

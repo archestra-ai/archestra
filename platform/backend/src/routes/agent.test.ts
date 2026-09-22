@@ -951,7 +951,7 @@ describe("agent routes", () => {
       expect(response.json().builtInAgentConfig).toBeNull();
     });
 
-    test("rejects clearing all teams on a team-scoped agent", async ({
+    test("ignores an attempt to clear all teams on a team-scoped agent", async ({
       makeAgent,
       makeTeam,
     }) => {
@@ -964,16 +964,23 @@ describe("agent routes", () => {
         authorId: user.id,
       });
 
+      // `teams` left the update body, so the retired field is dropped and the
+      // agent keeps the team it had.
       const response = await app.inject({
         method: "PUT",
         url: `/api/agents/${created.id}`,
         payload: { teams: [] },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
+      expect(
+        (await AgentModel.findById(created.id, user.id, true))?.teams.map(
+          (entry) => entry.id,
+        ),
+      ).toEqual([team.id]);
     });
 
-    test("rejects switching an agent to team scope without teams", async ({
+    test("ignores a retired scope switch on an update", async ({
       makeAgent,
     }) => {
       const created = await makeAgent({
@@ -989,7 +996,10 @@ describe("agent routes", () => {
         payload: { scope: "team", teams: [] },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
+      expect(
+        (await AgentModel.findById(created.id, user.id, true))?.scope,
+      ).toBe("personal");
     });
 
     test("rejects an update that sets a model without an API key", async ({

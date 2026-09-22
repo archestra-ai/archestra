@@ -180,6 +180,8 @@ describe("scoped skill grants", () => {
         })
       ).statusCode,
     ).toBe(403);
+    // Sharing is no longer reachable from the update body at all: the retired
+    // field is dropped, the edit lands, and nobody new gains access.
     expect(
       (
         await ctx.app.inject({
@@ -191,7 +193,7 @@ describe("scoped skill grants", () => {
           },
         })
       ).statusCode,
-    ).toBe(400);
+    ).toBe(200);
     const agent = await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",

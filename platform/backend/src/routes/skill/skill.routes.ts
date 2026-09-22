@@ -254,18 +254,27 @@ const SkillManifestInputSchema = SkillManifestFieldsSchema.extend({
  * `ZodEffects`, which cannot be `.extend()`ed — the shared fields have to live
  * in a plain object for the update schema to add to them.
  */
-const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
-  baseVersion: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "The skill's `latestVersion` when this edit was composed. Rejected " +
-        "with 409 if the skill has moved past it. Omit only when the payload " +
-        "owes nothing to a prior read of the skill.",
-    ),
-}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+const SkillManifestUpdateSchema = SkillManifestFieldsSchema.omit({
+  // Who can reach a skill is decided by its resource permission policy, which
+  // the permissions API writes on its own. The stored visibility columns are
+  // carried through an update untouched.
+  scope: true,
+  teamIds: true,
+  userIds: true,
+})
+  .extend({
+    baseVersion: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        "The skill's `latestVersion` when this edit was composed. Rejected " +
+          "with 409 if the skill has moved past it. Omit only when the payload " +
+          "owes nothing to a prior read of the skill.",
+      ),
+  })
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)
@@ -932,11 +941,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const existing = await findSkillOrThrow(id, organizationId);
       const parsed = parseManifestOrThrow(body.content);
 
-      const {
-        checker,
-        userTeamIds,
-        skillTeamIds: existingTeamIds,
-      } = await authorizeSkillModify({
+      await authorizeSkillModify({
         skill: existing,
         userId: user.id,
         organizationId,
@@ -948,69 +953,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // GitHub makes it editable.
       if (existing.githubSyncInterval !== null) {
         assertSyncedSkillContentUnchanged({ existing, parsed, body });
-      }
-
-      // Re-authorize and re-sync teams only when scope or team assignments
-      // actually change. A content-only edit that echoes the existing teams
-      // must not 403 a non-admin author or needlessly rewrite team rows.
-      const newScope = body.scope ?? existing.scope;
-      const newTeamIds =
-        newScope === "team" ? dedupe(body.teamIds ?? existingTeamIds) : [];
-      const scopeChanged = newScope !== existing.scope;
-      const teamsChanged =
-        newScope === "team" && !sameIdSet(newTeamIds, existingTeamIds);
-      // Sharing with named people keeps the skill personal, so grants live only
-      // on that scope; widening to team or org clears them rather than leaving
-      // grants stranded on a skill whose visibility now says something else.
-      const existingGrantees =
-        (await SkillUserModel.getUserDetailsForSkills([existing.id])).get(
-          existing.id,
-        ) ?? [];
-      const existingUserIds = existingGrantees.map((grantee) => grantee.id);
-      const newUserIds =
-        newScope === "personal" ? dedupe(body.userIds ?? existingUserIds) : [];
-      const usersChanged = !sameIdSet(newUserIds, existingUserIds);
-      if (scopeChanged || teamsChanged || usersChanged) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        // Refuse the retired fields before the legacy scope rules run: once a
-        // skill answers to grants, a scope/team/user write is a bad request,
-        // not a permission failure, and saying so names the right remedy.
-        await ResourcePermissions.rejectLegacySharing({
-          organizationId,
-          resource: "skill",
-          scope: existing.id,
-        });
-        // SPDX-SnippetEnd
-      }
-      if (scopeChanged || teamsChanged) {
-        authorizeSkillScope({
-          checker,
-          scope: newScope,
-          authorId: existing.authorId,
-          requestedTeamIds: newTeamIds,
-          userTeamIds,
-          userId: user.id,
-        });
-        await assertSkillTeams({
-          scope: newScope,
-          teamIds: newTeamIds,
-          organizationId,
-        });
-      }
-      if (scopeChanged || teamsChanged || usersChanged) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissions.require({
-          organizationId,
-          userId: user.id,
-          resource: "skill",
-          scope: existing.id,
-          action: "manage-permissions",
-        });
-        // SPDX-SnippetEnd
       }
 
       // Changing a skill's environment assignments is gated like assigning
@@ -1036,22 +978,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let updated: Skill | null;
       try {
-        // The metadata, files, and team assignments are updated in a single
-        // transaction (see SkillModel.updateWithFiles), so a team deleted
-        // mid-request rolls the whole update back rather than leaving a
-        // team-scoped skill with no teams. teamIds is only synced when scope or
-        // teams actually change; otherwise it is left untouched.
+        // The metadata and files are updated in a single transaction (see
+        // SkillModel.updateWithFiles). Team assignments are not touched here:
+        // access lives in the skill's permission policy.
         updated = await withTeamFkErrorMapped(() =>
           SkillModel.updateWithFiles({
             id,
             skill: {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
-              scope: newScope,
             },
             files:
               body.files === undefined ? undefined : toSkillFiles(body.files),
-            teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
             environmentIds: environmentsChanged ? newEnvironmentIds : undefined,
             // Compare-and-set against the head the caller composed from; the
             // transaction rejects (409) rather than burying a concurrent edit.
@@ -1071,9 +1009,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
-      }
-      if (usersChanged) {
-        await SkillUserModel.syncSkillUsers(id, newUserIds);
       }
       // Only touch labels when the caller sent them, so an update that omits
       // the field leaves existing labels alone.
@@ -1165,15 +1100,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Two checks, as on the single-skill update: the caller must be
           // allowed to modify the skill where it is now, and to place it where
           // it is going.
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          await ResourcePermissions.rejectLegacySharing({
-            organizationId,
-            resource: "skill",
-            scope: skill.id,
-          });
-          // SPDX-SnippetEnd
           requireSkillModifyPermission({
             checker: context.checker,
             scope: skill.scope,

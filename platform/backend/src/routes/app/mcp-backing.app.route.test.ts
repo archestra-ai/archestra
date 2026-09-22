@@ -322,7 +322,7 @@ describe("MCP backing for apps", () => {
     await catalogApp.close();
   });
 
-  test("retired catalog sharing edits leave the app and backing server unchanged", async () => {
+  test("retired catalog sharing edits are ignored, leaving the app and backing server unchanged", async () => {
     const appId = await createApp("personal");
     const created = mustExist(await AppModel.findById(appId));
     const server = mustExist(
@@ -345,7 +345,9 @@ describe("MCP backing for apps", () => {
       url: `/api/internal_mcp_catalog/${catalogId}`,
       payload: { serverType: "app", scope: "org" },
     });
-    expect(res.statusCode).toBe(400);
+    // `scope` left the catalog update body, so the retired field is dropped
+    // and neither the app nor its backing server moves.
+    expect(res.statusCode).toBe(200);
 
     expect((await McpServerModel.findById(server.id))?.scope).toBe("personal");
     expect((await AppModel.findById(appId))?.scope).toBe("personal");

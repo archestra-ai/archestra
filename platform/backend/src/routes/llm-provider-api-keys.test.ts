@@ -1588,7 +1588,7 @@ describe("LLM Provider API Keys Scope Update", () => {
     await app.close();
   });
 
-  test("rejects legacy scope updates after permissions become authoritative", async () => {
+  test("ignores legacy scope updates after permissions become authoritative", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1609,13 +1609,12 @@ describe("LLM Provider API Keys Scope Update", () => {
       },
     });
 
-    expect(updateResponse.statusCode).toBe(400);
-    expect(updateResponse.json().error.message).toContain(
-      "resource permissions API",
-    );
-    expect((await LlmProviderApiKeyModel.findById(createdKey.id))?.userId).toBe(
-      user.id,
-    );
+    // `scope` left the update body, so a caller still sending it neither
+    // rescopes the key nor fails: the stored visibility stands.
+    expect(updateResponse.statusCode).toBe(200);
+    const stored = await LlmProviderApiKeyModel.findById(createdKey.id);
+    expect(stored?.scope).toBe("personal");
+    expect(stored?.userId).toBe(user.id);
   });
 
   test("rejects a ChatGPT-subscription credential pasted into an org key without a scope change", async () => {

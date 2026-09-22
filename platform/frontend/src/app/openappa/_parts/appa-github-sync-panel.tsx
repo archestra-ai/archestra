@@ -302,6 +302,7 @@ function SourceForm({
     <StandardFormDialog
       open
       onOpenChange={onOpenChange}
+      isDirty={form.formState.isDirty}
       title={source ? "Edit GitHub source" : "Connect APPA to GitHub"}
       description="Pull a policy file from GitHub. Your current policy stays active until a valid update is accepted."
       size="medium"
@@ -357,7 +358,9 @@ function SourceForm({
         <Label htmlFor="appa-credential">Authentication</Label>
         <Select
           value={form.watch("credential")}
-          onValueChange={(value) => form.setValue("credential", value)}
+          onValueChange={(value) =>
+            form.setValue("credential", value, { shouldDirty: true })
+          }
         >
           <SelectTrigger id="appa-credential" className="w-full">
             <SelectValue />
@@ -384,7 +387,9 @@ function SourceForm({
         <Select
           value={form.watch("interval")}
           onValueChange={(value) =>
-            form.setValue("interval", value as "15m" | "1h" | "1d")
+            form.setValue("interval", value as "15m" | "1h" | "1d", {
+              shouldDirty: true,
+            })
           }
         >
           <SelectTrigger id="appa-frequency" className="w-full">

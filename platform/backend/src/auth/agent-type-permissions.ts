@@ -9,7 +9,6 @@ import {
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { TeamModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type AgentScope, type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
@@ -45,7 +44,8 @@ export async function requireAgentTypePermission(params: {
 }
 
 /**
- * Returns true if the user has "admin" on the resource for the given agentType.
+ * Returns true if the user holds `update` on every agent of the given type — a
+ * grant at `*` scope. Role actions no longer confer this.
  */
 export async function isAgentTypeAdmin(params: {
   userId: string;
@@ -68,9 +68,9 @@ export async function hasAnyAgentTypeReadPermission(params: {
 }
 
 /**
- * Returns true if the user has admin permission on ANY of the agent-type resources.
- * Used when no agentType filter is provided on list endpoints to determine
- * whether to bypass team-based access filtering.
+ * Returns true if the user holds `update` at `*` scope on ANY of the agent-type
+ * resources. Used when no agentType filter is provided on list endpoints to
+ * determine whether to bypass per-agent access filtering.
  */
 export async function hasAnyAgentTypeAdminPermission(params: {
   userId: string;
@@ -89,14 +89,9 @@ export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<AgentTypePermissionChecker> {
-  const [permissions, grants, migratedPolicies] = await Promise.all([
+  const [permissions, grants] = await Promise.all([
     getPermissionsForUserContext(params),
     ResourcePermissions.resolveAll(params),
-    Promise.all(
-      (["agent", "mcpGateway"] as const).map((resource) =>
-        ResourcePermissionPolicyModel.find({ ...params, resource, scope: "*" }),
-      ),
-    ),
   ]);
   const allowsScoped = (target: {
     agentType: AgentType;
@@ -122,12 +117,6 @@ export async function getAgentTypePermissionChecker(params: {
     );
   };
   return {
-    isMigrated: (agentType) =>
-      migratedPolicies.some(
-        (policy) =>
-          policy?.resource === getResourceForAgentType(agentType) &&
-          policy.legacySharingMigrated,
-      ),
     allowsScoped,
     hasBaseAction: (agentType, action) =>
       permissions[getResourceForAgentType(agentType)]?.includes(action) ??
@@ -155,25 +144,7 @@ export async function getAgentTypePermissionChecker(params: {
       }
     },
     isAdmin(agentType: AgentType): boolean {
-      const resource = getResourceForAgentType(agentType);
-      return (
-        allowsScoped({ agentType, agentId: "*", action: "update" }) ||
-        (!migratedPolicies.some(
-          (policy) =>
-            policy?.resource === resource && policy.legacySharingMigrated,
-        ) &&
-          (permissions[resource]?.includes("admin") ?? false))
-      );
-    },
-    isTeamAdmin(agentType: AgentType): boolean {
-      const resource = getResourceForAgentType(agentType);
-      return (
-        !migratedPolicies.some(
-          (policy) =>
-            policy?.resource === resource && policy.legacySharingMigrated,
-        ) &&
-        (permissions[resource]?.includes("team-admin") ?? false)
-      );
+      return allowsScoped({ agentType, agentId: "*", action: "update" });
     },
     hasAnyReadPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
@@ -205,79 +176,46 @@ export async function getAgentTypePermissionChecker(params: {
       );
     },
     hasAnyAdminPermission(): boolean {
-      return AGENT_TYPE_RESOURCES.some(
-        (r) =>
-          grants.some(
-            (grant) =>
-              grant.resource === r &&
-              grant.action === "update" &&
-              grant.scope === "*",
-          ) ||
-          (!migratedPolicies.some(
-            (policy) => policy?.resource === r && policy.legacySharingMigrated,
-          ) &&
-            (permissions[r]?.includes("admin") ?? false)),
+      return AGENT_TYPE_RESOURCES.some((r) =>
+        grants.some(
+          (grant) =>
+            grant.resource === r &&
+            grant.action === "update" &&
+            grant.scope === "*",
+        ),
       );
     },
   };
 }
 
 /**
- * Enforces 3-tier scope-based authorization for agent modifications (create/update/delete).
+ * Authorizes a modification of one existing agent. The caller must hold the
+ * action on that agent through a grant — on the agent itself, or at `*` scope.
+ * Role actions (`admin`, `team-admin`) and the agent's legacy scope, teams and
+ * author confer nothing: those were converted into grants by the cutover.
  *
- * - Admin (`agent:admin`) → always allowed
- * - `scope=org` → requires `admin`
- * - `scope=team` → requires `team-admin` + membership in at least one of the agent's teams
- * - `scope=personal` → requires authorship (authorId === userId)
- *
- * Throws ApiError(403) if the user lacks permission.
+ * Throws ApiError(403) if the caller lacks the grant.
  */
 export function requireAgentModifyPermission(params: {
   checker: AgentTypePermissionChecker;
   agentType: AgentType;
-  agentScope: AgentScope;
-  agentAuthorId: string | null;
-  agentTeamIds: string[];
-  userTeamIds: string[];
-  userId: string;
-  agentId?: string;
-  action?: "update" | "delete" | "manage-permissions";
+  agentId: string;
+  action: "update" | "delete" | "manage-permissions";
 }): void {
   if (
-    params.agentId &&
-    params.action &&
-    params.checker.allowsScoped?.({
+    params.checker.allowsScoped({
       agentType: params.agentType,
       agentId: params.agentId,
       action: params.action,
     })
   )
     return;
-  if (
-    params.action === "manage-permissions" &&
-    !params.checker.hasBaseAction?.(params.agentType, "update")
-  ) {
-    throw new ApiError(
-      403,
-      "You do not have permission to manage access to this resource",
-    );
-  }
-  if (params.checker.isMigrated?.(params.agentType)) {
-    throw new ApiError(
-      403,
-      "You do not have permission to modify this resource",
-    );
-  }
-  requireScopedModifyPermission({
-    isAdmin: params.checker.isAdmin(params.agentType),
-    isTeamAdmin: params.checker.isTeamAdmin(params.agentType),
-    scope: params.agentScope,
-    authorId: params.agentAuthorId,
-    resourceTeamIds: params.agentTeamIds,
-    userTeamIds: params.userTeamIds,
-    userId: params.userId,
-    resourceLabel: "agent",
-  });
+  throw new ApiError(
+    403,
+    params.action === "manage-permissions"
+      ? "You do not have permission to manage access to this resource"
+      : "You do not have permission to modify this resource",
+  );
 }
 
 /**
@@ -399,23 +337,21 @@ export interface AgentTypePermissionChecker {
     agentType: AgentType,
     action: Action | { action: Action; scope: string },
   ): void;
-  allowsScoped?(params: {
+  /** Returns true if a grant gives the user the action on this agent (or at `*`). */
+  allowsScoped(params: {
     agentType: AgentType;
     agentId: string;
     action: Action | "manage-permissions";
   }): boolean;
   hasBaseAction?(agentType: AgentType, action: Action): boolean;
-  /** Returns true if the user has admin on the agent type's resource. */
-  isMigrated?(agentType: AgentType): boolean;
+  /** Returns true if the user holds `update` at `*` scope on the agent type's resource. */
   isAdmin(agentType: AgentType): boolean;
-  /** Returns true if the user has team-admin on the agent type's resource. */
-  isTeamAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has read on any of the agent-type resources. */
   hasAnyReadPermission(): boolean;
   /** Returns agent types for which the user has the requested permission. */
   getAgentTypesWithPermission(action: Action): AgentType[];
   getAgentTypesWithScopedPermission?(action: Action): AgentType[];
-  /** Returns true if the user has admin on any of the agent-type resources. */
+  /** Returns true if the user holds `update` at `*` scope on any agent-type resource. */
   hasAnyAdminPermission(): boolean;
 }
 

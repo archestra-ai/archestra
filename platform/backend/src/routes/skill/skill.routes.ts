@@ -449,13 +449,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Viewing the trash is an admin/team-admin surface. Skills have no
-      // checker-level delete capability (delete is authorized per-skill), so
-      // this gates on the broader manage roles rather than a `skill:delete`.
-      if (
-        status === "deleted" &&
-        (!checker.canRead || !(checker.isAdmin || checker.isTeamAdmin))
-      ) {
+      // Viewing the trash is an admin surface: it needs `update` on every
+      // skill (a grant at `*`). Delete is authorized per skill, so there is no
+      // narrower checker-level capability to gate on.
+      if (status === "deleted" && (!checker.canRead || !checker.isAdmin)) {
         throw new ApiError(403, "Forbidden");
       }
 
@@ -729,12 +726,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const environmentIds = dedupe(body.environmentIds ?? []);
 
-      await authorizeSkillCreate({
-        userId: user.id,
-        organizationId,
-        scope,
-        teamIds,
-      });
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
       // Always assert on create: an empty list makes the skill available in
       // every environment including the org default, which may itself be
@@ -1107,20 +1099,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           requireSkillModifyPermission({
             checker: context.checker,
             skillId: skill.id,
-            scope: skill.scope,
-            authorId: skill.authorId,
-            skillTeamIds: currentTeamIds,
-            userTeamIds: context.userTeamIds,
-            userId: user.id,
           });
           authorizeSkillScope({
             checker: context.checker,
             skillId: skill.id,
             scope,
-            authorId: skill.authorId,
             requestedTeamIds: teamIds,
             userTeamIds: context.userTeamIds,
-            userId: user.id,
           });
           // A personal skill IS its author: `skill://` addresses one by author
           // id (buildSkillRootUri throws without one) and every access check
@@ -1306,11 +1291,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             checker: context.checker,
             skillId: id,
             action: "delete",
-            scope: skill.scope,
-            authorId: skill.authorId,
-            skillTeamIds: context.teamIdsBySkill.get(id) ?? [],
-            userTeamIds: context.userTeamIds,
-            userId: user.id,
           });
         } catch (error) {
           if (error instanceof ApiError) {
@@ -1874,12 +1854,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // to that scope; every skill in this import gets the same set.
       const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
-      await authorizeSkillCreate({
-        userId: user.id,
-        organizationId,
-        scope,
-        teamIds,
-      });
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2377,28 +2352,20 @@ async function withTeamFkErrorMapped<T>(
 }
 
 /**
- * Authorize creating/moving a skill to the given scope and teams. Enforces the
- * 3-tier scope check and, for non-admins, that every assigned team is one the
- * user belongs to.
+ * Authorize moving a skill to the given scope and teams: the caller must hold
+ * `update` on the skill, and a caller without `update` on every skill may only
+ * assign teams they belong to.
  */
 function authorizeSkillScope(params: {
   checker: SkillPermissionChecker;
-  /** Omitted only before the skill exists, where no grant can name it. */
-  skillId?: string;
+  skillId: string;
   scope: ResourceVisibilityScope;
-  authorId: string | null;
   requestedTeamIds: string[];
   userTeamIds: string[];
-  userId: string;
 }): void {
   requireSkillModifyPermission({
     checker: params.checker,
     skillId: params.skillId,
-    scope: params.scope,
-    authorId: params.authorId,
-    skillTeamIds: params.requestedTeamIds,
-    userTeamIds: params.userTeamIds,
-    userId: params.userId,
   });
 
   if (!params.checker.isAdmin && params.scope === "team") {
@@ -2413,65 +2380,19 @@ function authorizeSkillScope(params: {
 }
 
 /**
- * Authorization for creating a skill in a given scope: the caller must hold
- * the scope-appropriate create permission and may only target teams they
- * belong to (admins excepted), and those teams must exist in the org.
- */
-async function authorizeSkillCreate(params: {
-  userId: string;
-  organizationId: string;
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-}): Promise<void> {
-  const checker = await getSkillPermissionChecker({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
-  const userTeamIds = checker.isAdmin
-    ? []
-    : await TeamModel.getUserTeamIds(params.userId);
-  if (!checker.isMigrated)
-    authorizeSkillScope({
-      checker,
-      scope: params.scope,
-      authorId: params.userId,
-      requestedTeamIds: params.teamIds,
-      userTeamIds,
-      userId: params.userId,
-    });
-  await assertSkillTeams({
-    scope: params.scope,
-    teamIds: params.teamIds,
-    organizationId: params.organizationId,
-  });
-}
-
-/**
  * Authorize a modify (update/delete/reset) on an existing skill: the caller
  * must be able to see it — else 404, not 403, so scope is not leaked to users
- * who cannot see the skill — and hold the scope-appropriate modify permission.
- *
- * Returns the skill's permission checker, the caller's team ids, and the
- * skill's current team ids so callers can run follow-up scope/team
- * re-authorization (e.g. on update) without reloading.
+ * who cannot see the skill — and hold the action on it through a grant.
  */
 async function authorizeSkillModify(params: {
   skill: Skill;
   userId: string;
   organizationId: string;
   action?: "update" | "delete";
-}): Promise<{
-  checker: SkillPermissionChecker;
-  userTeamIds: string[];
-  skillTeamIds: string[];
-}> {
+}): Promise<void> {
   const { skill, userId, organizationId } = params;
 
   const checker = await getSkillPermissionChecker({ userId, organizationId });
-  const userTeamIds = checker.isAdmin
-    ? []
-    : await TeamModel.getUserTeamIds(userId);
-  const skillTeamIds = await SkillTeamModel.getTeamsForSkill(skill.id);
 
   if (!skill.deletedAt) {
     // SPDX-SnippetBegin
@@ -2517,15 +2438,8 @@ async function authorizeSkillModify(params: {
       checker,
       skillId: skill.id,
       action: params.action,
-      scope: skill.scope,
-      authorId: skill.authorId,
-      skillTeamIds,
-      userTeamIds,
-      userId,
     });
   }
-
-  return { checker, userTeamIds, skillTeamIds };
 }
 
 /** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */

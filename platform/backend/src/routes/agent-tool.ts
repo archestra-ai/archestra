@@ -23,7 +23,6 @@ import {
   AgentVersionModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import {
@@ -144,19 +143,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       checker.require(agent.agentType, { action: "update", scope: agent.id });
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(request.user.id)
-        : [];
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: request.user.id,
       });
 
       const result = await assignToolToAgent({
@@ -590,19 +581,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       checker.require(agent.agentType, { action: "update", scope: agent.id });
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       const success = await AgentToolModel.delete({ agentId, toolId });
@@ -710,19 +693,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           action: "update",
           scope: agentForPerm.id,
         });
-        const userTeamIds = !checker.isAdmin(agentForPerm.agentType)
-          ? await TeamModel.getUserTeamIds(user.id)
-          : [];
         requireAgentModifyPermission({
           agentId: agentForPerm.id,
           action: "update",
           checker,
           agentType: agentForPerm.agentType,
-          agentScope: agentForPerm.scope,
-          agentAuthorId: agentForPerm.authorId,
-          agentTeamIds: agentForPerm.teams.map((t) => t.id),
-          userTeamIds,
-          userId: user.id,
         });
       }
 
@@ -877,7 +852,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Check update permission and scope-based modify permission
+      // Requires an update grant on this agent
       const syncChecker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -890,19 +865,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      const syncUserTeamIds = !syncChecker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker: syncChecker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds: syncUserTeamIds,
-        userId: user.id,
       });
 
       // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
@@ -968,7 +935,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Check update permission and scope-based modify permission
+      // Requires an update grant on this agent
       const delChecker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -981,19 +948,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      const delUserTeamIds = !delChecker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker: delChecker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds: delUserTeamIds,
-        userId: user.id,
       });
 
       // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
@@ -1187,22 +1146,13 @@ async function assertCanModifyAgents(params: {
     }),
   ]);
 
-  let userTeamIds: string[] | null = null;
   for (const [agentId, agent] of agentsForPermCheck) {
     checker.require(agent.agentType, { action: "update", scope: agentId });
-    if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
-      userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
-    }
     requireAgentModifyPermission({
       agentId,
       action: "update",
       checker,
       agentType: agent.agentType,
-      agentScope: agent.scope,
-      agentAuthorId: agent.authorId,
-      agentTeamIds: agent.teamIds,
-      userTeamIds: userTeamIds ?? [],
-      userId: request.user.id,
     });
   }
 

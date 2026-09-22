@@ -998,20 +998,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
         agentId: existingAgent.id,
         action: "update",
         checker,
         agentType: existingAgent.agentType,
-        agentScope: existingAgent.scope,
-        agentAuthorId: existingAgent.authorId,
-        agentTeamIds: existingAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       // Built-in agents restrict which fields an update may touch; a snapshot
@@ -1089,20 +1081,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions on the source agent
-      const userTeamIds = !checker.isAdmin(sourceAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on the source agent
       requireAgentModifyPermission({
         agentId: sourceAgent.id,
         action: "update",
         checker,
         agentType: sourceAgent.agentType,
-        agentScope: sourceAgent.scope,
-        agentAuthorId: sourceAgent.authorId,
-        agentTeamIds: sourceAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       const initialGrants = body?.initialGrants ?? [];
@@ -1331,20 +1315,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       return reply.send(
@@ -1449,20 +1425,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       return reply.send(
@@ -1932,11 +1900,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAdmin: checker.isAdmin(existingAgent.agentType),
       });
 
-      // Fetch user's team IDs once for scope-based checks and team assignment validation
-      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
-
       // Who can reach the agent is not editable here: access lives in the
       // agent's permission policy, which the permissions API writes on its own.
       requireAgentModifyPermission({
@@ -1944,11 +1907,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "update",
         checker,
         agentType: existingAgent.agentType,
-        agentScope: existingAgent.scope,
-        agentAuthorId: existingAgent.authorId,
-        agentTeamIds: existingAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -2161,9 +2119,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const userTeamIdSet = new Set(userTeamIds);
-
       const outcome = await runBulk({
         ids: body.ids,
         logLabel: "agents bulk update",
@@ -2198,39 +2153,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             action: "manage-permissions",
             checker,
             agentType: agent.agentType,
-            agentScope: agent.scope,
-            agentAuthorId: agent.authorId,
-            agentTeamIds: agent.teamIds,
-            userTeamIds: isAdmin ? [] : userTeamIds,
-            userId: user.id,
           });
 
-          // Admin-ness is per agent type, so these cannot be hoisted to a
-          // request-level 403 the way the team validation above can.
+          // Admin-ness (update on every agent of the type) is per agent type,
+          // so these cannot be hoisted to a request-level 403 the way the team
+          // validation above can. Team-admin no longer exists as a role action.
           if (!isAdmin) {
             if (scope === "org") {
               throw new ApiError(403, "Only admins can set scope to org");
             }
-            if (
-              (scope === "team" || teams.length > 0) &&
-              !checker.isTeamAdmin(agent.agentType)
-            ) {
-              throw new ApiError(
-                403,
-                "You need team-admin permission to set scope to team",
-              );
-            }
-            // A team-admin may only place an agent on teams they belong to.
-            // The single-agent update silently preserves teams they do not
-            // control; a batch cannot, because it sets one team list across
-            // the selection — so an unassignable team is refused outright
-            // rather than quietly producing a different result per agent.
-            const unassignable = teams.filter((id) => !userTeamIdSet.has(id));
-            if (checker.isTeamAdmin(agent.agentType) && unassignable.length) {
-              throw new ApiError(
-                403,
-                "You can only assign teams you are a member of",
-              );
+            if (scope === "team" || teams.length > 0) {
+              throw new ApiError(403, "Only admins can set scope to team");
             }
           }
 
@@ -2298,7 +2231,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
       const outcome = await runBulk({
         ids: body.ids,
@@ -2329,11 +2261,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             action: "delete",
             checker,
             agentType: agent.agentType,
-            agentScope: agent.scope,
-            agentAuthorId: agent.authorId,
-            agentTeamIds: agent.teamIds,
-            userTeamIds: checker.isAdmin(agent.agentType) ? [] : userTeamIds,
-            userId: user.id,
           });
           if (agent.isBuiltIn) {
             throw new ApiError(403, "Built-in agents cannot be deleted");
@@ -2402,20 +2329,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires a delete grant on this agent
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "delete",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       // Prevent deletion of built-in agents
@@ -2484,19 +2403,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
         agentId: agent.id,
         action: "delete",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       const conflictMessage = await AgentModel.getRestoreConflictMessage(agent);
@@ -2994,19 +2905,11 @@ async function requireAgentUpdateAccess(params: {
     throw new ApiError(404, "Agent not found");
   }
 
-  const userTeamIds = !checker.isAdmin(agent.agentType)
-    ? await TeamModel.getUserTeamIds(user.id)
-    : [];
   requireAgentModifyPermission({
     agentId: agent.id,
     action: "update",
     checker,
     agentType: agent.agentType,
-    agentScope: agent.scope,
-    agentAuthorId: agent.authorId,
-    agentTeamIds: agent.teams.map((t) => t.id),
-    userTeamIds,
-    userId: user.id,
   });
   return agent;
 }

@@ -19,7 +19,6 @@ import {
   AgentWorkspaceModel,
   ProjectAccessModel,
   ProjectModel,
-  TeamModel,
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
@@ -1288,19 +1287,11 @@ async function requireWritableAgent(params: {
     organizationId: params.request.organizationId,
   });
   checker.require("agent", { action: "update", scope: params.agent.id });
-  const userTeamIds = checker.isAdmin("agent")
-    ? []
-    : await TeamModel.getUserTeamIds(params.request.user.id);
   requireAgentModifyPermission({
     agentId: params.agent.id,
     action: "update",
     checker,
     agentType: "agent",
-    agentScope: params.agent.scope,
-    agentAuthorId: params.agent.authorId,
-    agentTeamIds: params.agent.teams.map((team) => team.id),
-    userTeamIds,
-    userId: params.request.user.id,
   });
 }
 

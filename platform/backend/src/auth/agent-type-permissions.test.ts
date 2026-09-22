@@ -1,4 +1,3 @@
-// Legacy flag and visibility compatibility before the grant backfill. Migrated authorization is exercised by the scoped route and migration suites.
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
@@ -415,109 +414,94 @@ describe("getAgentTypePermissionChecker", () => {
     checker.isAdmin("agent");
     checker.isAdmin("mcp_gateway");
     checker.isAdmin("llm_proxy");
-    checker.isTeamAdmin("agent");
     // If this reached here without issues, the synchronous pattern works
-  });
-
-  test("member role does not have team-admin permission", async ({
-    makeUser,
-    makeOrganization,
-    makeMember,
-  }) => {
-    const user = await makeUser();
-    const org = await makeOrganization({ legacyPermissions: true });
-    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
-
-    const checker = await getAgentTypePermissionChecker({
-      userId: user.id,
-      organizationId: org.id,
-    });
-
-    expect(checker.isTeamAdmin("agent")).toBe(false);
-    expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
-    expect(checker.isTeamAdmin("llm_proxy")).toBe(false);
   });
 });
 
 describe("requireAgentModifyPermission", () => {
-  test("member cannot manage team-scoped or org-scoped agents", async ({
+  // The agent's scope, teams and author, and the role's admin/team-admin
+  // actions, no longer decide anything: only a grant on the agent (or at `*`)
+  // lets a caller modify it.
+  test("authorizes from grants alone", async ({
     makeUser,
     makeOrganization,
     makeMember,
+    makeAgent,
   }) => {
     const user = await makeUser();
-    const org = await makeOrganization({ legacyPermissions: true });
+    const org = await makeOrganization();
     await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
-
-    const checker = await getAgentTypePermissionChecker({
-      userId: user.id,
+    const agent = await makeAgent({
       organizationId: org.id,
+      agentType: "agent",
+    });
+    const context = { userId: user.id, organizationId: org.id };
+    const modify = async (action: "update" | "delete" | "manage-permissions") =>
+      requireAgentModifyPermission({
+        checker: await getAgentTypePermissionChecker(context),
+        agentType: agent.agentType,
+        agentId: agent.id,
+        action,
+      });
+
+    await expect(modify("update")).rejects.toThrow(ApiError);
+
+    const key = {
+      organizationId: org.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const current = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: current?.revision ?? 0,
+      grants: [
+        ...(current?.grants ?? []),
+        {
+          subject: { type: "user", id: user.id },
+          actions: ["read", "use", "update"],
+        },
+      ],
     });
 
-    // Member cannot manage team-scoped agents
-    expect(() =>
-      requireAgentModifyPermission({
-        checker,
-        agentType: "agent",
-        agentScope: "team",
-        agentAuthorId: "other-user-id",
-        agentTeamIds: ["team-a"],
-        userTeamIds: ["team-a"],
-        userId: user.id,
-      }),
-    ).toThrow(ApiError);
-
-    // Member cannot manage org-scoped agents
-    expect(() =>
-      requireAgentModifyPermission({
-        checker,
-        agentType: "agent",
-        agentScope: "org",
-        agentAuthorId: "other-user-id",
-        agentTeamIds: [],
-        userTeamIds: [],
-        userId: user.id,
-      }),
-    ).toThrow(ApiError);
+    await expect(modify("update")).resolves.toBeUndefined();
+    await expect(modify("delete")).rejects.toThrow(ApiError);
+    await expect(modify("manage-permissions")).rejects.toThrow(
+      "You do not have permission to manage access to this resource",
+    );
   });
 
-  test("member can manage own personal agent but not others' personal agents", async ({
+  test("a role holding the retired admin actions gains nothing from them", async ({
     makeUser,
     makeOrganization,
     makeMember,
+    makeCustomRole,
+    makeAgent,
   }) => {
     const user = await makeUser();
-    const org = await makeOrganization({ legacyPermissions: true });
-    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
-
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      role: "legacy_agent_admin",
+      permission: { agent: ["read", "update", "team-admin", "admin"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
     const checker = await getAgentTypePermissionChecker({
       userId: user.id,
       organizationId: org.id,
     });
 
-    // Member can manage own personal agent
+    expect(checker.isAdmin("agent")).toBe(false);
+    expect(checker.hasAnyAdminPermission()).toBe(false);
     expect(() =>
       requireAgentModifyPermission({
         checker,
         agentType: "agent",
-        agentScope: "personal",
-        agentAuthorId: user.id,
-        agentTeamIds: [],
-        userTeamIds: [],
-        userId: user.id,
-      }),
-    ).not.toThrow();
-
-    // Member cannot manage another user's personal agent
-    expect(() =>
-      requireAgentModifyPermission({
-        checker,
-        agentType: "agent",
-        agentScope: "personal",
-        agentAuthorId: "other-user-id",
-        agentTeamIds: [],
-        userTeamIds: [],
-        userId: user.id,
+        agentId: agent.id,
+        action: "update",
       }),
     ).toThrow(ApiError);
   });
@@ -609,8 +593,6 @@ describe("scoped agent authority", () => {
       organizationId: org.id,
       userId: user.id,
     });
-    expect(checker.isTeamAdmin("agent")).toBe(false);
-    expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
     expect(checker.isAdmin("agent")).toBe(false);
     expect(checker.hasAnyAdminPermission()).toBe(false);
   });

@@ -84,4 +84,27 @@ describe("getSkillPermissionChecker", () => {
     expect(checker.canRead).toBe(true);
     expect(checker.isAdmin).toBe(true);
   });
+
+  test("the retired skill:admin role action confers nothing without a grant", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      role: "legacy_skill_admin",
+      permission: { skill: ["read", "update", "team-admin", "admin"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+
+    const checker = await getSkillPermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(checker.canRead).toBe(true);
+    expect(checker.isAdmin).toBe(false);
+  });
 });

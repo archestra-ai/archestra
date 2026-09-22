@@ -19,7 +19,6 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  TeamModel,
 } from "@/models";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
@@ -677,8 +676,6 @@ export async function handleEditResource<
       scope: existingAgent.id,
     });
 
-    const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
-    const existingTeamIds = existingAgent.teams.map((team) => team.id);
     // Who can reach the record is not editable here: access lives in its
     // permission policy, which the resource permissions API writes on its own.
     requireAgentModifyPermission({
@@ -686,11 +683,6 @@ export async function handleEditResource<
       action: "update",
       checker,
       agentType: existingAgent.agentType,
-      agentScope: existingAgent.scope,
-      agentAuthorId: existingAgent.authorId,
-      agentTeamIds: existingTeamIds,
-      userTeamIds,
-      userId: context.userId,
     });
 
     const updateData: Record<string, unknown> = {};

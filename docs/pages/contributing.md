@@ -29,11 +29,3 @@ Our engineers will join the conversation, greet you, and share the context you n
 We take contributions as human-written text, not code. Pull requests from non-maintainers are closed automatically by CI.
 
 Describe the change you want in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose) written by a human. If we agree, we handle the implementation with our coding agents. A precise issue lands faster.
-
-## Bounties
-
-We use bounties as an optional way to thank contributors for meaningful work. They are not contract jobs, and they do not replace coordination with maintainers and other contributors.
-
-Respect assigned work. If an issue already has an assigned contributor, do not open a competing pull request, comment `/attempt`, or otherwise try to take over the bounty. Bots or users that try to steal already assigned bounties will be banned from the repository.
-
-We have to enforce this because irresponsible use of AI bots has made it much easier to spam issues and disrupt contributors who are already doing the work. We wrote more about this in [Let's talk about AI slop](https://archestra.ai/blog/only-responsible-ai). Use AI responsibly, communicate clearly, and help keep the project a high-effort engineering space.

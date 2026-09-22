@@ -1694,6 +1694,13 @@ export function AgentForm({
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
+  // Whether the agent being created/edited here has a dedicated Agent
+  // Runtime, driven by the same `runtime` selection the Runtime picker
+  // (create) and Runtime fields (edit) both write to. Deliberately not the
+  // org-wide `agentRuntime` feature flag (true even when this particular
+  // agent has no runtime of its own) and not `agent?.runtime` alone (always
+  // undefined while creating, since there is no saved agent yet).
+  const agentHasDedicatedRuntime = isInternalAgent && !!runtime;
   // Agents and MCP gateways can be assigned a deployment environment. For
   // agents it binds the code sandbox runtime; for MCP gateways it is an
   // attribution label so their usage falls under environment-scoped cost
@@ -1702,7 +1709,9 @@ export function AgentForm({
   const environmentHelpText =
     agentType === "mcp_gateway"
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
-      : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
+      : agentHasDedicatedRuntime
+        ? "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use."
+        : "The environment for the tools and knowledge sources this agent can use.";
   const isBuiltIn = !!agent?.builtIn;
   const showActivationSkills =
     showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;

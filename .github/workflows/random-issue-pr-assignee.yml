@@ -29,8 +29,6 @@ env:
   # merged by whoever cuts the release), so skip reviewer auto-assignment.
   # Backport PRs from the release App still receive reviewers.
   REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]", "archestra-ci[bot]"]'
-  # Must match close-external-prs.yml: PRs outside these associations get closed.
-  MAINTAINER_ASSOCIATIONS: '["OWNER","MEMBER","COLLABORATOR"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}
@@ -129,7 +127,6 @@ jobs:
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
             const exemptLogins = JSON.parse(process.env.REVIEW_REQUEST_EXEMPT_LOGINS);
-            const maintainerAssociations = JSON.parse(process.env.MAINTAINER_ASSOCIATIONS);
             const isManualBackfill = context.eventName === 'workflow_dispatch';
             const updatedSince = isManualBackfill
               ? null
@@ -189,10 +186,13 @@ jobs:
                     continue;
                   }
 
-                  // close-external-prs.yml polls on the same cadence and closes these.
-                  // Do not ping a maintainer about a PR that is about to close.
-                  if (!maintainerAssociations.includes(pr.author_association)) {
-                    console.log(`Skipping reviewer request because PR #${pr.number} is external (${pr.author_association})`);
+                  // close-external-prs.yml polls on the same cadence and closes PRs from
+                  // forks. Do not ping a maintainer about a PR that is about to close.
+                  // Same check as there: a same-repo head branch means a maintainer. Not
+                  // author_association or the collaborators API, which both misread
+                  // private org members under the Actions token.
+                  if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+                    console.log(`Skipping reviewer request because PR #${pr.number} comes from a fork`);
                     continue;
                   }
 

@@ -5,6 +5,15 @@ name: Close External Pull Requests
 # closes every open PR from outside the maintainer group and leaves a comment
 # that explains the process.
 #
+# Who counts as a maintainer: anyone whose PR branch lives in this repository.
+# Only people with push access can create a branch here, so a same-repo head
+# means a maintainer and a fork head means an external contributor.
+#
+# Do NOT use `author_association` or the collaborators API for this. Org
+# memberships are private, so the Actions token reports every org member as a
+# plain CONTRIBUTOR and answers 404 on the collaborator check. Both variants
+# closed maintainer PRs in practice.
+#
 # Scheduled polling instead of `pull_request_target`: the privileged trigger runs
 # in the base repository security context for untrusted PR events and is a common
 # source of Actions incidents (see random-issue-pr-assignee.yml for the same
@@ -19,8 +28,6 @@ on:
 permissions: {}
 
 env:
-  # Author associations that count as maintainers. Everything else is external.
-  MAINTAINER_ASSOCIATIONS: '["OWNER","MEMBER","COLLABORATOR"]'
   # Bots that open PRs as part of automated processes (release-please, dependabot,
   # backports, task envs) are never closed by this workflow.
   EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
@@ -49,7 +56,6 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const maintainerAssociations = JSON.parse(process.env.MAINTAINER_ASSOCIATIONS);
             const exemptBotLogins = JSON.parse(process.env.EXEMPT_BOT_LOGINS);
             const marker = process.env.CLOSE_MARKER;
             const body = `${marker}\n${process.env.CLOSE_COMMENT}`;
@@ -71,8 +77,8 @@ jobs:
                   continue;
                 }
 
-                if (maintainerAssociations.includes(pr.author_association)) {
-                  console.log(`Keeping #${pr.number}: ${author} is ${pr.author_association}`);
+                if (isSameRepoBranch(pr)) {
+                  console.log(`Keeping #${pr.number}: ${author} pushed a branch to this repo`);
                   continue;
                 }
 
@@ -86,6 +92,11 @@ jobs:
             }
 
             console.log(`Closed ${closedPrs} external pull requests`);
+
+            // A deleted fork leaves head.repo null, which counts as external.
+            function isSameRepoBranch(pr) {
+              return pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            }
 
             async function closeExternalPr(pr) {
               let alreadyCommented = false;
@@ -118,5 +129,5 @@ jobs:
                 state: 'closed',
               });
 
-              console.log(`Closed #${pr.number} from ${pr.user.login} (${pr.author_association})${alreadyCommented ? ' without a new comment' : ''}`);
+              console.log(`Closed #${pr.number} from ${pr.user.login}${alreadyCommented ? ' without a new comment' : ''}`);
             }

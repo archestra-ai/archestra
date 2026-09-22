@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Fill in what you know. Maintainers derive the rest (tools, transport, icon) and add the entry to `mcp-catalog/data/`.
+        Maintainers add the catalog entry from this issue.
   - type: input
     id: server_url
     attributes:

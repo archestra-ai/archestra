@@ -5,6 +5,13 @@ name: Close External Pull Requests
 # closes every open PR from outside the maintainer group and leaves a comment
 # that explains the process.
 #
+# Who counts as a maintainer: anyone with access to this repository, checked
+# with the collaborators API. Org members get that access through the org, so
+# the set equals org membership as long as no outside collaborators are added.
+# Do NOT use `author_association` for this: org memberships are private, so the
+# Actions token reports every org member as a plain CONTRIBUTOR and the
+# workflow would close maintainer PRs.
+#
 # Scheduled polling instead of `pull_request_target`: the privileged trigger runs
 # in the base repository security context for untrusted PR events and is a common
 # source of Actions incidents (see random-issue-pr-assignee.yml for the same
@@ -15,12 +22,15 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Log the decision for every open PR without commenting or closing.
+        type: boolean
+        default: false
 
 permissions: {}
 
 env:
-  # Author associations that count as maintainers. Everything else is external.
-  MAINTAINER_ASSOCIATIONS: '["OWNER","MEMBER","COLLABORATOR"]'
   # Bots that open PRs as part of automated processes (release-please, dependabot,
   # backports, task envs) are never closed by this workflow.
   EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
@@ -31,6 +41,7 @@ env:
     Describe the change you'd like in a GitHub issue written by a human (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents.
 
     This PR is closed automatically.
+  DRY_RUN: ${{ inputs.dry_run == true }}
 
 concurrency:
   group: close-external-prs
@@ -49,10 +60,10 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const maintainerAssociations = JSON.parse(process.env.MAINTAINER_ASSOCIATIONS);
             const exemptBotLogins = JSON.parse(process.env.EXEMPT_BOT_LOGINS);
             const marker = process.env.CLOSE_MARKER;
             const body = `${marker}\n${process.env.CLOSE_COMMENT}`;
+            const dryRun = process.env.DRY_RUN === 'true';
             let closedPrs = 0;
 
             for await (const response of github.paginate.iterator(github.rest.pulls.list, {
@@ -71,8 +82,15 @@ jobs:
                   continue;
                 }
 
-                if (maintainerAssociations.includes(pr.author_association)) {
-                  console.log(`Keeping #${pr.number}: ${author} is ${pr.author_association}`);
+                const membership = await isMaintainer(author);
+
+                if (membership !== 'external') {
+                  console.log(`Keeping #${pr.number}: ${author} is ${membership}`);
+                  continue;
+                }
+
+                if (dryRun) {
+                  console.log(`Would close #${pr.number} from ${author} (dry run)`);
                   continue;
                 }
 
@@ -86,6 +104,26 @@ jobs:
             }
 
             console.log(`Closed ${closedPrs} external pull requests`);
+
+            // Returns 'maintainer' (has repo access), 'external' (confirmed no
+            // access), or 'unknown' (the lookup failed). Only 'external' closes a
+            // PR: on any lookup error the PR is kept, never closed by mistake.
+            async function isMaintainer(login) {
+              try {
+                await github.rest.repos.checkCollaborator({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: login,
+                });
+                return 'maintainer';
+              } catch (error) {
+                if (error.status === 404) {
+                  return 'external';
+                }
+                console.log(`Collaborator lookup failed for ${login}: ${error.message}`);
+                return 'unknown';
+              }
+            }
 
             async function closeExternalPr(pr) {
               let alreadyCommented = false;
@@ -118,5 +156,5 @@ jobs:
                 state: 'closed',
               });
 
-              console.log(`Closed #${pr.number} from ${pr.user.login} (${pr.author_association})${alreadyCommented ? ' without a new comment' : ''}`);
+              console.log(`Closed #${pr.number} from ${pr.user.login}${alreadyCommented ? ' without a new comment' : ''}`);
             }

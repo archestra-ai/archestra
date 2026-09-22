@@ -80,6 +80,20 @@ for (const viewport of [
         url: "/api/guardrails-deployment",
         body: { enabled: false, featureEnabled: true, active: false },
       });
+      await mswControl.use({
+        method: "get",
+        url: "/api/openappa/effective-policy",
+        body: {
+          organizationId: "org",
+          content: "[policy]\nversion = 2\n",
+          contentHash: "composed",
+          rootRevision: 1,
+          installFingerprint: "none",
+          compiledAt: "2026-09-22T12:00:00Z",
+          lastError: null,
+          lastErrorAt: null,
+        },
+      });
       await page.goto("/guardrails-v2");
       await expect(page).toHaveURL(/\/openappa$/);
       const editor = page.getByRole("heading", { name: "Policy editor" });
@@ -87,6 +101,15 @@ for (const viewport of [
       await expect(
         page.getByRole("button", { name: "Save & apply" }),
       ).toBeVisible();
+      // Both tab panels stay mounted; only the chosen one is shown.
+      const effective = page.getByRole("heading", { name: "Effective policy" });
+      await expect(effective).toBeHidden();
+      await page.getByRole("tab", { name: "Effective policy" }).click();
+      await expect(effective).toBeVisible();
+      await expect(editor).toBeHidden();
+      await page.getByRole("tab", { name: "Policy", exact: true }).click();
+      await expect(editor).toBeVisible();
+      await expect(effective).toBeHidden();
       await page.screenshot({
         path: testInfo.outputPath("policy-editor.png"),
         fullPage: true,

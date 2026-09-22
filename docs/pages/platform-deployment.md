@@ -1667,6 +1667,8 @@ Archestra advertises a configured host with the scheme you configured it under. 
 
 A host you name in neither variable falls back to the scheme of the incoming request. Behind a TLS-terminating proxy that scheme is `http`, so the metadata URL becomes `http://`. The client then fails the handshake or times out. Two settings produce this result: a public host missing from both variables, and a proxy route that drops `X-Forwarded-Proto`. A layer-4 route, such as a Gateway API `TLSRoute`, cannot set that header at all. Terminate TLS on an HTTPS listener and use an `HTTPRoute` to get it.
 
+The connection documents at `/connect.md` and `/llms.txt` follow the same rule. They print the URLs a coding client uses to install itself, so a host you configured over `https://` keeps that scheme there too. Configure the host, and these documents stay correct on a route that drops `X-Forwarded-Proto`.
+
 `ARCHESTRA_TRUST_PROXY` does not change the OAuth public origin. The host check runs with it on or off.
 
 The backend logs the origin it resolved for every request, under `getPublicRequestOrigin`. It warns there when it advertises an `http` origin for an unconfigured host.

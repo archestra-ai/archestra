@@ -39,10 +39,13 @@ const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
 const otherCatalogId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const freshCatalogId = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f";
+const freshServerId = "3c2b1a09-8f7e-4d6c-9b5a-4e3d2c1b0a9f";
 const uploadHash = "a".repeat(64);
 const server = setupServer();
 let batteries: Battery[];
 let declarations: Declarations;
+/** Whether the Fresh server's tools have been synced since the render. */
+let freshSynced: boolean;
 
 const install = (fields: Partial<Install> = {}): Install => ({
   id: "install-1",
@@ -142,6 +145,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl });
   grantEverything();
+  freshSynced = false;
   batteries = [githubBattery([install()])];
   declarations = emptyDeclarations({ batteries: [declaredGithub()] });
   server.use(
@@ -161,10 +165,21 @@ beforeEach(() => {
     http.get(`${baseUrl}/api/openappa/battery-matches`, ({ request }) => {
       const picked = new URL(request.url).searchParams.get("catalogId");
       return HttpResponse.json({
-        attach: picked === freshCatalogId ? "unsynced" : "ready",
+        attach:
+          picked === freshCatalogId && !freshSynced ? "unsynced" : "ready",
         matches: [],
       });
     }),
+    http.get(`${baseUrl}/api/mcp_server`, () =>
+      HttpResponse.json([
+        {
+          id: freshServerId,
+          name: "Fresh",
+          catalogId: freshCatalogId,
+          createdAt: "2026-09-22T12:00:00Z",
+        },
+      ]),
+    ),
     http.get(`${baseUrl}/api/credentials`, () =>
       HttpResponse.json([credential]),
     ),
@@ -203,12 +218,31 @@ async function attach(battery: string, serverName: string) {
   await user.click(screen.getByRole("button", { name: "Attach" }));
 }
 
-test("an empty policy leads to MCP Registry", async () => {
+test("with no server to attach to, the attach form leads to MCP Registry", async () => {
   declarations = emptyDeclarations();
+  server.use(
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([]),
+    ),
+  );
   show();
   expect(
     await screen.findByRole("link", { name: "Browse MCP servers" }),
   ).toHaveAttribute("href", "/mcp/registry");
+  expect(
+    screen.queryByRole("combobox", { name: "Battery" }),
+  ).not.toBeInTheDocument();
+});
+
+test("an empty policy still offers the attach form when servers exist", async () => {
+  declarations = emptyDeclarations();
+  show();
+  expect(
+    await screen.findByRole("combobox", { name: "Battery" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Browse MCP servers" }),
+  ).not.toBeInTheDocument();
 });
 
 test("asks before discarding a battery upload draft", async () => {
@@ -444,8 +478,23 @@ test("a server whose tools are not synced yet cannot take a battery", async () =
   await user.click(screen.getByRole("option", { name: "Fresh" }));
   expect(await screen.findByRole("note")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
-  await user.click(screen.getByRole("combobox", { name: "Server" }));
-  await user.click(screen.getByRole("option", { name: "Code" }));
+  // Syncing the picked server's tools is offered right there and, once it
+  // lands, the same server can take the battery.
+  let reloaded: string | null = null;
+  server.use(
+    http.post(`${baseUrl}/api/mcp_server/:id/reload-tools`, ({ params }) => {
+      reloaded = String(params.id);
+      freshSynced = true;
+      return HttpResponse.json({
+        created: 3,
+        updated: 0,
+        unchanged: 0,
+        deleted: 0,
+      });
+    }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Sync tools" }));
+  await waitFor(() => expect(reloaded).toBe(freshServerId));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
   );

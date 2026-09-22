@@ -1,12 +1,15 @@
 "use client";
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BatteryCharging,
   ExternalLink,
   GitPullRequestArrow,
+  Loader2,
   LockKeyhole,
+  RefreshCw,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -20,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -32,8 +36,13 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  useMcpServers,
+  useReloadMcpServerTools,
+} from "@/lib/mcp/mcp-server.query";
+import {
   ATTACH_NOTES,
   type BatterySummary,
+  batteryMatchesQueryKey,
   type PolicyBattery,
   type PolicyDeclarations,
   useAcceptHeldPull,
@@ -162,14 +171,9 @@ export function BatteriesPanel() {
           />
         )}
         {included.length === 0 ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              The policy includes no battery yet. Attach one to a server below.
-            </p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/mcp/registry">Browse MCP servers</Link>
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            The policy includes no battery yet.
+          </p>
         ) : (
           <ul className="divide-y">
             {included.map((battery) => (
@@ -531,6 +535,18 @@ function AttachForm({
       ?.servers.map((server) => server.catalogId) ?? [],
   );
   const servers = catalog.filter((entry) => !attached.has(entry.id));
+  // A battery attaches to a server's tools; the wizard offers it on install.
+  if (catalog.length === 0)
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          There is no MCP server to attach a battery to yet.
+        </p>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/mcp/registry">Browse MCP servers</Link>
+        </Button>
+      </div>
+    );
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div className="min-w-48 flex-1 space-y-1">
@@ -596,8 +612,14 @@ function AttachForm({
         </p>
       ) : null}
       {attach !== null && attach !== "ready" ? (
-        <p role="note" className="basis-full text-sm text-muted-foreground">
-          {ATTACH_NOTES[attach]}
+        <p
+          role="note"
+          className="flex basis-full flex-wrap items-center gap-2 text-sm text-muted-foreground"
+        >
+          <span>{ATTACH_NOTES[attach]}</span>
+          {attach === "unsynced" ? (
+            <SyncToolsButton catalogId={catalogId} />
+          ) : null}
         </p>
       ) : null}
       {readiness.isError ? (
@@ -614,6 +636,56 @@ function AttachForm({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Re-discover the tools of the picked server, which is what gives an alias a
+ * target. The reload endpoint takes an install, not the catalog entry: the
+ * newest install of the entry stands for it, and without one there is
+ * nothing to sync from.
+ */
+function SyncToolsButton({ catalogId }: { catalogId: string }) {
+  const client = useQueryClient();
+  const servers = useMcpServers();
+  const reload = useReloadMcpServerTools();
+  const target = (servers.data ?? [])
+    .filter((server) => server.catalogId === catalogId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )[0];
+  return (
+    <PermissionButton
+      permissions={{ mcpServerInstallation: ["create"] }}
+      variant="outline"
+      size="sm"
+      disabled={reload.isPending || target === undefined}
+      tooltip={
+        target === undefined
+          ? "Connect this server first: syncing tools needs a live connection"
+          : undefined
+      }
+      onClick={() =>
+        target &&
+        reload.mutate(
+          { id: target.id, name: target.name, catalogId },
+          {
+            onSuccess: () =>
+              client.invalidateQueries({
+                queryKey: batteryMatchesQueryKey(catalogId),
+              }),
+          },
+        )
+      }
+    >
+      {reload.isPending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <RefreshCw className="size-4" />
+      )}
+      <span>Sync tools</span>
+    </PermissionButton>
   );
 }
 

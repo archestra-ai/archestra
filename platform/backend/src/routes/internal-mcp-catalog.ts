@@ -2490,6 +2490,7 @@ const MCP_RUNTIME_FAILURE_ERROR_NAMES = new Set([
   "McpServerConnectionTimeoutError",
   "McpServerUnreachableError",
   "McpServerDeploymentFailedError",
+  "McpServerReadinessTimeoutError",
 ]);
 
 /**
@@ -2501,6 +2502,15 @@ const MCP_RUNTIME_FAILURE_ERROR_NAMES = new Set([
  */
 function toMcpOperationApiError(reason: unknown): ApiError {
   const message = reason instanceof Error ? reason.message : "Unknown error";
+  if (
+    reason instanceof Error &&
+    reason.name === "McpServerReadinessTimeoutError"
+  ) {
+    return new ApiError(
+      502,
+      "MCP server did not become ready. Check its deployment status and pod logs, then retry.",
+    );
+  }
   if (
     reason instanceof Error &&
     MCP_RUNTIME_FAILURE_ERROR_NAMES.has(reason.name)

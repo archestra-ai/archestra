@@ -139,6 +139,29 @@ describe("AgentRuntimeFields", () => {
       "placeholder",
       "No limit (Installation Default)",
     );
+    expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
+    await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").ports,
+    ).toEqual([3000, 9000]);
+    fireEvent.change(screen.getByLabelText("Ports to forward"), {
+      target: { value: "3000, 3000, 9000" },
+    });
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").ports,
+    ).toEqual([3000, 9000]);
+    fireEvent.change(screen.getByLabelText("Ports to forward"), {
+      target: {
+        value: Array.from({ length: 21 }, (_, index) => index + 1).join(", "),
+      },
+    });
+    expect(screen.getByLabelText("Ports to forward")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").ports,
+    ).toEqual([3000, 9000]);
     expect(
       screen.getByText(/delivers follow-up instructions between Agent turns/i),
     ).toBeVisible();

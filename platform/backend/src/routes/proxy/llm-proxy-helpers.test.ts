@@ -1420,6 +1420,9 @@ describe("handleError upstream marking", () => {
     const thrown = thrownFor(error);
     expect(thrown.statusCode).toBe(502);
     expect(thrown.upstream).toBe(true);
+    expect(thrown.message).toBe(
+      "Could not connect to the model provider. Check its credentials and network access, then retry.",
+    );
   });
 
   test("does not mark our own unclassified 500s as upstream", () => {

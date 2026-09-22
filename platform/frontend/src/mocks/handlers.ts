@@ -154,6 +154,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),
+  ...getJson("/ready", {
+    ...healthSeed,
+    database: "connected",
+    sandbox: "disabled",
+  }),
   ...getJson("/api/organization", organizationSeed),
   // The roster behind owner pickers and the scope filter's "member" facet —
   // the seeded admin, mirroring the session identity.

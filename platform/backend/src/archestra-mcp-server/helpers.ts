@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -406,6 +407,28 @@ export function errorResult(message: string): CallToolResult {
     content: [{ type: "text" as const, text: `Error: ${message}` }],
     isError: true,
   };
+}
+
+/**
+ * Link to the dialog where a person pastes Agent Runtime credential values.
+ *
+ * Deliberately carries no `section`: the Agent detail page rewrites an
+ * unresolvable section through `agentDetailHref`, which rebuilds the URL from
+ * `section` alone and drops every other parameter — so `?section=…&setup=…`
+ * silently loses the `setup` that opens the dialog.
+ *
+ * `keys` names the credentials to ask for. The dialog otherwise shows only keys
+ * that preflight reports as missing, and an optional declaration is never
+ * missing, so a link without it would open on an empty dialog.
+ */
+export function agentCredentialSetupUrl(
+  agentId: string,
+  keys: string[] = [],
+): string {
+  const url = `${config.frontendBaseUrl}/agents/${agentId}?setup=credentials`;
+  return keys.length > 0
+    ? `${url}&keys=${encodeURIComponent(keys.join(","))}`
+    : url;
 }
 
 export function catchError(error: unknown, action: string): CallToolResult {

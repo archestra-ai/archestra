@@ -40,7 +40,52 @@ describe("resolveAgentCatalogId", () => {
 });
 
 describe("popular Agent images", () => {
-  test("preserves registry ports, namespaces and the release tag across the catalog", () => {
+  test("uses the stable release alias for maintained clients while keeping the built-in image pinned", () => {
+    const baseImage = getDefaultAgentRuntimeImage("1.3.65");
+    const images = getAgentCatalogImages(baseImage);
+    expect(images.archestra).toBe(baseImage);
+    expect(images).toEqual({
+      archestra: baseImage,
+      "claude-code": getDefaultAgentRuntimeImage("latest").replace(
+        "agent-archestra",
+        "agent-claude-code",
+      ),
+      codex: getDefaultAgentRuntimeImage("latest").replace(
+        "agent-archestra",
+        "agent-codex",
+      ),
+      opencode: getDefaultAgentRuntimeImage("latest").replace(
+        "agent-archestra",
+        "agent-opencode",
+      ),
+      hermes: getDefaultAgentRuntimeImage("latest").replace(
+        "agent-archestra",
+        "agent-hermes",
+      ),
+      openclaw: getDefaultAgentRuntimeImage("latest").replace(
+        "agent-archestra",
+        "agent-openclaw",
+      ),
+    });
+  });
+
+  test.each([
+    "1.4.0-rc.17",
+    "0123456789abcdef0123456789abcdef01234567",
+  ])("keeps prerelease and commit images together at %s", (tag) => {
+    const images = getAgentCatalogImages(getDefaultAgentRuntimeImage(tag));
+    expect(images["claude-code"]).toBe(
+      getDefaultAgentRuntimeImage(tag).replace(
+        "agent-archestra",
+        "agent-claude-code",
+      ),
+    );
+    expect(
+      Object.values(images).every((image) => image.endsWith(`:${tag}`)),
+    ).toBe(true);
+  });
+
+  test("preserves explicit custom registry ports, namespaces and tags", () => {
     const images = getAgentCatalogImages(
       "registry.example:5000/team/agent-archestra:v2",
     );

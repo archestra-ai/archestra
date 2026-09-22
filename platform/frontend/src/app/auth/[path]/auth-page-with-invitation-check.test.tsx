@@ -373,7 +373,9 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-      expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
+      expect(
+        screen.getByText("Can't reach the Sparky server."),
+      ).toBeInTheDocument();
       expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
       expect(screen.getByText("Next retry in 8s")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
@@ -423,7 +425,9 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByRole("alert")).toBeInTheDocument();
-      expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
+      expect(
+        screen.getByText("Can't reach the Sparky server."),
+      ).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 

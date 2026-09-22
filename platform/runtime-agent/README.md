@@ -49,5 +49,6 @@ fails at startup rather than silently pointing the agent somewhere else.
 The runtime also exposes the virtual key through the conventional
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_AUTH_TOKEN` names for
 maintained third-party Agent images. Those aliases all point to Archestra,
-never to an upstream provider credential. The optional Claude Code subscription
-path is an explicit exception implemented only by that maintained wrapper.
+never to an upstream provider credential. The Claude Code subscription wrapper
+uses its own OAuth bearer token and sends `ARCHESTRA_VIRTUAL_KEY` as a
+passthrough identity header to the same proxy.

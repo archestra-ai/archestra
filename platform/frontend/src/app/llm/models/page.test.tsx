@@ -177,6 +177,32 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("shows actionable database guidance when loading models fails", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              message:
+                "Database storage is full. Ask an administrator to free or expand it.",
+              type: "api_service_unavailable_error",
+            },
+          },
+          { status: 503 },
+        ),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Couldn't load your models")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Database storage is full. Ask an administrator to free or expand it.",
+      ),
+    ).toBeVisible();
+  });
+
   it("reports partial refresh failures and updates the persistent reconnect state", async () => {
     keyCreated = true;
     let rejected = false;

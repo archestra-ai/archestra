@@ -11,18 +11,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { useHealth } from "@/lib/config/health.query";
+import { useReadiness } from "@/lib/config/health.query";
 
 const HEALTHY_POLL_MS = 30_000;
 const FAILING_POLL_MS = 5_000;
-// Consecutive failed /health polls before declaring the backend unreachable.
+// Consecutive failed readiness polls before showing an app-wide warning.
 // Hysteresis: a single blip must not flip the whole app to an error banner.
 const UNREACHABLE_FAILURE_THRESHOLD = 2;
 
 export type ConnectivityState =
   | { kind: "online" }
   | { kind: "browser-offline" }
-  | { kind: "backend-unreachable" };
+  | { kind: "backend-unreachable" }
+  | { kind: "database-unavailable" };
 
 interface ConnectivityContextValue {
   state: ConnectivityState;
@@ -37,36 +38,54 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   // SSR-safe: assume online during render, read the real value in an effect.
   const [browserOnline, setBrowserOnline] = useState(true);
-  const [backendUnreachable, setBackendUnreachable] = useState(false);
+  const [unavailableKind, setUnavailableKind] = useState<
+    "backend-unreachable" | "database-unavailable" | null
+  >(null);
   const consecutiveFailuresRef = useRef(0);
+  const lastFailureKindRef = useRef<
+    "backend-unreachable" | "database-unavailable" | null
+  >(null);
 
-  // `/health` is unauthenticated, so its failures mean connectivity loss, never
-  // an expired session. Poll slowly when healthy, fast once a failure appears.
-  const { refetch, isSuccess, isError, errorUpdatedAt } = useHealth({
-    refetchOnReconnect: false,
-    // Poll speed follows the query's own error status (immediate), so a failing
-    // backend is re-probed quickly. The unreachable *threshold* below is a
-    // separate counter, so polling fast and declaring unreachable stay decoupled.
-    refetchInterval: (query) =>
-      query.state.status === "error" ? FAILING_POLL_MS : HEALTHY_POLL_MS,
-  });
+  // `/ready` is unauthenticated and probes the database. It distinguishes a
+  // reachable backend with a failed database from an unreachable backend.
+  const { refetch, data, isSuccess, isError, dataUpdatedAt, errorUpdatedAt } =
+    useReadiness({
+      refetchOnReconnect: false,
+      // Poll speed follows the query's own error status (immediate), so a failing
+      // backend is re-probed quickly. The unreachable *threshold* below is a
+      // separate counter, so polling fast and declaring unreachable stay decoupled.
+      refetchInterval: (query) =>
+        query.state.status === "error" ||
+        query.state.data?.database === "disconnected"
+          ? FAILING_POLL_MS
+          : HEALTHY_POLL_MS,
+    });
 
-  // Fold each settled /health poll into the consecutive-failure counter that
-  // drives the unreachable state. `errorUpdatedAt` is a dep — not read in the
-  // body — because a second consecutive failure leaves `isError` already true,
-  // so only its changing timestamp re-runs the effect to keep counting.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: errorUpdatedAt is the re-trigger for repeated failures
+  // Count repeated results of the same failure mode. The timestamps re-run
+  // this effect when a second poll settles with an unchanged status.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: timestamps re-trigger repeated settled polls
   useEffect(() => {
-    if (isSuccess) {
+    const failureKind = isError
+      ? "backend-unreachable"
+      : isSuccess && data?.database === "disconnected"
+        ? "database-unavailable"
+        : null;
+
+    if (!failureKind && isSuccess) {
       consecutiveFailuresRef.current = 0;
-      setBackendUnreachable(false);
-    } else if (isError) {
-      consecutiveFailuresRef.current += 1;
+      lastFailureKindRef.current = null;
+      setUnavailableKind(null);
+    } else if (failureKind) {
+      consecutiveFailuresRef.current =
+        lastFailureKindRef.current === failureKind
+          ? consecutiveFailuresRef.current + 1
+          : 1;
+      lastFailureKindRef.current = failureKind;
       if (consecutiveFailuresRef.current >= UNREACHABLE_FAILURE_THRESHOLD) {
-        setBackendUnreachable(true);
+        setUnavailableKind(failureKind);
       }
     }
-  }, [isSuccess, isError, errorUpdatedAt]);
+  }, [isSuccess, isError, data?.database, dataUpdatedAt, errorUpdatedAt]);
 
   // Track the browser's own connectivity, and re-probe the backend the moment
   // it reports online (browser-online does not imply backend-reachable).
@@ -87,9 +106,7 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
 
   const kind: ConnectivityState["kind"] = !browserOnline
     ? "browser-offline"
-    : backendUnreachable
-      ? "backend-unreachable"
-      : "online";
+    : (unavailableKind ?? "online");
 
   // On the transition back to fully online, refetch everything once so screens
   // that errored while offline recover — a single wave, not a per-screen storm.

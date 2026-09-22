@@ -255,7 +255,7 @@ Which model providers the page offers is not set here. That is one deployment-wi
 
 ### Runtime Handoff Instructions
 
-**Suggest runtime handoff** adds configurable instructions to connected clients. It is on by default. Setup must include an MCP gateway with access to Agent Runtime tools. At session start, the agent explains how to move work to Cloud runtime. When you request a transfer, it uses the handoff skill and creates a runtime agent if needed.
+**Suggest runtime handoff** adds configurable instructions to connected clients. It is on by default. Setup must include an MCP gateway with access to Agent Runtime tools. The default instructions ask the agent to mention Cloud runtime once, in its first reply. When you request a transfer, it uses the handoff skill and creates a runtime agent if needed.
 
 - **Claude Code:** the existing shell wrapper passes a local file through `--append-system-prompt-file`. Explicit system-prompt flags take precedence.
 - **Codex:** the wrapper reads effective settings through Codex's local configuration API. It combines existing developer instructions with the handoff text through `-c developer_instructions`. It does not edit `AGENTS.md` or replace the built-in prompt. Profile, directory, remote, and config overrides skip this addition, except model, provider, and reasoning-effort selections. If configuration cannot be read within three seconds, Codex launches unchanged with a warning. This requires Node.js and a Codex version supporting `config/read`.

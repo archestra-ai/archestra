@@ -30,8 +30,12 @@ class ClaudeAuthTest(unittest.TestCase):
             thread.start()
             try:
                 env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
-                # Test the installed CLI's wire format directly. The production
-                # subscription wrapper intentionally disallows proxy overrides.
+                env["ANTHROPIC_CUSTOM_HEADERS"] = (
+                    "X-Archestra-Virtual-Key: synthetic-passthrough-key\n"
+                    "X-Archestra-Run-Id: synthetic-task"
+                )
+                # Test the installed CLI's wire format directly, including
+                # the headers the Agent-scoped proxy needs for attribution.
                 process = subprocess.Popen(["claude", "--print", "--model", "claude-sonnet-4-6", "--tools", "", "--setting-sources", "", "Reply OK"], env=env, cwd=directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
                     server.received.wait(25)
@@ -46,6 +50,11 @@ class ClaudeAuthTest(unittest.TestCase):
                 for request in server.requests:
                     self.assertEqual(request.get("authorization"), f"Bearer {token}")
                     self.assertNotIn("x-api-key", request)
+                    self.assertEqual(
+                        request.get("x-archestra-virtual-key"),
+                        "synthetic-passthrough-key",
+                    )
+                    self.assertEqual(request.get("x-archestra-run-id"), "synthetic-task")
             finally:
                 server.shutdown()
                 server.server_close()

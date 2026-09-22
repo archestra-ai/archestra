@@ -15,9 +15,9 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should start in initializing state when autoStart is false", () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn, autoStart: false }),
+      useBackendConnectivity({ checkReadinessFn, autoStart: false }),
     );
 
     expect(result.current.status).toBe("initializing");
@@ -27,9 +27,9 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should start in checking state when autoStart is true", () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(true);
+    const checkReadinessFn = vi.fn().mockResolvedValue("ready");
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn }),
+      useBackendConnectivity({ checkReadinessFn }),
     );
 
     // Before the health check completes, should be in "checking" state
@@ -37,9 +37,9 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should transition directly to connected on successful first attempt without showing connecting UI", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(true);
+    const checkReadinessFn = vi.fn().mockResolvedValue("ready");
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn }),
+      useBackendConnectivity({ checkReadinessFn }),
     );
 
     // Start in "checking" state (no UI shown)
@@ -51,13 +51,13 @@ describe("useBackendConnectivity", () => {
 
     // Should go directly to "connected" without ever showing "connecting"
     expect(result.current.status).toBe("connected");
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
   });
 
   it("should transition to connected on successful first attempt", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(true);
+    const checkReadinessFn = vi.fn().mockResolvedValue("ready");
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn }),
+      useBackendConnectivity({ checkReadinessFn }),
     );
 
     await act(async () => {
@@ -65,20 +65,73 @@ describe("useBackendConnectivity", () => {
     });
 
     expect(result.current.status).toBe("connected");
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps database failures distinct during retries and after the timeout", async () => {
+    const checkReadinessFn = vi.fn().mockResolvedValue("database-unavailable");
+    const { result } = renderHook(() =>
+      useBackendConnectivity({
+        checkReadinessFn,
+        timeoutMs: 1000,
+        initialDelayMs: 1000,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("database-connecting");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(result.current.status).toBe("database-unavailable");
+  });
+
+  it("returns to sign-in when database readiness recovers", async () => {
+    const checkReadinessFn = vi
+      .fn()
+      .mockResolvedValueOnce("database-unavailable")
+      .mockResolvedValue("ready");
+    const { result } = renderHook(() =>
+      useBackendConnectivity({ checkReadinessFn, initialDelayMs: 1000 }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("database-connecting");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(result.current.status).toBe("connected");
+  });
+
+  it("keeps browser offline distinct from a server failure", async () => {
+    const checkReadinessFn = vi.fn().mockResolvedValue("browser-offline");
+    const { result } = renderHook(() =>
+      useBackendConnectivity({ checkReadinessFn, timeoutMs: 1000 }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("browser-connecting");
   });
 
   it("should retry with exponential backoff on failure", async () => {
     let callCount = 0;
-    const checkHealthFn = vi.fn().mockImplementation(() => {
+    const checkReadinessFn = vi.fn().mockImplementation(() => {
       callCount++;
       // Succeed on the 3rd attempt
-      return Promise.resolve(callCount >= 3);
+      return Promise.resolve(callCount >= 3 ? "ready" : "backend-unreachable");
     });
 
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         initialDelayMs: 1000,
         maxDelayMs: 30000,
       }),
@@ -90,7 +143,7 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
     expect(result.current.attemptCount).toBe(1);
     expect(result.current.nextRetryInMs).toBe(1000);
     // After first failure, transitions to "connecting"
@@ -100,7 +153,7 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(2);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(2);
     expect(result.current.attemptCount).toBe(2);
     expect(result.current.nextRetryInMs).toBe(2000);
 
@@ -108,16 +161,16 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(3);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(3);
     expect(result.current.status).toBe("connected");
     expect(result.current.nextRetryInMs).toBeNull();
   });
 
   it("should respect maxDelayMs for exponential backoff", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         initialDelayMs: 1000,
         maxDelayMs: 4000,
         timeoutMs: 100000,
@@ -128,40 +181,40 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
 
     // 1s delay (1000 * 2^0)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(2);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(2);
 
     // 2s delay (1000 * 2^1)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(3);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(3);
 
     // 4s delay (1000 * 2^2 = 4000, capped at maxDelayMs)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(4);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(4);
 
     // Next delay should still be 4s (capped at maxDelayMs)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(5);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(5);
 
     expect(result.current.status).toBe("connecting");
   });
 
   it("should transition to unreachable after timeout", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         timeoutMs: 3000,
         initialDelayMs: 500,
         maxDelayMs: 1000,
@@ -200,16 +253,18 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should allow manual retry after unreachable", async () => {
-    let resolveHealth: ((value: boolean) => void) | null = null;
-    const checkHealthFn = vi.fn().mockImplementation(() => {
-      return new Promise<boolean>((resolve) => {
-        resolveHealth = resolve;
+    let resolveReadiness:
+      | ((value: "ready" | "backend-unreachable") => void)
+      | null = null;
+    const checkReadinessFn = vi.fn().mockImplementation(() => {
+      return new Promise<"ready" | "backend-unreachable">((resolve) => {
+        resolveReadiness = resolve;
       });
     });
 
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         timeoutMs: 1500,
         initialDelayMs: 500,
         maxDelayMs: 500,
@@ -222,7 +277,7 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     await act(async () => {
-      resolveHealth?.(false);
+      resolveReadiness?.("backend-unreachable");
     });
 
     // Attempt 2
@@ -230,7 +285,7 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     await act(async () => {
-      resolveHealth?.(false);
+      resolveReadiness?.("backend-unreachable");
     });
 
     // Attempt 3
@@ -238,7 +293,7 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     await act(async () => {
-      resolveHealth?.(false);
+      resolveReadiness?.("backend-unreachable");
     });
 
     // Attempt 4 - should trigger unreachable since elapsed >= 1500ms
@@ -246,7 +301,7 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     await act(async () => {
-      resolveHealth?.(false);
+      resolveReadiness?.("backend-unreachable");
     });
 
     expect(result.current.status).toBe("unreachable");
@@ -266,37 +321,37 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     await act(async () => {
-      resolveHealth?.(true);
+      resolveReadiness?.("ready");
     });
 
     expect(result.current.status).toBe("connected");
   });
 
   it("should not start automatically when autoStart is false", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(true);
+    const checkReadinessFn = vi.fn().mockResolvedValue("ready");
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn, autoStart: false }),
+      useBackendConnectivity({ checkReadinessFn, autoStart: false }),
     );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
 
-    expect(checkHealthFn).not.toHaveBeenCalled();
+    expect(checkReadinessFn).not.toHaveBeenCalled();
     expect(result.current.status).toBe("initializing");
   });
 
   it("should start when retry is called with autoStart false", async () => {
-    let resolveHealth: (value: boolean) => void;
-    const checkHealthFn = vi.fn().mockImplementation(
+    let resolveReadiness: (value: "ready" | "backend-unreachable") => void;
+    const checkReadinessFn = vi.fn().mockImplementation(
       () =>
-        new Promise<boolean>((resolve) => {
-          resolveHealth = resolve;
+        new Promise<"ready" | "backend-unreachable">((resolve) => {
+          resolveReadiness = resolve;
         }),
     );
 
     const { result } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn, autoStart: false }),
+      useBackendConnectivity({ checkReadinessFn, autoStart: false }),
     );
 
     // Starts in "initializing" since autoStart is false
@@ -312,18 +367,18 @@ describe("useBackendConnectivity", () => {
 
     // Now resolve the health check
     await act(async () => {
-      resolveHealth(true);
+      resolveReadiness("ready");
     });
 
-    expect(checkHealthFn).toHaveBeenCalled();
+    expect(checkReadinessFn).toHaveBeenCalled();
     expect(result.current.status).toBe("connected");
   });
 
   it("should track elapsed time correctly", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         timeoutMs: 60000,
         initialDelayMs: 2000,
       }),
@@ -340,10 +395,10 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should increment attempt count on each failed attempt", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         initialDelayMs: 100,
         maxDelayMs: 100,
         timeoutMs: 10000,
@@ -370,10 +425,10 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should clear timers on unmount", async () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { unmount } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         initialDelayMs: 1000,
         timeoutMs: 60000,
       }),
@@ -383,7 +438,7 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
 
     // Unmount before next retry
     unmount();
@@ -393,20 +448,20 @@ describe("useBackendConnectivity", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
 
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
   });
 
   it("should not update state after unmount during pending request", async () => {
-    let resolveHealth: (value: boolean) => void;
-    const checkHealthFn = vi.fn().mockImplementation(
+    let resolveReadiness: (value: "ready" | "backend-unreachable") => void;
+    const checkReadinessFn = vi.fn().mockImplementation(
       () =>
-        new Promise<boolean>((resolve) => {
-          resolveHealth = resolve;
+        new Promise<"ready" | "backend-unreachable">((resolve) => {
+          resolveReadiness = resolve;
         }),
     );
 
     const { result, unmount } = renderHook(() =>
-      useBackendConnectivity({ checkHealthFn }),
+      useBackendConnectivity({ checkReadinessFn }),
     );
 
     // Should start in "checking" state
@@ -416,14 +471,14 @@ describe("useBackendConnectivity", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(checkHealthFn).toHaveBeenCalledTimes(1);
+    expect(checkReadinessFn).toHaveBeenCalledTimes(1);
 
     // Unmount while request is pending
     unmount();
 
     // Resolve the pending request - should not cause state update
     await act(async () => {
-      resolveHealth?.(true);
+      resolveReadiness?.("ready");
     });
 
     // No error should be thrown (React warning about updating unmounted component)
@@ -433,13 +488,13 @@ describe("useBackendConnectivity", () => {
 
   it("should reset state on retry", async () => {
     let shouldSucceed = false;
-    const checkHealthFn = vi.fn().mockImplementation(() => {
-      return Promise.resolve(shouldSucceed);
+    const checkReadinessFn = vi.fn().mockImplementation(() => {
+      return Promise.resolve(shouldSucceed ? "ready" : "backend-unreachable");
     });
 
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         initialDelayMs: 100,
         timeoutMs: 10000,
       }),
@@ -475,10 +530,10 @@ describe("useBackendConnectivity", () => {
   });
 
   it("should return estimatedTotalAttempts based on backoff schedule", () => {
-    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const checkReadinessFn = vi.fn().mockResolvedValue("backend-unreachable");
     const { result } = renderHook(() =>
       useBackendConnectivity({
-        checkHealthFn,
+        checkReadinessFn,
         timeoutMs: 60000,
         initialDelayMs: 1000,
         maxDelayMs: 30000,

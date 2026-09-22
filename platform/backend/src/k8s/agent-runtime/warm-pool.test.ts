@@ -70,6 +70,19 @@ test("falls back to direct Sandbox creation when extensions or a compatible pool
   );
 });
 
+test("cold-starts a floating image instead of claiming a potentially stale pool", async () => {
+  config.agentRuntime.warmPoolSize = 1;
+  expect(
+    await agentWarmPoolManager.claim({
+      api: api(),
+      spec: {
+        ...SPEC,
+        image: "registry.example.test/agent-claude-code:latest",
+      },
+    }),
+  ).toBe(false);
+});
+
 test("claims without environment or disk overrides that would force an upstream cold start", async () => {
   config.agentRuntime.warmPoolSize = 1;
   let submitted: Record<string, unknown> | undefined;

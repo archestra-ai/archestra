@@ -13,6 +13,7 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
+import { usesFloatingAgentImageTag } from "./image-pull-policy";
 
 /** Warm the popular catalog at boot, without blocking server readiness.
  * DaemonSets also cover nodes added after startup. Kubelet skips cached images. */
@@ -79,6 +80,17 @@ class AgentImagePrefetcher {
           name,
           namespace,
           images: [image],
+          // A stable platform upgrade moves the catalog's :latest aliases.
+          // Roll the prefetch pods once per platform image so their node cache
+          // contains the new release before any cold-started Agent needs it.
+          refreshGenerations: usesFloatingAgentImageTag(image)
+            ? {
+                [image]: Number.parseInt(
+                  hash(config.agentRuntime.defaultImage).slice(0, 12),
+                  16,
+                ),
+              }
+            : undefined,
           pullSecretNames,
           bootstrapImage: settings.bootstrapImage,
           nodeSelector: config.agentRuntime.nodeSelector,
@@ -96,7 +108,10 @@ class AgentImagePrefetcher {
         });
         if (!desired.metadata || !desired.spec?.template.spec) continue;
         desired.metadata.labels = { app: name, ...labels };
-        desired.spec.template.metadata = { labels: { app: name, ...labels } };
+        desired.spec.template.metadata = {
+          ...desired.spec.template.metadata,
+          labels: { app: name, ...labels },
+        };
         const fingerprint = hash(
           JSON.stringify({ spec: desired.spec, ownerReferences }),
         );

@@ -472,7 +472,7 @@ describe("buildAgentRunLaunchSpec", () => {
   test.for([
     false,
     true,
-  ])("uses a managed subscription secret without reading legacy tokens or proxying subscription inference (Vertex: %s)", async (vertexEnabled, {
+  ])("routes managed Claude subscription inference through a personal passthrough key (Vertex: %s)", async (vertexEnabled, {
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -497,6 +497,9 @@ describe("buildAgentRunLaunchSpec", () => {
     });
     const configuredRuntime = runtime(setup.agent, "anthropic");
     configuredRuntime.command = ["archestra-claude-code"];
+    configuredRuntime.environment = [
+      { key: "ANTHROPIC_CUSTOM_HEADERS", value: "X-Archestra-Run-Id: bypass" },
+    ];
     configuredRuntime.claudeCode = {
       authentication: "subscription",
       model: "opus[1m]",
@@ -542,15 +545,35 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
-    expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_CUSTOM_HEADERS");
-    expect(spec.secretEnv).not.toHaveProperty("ARCHESTRA_VIRTUAL_KEY");
-    expect(spec.env).not.toHaveProperty("ANTHROPIC_BASE_URL");
+    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
+    expect(spec.env.ANTHROPIC_BASE_URL).toBe(
+      `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
+    );
+    expect(spec.env).not.toHaveProperty("ANTHROPIC_CUSTOM_HEADERS");
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      `X-Archestra-Virtual-Key: ${spec.secretEnv.ARCHESTRA_VIRTUAL_KEY}`,
+    );
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      `X-Archestra-Run-Id: ${taskId}`,
+    );
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe("opus[1m]");
     expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
 
-    expect(virtualApiKeyId).toBeNull();
+    expect(virtualApiKeyId).toBeTruthy();
+    expect(
+      await VirtualApiKeyModel.validateToken(
+        spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+      ),
+    ).toMatchObject({
+      virtualKey: {
+        id: virtualApiKeyId,
+        keyType: "passthrough",
+        scope: "personal",
+        authorId: setup.user.id,
+      },
+    });
     expect(claudeCodeAccountManager.requireConnection).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: setup.user.id,

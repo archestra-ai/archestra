@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  isResourcePermissionPreset,
+  type ResourcePermissionGrant,
+  ScopedResourceSchema,
+  widenToPreset,
+} from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
@@ -31,6 +37,7 @@ export async function runScopedResourcePermissionCutover(
       ...ROLE_RETIREMENT_STATEMENTS,
     ])
       await tx.execute(statement);
+    await widenGrantsToPresets(tx);
   };
   if (transaction) await run(transaction);
   else await db.transaction(run);
@@ -908,3 +915,59 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true,
   revision = resource_permission_policies.revision + 1, updated_at = now()
 `);
+
+/**
+ * The last pass: every grant becomes one preset of its resource.
+ *
+ * The conversion carries each legacy shape over exactly, and some of those
+ * shapes sit between two presets. Each widens to the smaller preset that holds
+ * it — `use` alone gains `read`, and a set with `manage-permissions` but not
+ * `delete` gains `delete`. Only the policies that change are written, so a
+ * second run writes nothing.
+ *
+ * @public — read by the cutover tests
+ */
+export async function widenGrantsToPresets(tx: Transaction): Promise<void> {
+  const result = await tx.execute<{
+    organization_id: string;
+    resource: string;
+    scope: string;
+    grants: ResourcePermissionGrant[];
+  }>(
+    sql`SELECT organization_id, resource, scope, grants FROM resource_permission_policies`,
+  );
+  let widened = 0;
+  for (const policy of result.rows) {
+    const resource = ScopedResourceSchema.safeParse(policy.resource);
+    if (!resource.success) continue;
+    if (
+      policy.grants.every((grant) =>
+        isResourcePermissionPreset(grant.actions, resource.data),
+      )
+    )
+      continue;
+    const grants = policy.grants
+      .map((grant) =>
+        isResourcePermissionPreset(grant.actions, resource.data)
+          ? grant
+          : {
+              ...grant,
+              actions: widenToPreset(grant.actions, resource.data).sort(),
+            },
+      )
+      .filter((grant) => grant.actions.length);
+    await tx.execute(sql`
+      UPDATE resource_permission_policies
+      SET grants = ${JSON.stringify(grants)}::jsonb,
+        revision = revision + 1, updated_at = now()
+      WHERE organization_id = ${policy.organization_id}
+        AND resource = ${policy.resource} AND scope = ${policy.scope}
+    `);
+    widened++;
+  }
+  if (widened)
+    logger.info(
+      { policies: widened },
+      "[ResourcePermissions] Widened grants to the nearest permission preset",
+    );
+}

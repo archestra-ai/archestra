@@ -161,6 +161,7 @@ describe("resource permissions", () => {
     await expect(
       ResourcePermissions.validateRecipients({
         organizationId: org.id,
+        resource: "agent",
         grants: [{ subject, actions: ["read"] }],
       }),
     ).rejects.toThrow("disabled");
@@ -294,6 +295,7 @@ describe("resource permissions", () => {
     await expect(
       ResourcePermissions.validateRecipients({
         organizationId: org.id,
+        resource: "agent",
         grants: [grant],
       }),
     ).rejects.toThrow("does not exist");
@@ -306,6 +308,45 @@ describe("resource permissions", () => {
       }),
     ).rejects.toThrow("only grant permissions you hold");
     expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
+  });
+
+  test("refuses a grant that is not one of the resource's permission levels", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const subject = { type: "user" as const, id: user.id };
+    // Between Can edit and Full access: manage-permissions without delete.
+    await expect(
+      ResourcePermissions.validateRecipients({
+        organizationId: org.id,
+        resource: "agent",
+        grants: [
+          {
+            subject,
+            actions: ["read", "use", "update", "manage-permissions"],
+          },
+        ],
+      }),
+    ).rejects.toThrow("permission levels this resource offers");
+    // A preset of one resource is not a preset of every resource.
+    await expect(
+      ResourcePermissions.validateRecipients({
+        organizationId: org.id,
+        resource: "agent",
+        grants: [{ subject, actions: ["read", "manage-permissions"] }],
+      }),
+    ).rejects.toThrow("permission levels this resource offers");
+    await expect(
+      ResourcePermissions.validateRecipients({
+        organizationId: org.id,
+        resource: "conversation",
+        grants: [{ subject, actions: ["read", "manage-permissions"] }],
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

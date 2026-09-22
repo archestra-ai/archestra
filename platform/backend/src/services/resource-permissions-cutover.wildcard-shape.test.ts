@@ -42,7 +42,8 @@ describe("wildcard policy shape", () => {
         await read(resource as "agent" | "mcpGateway" | "mcpRegistry"),
       ).toEqual(adminTiers);
     // The model catalog is the one resource where Editor held wildcard
-    // authority of its own, and it never included delete.
+    // authority of its own. It never included delete, but no preset holds
+    // manage-permissions without delete, so the grant widens to Full access.
     expect(
       (
         await ResourcePermissionPolicyModel.find({
@@ -53,10 +54,7 @@ describe("wildcard policy shape", () => {
       )?.grants,
     ).toEqual([
       { subject: { type: "role", id: "admin" }, actions: [...MANAGE] },
-      {
-        subject: { type: "role", id: "editor" },
-        actions: ["manage-permissions", "read", "update", "use"],
-      },
+      { subject: { type: "role", id: "editor" }, actions: [...MANAGE] },
       { subject: { type: "role", id: "platform_admin" }, actions: [...MANAGE] },
     ]);
   });
@@ -65,26 +63,27 @@ describe("wildcard policy shape", () => {
    * `use` follows read and `manage-permissions` follows update. The retired
    * `admin` flag widened a role's reach to objects it did not own; it never
    * manufactured a CRUD action the role did not already hold.
+   *
+   * Every stored grant is then one preset, so a converted set that sits
+   * between two presets widens to the larger one. That is a deliberate
+   * escalation: an update-only or delete-only administrator becomes Full
+   * access. The middle column is the set before that last widening.
    */
-  for (const [held, expected] of [
-    [["read"], ["read", "use"]],
-    [["update"], ["manage-permissions", "update"]],
-    [["delete"], ["delete"]],
+  for (const [held, , expected] of [
+    [["read"], ["read", "use"], ["read", "use"]],
+    [["update"], ["manage-permissions", "update"], MANAGE],
+    [["delete"], ["delete"], MANAGE],
     [
       ["read", "update"],
       ["manage-permissions", "read", "update", "use"],
+      MANAGE,
     ],
-    [
-      ["read", "delete"],
-      ["delete", "read", "use"],
-    ],
-    [
-      ["update", "delete"],
-      ["delete", "manage-permissions", "update"],
-    ],
+    [["read", "delete"], ["delete", "read", "use"], MANAGE],
+    [["update", "delete"], ["delete", "manage-permissions", "update"], MANAGE],
     [
       ["read", "update", "delete"],
       ["delete", "manage-permissions", "read", "update", "use"],
+      MANAGE,
     ],
   ] as const) {
     test(`a custom agent administrator holding ${held.join("+")} converts to ${expected.join("+")}`, async ({

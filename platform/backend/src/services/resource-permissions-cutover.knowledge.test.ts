@@ -139,15 +139,16 @@ describe("knowledge sharing conversion", () => {
       const granted = policy?.grants.find(
         (grant) => grant.subject.id === role.id,
       );
-      // `use` follows read and `manage-permissions` follows update, but the
-      // role never held delete and the retired flag does not invent it.
+      // `use` follows read and `manage-permissions` follows update. The role
+      // never held delete, but no preset holds manage-permissions without it,
+      // so the grant deliberately widens to Full access.
       expect(granted?.actions).toEqual([
+        "delete",
         "manage-permissions",
         "read",
         "update",
         "use",
       ]);
-      expect(granted?.actions).not.toContain("delete");
     }
   });
 });

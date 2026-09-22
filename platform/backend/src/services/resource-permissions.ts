@@ -3,6 +3,7 @@ import {
   canDelegateScopedPermissions,
   hasScopedPermission,
   isBuiltInCatalogId,
+  isResourcePermissionPreset,
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   PredefinedRoleNameSchema,
@@ -502,9 +503,22 @@ export class ResourcePermissions {
 
   static async validateRecipients(params: {
     organizationId: string;
+    resource: ScopedResource;
     grants: ResourcePermissionGrant[];
     scope?: ResourcePermissionScope;
   }): Promise<void> {
+    // Every stored grant is one preset. A set between two presets has no
+    // label in the editor and no single meaning, so it is refused rather than
+    // silently widened into authority the caller did not ask for.
+    if (
+      params.grants.some(
+        (grant) => !isResourcePermissionPreset(grant.actions, params.resource),
+      )
+    )
+      throw new ApiError(
+        400,
+        "Each grant must be one of the permission levels this resource offers",
+      );
     const subjects = params.grants.map((grant) => grant.subject);
     if (new Set(subjects.map(subjectKey)).size !== subjects.length)
       throw new ApiError(400, "Each recipient can have only one direct grant");

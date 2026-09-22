@@ -17,23 +17,29 @@ import { ResourcePermissions } from "./resource-permissions";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 /**
- * What the upgrade owes: nobody gains or loses access.
+ * What the upgrade owes: nobody loses access, and nobody gains any beyond the
+ * one deliberate widening named below.
  *
  * The conversion is judged the only way that means anything — by asking the
  * real authorization paths, for every principal against every resource, once
  * while the deployment still answers from visibility fields and again after
- * the conversion has run. The two answers have to match exactly. A single
- * differing cell is a person who woke up able to read something they could
- * not read yesterday, or locked out of something they own.
+ * the conversion has run. The two answers have to match exactly, save for
+ * that widening. Any other differing cell is a person who woke up able to
+ * read something they could not read yesterday, or locked out of something
+ * they own.
  *
  * The fixtures are deliberately awkward: resources shared with nobody, with
  * one team, with two teams, with named people, and with the whole
  * organization; a creator, a teammate, someone in a different team, someone in
  * none, an organization admin, and a role that withholds the read action
- * entirely. The last one is the case a grant to "everyone" would have broken.
+ * entirely. The last one is the case a grant to "everyone" breaks: every
+ * stored grant is widened to the nearest preset, so the organization-wide
+ * `use` on an organization-wide agent becomes the `use` preset [read, use],
+ * and that role now finds the agent it could only chat with before. That is
+ * the one deliberate widening this matrix allows.
  */
 describe("upgrade access preservation", () => {
-  test("every principal keeps exactly the access it had", async ({
+  test("every principal keeps exactly the access it had, save the widening to the use preset", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -44,11 +50,12 @@ describe("upgrade access preservation", () => {
     makeApp,
     makeInternalMcpCatalog,
     makeServiceAccount,
+    removeObjectPolicies,
   }) => {
     // Seed the world as it stands before the upgrade. Nothing has converted
-    // this deployment yet, so `createInitial` writes no policy and every
-    // check below answers from the visibility columns, exactly as it does on
-    // a deployment that has not taken the upgrade.
+    // this deployment yet: once seeding is done the policies creation wrote
+    // are removed, so every check below answers from the visibility columns,
+    // exactly as it does on a deployment that has not taken the upgrade.
     let converted = false;
     const org = await makeOrganization({ legacyPermissions: true });
 
@@ -63,8 +70,10 @@ describe("upgrade access preservation", () => {
     await makeMember(otherTeamMember.id, org.id);
     await makeMember(loner.id, org.id);
     await makeMember(admin.id, org.id, { role: "admin" });
-    // A role that withholds every read action: invisible to it before the
-    // upgrade, and it must stay invisible afterwards.
+    // A role that withholds every read action: everything is invisible to it
+    // before the upgrade, and it stays invisible afterwards except for the
+    // organization-wide agent, which the widening to the `use` preset lets it
+    // read.
     const blindRole = await makeCustomRole(org.id, { permission: {} });
     await makeMember(restricted.id, org.id, { role: blindRole.role });
 
@@ -180,6 +189,7 @@ describe("upgrade access preservation", () => {
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentRestricted: true,
     });
+    await removeObjectPolicies(org.id);
 
     const principals = {
       creator,
@@ -352,7 +362,14 @@ describe("upgrade access preservation", () => {
 
     const after = await snapshot();
     const changed = Object.keys(before).filter((k) => before[k] !== after[k]);
-    expect(changed.map((k) => `${k}: ${before[k]} -> ${after[k]}`)).toEqual([]);
+    // The deliberate widening to the nearest preset: the organization's `use`
+    // on the organization-wide agent becomes [read, use], so the role that
+    // withholds every read action now reads and lists that one agent.
+    // Nothing else may move.
+    expect(changed.map((k) => `${k}: ${before[k]} -> ${after[k]}`)).toEqual([
+      "agent:orgWide:restricted:read: false -> true",
+      "agentList:orgWide:restricted: false -> true",
+    ]);
 
     // A second run must be a no-op down to the byte. `revision` is the token
     // the permissions editor holds while somebody is editing, so a statement

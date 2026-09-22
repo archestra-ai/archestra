@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
@@ -105,11 +106,12 @@ test("snapshots only current relative recipients at the intersection of role, te
       { subject: { type: "team", id: parent.id }, actions: ["read"] },
     ],
   });
-  // This is the persisted pre-upgrade policy; current API input rejects it.
-  await ResourcePermissionPolicyModel.replace({
+  // This is the persisted pre-upgrade policy. The API rejects these sets and
+  // the model widens them to presets, so it is written as raw rows.
+  await db.insert(schema.resourcePermissionPoliciesTable).values({
     ...base,
     scope: "teams:*",
-    revision: 0,
+    legacySharingMigrated: false,
     grants: [
       { subject: { type: "role", id: customRole.id }, actions: ["update"] },
       { subject: { type: "organization", id: "*" }, actions: ["delete"] },
@@ -149,7 +151,9 @@ test("snapshots only current relative recipients at the intersection of role, te
     expect(await allows(parentOnly.id, parentAgent.id, action)).toBe(true);
     expect(await allows(parentOnly.id, childAgent.id, action)).toBe(false);
   }
-  expect(await allows(parentOnly.id, parentAgent.id, "use")).toBe(false);
+  // The snapshot is update, delete and manage-permissions. No preset holds
+  // those without use, so the last pass widens it to Full access.
+  expect(await allows(parentOnly.id, parentAgent.id, "use")).toBe(true);
   // A role inherited from one team was usable on a resource shared with
   // another team the same person belonged to.
   expect(await allows(crossTeam.id, siblingAgent.id, "update")).toBe(true);
@@ -157,7 +161,8 @@ test("snapshots only current relative recipients at the intersection of role, te
     await allows(crossTeam.id, siblingAgent.id, "manage-permissions"),
   ).toBe(true);
   expect(await allows(siblingOnly.id, siblingAgent.id, "delete")).toBe(true);
-  expect(await allows(siblingOnly.id, siblingAgent.id, "update")).toBe(false);
+  // Delete alone widens to Full access, which includes update.
+  expect(await allows(siblingOnly.id, siblingAgent.id, "update")).toBe(true);
   expect(await allows(siblingOnly.id, parentAgent.id, "delete")).toBe(false);
   for (const userId of [
     descendant.id,

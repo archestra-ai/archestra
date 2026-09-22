@@ -10,6 +10,7 @@ test("catalog admin scope preserves a read-only custom role without manufacturin
   makeMember,
   makeCustomRole,
   makeInternalMcpCatalog,
+  removeObjectPolicies,
 }) => {
   const org = await makeOrganization({ legacyPermissions: true });
   const user = await makeUser();
@@ -24,6 +25,7 @@ test("catalog admin scope preserves a read-only custom role without manufacturin
     organizationId: org.id,
     scope: "personal",
   });
+  await removeObjectPolicies(org.id);
   const access = {
     organizationId: org.id,
     userId: user.id,
@@ -67,6 +69,7 @@ test("project admin scope preserves read-only custom authority", async ({
   makeUser,
   makeMember,
   makeCustomRole,
+  removeObjectPolicies,
 }) => {
   const org = await makeOrganization({ legacyPermissions: true });
   const user = await makeUser();
@@ -81,6 +84,7 @@ test("project admin scope preserves read-only custom authority", async ({
     userId: owner.id,
     name: "Read-only oversight",
   });
+  await removeObjectPolicies(org.id);
   const access = {
     organizationId: org.id,
     userId: user.id,
@@ -100,12 +104,13 @@ test("project admin scope preserves read-only custom authority", async ({
   }
 });
 
-test("installation-only catalog administrators keep use without gaining catalog CRUD", async ({
+test("installation-only catalog administrators keep use, widened to the use preset, without gaining catalog writes", async ({
   makeOrganization,
   makeUser,
   makeMember,
   makeCustomRole,
   makeInternalMcpCatalog,
+  removeObjectPolicies,
 }) => {
   const org = await makeOrganization({ legacyPermissions: true });
   const user = await makeUser();
@@ -117,6 +122,7 @@ test("installation-only catalog administrators keep use without gaining catalog 
     organizationId: org.id,
     scope: "personal",
   });
+  await removeObjectPolicies(org.id);
   const access = {
     organizationId: org.id,
     userId: user.id,
@@ -128,12 +134,19 @@ test("installation-only catalog administrators keep use without gaining catalog 
     await expect(
       ResourcePermissions.require({ ...access, action: "use" }),
     ).resolves.toBeUndefined();
-    for (const action of [
-      "read",
-      "update",
-      "delete",
-      "manage-permissions",
-    ] as const) {
+    // The converted `use` grant is widened to the `use` preset [read, use],
+    // so after the upgrade this role can also read the catalog it could only
+    // use before. That widening to the nearest preset is deliberate; the
+    // write actions stay refused.
+    if (migrated) {
+      await expect(
+        ResourcePermissions.require({ ...access, action: "read" }),
+      ).resolves.toBeUndefined();
+    }
+    const refused = migrated
+      ? (["update", "delete", "manage-permissions"] as const)
+      : (["read", "update", "delete", "manage-permissions"] as const);
+    for (const action of refused) {
       await expect(
         ResourcePermissions.require({ ...access, action }),
       ).rejects.toThrow();

@@ -144,6 +144,7 @@ describe("widenToPreset", () => {
         "conversation",
       ),
     ).toEqual(["read", "manage-permissions"]);
-    expect(widenToPreset(["use"], "log")).toEqual(["read"]);
+    expect(widenToPreset(["use"], "log")).toEqual([]);
+    expect(widenToPreset([], "agent")).toEqual([]);
   });
 });

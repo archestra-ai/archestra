@@ -171,7 +171,8 @@ export function resourcePermissionPresetsFor(
 /**
  * The smallest preset holding every action in `actions`. A grant is always one
  * preset: an action set between two presets widens to the larger one, and an
- * action the resource has no preset for is dropped first.
+ * action the resource has no preset for is dropped first. A set left with no
+ * action widens to nothing, never to read.
  */
 export function widenToPreset(
   actions: readonly ResourcePermissionAction[],
@@ -180,9 +181,22 @@ export function widenToPreset(
   const presets = Object.values(resourcePermissionPresetsFor(resource));
   const offered = new Set(presets.flatMap((preset) => preset.actions));
   const wanted = actions.filter((action) => offered.has(action));
+  if (!wanted.length) return [];
   const preset =
     presets.find((candidate) =>
       wanted.every((action) => candidate.actions.includes(action)),
     ) ?? presets[presets.length - 1];
   return [...preset.actions];
+}
+
+/** Whether `actions` is exactly one preset of `resource`, in any order. */
+export function isResourcePermissionPreset(
+  actions: readonly ResourcePermissionAction[],
+  resource: ScopedResource,
+): boolean {
+  const preset = widenToPreset(actions, resource);
+  return (
+    preset.length === new Set(actions).size &&
+    actions.every((action) => preset.includes(action))
+  );
 }

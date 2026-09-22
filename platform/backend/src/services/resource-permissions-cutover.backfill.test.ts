@@ -219,6 +219,7 @@ describe("resource sharing grant backfill", () => {
   test("the complete migration converts sharing and rolls back grants on transaction failure", async ({
     makeOrganization,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const agent = await makeAgent({
@@ -226,6 +227,7 @@ describe("resource sharing grant backfill", () => {
       agentType: "agent",
       scope: "org",
     });
+    await removeObjectPolicies(org.id);
     const key = {
       organizationId: org.id,
       resource: "agent" as const,
@@ -243,13 +245,18 @@ describe("resource sharing grant backfill", () => {
           WHERE organization_id = ${org.id} AND resource = 'agent' AND scope = ${agent.id}
         `);
         // Organization visibility lands on the roles that hold `agent:read`,
-        // so a role without it keeps seeing nothing after the upgrade, while
-        // `use` stays organization-wide because chatting never asked for that
-        // read in the first place.
+        // and `use` stays organization-wide because chatting never asked for
+        // that read. Every stored grant is widened to the nearest preset, so
+        // the organization's `use` becomes the `use` preset [read, use]: a
+        // role without `agent:read` now lists the agent too. That widening is
+        // deliberate.
         expect(migrated.rows).toEqual([
           {
             grants: [
-              { subject: { type: "organization", id: "*" }, actions: ["use"] },
+              {
+                subject: { type: "organization", id: "*" },
+                actions: ["read", "use"],
+              },
               ...["admin", "editor", "member", "platform_admin"].map((id) => ({
                 subject: { type: "role", id },
                 actions: ["read", "use"],
@@ -272,6 +279,7 @@ describe("resource sharing grant backfill", () => {
     makeUser,
     makeMember,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const foreign = await makeOrganization({ legacyPermissions: true });
@@ -293,6 +301,7 @@ describe("resource sharing grant backfill", () => {
       { id: writer.id, level: "write" },
       { id: outsider.id, level: "write" },
     ]);
+    await removeObjectPolicies(org.id);
     await AgentModel.delete(gateway.id);
     await runMigration();
     const key = {
@@ -331,6 +340,7 @@ describe("resource sharing grant backfill", () => {
     makeMember,
     makeTeam,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const foreign = await makeOrganization({ legacyPermissions: true });
@@ -348,18 +358,25 @@ describe("resource sharing grant backfill", () => {
       scope: "team",
     });
     await AgentTeamModel.syncAgentTeams(restricted.id, [team.id]);
+    await removeObjectPolicies(org.id);
+    await removeObjectPolicies(foreign.id);
     await runMigration();
     const publicPolicy = await ResourcePermissionPolicyModel.find({
       organizationId: org.id,
       resource: "agent",
       scope: publicAgent.id,
     });
-    // Finding the agent becomes the roles that hold `agent:read`, so nobody
-    // gains a listing they did not have. Chatting with it never consulted the
-    // caller's role, so `use` stays with the organization at large — a role
-    // shaped for chat alone would otherwise lose the agent on upgrade.
+    // Finding the agent goes to the roles that hold `agent:read`. Chatting
+    // with it never consulted the caller's role, so `use` stays with the
+    // organization at large — a role shaped for chat alone would otherwise
+    // lose the agent on upgrade. Every stored grant is widened to the nearest
+    // preset, so that `use` becomes the `use` preset [read, use] and every
+    // member can now list the agent. That widening is deliberate.
     expect(publicPolicy?.grants).toEqual([
-      { subject: { type: "organization", id: "*" }, actions: ["use"] },
+      {
+        subject: { type: "organization", id: "*" },
+        actions: ["read", "use"],
+      },
       ...["admin", "editor", "member", "platform_admin"].map((id) => ({
         subject: { type: "role", id },
         actions: ["read", "use"],
@@ -722,6 +739,7 @@ describe("resource sharing grant backfill", () => {
     makeTeam,
     makeTeamMember,
     makeInternalMcpCatalog,
+    removeObjectPolicies,
   }) => {
     const organization = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
@@ -754,6 +772,7 @@ describe("resource sharing grant backfill", () => {
       resource: "mcpRegistry" as const,
       scope: catalog.id,
     };
+    await removeObjectPolicies(organization.id);
     await ResourcePermissionPolicyModel.replace({
       ...key,
       revision: 0,
@@ -773,9 +792,10 @@ describe("resource sharing grant backfill", () => {
           subject: { type: "team", id: writers.id },
           actions: ["read", "update", "use"],
         },
+        // The pre-existing `use` grant survives, widened to the `use` preset.
         {
           subject: { type: "serviceAccount", id: account.id },
-          actions: ["use"],
+          actions: ["read", "use"],
         },
       ]),
     );
@@ -873,12 +893,13 @@ describe("resource sharing grant backfill", () => {
     ).toMatchObject({ allowed: false });
   });
 
-  test("a role holding neither agent nor model read keeps the agent and models it could always use", async ({
+  test("a role holding neither agent nor model read keeps the agent and models it could always use, and now lists the agent", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeCustomRole,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     // Chatting and invoking a model asked only whether the object was open to
     // the organization, never what the caller's role could read. A role built
@@ -902,6 +923,7 @@ describe("resource sharing grant backfill", () => {
       outputModalities: ["text"],
       lastSyncedAt: new Date(),
     });
+    await removeObjectPolicies(org.id);
     await runMigration();
 
     const context = { organizationId: org.id, userId: user.id };
@@ -922,7 +944,9 @@ describe("resource sharing grant backfill", () => {
         userTeamIds: [],
       }),
     ).toEqual({ allowed: true });
-    // Reading the lists stays where it was: this role never saw them.
+    // The organization's `use` grant is widened to the `use` preset
+    // [read, use], so this role now lists the agent it never saw before the
+    // upgrade. That widening to the nearest preset is deliberate.
     expect(
       await ResourcePermissions.allows({
         ...context,
@@ -930,13 +954,14 @@ describe("resource sharing grant backfill", () => {
         scope: agent.id,
         action: "read",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
   test("an app whose backing MCP server row is gone never receives a policy", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeApp,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
@@ -962,6 +987,7 @@ describe("resource sharing grant backfill", () => {
     await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, row.mcpServerId));
+    await removeObjectPolicies(org.id);
 
     await expect(runMigration()).resolves.toBeUndefined();
 
@@ -989,6 +1015,7 @@ describe("resource sharing grant backfill", () => {
     makeMember,
     makeTeam,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
@@ -1005,6 +1032,7 @@ describe("resource sharing grant backfill", () => {
     await AgentUserModel.syncAgentUsers(agent.id, [
       { id: named.id, level: "write" },
     ]);
+    await removeObjectPolicies(org.id);
 
     await runMigration();
 
@@ -1035,6 +1063,7 @@ describe("resource sharing grant backfill", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    removeObjectPolicies,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
@@ -1057,6 +1086,7 @@ describe("resource sharing grant backfill", () => {
     await SkillUserModel.syncSkillUsers(skill.id, [
       { id: writer.id, level: "write" },
     ]);
+    await removeObjectPolicies(org.id);
 
     await runMigration();
 

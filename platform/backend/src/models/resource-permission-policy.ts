@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
+  isResourcePermissionPreset,
   type PermissionSubject,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
@@ -7,6 +8,7 @@ import {
   resourcePermissionPresets,
   type ScopedResource,
   ScopedResourceSchema,
+  widenToPreset,
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
@@ -142,13 +144,11 @@ export default class ResourcePermissionPolicyModel {
               ...(resource === "llmModel"
                 ? [
                     {
+                      // Editors manage models. They held every model action
+                      // but delete, and no preset stops short of delete once
+                      // it includes manage-permissions.
                       subject: { type: "role" as const, id: "editor" },
-                      actions: [
-                        "read",
-                        "use",
-                        "update",
-                        "manage-permissions",
-                      ] as ResourcePermissionAction[],
+                      actions: resourcePermissionPresets.manage.actions,
                     },
                   ]
                 : []),
@@ -369,19 +369,22 @@ export default class ResourcePermissionPolicyModel {
           }
         : { type: "user", id: params.authorId }
       : null;
-    const grants = author
-      ? [
-          ...initialGrants.filter(
-            (grant) =>
-              grant.subject.type !== author.type ||
-              grant.subject.id !== author.id,
-          ),
-          {
-            subject: author,
-            actions: resourcePermissionPresets.manage.actions,
-          },
-        ]
-      : initialGrants;
+    const grants = asPresets(
+      author
+        ? [
+            ...initialGrants.filter(
+              (grant) =>
+                grant.subject.type !== author.type ||
+                grant.subject.id !== author.id,
+            ),
+            {
+              subject: author,
+              actions: resourcePermissionPresets.manage.actions,
+            },
+          ]
+        : initialGrants,
+      params.resource,
+    );
     await params.tx.insert(schema.resourcePermissionPoliciesTable).values({
       organizationId: params.organizationId,
       resource: params.resource,
@@ -541,7 +544,7 @@ export default class ResourcePermissionPolicyModel {
           organizationId: params.organizationId,
           resource: params.resource,
           scope: params.scope,
-          grants: params.grants,
+          grants: asPresets(params.grants, params.resource),
           legacySharingMigrated:
             params.resource === "conversation" ||
             params.resource === "agentRun",
@@ -553,7 +556,7 @@ export default class ResourcePermissionPolicyModel {
     const [updated] = await db
       .update(table)
       .set({
-        grants: params.grants,
+        grants: asPresets(params.grants, params.resource),
         ...(params.resource === "conversation" || params.resource === "agentRun"
           ? { legacySharingMigrated: true }
           : {}),
@@ -596,9 +599,12 @@ export default class ResourcePermissionPolicyModel {
     const existing = policy.grants.find((grant) =>
       sameSubject(grant.subject, params.to),
     );
-    const actions = [
-      ...new Set([...(existing?.actions ?? []), ...moved.actions]),
-    ].sort();
+    // Presets nest, so the union of two is the larger one. Widening only
+    // guards a grant stored before every grant had to be a preset.
+    const actions = widenToPreset(
+      [...new Set([...(existing?.actions ?? []), ...moved.actions])],
+      params.resource,
+    ).sort();
     const grants: ResourcePermissionGrant[] = [
       ...policy.grants.filter(
         (grant) =>
@@ -621,6 +627,23 @@ type PolicyKey = {
   resource: ScopedResource;
   scope: ResourcePermissionScope;
 };
+
+/**
+ * Store each grant as one preset of its resource. A grant already equal to a
+ * preset keeps its action order, so an unchanged policy stays byte-identical.
+ */
+function asPresets(
+  grants: ResourcePermissionGrant[],
+  resource: ScopedResource,
+): ResourcePermissionGrant[] {
+  return grants
+    .map((grant) =>
+      isResourcePermissionPreset(grant.actions, resource)
+        ? grant
+        : { ...grant, actions: widenToPreset(grant.actions, resource) },
+    )
+    .filter((grant) => grant.actions.length);
+}
 
 function policyCondition(params: PolicyKey) {
   const table = schema.resourcePermissionPoliciesTable;

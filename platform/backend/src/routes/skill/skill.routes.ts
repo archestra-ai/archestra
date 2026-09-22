@@ -713,6 +713,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       await ResourcePermissions.validateRecipients({
         organizationId,
+        resource: "skill",
         grants: [
           ...userIds.map((id) => ({
             subject: { type: "user" as const, id },
@@ -1885,6 +1886,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       await ResourcePermissions.validateRecipients({
         organizationId,
+        resource: "skill",
         grants: [
           ...userIds.map((id) => ({
             subject: { type: "user" as const, id },

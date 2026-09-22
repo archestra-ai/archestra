@@ -85,7 +85,7 @@ export function AgentRuntimePicker({
     {
       id: "custom",
       name: "Custom image",
-      runtime: defaultAgentRuntime(defaultImage),
+      runtime: defaultAgentRuntime(),
     },
   ];
   const [expandedRows, setExpandedRows] = useState(() =>

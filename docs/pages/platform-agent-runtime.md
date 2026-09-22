@@ -60,7 +60,7 @@ See [Network Egress Policies](/docs/platform-environments#network-egress-policie
 
 ### Built-In Archestra Agent
 
-The built-in agent loop is available through **Custom image** using the default runtime image. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
+The built-in agent loop ships in the `agent-archestra` runtime image. To use it, choose **Custom image** and enter that image. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
 
 Use it when you need a general coding loop without a specific third-party client's behavior. The [runtime-agent source](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) provides a working integration example.
 

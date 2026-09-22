@@ -75,7 +75,7 @@ describe("AgentRuntimeFields", () => {
     );
   });
 
-  it("starts with the configured image and preserves explicit run controls", async () => {
+  it("starts without an image rather than the platform's runtime image, and preserves explicit run controls", async () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) => {
       if (flag === "agentRuntime") return true;
@@ -114,9 +114,7 @@ describe("AgentRuntimeFields", () => {
       screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
     );
 
-    expect(screen.getByLabelText("Container image")).toHaveValue(
-      "registry.example.com/coding-agent:1.2.3",
-    );
+    expect(screen.getByLabelText("Container image")).toHaveValue("");
     expect(screen.getByLabelText("Inference API")).toBeVisible();
     expect(screen.getByLabelText("Steering")).toBeVisible();
     expect(
@@ -169,6 +167,10 @@ describe("AgentRuntimeFields", () => {
       screen.getByText(/Stops the run after it finishes a task/i),
     ).toBeVisible();
 
+    await user.type(
+      screen.getByLabelText("Container image"),
+      "registry.example.com/coding-agent:1.2.3",
+    );
     await user.type(screen.getByLabelText("Command"), "claude");
     fireEvent.change(screen.getByLabelText("Arguments (one per line)"), {
       target: { value: "--permission-mode\nbypassPermissions" },

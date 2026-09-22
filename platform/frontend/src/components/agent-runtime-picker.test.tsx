@@ -154,7 +154,14 @@ describe("AgentRuntimePicker", () => {
     renderPicker("chat");
     await user.click(screen.getByRole("radio", { name: "Custom image" }));
     expect(screen.getByText("Model settings content")).toBeVisible();
-    expect(screen.getByLabelText("Container image")).toHaveValue(defaultImage);
+    // Custom image starts empty: it must not quietly fall back to the
+    // platform's own runtime image.
+    expect(screen.getByLabelText("Container image")).toHaveValue("");
+    expect(
+      screen.getByRole("img", {
+        name: "Set a container image before creating the agent",
+      }),
+    ).toBeVisible();
     fireEvent.change(screen.getByLabelText("Container image"), {
       target: { value: "registry.example.com/custom:2" },
     });
@@ -239,7 +246,7 @@ function runtimeFor(
   return (
     getAgentCatalogTemplates(defaultImage, "Test Platform").find(
       (template) => template.id === id,
-    )?.initialValues.runtime ?? defaultAgentRuntime(defaultImage)
+    )?.initialValues.runtime ?? defaultAgentRuntime()
   );
 }
 

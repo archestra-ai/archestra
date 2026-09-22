@@ -573,30 +573,49 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-runtime-fields", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./agent-runtime-fields")>()),
-  AgentRuntimeFields: ({
-    value,
-    onChange,
-  }: {
-    value: { inferenceProtocol: string } | null;
-    onChange: (value: { inferenceProtocol: string } | null) => void;
-  }) => (
-    <div data-testid="agent-runtime">
-      <button
-        type="button"
-        onClick={() =>
-          value && onChange({ ...value, inferenceProtocol: "openai_responses" })
-        }
-      >
-        Set runtime to OpenAI Responses
-      </button>
-      <button type="button" onClick={() => onChange(null)}>
-        Disable runtime
-      </button>
-    </div>
-  ),
-}));
+vi.mock("./agent-runtime-fields", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./agent-runtime-fields")>();
+  return {
+    ...actual,
+    AgentRuntimeFields: ({
+      value,
+      onChange,
+    }: {
+      value: { inferenceProtocol: string } | null;
+      onChange: (value: object | null) => void;
+    }) => (
+      <div data-testid="agent-runtime">
+        <button
+          type="button"
+          onClick={() => onChange(actual.defaultAgentRuntime())}
+        >
+          Enable runtime
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            value && onChange({ ...value, image: "example.com/custom:v1" })
+          }
+        >
+          Set runtime image
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            value &&
+            onChange({ ...value, inferenceProtocol: "openai_responses" })
+          }
+        >
+          Set runtime to OpenAI Responses
+        </button>
+        <button type="button" onClick={() => onChange(null)}>
+          Disable runtime
+        </button>
+      </div>
+    ),
+  };
+});
 
 vi.mock(
   "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
@@ -3465,6 +3484,33 @@ describe("AgentForm save payload and failure handling", () => {
     expect(savedBody()).toEqual({ runtime: null });
   });
 
+  it("requires an image before saving a runtime newly enabled on an existing agent", async () => {
+    vi.mocked(useFeature).mockImplementation(
+      ((flag: string) =>
+        flag === "agentRuntime") as unknown as typeof useFeature,
+    );
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{ ...baseAgent, runtime: null }}
+        sections={["runtime"]}
+        activeSection="runtime"
+      />,
+    );
+
+    // Enabling a runtime no longer prefills the platform's own image.
+    await user.click(screen.getByRole("button", { name: "Enable runtime" }));
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Set runtime image" }));
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody()).toMatchObject({
+      runtime: { image: "example.com/custom:v1" },
+    });
+  });
+
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
       isSet: true,
@@ -4029,7 +4075,10 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         agent={{
           ...baseAgent,
-          runtime: defaultAgentRuntime("example.com/runtime:latest"),
+          runtime: {
+            ...defaultAgentRuntime(),
+            image: "example.com/runtime:latest",
+          },
         }}
         sections={["advanced"]}
       />,
@@ -4496,7 +4545,7 @@ describe("AgentForm save payload and failure handling", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Custom image" }));
-    await user.clear(screen.getByLabelText(/Container image/));
+    expect(screen.getByLabelText(/Container image/)).toHaveValue("");
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /^Image/ }));
     expect(screen.queryByLabelText(/Container image/)).not.toBeInTheDocument();

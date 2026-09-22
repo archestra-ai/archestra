@@ -2465,7 +2465,7 @@ export function AgentForm({
     isClaudeCodeRuntime &&
     !usesClaudeSubscription &&
     (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
-  const needsRuntimeImage = !agent && !!runtime && !runtime.image.trim();
+  const needsRuntimeImage = !!runtime && !runtime.image.trim();
 
   // Moving an agent out of the environment its tools belong to strands them.
   // The tools editor refuses that itself, but the Configuration step does not

@@ -15,6 +15,14 @@ maintained by hand — there is no evaluation or scoring pipeline.
 
 ## Add a server
 
+Open an [Add an MCP server](https://github.com/archestra-ai/archestra/issues/new?template=add-mcp-server.yml)
+issue with the server URL, description, and category. Maintainers add the entry.
+To change an existing entry, open an
+[Update an MCP server](https://github.com/archestra-ai/archestra/issues/new?template=edit-mcp-server.yml)
+issue.
+
+## Maintainer steps
+
 1. Add the server's URL to `data/mcp-servers.json`.
 2. Add or edit its manifest under `data/mcp-evaluations/` — copy an existing entry as a
    template. The file name (and its `name` field) must match the name the catalog derives

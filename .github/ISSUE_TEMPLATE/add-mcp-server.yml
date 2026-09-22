@@ -1,0 +1,102 @@
+name: "🧩 Add an MCP server to the catalog"
+description: Request a new entry in the Archestra MCP Catalog. Maintainers add the entry.
+title: "[MCP Catalog] Add "
+labels: ["mcp-catalog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in what you know. Maintainers derive the rest (tools, transport, icon) and add the entry to `mcp-catalog/data/`.
+  - type: input
+    id: server_url
+    attributes:
+      label: Server URL
+      description: The GitHub repository URL (with the subdirectory path for a monorepo) or the endpoint URL of a remote MCP server.
+      placeholder: https://github.com/owner/repo or https://mcp.example.com/mcp
+    validations:
+      required: true
+  - type: input
+    id: display_name
+    attributes:
+      label: Display name
+      placeholder: Example MCP
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: One to three factual sentences about what the server does.
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Aggregators
+        - AI Tools
+        - Art & Culture
+        - Audio
+        - Browser Automation
+        - CLI Tools
+        - Cloud
+        - Communication
+        - CRM
+        - Data
+        - Data Science
+        - Development
+        - Email
+        - Enterprise
+        - File Management
+        - Finance
+        - Gaming
+        - General
+        - Healthcare
+        - IoT
+        - Job Search
+        - Knowledge
+        - Local files
+        - Location
+        - Logistics
+        - Marketing
+        - Media
+        - Messengers
+        - Monitoring
+        - Search
+        - Security
+        - Social Media
+        - Sports
+        - Support
+        - Translation
+        - Travel
+    validations:
+      required: true
+  - type: input
+    id: author
+    attributes:
+      label: Author
+      description: Vendor or maintainer name and website.
+      placeholder: Example Inc, https://example.com
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Homepage, documentation, and support URLs, one per line.
+  - type: input
+    id: keywords
+    attributes:
+      label: Keywords
+      description: Comma-separated search terms.
+      placeholder: markdown, documents, conversion
+  - type: textarea
+    id: client_config
+    attributes:
+      label: Client configuration
+      description: For local servers, the command, arguments, and environment variables a client needs to run it. Leave empty for remote servers.
+      render: json
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Authentication requirements, known limitations, or other context.

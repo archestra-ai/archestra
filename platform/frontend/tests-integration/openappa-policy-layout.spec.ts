@@ -51,6 +51,18 @@ for (const viewport of [
         url: "/api/openappa/batteries",
         body: [],
       });
+      await mswControl.use({
+        method: "get",
+        url: "/api/openappa/policy-declarations",
+        body: {
+          batteries: [],
+          unusedAliases: [],
+          rootRevision: 1,
+          lastError: null,
+          managedInGithub: false,
+          heldPull: null,
+        },
+      });
       const permissions = await (
         await request.get("/internal-test/api/api/user/permissions")
       ).json();

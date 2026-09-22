@@ -814,3 +814,25 @@ button.plugin-featured-action::after {
     animation: none;
   }
 }
+
+/* ── OpenAPPA policy editor: glyph-margin annotations ──
+   Monaco paints these beside a line of the policy text and carries the hover
+   message on the same decoration. A bar rather than a dot, because Monaco
+   sizes the glyph element itself and a bar reads at any glyph-margin width.
+   The colours are literal: the glyph margin sits outside the editor's own
+   foreground, so `currentColor` there is Monaco's, not ours. */
+
+.openappa-glyph-info,
+.openappa-glyph-warning {
+  width: 3px !important;
+  margin-left: 6px;
+  border-radius: 2px;
+}
+
+.openappa-glyph-info {
+  background-color: var(--color-blue-500);
+}
+
+.openappa-glyph-warning {
+  background-color: var(--color-amber-500);
+}

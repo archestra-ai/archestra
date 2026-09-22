@@ -8,6 +8,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type BatteryMatch,
+  useBatteries,
   useBatteryMatches,
   useSetBatteryEnabled,
 } from "@/lib/openappa-batteries.query";
@@ -28,6 +29,12 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
     organization: ["update"],
     toolPolicy: ["update"],
   });
+  // Binding a credential hands its value to helper code, so it takes its own
+  // permission: whoever adds the battery here may not be able to finish it.
+  const { data: canBindCredentials } = useHasPermissions({
+    credential: ["update"],
+  });
+  const batteries = useBatteries(openappaEnabled);
   const setEnabled = useSetBatteryEnabled(catalogId);
   // A failed lookup must not read as "no battery applies".
   if (isError)
@@ -49,13 +56,25 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
     <div className="space-y-2 rounded-md border p-3">
       {matches.map((match) => {
         const id = `battery-${match.battery}`;
+        // Until the battery list answers, whether this one reads a credential
+        // is unknown; a failed list is treated as if it does.
+        const declaresCredentials = batteries.data
+          ? (batteries.data.find((battery) => battery.name === match.battery)
+              ?.credentials.length ?? 0) > 0
+          : batteries.isError;
+        const credentialIsSomeoneElses =
+          declaresCredentials && canBindCredentials !== true;
         return (
           <div key={match.battery} className="flex items-start gap-2 text-sm">
             <Checkbox
               id={id}
               className="mt-0.5"
               checked={match.install?.enabled ?? false}
-              disabled={canManage !== true || setEnabled.isPending}
+              disabled={
+                canManage !== true ||
+                setEnabled.isPending ||
+                batteries.isLoading
+              }
               onCheckedChange={(checked) =>
                 setEnabled.mutate({ match, enabled: checked === true })
               }
@@ -66,7 +85,8 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
               </Label>
               <p className="text-muted-foreground">
                 <span>{describe(match)} </span>
-                {match.install?.status === "missing_credentials" ? (
+                {match.install?.status === "missing_credentials" &&
+                !credentialIsSomeoneElses ? (
                   <Link
                     href="/openappa"
                     className="underline underline-offset-4"
@@ -75,6 +95,20 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
                   </Link>
                 ) : null}
               </p>
+              {credentialIsSomeoneElses ? (
+                <p role="note" className="text-muted-foreground">
+                  <span>
+                    The box adds the battery, but its helpers stay idle until
+                    someone with the credential permission binds its credential.{" "}
+                  </span>
+                  <Link
+                    href="/openappa"
+                    className="underline underline-offset-4"
+                  >
+                    See its credentials
+                  </Link>
+                </p>
+              ) : null}
             </div>
           </div>
         );

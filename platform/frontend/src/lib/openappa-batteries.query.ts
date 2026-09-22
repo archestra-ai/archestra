@@ -1,11 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import {
-  type QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  batteriesQueryKey,
+  batteryMatchesPrefix,
+  effectivePolicyQueryKey,
+  invalidatePolicyViews,
+  policyDeclarationsQueryKey,
+} from "@/lib/openappa-policy-views";
 import { getApiErrorType, reportApiError, throwOnApiError } from "@/lib/utils";
 
 export type BatteryMatch =
@@ -13,13 +15,60 @@ export type BatteryMatch =
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 export type BatteryInstall = BatterySummary["installs"][number];
+export type PolicyDeclarations =
+  archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
+export type PolicyBattery = PolicyDeclarations["batteries"][number];
+export type EffectivePolicy =
+  archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 
-const batteriesQueryKey = ["openappa-batteries"];
-const batteryMatchesPrefix = "openappa-battery-matches";
 export const batteryMatchesQueryKey = (catalogId: string) => [
   batteryMatchesPrefix,
   catalogId,
 ];
+
+/**
+ * What the organization's policy text declares and what came of it: every
+ * included battery with its status, servers and credential rows, the aliases
+ * no battery declares, the composition's last error and a held GitHub pull.
+ */
+export function usePolicyDeclarations() {
+  return useQuery({
+    queryKey: policyDeclarationsQueryKey,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaPolicyDeclarations();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+/** The composed document the runtime enforces: the root text with its batteries. */
+export function useEffectivePolicy(enabled = true) {
+  return useQuery({
+    queryKey: effectivePolicyQueryKey,
+    enabled,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaEffectivePolicy();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+/** Publish a held GitHub pull under the accepting user's permissions. */
+export function useAcceptHeldPull() {
+  return useBatteryMutation(
+    async () => settled(await archestraApiSdk.acceptHeldAppaGithubPull()),
+    (accepted) =>
+      toast.success(
+        accepted.droppedBatteries.length > 0
+          ? `Repository text accepted. Dropped: ${accepted.droppedBatteries.join(", ")}`
+          : "Repository text accepted",
+      ),
+  );
+}
 
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
 export function useBatteries() {
@@ -150,10 +199,9 @@ function settled<T>(result: { data?: T; error?: unknown }): T {
 }
 
 /**
- * A write to an install or package. Whatever happened, the battery list and
- * every catalog entry's matches are refetched so a refused write (the battery
- * got installed meanwhile, another server owns its helpers) shows the server's
- * state.
+ * A write to the policy's declarations. Whatever happened, every view of the
+ * policy is refetched so a refused write (the battery got included meanwhile,
+ * the text moved under the edit) shows the server's state.
  */
 function useBatteryMutation<TInput, TOutput>(
   mutationFn: (input: TInput) => Promise<TOutput>,
@@ -163,13 +211,6 @@ function useBatteryMutation<TInput, TOutput>(
   return useMutation({
     mutationFn,
     onSuccess,
-    onSettled: () => invalidateBatteries(client),
+    onSettled: () => invalidatePolicyViews(client),
   });
-}
-
-function invalidateBatteries(client: QueryClient) {
-  return Promise.all([
-    client.invalidateQueries({ queryKey: batteriesQueryKey }),
-    client.invalidateQueries({ queryKey: [batteryMatchesPrefix] }),
-  ]);
 }

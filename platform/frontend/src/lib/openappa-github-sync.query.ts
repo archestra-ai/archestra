@@ -1,12 +1,15 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  appaGithubSyncQueryKey,
+  invalidatePolicyViews,
+} from "@/lib/openappa-policy-views";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
-const queryKey = ["openappa-github-sync"];
 export function useAppaGithubSync() {
   return useQuery({
-    queryKey,
+    queryKey: appaGithubSyncQueryKey,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getAppaGithubSync();
       throwOnApiError(error, { toastOnError: false });
@@ -31,9 +34,10 @@ export function useConfigureAppaGithubSync() {
       return data;
     },
     onSuccess: () => {
-      client.invalidateQueries({ queryKey });
       toast.success("GitHub source saved. First sync queued.");
     },
+    // Syncing hands the text to the repository: every view of it follows.
+    onSettled: () => invalidatePolicyViews(client),
   });
 }
 export function useUpdateAppaGithubSync() {
@@ -51,8 +55,8 @@ export function useUpdateAppaGithubSync() {
       }
       return data;
     },
+    onSettled: () => invalidatePolicyViews(client),
     onSuccess: (_data, body) => {
-      client.invalidateQueries({ queryKey });
       toast.success(
         body.action === "sync"
           ? "Sync queued"

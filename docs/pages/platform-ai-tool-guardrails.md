@@ -74,7 +74,7 @@ Helper scripts run in the [code execution sandbox](./platform-code-sandbox), so 
 
 You can upload your own battery package. The policy includes an upload by its content hash — `batteries/acme@sha256-…/appa.toml` — and a bundled battery keeps its own spelling, so an upload never replaces one silently. A package cannot be deleted while the policy includes it. Uploading a package with helpers or credentials needs the credential permission too.
 
-While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that would drop a battery or change a credential binding is held instead of published. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
+While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that binds a credential variable to a new key is held instead of published, and so is one that drops a battery your deployment declared before its declarations first reached the repository. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
 
 The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. When the current text fails to compose, the tab shows the last document that opened and says so.
 
@@ -84,7 +84,7 @@ The editor marks each include line and each unused alias with the status of what
 
 Lumen Cartography installs the GitHub MCP server for its agents. The setup wizard recognizes the server's image and offers the `github` battery. An administrator turns the checkbox on, and the policy gains an include line and an alias for the new server. The battery shows "Needs a credential" until the administrator binds `APPA_PROVIDER_GITHUB_TOKEN` to the organization's GitHub token in the Batteries panel. From then on the battery consults GitHub before an agent writes to a repository.
 
-Later the team moves the policy into a GitHub repository. A pull request removes the include line by mistake. The next pull is held with the reason "drops batteries" instead of turning the battery off. The administrator reads the held pull in the panel, restores the line in the repository, and the next pull publishes cleanly.
+Later the team moves the policy into a GitHub repository. A pull request points `APPA_PROVIDER_GITHUB_TOKEN` at a different key. The next pull is held with the reason "changes credentials" instead of handing the battery that key on its own. An administrator with the credential permission reads the held pull in the panel and accepts it, or asks for the change to be reverted.
 
 ## The Lethal Trifecta
 

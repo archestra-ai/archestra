@@ -132,7 +132,10 @@ time, and a stored duplicate resolves to nothing.
 Install rows (`openappa_battery_install`) are a read model derived from the
 text: every recompose plans the rows from the declarations and replaces them
 wholesale, preserving ids. `enabled` is `true` for every declared battery; a
-battery is off by being absent from the text. Every write path edits the text
+battery is off by being absent from the text. Unticking the wizard checkbox
+unbinds the alias but keeps the include, which then composes as the
+`server_missing` stub until the entry is detached elsewhere or removed from
+the text. Every write path edits the text
 through the addon's `editOpenappaPolicy` and saves a revision: the batteries
 routes (attach, detach, rebind, upload), the wizard checkbox, the editor, the MCP
 guardrails tools, and GitHub sync. Attaching through the routes requires

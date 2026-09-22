@@ -31,6 +31,7 @@ import {
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import { BATTERY_STATUS_LABELS } from "./policy-decorations";
 
 export function BatteriesPanel() {
   const batteries = useBatteries();
@@ -159,13 +160,14 @@ function InstallRow({
   const options =
     credentials.data?.filter((credential) => credential.allowOrganization) ??
     [];
-  const status = STATUS_BADGES[install.status];
   return (
     <li className="flex flex-wrap items-start justify-between gap-3 py-3">
       <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{battery.name}</span>
-          <Badge variant={status.variant}>{status.label}</Badge>
+          <Badge variant={STATUS_VARIANTS[install.status]}>
+            {BATTERY_STATUS_LABELS[install.status]}
+          </Badge>
           <span className="text-sm text-muted-foreground">{serverName}</span>
         </div>
         {battery.credentials.map((name) => {
@@ -350,16 +352,16 @@ function UploadPackageDialog({
   );
 }
 
-const STATUS_BADGES: Record<
+const STATUS_VARIANTS: Record<
   BatteryInstall["status"],
-  { label: string; variant: "secondary" | "outline" | "destructive" }
+  "secondary" | "outline" | "destructive"
 > = {
-  active: { label: "Active", variant: "secondary" },
-  missing_credentials: { label: "Needs a credential", variant: "destructive" },
-  naming_conflict: { label: "Tool name conflict", variant: "destructive" },
-  server_missing: { label: "No server bound", variant: "outline" },
-  refused: { label: "Not enforced", variant: "destructive" },
-  unavailable: { label: "Package missing", variant: "destructive" },
+  active: "secondary",
+  missing_credentials: "destructive",
+  naming_conflict: "destructive",
+  server_missing: "outline",
+  refused: "destructive",
+  unavailable: "destructive",
 };
 
 function rebind(

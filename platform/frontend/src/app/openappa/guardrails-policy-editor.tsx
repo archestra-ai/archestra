@@ -1,7 +1,8 @@
 "use client";
 
+import type { OnMount } from "@monaco-editor/react";
 import { Check, FileCode2, Loader2, LockKeyhole, Save } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type GuardrailsPolicy,
@@ -16,11 +18,21 @@ import {
   useUpdateGuardrailsPolicy,
   useValidateGuardrailsPolicy,
 } from "@/lib/guardrails-policy.query";
+import {
+  type PolicyDeclarations,
+  usePolicyDeclarations,
+} from "@/lib/openappa-batteries.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { EffectivePolicyView } from "./_parts/effective-policy-view";
+import {
+  annotationDecorations,
+  policyAnnotations,
+} from "./_parts/policy-decorations";
 
 export function GuardrailsPolicyEditor() {
   const policy = useGuardrailsPolicy();
   const sync = useAppaGithubSync();
+  const [tab, setTab] = useState<"policy" | "effective">("policy");
   if (policy.isLoading || sync.isPending)
     return <Skeleton className="h-[65vh] w-full" />;
   if (policy.isError || !policy.data || sync.isError)
@@ -34,7 +46,27 @@ export function GuardrailsPolicyEditor() {
       />
     );
   return (
-    <PolicyForm policy={policy.data} synced={!!sync.data?.source?.interval} />
+    // Both panels stay mounted: switching tabs must not throw away an unsaved
+    // draft, and the composed view pays for itself only once it is asked for,
+    // which is what its `enabled` flag carries.
+    <Tabs
+      value={tab}
+      onValueChange={(next) => setTab(next === "effective" ? next : "policy")}
+    >
+      <TabsList>
+        <TabsTrigger value="policy">Policy</TabsTrigger>
+        <TabsTrigger value="effective">Effective policy</TabsTrigger>
+      </TabsList>
+      <TabsContent value="policy" forceMount>
+        <PolicyForm
+          policy={policy.data}
+          synced={!!sync.data?.source?.interval}
+        />
+      </TabsContent>
+      <TabsContent value="effective" forceMount>
+        <EffectivePolicyView enabled={tab === "effective"} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -60,6 +92,7 @@ function PolicyForm({
   const dirty = form.formState.isDirty;
   const save = useUpdateGuardrailsPolicy();
   const validation = useValidateGuardrailsPolicy();
+  const declarations = usePolicyDeclarations();
   const busy = save.isPending || validation.isPending;
   const changedElsewhere = policy.revision !== revision;
   const checked =
@@ -151,29 +184,27 @@ function PolicyForm({
             )}
           </div>
         </div>
-        <Editor
-          height="min(50vh, 560px)"
-          language="ini"
-          value={content}
+        <AnnotatedEditor
+          content={content}
+          readOnly={!canEdit || save.isPending}
+          declarations={
+            // The annotations are line numbers into the revision they were read
+            // at. An edit moves every line below it, so a dirty buffer gets none.
+            !dirty && declarations.data?.rootRevision === policy.revision
+              ? declarations.data
+              : null
+          }
           onChange={(value) => {
-            form.setValue("content", value ?? "", { shouldDirty: true });
+            form.setValue("content", value, { shouldDirty: true });
             save.reset();
           }}
-          options={{
-            readOnly: !canEdit || save.isPending,
-            ariaLabel: "Organization guardrails policy",
-            minimap: { enabled: false },
-            fontSize: 14,
-            lineNumbers: "on",
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            padding: { top: 16, bottom: 16 },
-            automaticLayout: true,
-          }}
         />
-        <div className="border-t px-4 py-3 text-xs text-muted-foreground">
-          Saved changes apply to new conversations. Existing conversations keep
-          their original policy.
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
+          <span>
+            Saved changes apply to new conversations. Existing conversations
+            keep their original policy.
+          </span>
+          <CompositionSummary declarations={declarations.data} />
         </div>
       </div>
       {changedElsewhere && dirty && (
@@ -195,6 +226,15 @@ function PolicyForm({
           </InlineNoticeText>
         </InlineNotice>
       )}
+      {checked && checked.warnings.length > 0 && (
+        // Its own notice: these entries parse, they just compose to nothing.
+        // Folding them into the error strip would read as a refusal to save.
+        <InlineNotice variant="neutral" data-testid="policy-warnings">
+          <InlineNoticeText className="whitespace-pre-wrap font-mono">
+            {checked.warnings.join("\n")}
+          </InlineNoticeText>
+        </InlineNotice>
+      )}
       {save.isError && (
         <InlineNotice variant="error">
           <InlineNoticeText className="whitespace-pre-wrap">
@@ -203,5 +243,90 @@ function PolicyForm({
         </InlineNotice>
       )}
     </form>
+  );
+}
+
+/** The policy text with a glyph beside each line the declarations speak for. */
+function AnnotatedEditor({
+  content,
+  readOnly,
+  declarations,
+  onChange,
+}: {
+  content: string;
+  readOnly: boolean;
+  declarations: PolicyDeclarations | null;
+  onChange: (value: string) => void;
+}) {
+  const [editor, setEditor] = useState<Parameters<OnMount>[0] | null>(null);
+  const decorations = useMemo(
+    () =>
+      declarations
+        ? annotationDecorations(policyAnnotations(declarations))
+        : [],
+    [declarations],
+  );
+  useEffect(() => {
+    if (!editor) return;
+    const collection = editor.createDecorationsCollection(decorations);
+    return () => collection.clear();
+  }, [editor, decorations]);
+  return (
+    <Editor
+      height="min(50vh, 560px)"
+      language="ini"
+      value={content}
+      onMount={setEditor}
+      onChange={(value) => onChange(value ?? "")}
+      options={{
+        readOnly,
+        ariaLabel: "Organization guardrails policy",
+        minimap: { enabled: false },
+        fontSize: 14,
+        lineNumbers: "on",
+        glyphMargin: true,
+        scrollBeyondLastLine: false,
+        wordWrap: "on",
+        padding: { top: 16, bottom: 16 },
+        automaticLayout: true,
+      }}
+    />
+  );
+}
+
+/** One line on what the text composes to, beside the editor's own footer. */
+function CompositionSummary({
+  declarations,
+}: {
+  declarations: PolicyDeclarations | null | undefined;
+}) {
+  if (!declarations) return null;
+  if (declarations.lastError)
+    return (
+      <output
+        data-testid="composition-summary"
+        data-failed="true"
+        className="text-destructive"
+      >
+        Composition failed: not enforced
+      </output>
+    );
+  const total = declarations.batteries.length;
+  const notEnforced = declarations.batteries.filter(
+    (battery) => battery.status !== "active",
+  ).length;
+  return (
+    <output
+      data-testid="composition-summary"
+      data-batteries={total}
+      data-not-enforced={notEnforced}
+    >
+      <span>
+        {total === 1
+          ? "1 battery composes into this policy"
+          : `${total} batteries compose into this policy`}
+      </span>
+      {notEnforced > 0 && <span>{` · ${notEnforced} not enforced`}</span>}
+    </output>
   );
 }

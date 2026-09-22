@@ -9,8 +9,11 @@
  * `onMount` is called once with a stand-in for the editor instance that
  * answers only what the app's own editors ask of it: a content height of
  * {@link MOCK_EDITOR_LINE_HEIGHT_PX} per line of the value (plus padding),
- * focus, and a content-size subscription that fires when the value changes —
- * which is what an editor sized by its content is listening for.
+ * focus, a content-size subscription that fires when the value changes —
+ * which is what an editor sized by its content is listening for — and a
+ * decorations collection that holds what it is given. jsdom paints no glyph
+ * margin, so the decorations are only kept, never drawn; what goes into them
+ * is tested where it is computed.
  */
 import type { EditorProps } from "@monaco-editor/react";
 import { useEffect, useRef } from "react";
@@ -52,6 +55,20 @@ export function Editor({
       },
       focus: () => {},
       getValue: () => valueRef.current,
+      createDecorationsCollection: (initial: unknown[] = []) => {
+        let held = initial;
+        return {
+          set: (next: unknown[]) => {
+            held = next;
+          },
+          clear: () => {
+            held = [];
+          },
+          get length() {
+            return held.length;
+          },
+        };
+      },
     } as unknown as Parameters<NonNullable<EditorProps["onMount"]>>[0];
     onMountRef.current?.(editor, {} as never);
   }, []);

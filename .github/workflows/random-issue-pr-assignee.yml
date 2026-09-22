@@ -187,11 +187,12 @@ jobs:
                   }
 
                   // close-external-prs.yml polls on the same cadence and closes PRs from
-                  // authors without repo access. Do not ping a maintainer about a PR that
-                  // is about to close. Same check as there: the collaborators API, not
-                  // author_association (private org members read as CONTRIBUTOR).
-                  if (!(await hasRepoAccess(pr.user.login))) {
-                    console.log(`Skipping reviewer request because PR #${pr.number} is external`);
+                  // forks. Do not ping a maintainer about a PR that is about to close.
+                  // Same check as there: a same-repo head branch means a maintainer. Not
+                  // author_association or the collaborators API, which both misread
+                  // private org members under the Actions token.
+                  if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+                    console.log(`Skipping reviewer request because PR #${pr.number} comes from a fork`);
                     continue;
                   }
 
@@ -229,23 +230,4 @@ jobs:
 
             if (isManualBackfill) {
               console.log(`Processed ${processedPrs} open PRs during manual backfill`);
-            }
-
-            // True when the user has access to this repo. A failed lookup counts as
-            // access, so a transient API error never hides a maintainer PR.
-            async function hasRepoAccess(login) {
-              try {
-                await github.rest.repos.checkCollaborator({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  username: login,
-                });
-                return true;
-              } catch (error) {
-                if (error.status === 404) {
-                  return false;
-                }
-                console.log(`Collaborator lookup failed for ${login}: ${error.message}`);
-                return true;
-              }
             }

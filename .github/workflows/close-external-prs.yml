@@ -5,12 +5,14 @@ name: Close External Pull Requests
 # closes every open PR from outside the maintainer group and leaves a comment
 # that explains the process.
 #
-# Who counts as a maintainer: anyone with access to this repository, checked
-# with the collaborators API. Org members get that access through the org, so
-# the set equals org membership as long as no outside collaborators are added.
-# Do NOT use `author_association` for this: org memberships are private, so the
-# Actions token reports every org member as a plain CONTRIBUTOR and the
-# workflow would close maintainer PRs.
+# Who counts as a maintainer: anyone whose PR branch lives in this repository.
+# Only people with push access can create a branch here, so a same-repo head
+# means a maintainer and a fork head means an external contributor.
+#
+# Do NOT use `author_association` or the collaborators API for this. Org
+# memberships are private, so the Actions token reports every org member as a
+# plain CONTRIBUTOR and answers 404 on the collaborator check. Both variants
+# closed maintainer PRs in practice.
 #
 # Scheduled polling instead of `pull_request_target`: the privileged trigger runs
 # in the base repository security context for untrusted PR events and is a common
@@ -82,10 +84,8 @@ jobs:
                   continue;
                 }
 
-                const membership = await isMaintainer(author);
-
-                if (membership !== 'external') {
-                  console.log(`Keeping #${pr.number}: ${author} is ${membership}`);
+                if (isSameRepoBranch(pr)) {
+                  console.log(`Keeping #${pr.number}: ${author} pushed a branch to this repo`);
                   continue;
                 }
 
@@ -105,24 +105,9 @@ jobs:
 
             console.log(`Closed ${closedPrs} external pull requests`);
 
-            // Returns 'maintainer' (has repo access), 'external' (confirmed no
-            // access), or 'unknown' (the lookup failed). Only 'external' closes a
-            // PR: on any lookup error the PR is kept, never closed by mistake.
-            async function isMaintainer(login) {
-              try {
-                await github.rest.repos.checkCollaborator({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  username: login,
-                });
-                return 'maintainer';
-              } catch (error) {
-                if (error.status === 404) {
-                  return 'external';
-                }
-                console.log(`Collaborator lookup failed for ${login}: ${error.message}`);
-                return 'unknown';
-              }
+            // A deleted fork leaves head.repo null, which counts as external.
+            function isSameRepoBranch(pr) {
+              return pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
             }
 
             async function closeExternalPr(pr) {

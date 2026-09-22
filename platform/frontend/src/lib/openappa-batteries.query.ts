@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   batteriesQueryKey,
@@ -32,15 +37,7 @@ export const batteryMatchesQueryKey = (catalogId: string) => [
  * no battery declares, the composition's last error and a held GitHub pull.
  */
 export function usePolicyDeclarations() {
-  return useQuery({
-    queryKey: policyDeclarationsQueryKey,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getOpenappaPolicyDeclarations();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-  });
+  return useQuery(policyDeclarationsQuery);
 }
 
 /** The composed document the runtime enforces: the root text with its batteries. */
@@ -75,15 +72,7 @@ export function useAcceptHeldPull() {
 
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
 export function useBatteries(enabled = true) {
-  return useQuery({
-    queryKey: batteriesQueryKey,
-    enabled,
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getOpenappaBatteries();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
-  });
+  return useQuery({ ...batteriesQuery, enabled });
 }
 
 /** The guardrails batteries a catalog entry stands for, with their installs. */
@@ -103,6 +92,7 @@ export function useBatteryMatches(catalogId: string, enabled: boolean) {
 
 /** Turns a matched battery on or off for a catalog entry, installing it on first use. */
 export function useSetBatteryEnabled(catalogId: string) {
+  const client = useQueryClient();
   return useBatteryMutation(
     async (params: { match: BatteryMatch; enabled: boolean }) => {
       const { match, enabled } = params;
@@ -110,7 +100,7 @@ export function useSetBatteryEnabled(catalogId: string) {
       // A battery is off by being absent from the policy, so turning an
       // unattached one off is nothing to write.
       if (!enabled) return null;
-      const created = await createInstall({
+      const created = await createInstall(client, {
         batteryName: match.battery,
         catalogId,
       });
@@ -132,16 +122,12 @@ export function useSetBatteryEnabled(catalogId: string) {
   );
 }
 
-/**
- * Include a battery for one catalog entry. The body names the package the
- * policy is to spell: an entry already included governs which bytes win, so
- * the caller passes that entry's hash rather than the newest upload's.
- */
 /** Include a battery for a catalog entry, spelling the package the policy governs. */
 export function useCreateBatteryInstall() {
+  const client = useQueryClient();
   return useBatteryMutation(
     async (params: { batteryName: string; catalogId: string }) =>
-      settled(await createInstall(params)),
+      settled(await createInstall(client, params)),
     (battery) => toast.success(`Battery "${battery.name}" attached`),
   );
 }
@@ -203,14 +189,15 @@ export function useDeleteBatteryPackage() {
 /**
  * The one create call: a battery is included once, so a second server joining
  * one the policy already includes has to name that entry's package — the
- * server refuses any other spelling. The package is read at write time, not
- * from a render's data, so a policy that moved meanwhile still lands.
+ * server refuses any other spelling. The package is read at write time through
+ * the query cache — fresh data answers, stale data is refetched — so a policy
+ * that moved meanwhile still lands without a round-trip the page already paid.
  */
-async function createInstall(params: {
-  batteryName: string;
-  catalogId: string;
-}) {
-  const packageHash = await includedPackageHash(params.batteryName);
+async function createInstall(
+  client: QueryClient,
+  params: { batteryName: string; catalogId: string },
+) {
+  const packageHash = await includedPackageHash(client, params.batteryName);
   return archestraApiSdk.createOpenappaBatteryInstall({
     body: {
       ...params,
@@ -220,18 +207,38 @@ async function createInstall(params: {
 }
 
 /** The included entry's package, else the newest upload's, else none (bundled). */
-async function includedPackageHash(name: string): Promise<string | null> {
-  const declarations = settled(
-    await archestraApiSdk.getOpenappaPolicyDeclarations(),
-  );
-  const included = declarations.batteries.find(
+async function includedPackageHash(
+  client: QueryClient,
+  name: string,
+): Promise<string | null> {
+  const declarations = await client.fetchQuery(policyDeclarationsQuery);
+  const included = declarations?.batteries.find(
     (battery) => battery.name === name,
   );
   if (included) return included.packageHash;
-  const batteries = settled(await archestraApiSdk.getOpenappaBatteries());
+  const batteries = await client.fetchQuery(batteriesQuery);
   const battery = batteries.find((candidate) => candidate.name === name);
   return battery?.source === "upload" ? battery.contentHash : null;
 }
+
+const policyDeclarationsQuery = {
+  queryKey: policyDeclarationsQueryKey,
+  queryFn: async () => {
+    const { data, error } =
+      await archestraApiSdk.getOpenappaPolicyDeclarations();
+    throwOnApiError(error, { toastOnError: false });
+    return data ?? null;
+  },
+};
+
+const batteriesQuery = {
+  queryKey: batteriesQueryKey,
+  queryFn: async () => {
+    const { data, error } = await archestraApiSdk.getOpenappaBatteries();
+    throwOnApiError(error, { toastOnError: false });
+    return data ?? [];
+  },
+};
 
 async function setInstallEnabled(id: string, enabled: boolean) {
   return settled(

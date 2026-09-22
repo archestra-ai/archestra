@@ -316,6 +316,13 @@ function IncludedBattery({
             <Trash2 className="size-4" />
           </Button>
         )}
+        {writable && installs.length === 0 && (
+          // An include with no install row is removed by editing the text:
+          // every panel write goes through an install.
+          <span className="ml-auto text-xs text-muted-foreground">
+            Remove its include line in the policy editor.
+          </span>
+        )}
       </div>
       {battery.servers.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -360,8 +367,15 @@ function IncludedBattery({
         pendingLabel="Removing…"
         isPending={remove.isPending}
         onConfirm={async () => {
-          for (const install of installs) await remove.mutateAsync(install.id);
-          setRemoving(false);
+          // Independent rows go together; whatever failed, the refetch shows
+          // what is left and the dialog never outlives the attempt.
+          try {
+            await Promise.all(
+              installs.map((install) => remove.mutateAsync(install.id)),
+            );
+          } finally {
+            setRemoving(false);
+          }
         }}
       />
     </li>

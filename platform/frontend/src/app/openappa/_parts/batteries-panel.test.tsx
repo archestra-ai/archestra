@@ -153,11 +153,18 @@ beforeEach(() => {
     ),
     http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
       HttpResponse.json([
-        { id: catalogId, name: "Code", toolCount: 3 },
-        { id: otherCatalogId, name: "Docs", toolCount: 2 },
-        { id: freshCatalogId, name: "Fresh", toolCount: 0 },
+        { id: catalogId, name: "Code" },
+        { id: otherCatalogId, name: "Docs" },
+        { id: freshCatalogId, name: "Fresh" },
       ]),
     ),
+    http.get(`${baseUrl}/api/openappa/battery-matches`, ({ request }) => {
+      const picked = new URL(request.url).searchParams.get("catalogId");
+      return HttpResponse.json({
+        attach: picked === freshCatalogId ? "unsynced" : "ready",
+        matches: [],
+      });
+    }),
     http.get(`${baseUrl}/api/credentials`, () =>
       HttpResponse.json([credential]),
     ),
@@ -426,7 +433,7 @@ test("attaching a bundled battery that is not included yet names no package", as
   );
 });
 
-test("a server whose tools are not synced yet cannot be picked", async () => {
+test("a server whose tools are not synced yet cannot take a battery", async () => {
   declarations = emptyDeclarations();
   batteries = [githubBattery()];
   show();
@@ -434,14 +441,15 @@ test("a server whose tools are not synced yet cannot be picked", async () => {
   await user.click(await screen.findByRole("combobox", { name: "Battery" }));
   await user.click(screen.getByRole("option", { name: "github" }));
   await user.click(screen.getByRole("combobox", { name: "Server" }));
-  expect(screen.getByRole("option", { name: /Fresh/ })).toHaveAttribute(
-    "aria-disabled",
-    "true",
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  expect(await screen.findByRole("note")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(screen.getByRole("option", { name: "Code" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
   );
-  expect(screen.getByRole("option", { name: "Code" })).not.toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
+  expect(screen.queryByRole("note")).not.toBeInTheDocument();
 });
 
 test("detaching a server deletes that server's install alone", async () => {

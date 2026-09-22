@@ -85600,26 +85600,28 @@ export type GetOpenappaBatteryMatchesResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        battery: string;
-        evidence: 'host' | 'image' | 'name';
-        install: {
-            id: string;
-            organizationId: string;
-            batteryName: string;
-            catalogId: string;
-            enabled: boolean;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
-            packageHash: string | null;
-            lastError: string | null;
-            credentialBindings: {
-                [key: string]: string;
-            };
-            createdAt: string;
-            updatedAt: string;
-        } | null;
-        targets: Array<string>;
-    }>;
+    200: {
+        attach: 'ready' | 'unsynced' | 'conflicting';
+        matches: Array<{
+            battery: string;
+            evidence: 'host' | 'image' | 'name';
+            install: {
+                id: string;
+                organizationId: string;
+                batteryName: string;
+                catalogId: string;
+                enabled: boolean;
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+                packageHash: string | null;
+                lastError: string | null;
+                credentialBindings: {
+                    [key: string]: string;
+                };
+                createdAt: string;
+                updatedAt: string;
+            } | null;
+        }>;
+    };
 };
 
 export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesResponses[keyof GetOpenappaBatteryMatchesResponses];

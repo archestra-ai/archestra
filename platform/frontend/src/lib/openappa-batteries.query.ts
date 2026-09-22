@@ -15,8 +15,9 @@ import {
 } from "@/lib/openappa-policy-views";
 import { getApiErrorType, reportApiError, throwOnApiError } from "@/lib/utils";
 
-export type BatteryMatch =
-  archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"][number];
+export type BatteryMatches =
+  archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];
+export type BatteryMatch = BatteryMatches["matches"][number];
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 export type PolicyDeclarations =
@@ -74,17 +75,20 @@ export function useBatteries(enabled = true) {
   return useQuery({ ...batteriesQuery, enabled });
 }
 
-/** The guardrails batteries a catalog entry stands for, with their installs. */
+/**
+ * The guardrails batteries a catalog entry stands for, with their installs,
+ * and whether the entry can take one at all.
+ */
 export function useBatteryMatches(catalogId: string, enabled: boolean) {
   return useQuery({
     queryKey: batteryMatchesQueryKey(catalogId),
     enabled,
-    queryFn: async () => {
+    queryFn: async (): Promise<BatteryMatches> => {
       const { data, error } = await archestraApiSdk.getOpenappaBatteryMatches({
         query: { catalogId },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      return data ?? { attach: "unsynced", matches: [] };
     },
   });
 }
@@ -111,7 +115,7 @@ export function useSetBatteryEnabled(catalogId: string) {
           query: { catalogId },
         }),
       );
-      const install = matches.find(
+      const install = matches.matches.find(
         (fresh) => fresh.battery === match.battery,
       )?.install;
       return install

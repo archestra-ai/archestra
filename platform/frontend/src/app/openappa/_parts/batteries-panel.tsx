@@ -32,11 +32,13 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  type BatteryMatches,
   type BatterySummary,
   type PolicyBattery,
   type PolicyDeclarations,
   useAcceptHeldPull,
   useBatteries,
+  useBatteryMatches,
   useCreateBatteryInstall,
   useDeleteBatteryInstall,
   useDeleteBatteryPackage,
@@ -513,11 +515,15 @@ function AttachForm({
 }: {
   batteries: BatterySummary[];
   included: PolicyBattery[];
-  catalog: { id: string; name: string; toolCount: number }[];
+  catalog: { id: string; name: string }[];
 }) {
   const create = useCreateBatteryInstall();
   const [batteryName, setBatteryName] = useState("");
   const [catalogId, setCatalogId] = useState("");
+  // Whether the chosen server has a tool prefix an alias can point at; the
+  // server refuses the attach otherwise, so the form says so first.
+  const readiness = useBatteryMatches(catalogId, catalogId !== "");
+  const attach = readiness.data?.attach ?? null;
   const chosen = batteries.find((battery) => battery.name === batteryName);
   const attached = new Set(
     included
@@ -560,24 +566,16 @@ function AttachForm({
             <SelectValue placeholder="Pick a server" />
           </SelectTrigger>
           <SelectContent>
-            {servers.map((entry) =>
-              // The alias points at the server's tool prefix, which exists
-              // once its tools are synced; the attach is refused before that.
-              entry.toolCount === 0 ? (
-                <SelectItem key={entry.id} value={entry.id} disabled>
-                  {entry.name} (sync its tools first)
-                </SelectItem>
-              ) : (
-                <SelectItem key={entry.id} value={entry.id}>
-                  {entry.name}
-                </SelectItem>
-              ),
-            )}
+            {servers.map((entry) => (
+              <SelectItem key={entry.id} value={entry.id}>
+                {entry.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
       <Button
-        disabled={batteryName === "" || catalogId === "" || create.isPending}
+        disabled={batteryName === "" || attach !== "ready" || create.isPending}
         onClick={() =>
           create.mutate(
             { batteryName, catalogId },
@@ -597,9 +595,24 @@ function AttachForm({
           {chosen.description}
         </p>
       ) : null}
+      {attach !== null && attach !== "ready" ? (
+        <p role="note" className="basis-full text-sm text-muted-foreground">
+          {ATTACH_NOTES[attach]}
+        </p>
+      ) : null}
     </div>
   );
 }
+
+const ATTACH_NOTES: Record<
+  Exclude<BatteryMatches["attach"], "ready">,
+  string
+> = {
+  unsynced:
+    "Sync this server's tools first: the battery attaches to their prefix.",
+  conflicting:
+    "This server cannot take a battery: one of its tool prefixes holds a double underscore, which an alias cannot target.",
+};
 
 function PackageRow({
   battery,

@@ -137,9 +137,10 @@ unbinds the alias but keeps the include, which then composes as the
 `server_missing` stub until the panel removes the battery
 (`DELETE /api/openappa/battery-includes/:name`, which drops the entry and every
 alias its namespaces bind) or the text is edited. An attach to a catalog with no
-synced tools is refused with 409, since the alias would have no target; the
-wizard and the panel read the catalog's tool prefixes (`targets` on a battery
-match, `toolCount` on the catalog) and disable the control until a sync. Every
+synced tools is refused with 409, since the alias would have no target, and so
+is one to a catalog whose tool prefix holds `__`; `GET /api/openappa/battery-matches`
+answers `attach` (`ready | unsynced | conflicting`) beside the matches, and the
+wizard checkbox and the panel's attach form disable on it with the reason. Every
 write path edits the text
 through the addon's `editOpenappaPolicy` and saves a revision: the batteries
 routes (attach, detach, remove, rebind, upload), the wizard checkbox, the

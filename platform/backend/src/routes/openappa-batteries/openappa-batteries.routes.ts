@@ -6,7 +6,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
-  BatteryMatchSchema,
+  BatteryMatchesSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   EffectivePolicySchema,
@@ -95,7 +95,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.GetOpenappaBatteryMatches,
         tags: ["OpenAPPA"],
         querystring: MatchesQuerySchema,
-        response: constructResponseSchema(z.array(BatteryMatchSchema)),
+        response: constructResponseSchema(BatteryMatchesSchema),
       },
     },
     async (request) =>

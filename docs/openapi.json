@@ -329741,110 +329741,121 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "battery": {
-                        "type": "string"
-                      },
-                      "evidence": {
-                        "type": "string",
-                        "enum": [
-                          "host",
-                          "image",
-                          "name"
-                        ]
-                      },
-                      "install": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "attach": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "unsynced",
+                        "conflicting"
+                      ]
+                    },
+                    "matches": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "organizationId": {
+                          "battery": {
                             "type": "string"
                           },
-                          "batteryName": {
-                            "type": "string"
-                          },
-                          "catalogId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "enabled": {
-                            "type": "boolean"
-                          },
-                          "status": {
+                          "evidence": {
                             "type": "string",
                             "enum": [
-                              "unavailable",
-                              "missing_credentials",
-                              "naming_conflict",
-                              "server_missing",
-                              "refused",
-                              "active"
+                              "host",
+                              "image",
+                              "name"
                             ]
                           },
-                          "packageHash": {
+                          "install": {
                             "nullable": true,
-                            "type": "string"
-                          },
-                          "lastError": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "credentialBindings": {
                             "type": "object",
-                            "additionalProperties": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "organizationId": {
+                                "type": "string"
+                              },
+                              "batteryName": {
+                                "type": "string"
+                              },
+                              "catalogId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "unavailable",
+                                  "missing_credentials",
+                                  "naming_conflict",
+                                  "server_missing",
+                                  "refused",
+                                  "active"
+                                ]
+                              },
+                              "packageHash": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "lastError": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "credentialBindings": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                }
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "organizationId",
+                              "batteryName",
+                              "catalogId",
+                              "enabled",
+                              "status",
+                              "packageHash",
+                              "lastError",
+                              "credentialBindings",
+                              "createdAt",
+                              "updatedAt"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
-                          "id",
-                          "organizationId",
-                          "batteryName",
-                          "catalogId",
-                          "enabled",
-                          "status",
-                          "packageHash",
-                          "lastError",
-                          "credentialBindings",
-                          "createdAt",
-                          "updatedAt"
+                          "battery",
+                          "evidence",
+                          "install"
                         ],
                         "additionalProperties": false
-                      },
-                      "targets": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
                       }
-                    },
-                    "required": [
-                      "battery",
-                      "evidence",
-                      "install",
-                      "targets"
-                    ],
-                    "additionalProperties": false
-                  }
+                    }
+                  },
+                  "required": [
+                    "attach",
+                    "matches"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

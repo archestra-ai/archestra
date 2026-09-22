@@ -45,14 +45,10 @@ describe("guardrails battery matches", () => {
     });
     // A synced catalog is only a suggestion: nothing is declared for it.
     await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
-    expect((await matches(catalog.id)).json()).toEqual([
-      {
-        battery: "github",
-        evidence: "host",
-        install: null,
-        targets: ["github"],
-      },
-    ]);
+    expect((await matches(catalog.id)).json()).toEqual({
+      attach: "ready",
+      matches: [{ battery: "github", evidence: "host", install: null }],
+    });
     expect(
       (
         await app.inject({
@@ -62,13 +58,15 @@ describe("guardrails battery matches", () => {
         })
       ).statusCode,
     ).toBe(200);
-    expect((await matches(catalog.id)).json()).toMatchObject([
-      {
-        battery: "github",
-        evidence: "host",
-        install: { catalogId: catalog.id, status: "missing_credentials" },
-      },
-    ]);
+    expect((await matches(catalog.id)).json()).toMatchObject({
+      matches: [
+        {
+          battery: "github",
+          evidence: "host",
+          install: { catalogId: catalog.id, status: "missing_credentials" },
+        },
+      ],
+    });
   });
 
   test("a name-only match is reported undeclared, and an unrelated entry matches nothing", async ({
@@ -80,15 +78,20 @@ describe("guardrails battery matches", () => {
       serverUrl: "https://mcp.example.com/chat",
     });
     await openappaBatteriesService.onCatalogToolsChanged(byName.id);
-    expect((await matches(byName.id)).json()).toEqual([
-      { battery: "slack", evidence: "name", install: null, targets: [] },
-    ]);
+    // Nothing synced yet: the match is offered, the attach is not.
+    expect((await matches(byName.id)).json()).toEqual({
+      attach: "unsynced",
+      matches: [{ battery: "slack", evidence: "name", install: null }],
+    });
     const plain = await makeInternalMcpCatalog({
       organizationId,
       name: "Weather",
       serverUrl: "https://mcp.example.com/weather",
     });
-    expect((await matches(plain.id)).json()).toEqual([]);
+    expect((await matches(plain.id)).json()).toEqual({
+      attach: "unsynced",
+      matches: [],
+    });
   });
 
   test("another organization's catalog entry is not found", async ({

@@ -26,11 +26,12 @@ import {
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
+  AttachReadiness,
   BatteryCredentialBindings,
   BatteryInstall,
   BatteryInstallRow,
   BatteryInstallStatus,
-  BatteryMatch,
+  BatteryMatches,
   BatteryPackageFile,
   BatterySummary,
   CreateBatteryInstall,
@@ -99,24 +100,29 @@ class OpenAppaBatteriesService {
   async matchesForCatalog(params: {
     organizationId: string;
     catalogId: string;
-  }): Promise<BatteryMatch[]> {
+  }): Promise<BatteryMatches> {
     const { organizationId, catalogId } = params;
     const catalog = await this.requireCatalog(params);
     const { installs } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
-    const targets = [
-      ...(await this.attachTargets({ organizationId, catalogId })).targets,
-    ].sort();
-    return matchBatteries(catalog, new Set(available.keys())).map((match) => ({
-      ...match,
-      install:
-        installs.find(
-          (install) =>
-            install.catalogId === catalogId &&
-            install.batteryName === match.battery,
-        ) ?? null,
-      targets,
-    }));
+    const { readiness } = await this.attachTargets({
+      organizationId,
+      catalogId,
+    });
+    return {
+      attach: readiness,
+      matches: matchBatteries(catalog, new Set(available.keys())).map(
+        (match) => ({
+          ...match,
+          install:
+            installs.find(
+              (install) =>
+                install.catalogId === catalogId &&
+                install.batteryName === match.battery,
+            ) ?? null,
+        }),
+      ),
+    };
   }
 
   /** What the root declares, what came of each declaration, and what holds it back. */
@@ -313,20 +319,24 @@ class OpenAppaBatteriesService {
           );
         // An include with no alias would compose as a stub governing nothing,
         // so a catalog with no prefix to point at is refused instead.
-        const { targets, conflicting } = await this.attachTargets({
+        const { targets, readiness } = await this.attachTargets({
           organizationId,
           catalogId: catalog.id,
         });
-        if (conflicting)
-          throw new ApiError(
-            409,
-            `The tools of ${catalog.name} carry a prefix holding "__", which a composed alias cannot target.`,
-          );
-        if (targets.size === 0)
-          throw new ApiError(
-            409,
-            `${catalog.name} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
-          );
+        switch (readiness) {
+          case "conflicting":
+            throw new ApiError(
+              409,
+              `The tools of ${catalog.name} carry a prefix holding "__", which a composed alias cannot target.`,
+            );
+          case "unsynced":
+            throw new ApiError(
+              409,
+              `${catalog.name} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+            );
+          case "ready":
+            break;
+        }
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -503,14 +513,16 @@ class OpenAppaBatteriesService {
             boundTargets({ resolution, namespace }),
           ),
         );
+        // Kept by entry, not by name: a hand-written duplicate of the same
+        // battery still declares its namespaces.
+        const keep = new Set(
+          resolution.entries
+            .filter((entry) => entry !== included)
+            .flatMap((entry) => entry.battery?.namespaces ?? []),
+        );
         return [
           { kind: "removeInclude", entry: included.entry },
-          ...unbindEdits({
-            resolution,
-            namespaces,
-            targets,
-            keep: otherNamespaces(resolution, name),
-          }),
+          ...unbindEdits({ resolution, namespaces, targets, keep }),
         ];
       },
     });
@@ -1197,16 +1209,19 @@ class OpenAppaBatteriesService {
   private async attachTargets(params: {
     organizationId: string;
     catalogId: string;
-  }): Promise<{ targets: ReadonlySet<string>; conflicting: boolean }> {
+  }): Promise<{ targets: ReadonlySet<string>; readiness: AttachReadiness }> {
     const { organizationId, catalogId } = params;
     const prefixes = await catalogToolPrefixes(organizationId, {
       targets: [],
       catalogIds: [catalogId],
     });
-    return {
-      targets: prefixes.byCatalog.get(catalogId) ?? new Set<string>(),
-      conflicting: prefixes.conflicting.has(catalogId),
-    };
+    const targets = prefixes.byCatalog.get(catalogId) ?? new Set<string>();
+    const readiness: AttachReadiness = prefixes.conflicting.has(catalogId)
+      ? "conflicting"
+      : targets.size === 0
+        ? "unsynced"
+        : "ready";
+    return { targets, readiness };
   }
 
   private async requireCatalog(params: {

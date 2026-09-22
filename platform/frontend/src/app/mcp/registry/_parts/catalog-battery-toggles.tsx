@@ -8,6 +8,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type BatteryMatch,
+  type BatteryMatches,
   useBatteries,
   useBatteryMatches,
   useSetBatteryEnabled,
@@ -20,11 +21,10 @@ import {
  */
 export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
   const openappaEnabled = useFeature("openappaEnabled") === true;
-  const {
-    data: matches,
-    isError,
-    refetch,
-  } = useBatteryMatches(catalogId, openappaEnabled);
+  const { data, isError, refetch } = useBatteryMatches(
+    catalogId,
+    openappaEnabled,
+  );
   const { data: canManage } = useHasPermissions({
     organization: ["update"],
     toolPolicy: ["update"],
@@ -51,10 +51,14 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
         </Button>
       </p>
     );
-  if (!matches?.length) return null;
+  if (!data?.matches.length) return null;
+  // The alias points at the server's tool prefix; the server refuses the
+  // attach while it has none an alias can target, so an unattached match says
+  // why before the box is tried.
+  const attachNote = data.attach === "ready" ? null : ATTACH_NOTES[data.attach];
   return (
     <div className="space-y-2 rounded-md border p-3">
-      {matches.map((match) => {
+      {data.matches.map((match) => {
         const id = `battery-${match.battery}`;
         // Until the battery list answers, whether this one reads a credential
         // is unknown; a failed list is treated as if it does.
@@ -64,9 +68,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
           : batteries.isError;
         const credentialIsSomeoneElses =
           declaresCredentials && canBindCredentials !== true;
-        // The alias points at the server's tool prefix, which exists once its
-        // tools are synced; the attach is refused before that.
-        const unsynced = match.install === null && match.targets.length === 0;
+        const unattachable = match.install === null && attachNote !== null;
         return (
           <div key={match.battery} className="flex items-start gap-2 text-sm">
             <Checkbox
@@ -75,7 +77,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
               checked={match.install?.enabled ?? false}
               disabled={
                 canManage !== true ||
-                unsynced ||
+                unattachable ||
                 setEnabled.isPending ||
                 batteries.isLoading
               }
@@ -99,10 +101,9 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
                   </Link>
                 ) : null}
               </p>
-              {unsynced ? (
+              {unattachable ? (
                 <p role="note" className="text-muted-foreground">
-                  Sync the server's tools first: the battery attaches to their
-                  prefix.
+                  {attachNote}
                 </p>
               ) : null}
               {credentialIsSomeoneElses ? (
@@ -136,6 +137,16 @@ const STATUS_NOTES: Record<InstallStatus, string> = {
   server_missing: "Off: it is bound to no server this deployment carries.",
   refused: "Off: the policy it composes into was refused.",
   unavailable: "Off: the battery package is gone.",
+};
+
+const ATTACH_NOTES: Record<
+  Exclude<BatteryMatches["attach"], "ready">,
+  string
+> = {
+  unsynced:
+    "Sync the server's tools first: the battery attaches to their prefix.",
+  conflicting:
+    "Cannot attach: a tool prefix of this server holds a double underscore, which an alias cannot target.",
 };
 
 const EVIDENCE_NOTES: Record<BatteryMatch["evidence"], string> = {

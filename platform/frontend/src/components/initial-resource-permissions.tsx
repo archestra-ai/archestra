@@ -16,11 +16,10 @@ import {
   presetFor,
   ResourcePermissionsDialog,
   resourcePluralNames,
-  scopedResourceNouns,
   SubjectIcon,
+  scopedResourceNouns,
   subjectLabels,
 } from "@/components/resource-permissions";
-import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -34,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
 
 export type InitialPermissionGrant = ResourcePermissionGrant & { name: string };
 

@@ -5,7 +5,8 @@ import {
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   type ResourcePermissionAction,
-  resourcePermissionPresets,
+  type resourcePermissionPresets,
+  resourcePermissionPresetsFor,
   type ScopedResource,
 } from "@archestra/shared";
 import {
@@ -172,8 +173,9 @@ export function ResourcePermissionsDialog({
   const [isDirty, setIsDirty] = useState(false);
   const [footerContainer, setFooterContainer] =
     useState<HTMLFieldSetElement | null>(null);
-  const [headerContainer, setHeaderContainer] =
-    useState<HTMLDivElement | null>(null);
+  const [headerContainer, setHeaderContainer] = useState<HTMLDivElement | null>(
+    null,
+  );
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -317,7 +319,7 @@ function PermissionsEditor({
           "manage-permissions",
         ) ?? false);
   const canManage = policy.effectiveActions.includes("manage-permissions");
-  const presets = presetsFor(policy.resource);
+  const presets = resourcePermissionPresetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const reset = () =>
@@ -447,215 +449,226 @@ function PermissionsEditor({
         onSubmit={embedded ? undefined : submit}
         className={embedded ? undefined : "space-y-3"}
       >
-       <PermissionsPanel embedded={embedded && !dialog} standalone={standalone}>
-        {/* In a dialog the action takes the close button's corner, so it
+        <PermissionsPanel
+          embedded={embedded && !dialog}
+          standalone={standalone}
+        >
+          {/* In a dialog the action takes the close button's corner, so it
             costs no vertical space above the table. */}
-        {title === null &&
-          addAccessButton &&
-          headerContainer &&
-          createPortal(addAccessButton, headerContainer)}
-        {title !== null && (
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <h2 className="text-sm font-semibold">
-                {title ?? "Who has access"}
-              </h2>
-              {explanation && (
-                <p className="max-w-prose text-xs text-muted-foreground">
-                  {explanation}
-                </p>
-              )}
-            </div>
-            {addAccessButton}
-          </div>
-        )}
-        {refreshFailed && (
-          <InlineNotice variant="error">
-            <AlertCircle />
-            <span className="font-medium">Could not refresh permissions.</span>
-            <InlineNoticeText>
-              {dirty
-                ? "Your draft is preserved. Retry before saving."
-                : "Showing the last loaded permissions. Retry to see current access."}
-            </InlineNoticeText>
-            <Button
-              type="button"
-              variant="link"
-              className="ml-auto h-auto p-0"
-              onClick={onRetry}
-            >
-              <span>Retry</span>
-            </Button>
-          </InlineNotice>
-        )}
-        {changedElsewhere && !mutation.isPending && (
-          <InlineNotice>
-            <AlertTriangle />
-            <span className="font-medium">Permissions changed.</span>
-            <InlineNoticeText>
-              Someone else changed these permissions while you edited.
-            </InlineNoticeText>
-            <Button
-              type="button"
-              variant="link"
-              className="ml-auto h-auto p-0"
-              aria-label="Discard draft and reload"
-              onClick={reset}
-            >
-              <span>Reload</span>
-            </Button>
-          </InlineNotice>
-        )}
-
-        <div className="divide-y">
-          {(fields.length > 0 || indirect.length > 0) && (
-            <div className="flex items-center gap-3 pb-2 text-xs font-medium text-muted-foreground">
-              <span className="flex-1">Recipient</span>
-              <span className="w-36 border border-transparent px-3">
-                Permission
-              </span>
-              <span className="size-8" />
-            </div>
-          )}
-          {fields.length === 0 && indirect.length === 0 && (
-            <p className="py-3 text-sm text-muted-foreground">
-              Nobody has access yet.
-            </p>
-          )}
-          {fields.map((grant, index) => (
-            <div key={grant.id} className="flex items-center gap-3 py-1.5">
-              <SubjectIcon type={grant.subject.type} />
-              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                <p className="break-words text-sm font-medium">{grant.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {subjectLabels[grant.subject.type]}
-                </p>
+          {title === null &&
+            addAccessButton &&
+            headerContainer &&
+            createPortal(addAccessButton, headerContainer)}
+          {title !== null && (
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <h2 className="text-sm font-semibold">
+                  {title ?? "Who has access"}
+                </h2>
+                {explanation && (
+                  <p className="max-w-prose text-xs text-muted-foreground">
+                    {explanation}
+                  </p>
+                )}
               </div>
-              <Select
-                disabled={!canManage || mutation.isPending}
-                value={presetFor(grant.actions, policy.resource)}
-                onValueChange={(preset) => {
-                  const choice = Object.entries(presets).find(
-                    ([key]) => key === preset,
-                  )?.[1];
-                  if (choice)
-                    update(index, { ...grant, actions: [...choice.actions] });
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
-                  aria-label={`Permission for ${grant.name}`}
-                  title={actionDetail(grant.actions, policy.resource)}
-                >
-                  <SelectValue>
-                    {actionSummary(grant.actions, policy.resource)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(presets).map(([key, preset]) => (
-                    <SelectItem
-                      key={key}
-                      value={key}
-                      disabled={preset.actions.some(
-                        (action) => !policy.effectiveActions.includes(action),
-                      )}
-                    >
-                      <span className="block font-medium">{preset.label}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {presetDescription(key, policy.resource)}
-                      </span>
-                    </SelectItem>
-                  ))}
-                  {presetFor(grant.actions, policy.resource) === "custom" && (
-                    <SelectItem value="custom" disabled>
-                      {actionSummary(grant.actions, policy.resource)}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              {addAccessButton}
+            </div>
+          )}
+          {refreshFailed && (
+            <InlineNotice variant="error">
+              <AlertCircle />
+              <span className="font-medium">
+                Could not refresh permissions.
+              </span>
+              <InlineNoticeText>
+                {dirty
+                  ? "Your draft is preserved. Retry before saving."
+                  : "Showing the last loaded permissions. Retry to see current access."}
+              </InlineNoticeText>
               <Button
                 type="button"
-                size="icon"
-                variant="ghost"
-                className="size-8 shrink-0 text-muted-foreground"
-                disabled={!canManage || mutation.isPending}
-                aria-label={`Remove direct access for ${grant.name}`}
-                onClick={() => remove(index)}
+                variant="link"
+                className="ml-auto h-auto p-0"
+                onClick={onRetry}
               >
-                <Trash2 className="size-4" />
+                <span>Retry</span>
               </Button>
-            </div>
-          ))}
-          {indirect.map((grant) => (
-            <div
-              key={grant.key}
-              className="flex items-center gap-3 py-1.5 text-muted-foreground"
-            >
-              <SubjectIcon type={grant.type} />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-                <p className="break-words text-sm font-medium">{grant.name}</p>
-                <span className="text-xs">{subjectLabels[grant.type]}</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
-                      aria-label={`Why ${grant.name} has access: ${grant.via}`}
-                    >
-                      <span>{grant.via}</span>
-                      <Info className="size-3" aria-hidden="true" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="start"
-                    className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
-                    aria-label={`Access source for ${grant.name}`}
-                  >
-                    <p>
-                      <span>{grant.explanation}</span>
-                      {grant.source !== "legacy" && canEditAll && (
-                        <span>
-                          {" Edit in "}
-                          <Button
-                            type="button"
-                            variant="link"
-                            className="h-auto p-0 text-xs underline underline-offset-2"
-                            onClick={() => setAllPermissionsOpen(true)}
-                          >
-                            permissions for all{" "}
-                            {resourcePluralNames[policy.resource]}
-                          </Button>
-                          .
-                        </span>
-                      )}
-                    </p>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <p
-                className="w-36 shrink-0 truncate border border-transparent px-3 text-sm"
-                title={actionDetail(grant.actions, policy.resource)}
+            </InlineNotice>
+          )}
+          {changedElsewhere && !mutation.isPending && (
+            <InlineNotice>
+              <AlertTriangle />
+              <span className="font-medium">Permissions changed.</span>
+              <InlineNoticeText>
+                Someone else changed these permissions while you edited.
+              </InlineNoticeText>
+              <Button
+                type="button"
+                variant="link"
+                className="ml-auto h-auto p-0"
+                aria-label="Discard draft and reload"
+                onClick={reset}
               >
-                {actionSummary(grant.actions, policy.resource)}
-              </p>
-              <span className="size-8 shrink-0" />
-            </div>
-          ))}
-        </div>
+                <span>Reload</span>
+              </Button>
+            </InlineNotice>
+          )}
 
-        {footerContainer === undefined
-          ? actions
-          : footerContainer && createPortal(actions, footerContainer)}
-        {allPermissionsOpen && (
-          <ResourcePermissionsDialog
-            resource={policy.resource}
-            open={allPermissionsOpen}
-            onOpenChange={setAllPermissionsOpen}
-          />
-        )}
-       </PermissionsPanel>
+          <div className="divide-y">
+            {(fields.length > 0 || indirect.length > 0) && (
+              <div className="flex items-center gap-3 pb-2 text-xs font-medium text-muted-foreground">
+                <span className="flex-1">Recipient</span>
+                <span className="w-36 border border-transparent px-3">
+                  Permission
+                </span>
+                <span className="size-8" />
+              </div>
+            )}
+            {fields.length === 0 && indirect.length === 0 && (
+              <p className="py-3 text-sm text-muted-foreground">
+                Nobody has access yet.
+              </p>
+            )}
+            {fields.map((grant, index) => (
+              <div key={grant.id} className="flex items-center gap-3 py-1.5">
+                <SubjectIcon type={grant.subject.type} />
+                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                  <p className="break-words text-sm font-medium">
+                    {grant.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {subjectLabels[grant.subject.type]}
+                  </p>
+                </div>
+                <Select
+                  disabled={!canManage || mutation.isPending}
+                  value={presetFor(grant.actions, policy.resource)}
+                  onValueChange={(preset) => {
+                    const choice = Object.entries(presets).find(
+                      ([key]) => key === preset,
+                    )?.[1];
+                    if (choice)
+                      update(index, { ...grant, actions: [...choice.actions] });
+                  }}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
+                    aria-label={`Permission for ${grant.name}`}
+                    title={actionDetail(grant.actions, policy.resource)}
+                  >
+                    <SelectValue>
+                      {actionSummary(grant.actions, policy.resource)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(presets).map(([key, preset]) => (
+                      <SelectItem
+                        key={key}
+                        value={key}
+                        disabled={preset.actions.some(
+                          (action) => !policy.effectiveActions.includes(action),
+                        )}
+                      >
+                        <span className="block font-medium">
+                          {preset.label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {presetDescription(key, policy.resource)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                    {presetFor(grant.actions, policy.resource) === "custom" && (
+                      <SelectItem value="custom" disabled>
+                        {actionSummary(grant.actions, policy.resource)}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0 text-muted-foreground"
+                  disabled={!canManage || mutation.isPending}
+                  aria-label={`Remove direct access for ${grant.name}`}
+                  onClick={() => remove(index)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+            {indirect.map((grant) => (
+              <div
+                key={grant.key}
+                className="flex items-center gap-3 py-1.5 text-muted-foreground"
+              >
+                <SubjectIcon type={grant.type} />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+                  <p className="break-words text-sm font-medium">
+                    {grant.name}
+                  </p>
+                  <span className="text-xs">{subjectLabels[grant.type]}</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                        aria-label={`Why ${grant.name} has access: ${grant.via}`}
+                      >
+                        <span>{grant.via}</span>
+                        <Info className="size-3" aria-hidden="true" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
+                      aria-label={`Access source for ${grant.name}`}
+                    >
+                      <p>
+                        <span>{grant.explanation}</span>
+                        {grant.source !== "legacy" && canEditAll && (
+                          <span>
+                            {" Edit in "}
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="h-auto p-0 text-xs underline underline-offset-2"
+                              onClick={() => setAllPermissionsOpen(true)}
+                            >
+                              permissions for all{" "}
+                              {resourcePluralNames[policy.resource]}
+                            </Button>
+                            .
+                          </span>
+                        )}
+                      </p>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <p
+                  className="w-36 shrink-0 truncate border border-transparent px-3 text-sm"
+                  title={actionDetail(grant.actions, policy.resource)}
+                >
+                  {actionSummary(grant.actions, policy.resource)}
+                </p>
+                <span className="size-8 shrink-0" />
+              </div>
+            ))}
+          </div>
+
+          {footerContainer === undefined
+            ? actions
+            : footerContainer && createPortal(actions, footerContainer)}
+          {allPermissionsOpen && (
+            <ResourcePermissionsDialog
+              resource={policy.resource}
+              open={allPermissionsOpen}
+              onOpenChange={setAllPermissionsOpen}
+            />
+          )}
+        </PermissionsPanel>
       </Container>
       {canManage && addOpen && (
         <AccessPicker
@@ -714,7 +727,7 @@ export function presetFor(
   resource?: ScopedResource,
 ) {
   return (
-    Object.entries(presetsFor(resource)).find(
+    Object.entries(resourcePermissionPresetsFor(resource)).find(
       ([, preset]) =>
         preset.actions.length === actions.length &&
         preset.actions.every((action) => actions.includes(action)),
@@ -731,7 +744,7 @@ export function actionSummary(
   resource: ScopedResource,
 ) {
   const preset = presetFor(actions, resource);
-  const choice = Object.entries(presetsFor(resource)).find(
+  const choice = Object.entries(resourcePermissionPresetsFor(resource)).find(
     ([key]) => key === preset,
   )?.[1];
   if (choice) return choice.label;
@@ -747,33 +760,6 @@ export function actionDetail(
 ) {
   if (presetFor(actions, resource) !== "custom") return undefined;
   return actions.map((action) => actionLabels[action]).join(", ");
-}
-
-function presetsFor(
-  resource?: ScopedResource,
-): Record<
-  string,
-  { label: string; actions: readonly ResourcePermissionAction[] }
-> {
-  if (resource === "conversation" || resource === "agentRun") {
-    return {
-      view: resourcePermissionPresets.view,
-      manage: {
-        label: "Can manage access",
-        actions: ["read", "manage-permissions"],
-      },
-    };
-  }
-  if (resource === "log" || resource === "auditLog") {
-    return {
-      view: resourcePermissionPresets.view,
-      manage: {
-        label: "Full access",
-        actions: ["read", "manage-permissions"] as const,
-      },
-    };
-  }
-  return resourcePermissionPresets;
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {

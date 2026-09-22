@@ -137,3 +137,52 @@ export const resourcePermissionPresets = {
   string,
   { label: string; actions: ResourcePermissionAction[] }
 >;
+
+type ResourcePermissionPreset = {
+  label: string;
+  actions: readonly ResourcePermissionAction[];
+};
+
+/**
+ * The presets one resource offers, smallest first. Sessions and logs have no
+ * use, update, or delete, so their top preset is read plus manage-permissions.
+ */
+export function resourcePermissionPresetsFor(
+  resource?: ScopedResource,
+): Record<string, ResourcePermissionPreset> {
+  if (resource === "conversation" || resource === "agentRun") {
+    return {
+      view: resourcePermissionPresets.view,
+      manage: {
+        label: "Can manage access",
+        actions: ["read", "manage-permissions"],
+      },
+    };
+  }
+  if (resource === "log" || resource === "auditLog") {
+    return {
+      view: resourcePermissionPresets.view,
+      manage: { label: "Full access", actions: ["read", "manage-permissions"] },
+    };
+  }
+  return resourcePermissionPresets;
+}
+
+/**
+ * The smallest preset holding every action in `actions`. A grant is always one
+ * preset: an action set between two presets widens to the larger one, and an
+ * action the resource has no preset for is dropped first.
+ */
+export function widenToPreset(
+  actions: readonly ResourcePermissionAction[],
+  resource: ScopedResource,
+): ResourcePermissionAction[] {
+  const presets = Object.values(resourcePermissionPresetsFor(resource));
+  const offered = new Set(presets.flatMap((preset) => preset.actions));
+  const wanted = actions.filter((action) => offered.has(action));
+  const preset =
+    presets.find((candidate) =>
+      wanted.every((action) => candidate.actions.includes(action)),
+    ) ?? presets[presets.length - 1];
+  return [...preset.actions];
+}

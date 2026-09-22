@@ -5,6 +5,7 @@ import {
   hasScopedPermission,
   ResourcePermissionScopeSchema,
   type ScopedPermission,
+  widenToPreset,
 } from "./resource-permissions";
 
 const engineering = "00000000-0000-4000-8000-000000000001";
@@ -111,5 +112,38 @@ describe("scoped permission composition", () => {
         false,
       );
     }
+  });
+});
+
+describe("widenToPreset", () => {
+  test("keeps a set that is already a preset", () => {
+    expect(widenToPreset(["read", "manage-permissions"], "auditLog")).toEqual([
+      "read",
+      "manage-permissions",
+    ]);
+    expect(widenToPreset(["use", "read"], "agent")).toEqual(["read", "use"]);
+  });
+
+  test("adds read to use alone", () => {
+    expect(widenToPreset(["use"], "llmModel")).toEqual(["read", "use"]);
+  });
+
+  test("widens a set between presets to the larger one, adding delete", () => {
+    expect(
+      widenToPreset(
+        ["read", "use", "update", "manage-permissions"],
+        "llmModel",
+      ),
+    ).toEqual(["read", "use", "update", "delete", "manage-permissions"]);
+  });
+
+  test("drops actions the resource offers no preset for", () => {
+    expect(
+      widenToPreset(
+        ["read", "use", "update", "delete", "manage-permissions"],
+        "conversation",
+      ),
+    ).toEqual(["read", "manage-permissions"]);
+    expect(widenToPreset(["use"], "log")).toEqual(["read"]);
   });
 });

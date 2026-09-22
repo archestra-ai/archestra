@@ -122,6 +122,8 @@ for (const viewport of [
       ).toBeInViewport();
       await page.screenshot({ path: testInfo.outputPath("github-dialog.png") });
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      // The repository field holds an unsaved value, so Cancel asks first.
+      await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
       await editor.scrollIntoViewIfNeeded();
       await expect(editor).toBeInViewport();

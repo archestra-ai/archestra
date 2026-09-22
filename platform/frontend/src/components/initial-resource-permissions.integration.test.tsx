@@ -107,15 +107,12 @@ it("adds initial access through recipient types without submitting the resource,
     },
   ]);
   await user.click(screen.getByRole("button", { name: "Add access" }));
-  await user.click(screen.getByRole("button", { name: /^Roles/ }));
-  await user.click(screen.getByRole("combobox", { name: "Add roles" }));
+  // Every role already has access, so the tile says so and cannot open.
   expect(
-    await screen.findByText("No matching recipients available to add."),
-  ).toBeInTheDocument();
-  await user.keyboard("{Escape}");
-  await user.click(
-    screen.getByRole("button", { name: "Back to recipient types" }),
-  );
+    await screen.findByRole("button", {
+      name: /^Roles.*already have access/,
+    }),
+  ).toBeDisabled();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   await user.click(
     screen.getByRole("button", { name: "Remove access for Editor" }),

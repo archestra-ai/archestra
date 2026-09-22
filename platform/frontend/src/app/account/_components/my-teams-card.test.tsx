@@ -55,7 +55,9 @@ describe("MyTeamsCard", () => {
 
     render(<MyTeamsCard />);
 
-    expect(screen.getByText("You're not in any teams yet")).toBeInTheDocument();
+    expect(
+      screen.getByText(/You are not in any teams yet/),
+    ).toBeInTheDocument();
   });
 
   it("offers a retry when the teams fail to load", async () => {

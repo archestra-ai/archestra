@@ -141,9 +141,28 @@ export function ResourceAccessPicker({
     resource,
     scope,
     query,
-    enabled: open && category !== null,
+    enabled: open,
   });
   const existing = new Set(existingSubjects.map(subjectKey));
+  // With no search text the endpoint returns up to 30 recipients of each
+  // type, so an empty type really has none, and a short full list is complete.
+  const unavailableReason = (type: PermissionSubject["type"]) => {
+    if (query !== "" || !recipients.data) return null;
+    const ofType = recipients.data.filter(
+      (recipient) => recipient.subject.type === type,
+    );
+    if (ofType.length === 0)
+      return categories.find((item) => item.type === type)?.emptyReason;
+    if (
+      ofType.length < RECIPIENT_PAGE_SIZE &&
+      ofType.every((recipient) => existing.has(subjectKey(recipient.subject)))
+    )
+      return "All of them already have access";
+    return null;
+  };
+  const firstAvailableType = categories.find(
+    (item) => !unavailableReason(item.type),
+  )?.type;
   const available = (recipients.data ?? []).filter(
     (recipient) =>
       recipient.subject.type === category &&
@@ -253,24 +272,33 @@ export function ResourceAccessPicker({
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             {categories.map(
-              ({ type, label: categoryLabel, description, icon: Icon }) => (
-                <Button
-                  key={type}
-                  ref={type === "user" ? firstCategoryRef : undefined}
-                  type="button"
-                  variant="outline"
-                  className="h-auto flex-col gap-3 whitespace-normal p-5 text-center"
-                  onClick={() => chooseCategory(type)}
-                >
-                  <Icon className="size-6 text-muted-foreground" />
-                  <span className="space-y-1">
-                    <span className="block font-medium">{categoryLabel}</span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {description}
+              ({ type, label: categoryLabel, description, icon: Icon }) => {
+                const reason = unavailableReason(type);
+                return (
+                  <Button
+                    key={type}
+                    ref={
+                      type === firstAvailableType ? firstCategoryRef : undefined
+                    }
+                    type="button"
+                    variant="outline"
+                    className="h-auto flex-col gap-3 whitespace-normal p-5 text-center"
+                    disabled={!!reason}
+                    onClick={() => chooseCategory(type)}
+                  >
+                    <Icon className="size-6 text-muted-foreground" />
+                    <span className="space-y-1">
+                      <span className="block font-medium">{categoryLabel}</span>
+                      <span
+                        key={reason ?? "description"}
+                        className="block text-xs font-normal text-muted-foreground"
+                      >
+                        {reason ?? description}
+                      </span>
                     </span>
-                  </span>
-                </Button>
-              ),
+                  </Button>
+                );
+              },
             )}
           </div>
           <Button
@@ -287,7 +315,7 @@ export function ResourceAccessPicker({
           </Button>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-2">
           <h3
             ref={categoryTitleRef}
             tabIndex={-1}
@@ -327,7 +355,7 @@ export function ResourceAccessPicker({
             </output>
           ) : null}
           {category === "organization" && (
-            <fieldset className="space-y-3">
+            <fieldset className="space-y-3 pt-3">
               <legend className="text-sm font-medium">Permission</legend>
               <RadioGroup
                 value={permission}
@@ -462,29 +490,37 @@ const categories = [
     type: "user",
     label: "People",
     description: "Choose individual members",
+    emptyReason: "No other members yet",
     icon: UserRound,
   },
   {
     type: "team",
     label: "Teams",
     description: "Include current and future members",
+    emptyReason: "No teams yet",
     icon: UsersRound,
   },
   {
     type: "role",
     label: "Roles",
     description: "Include everyone with a role",
+    emptyReason: "No roles yet",
     icon: ShieldCheck,
   },
   {
     type: "serviceAccount",
     label: "Service accounts",
     description: "Give automation access",
+    emptyReason: "No service accounts yet",
     icon: Bot,
   },
 ] satisfies Array<{
   type: PermissionSubject["type"];
   label: string;
   description: string;
+  emptyReason: string;
   icon: typeof UserRound;
 }>;
+
+/** Matches the per-type limit of the subject search endpoint. */
+const RECIPIENT_PAGE_SIZE = 30;

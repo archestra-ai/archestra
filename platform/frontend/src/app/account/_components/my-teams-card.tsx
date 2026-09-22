@@ -1,16 +1,8 @@
 "use client";
 
-import { Users } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type Team, useMyTeams } from "@/lib/teams/team.query";
 
@@ -46,18 +38,10 @@ export function MyTeamsCard() {
           <Skeleton className="h-16 w-full" />
         </div>
       ) : teams.length === 0 ? (
-        <Empty className="py-6">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Users />
-            </EmptyMedia>
-            <EmptyTitle>You're not in any teams yet</EmptyTitle>
-            <EmptyDescription>
-              When you're added to a team, or create one from chat, it shows up
-              here.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <p className="text-sm text-muted-foreground">
+          You are not in any teams yet. Teams you join or create from chat show
+          here.
+        </p>
       ) : (
         <ul className="divide-y overflow-hidden rounded-lg border">
           {teams.map((team) => (

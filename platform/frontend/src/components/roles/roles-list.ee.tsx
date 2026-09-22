@@ -40,7 +40,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Textarea } from "@/components/ui/textarea";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -540,8 +539,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       <FormDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        title="Create Custom Role"
-        description="Roles set allowed actions for users, teams, and service accounts. Permissions determine which resources those actions reach."
+        title="Create role"
         size="large"
         className="h-auto max-h-[90vh]"
       >
@@ -549,37 +547,16 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreateRole}
         >
-          <DialogBody className="space-y-6 p-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Role Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  rows={2}
-                  placeholder="What this role is used for"
-                  value={roleDescription}
-                  onChange={(e) => setRoleDescription(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions *</Label>
-              <RolePermissionBuilder
-                permission={permission}
-                onChange={setPermission}
-                userPermissions={authorPermissions ?? {}}
-              />
-            </div>
-          </DialogBody>
+          <RoleFormBody
+            idPrefix="create-role"
+            name={roleName}
+            onNameChange={setRoleName}
+            description={roleDescription}
+            onDescriptionChange={setRoleDescription}
+            permission={permission}
+            onPermissionChange={setPermission}
+            userPermissions={authorPermissions ?? {}}
+          />
           <DialogStickyFooter className="mt-0">
             <Button
               type="button"
@@ -594,7 +571,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
               Cancel
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creating..." : "Create Role"}
+              {createMutation.isPending ? "Creating..." : "Create role"}
             </Button>
           </DialogStickyFooter>
         </DialogForm>
@@ -608,8 +585,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             closeEditDialog();
           }
         }}
-        title="Edit Role"
-        description="Changes to allowed actions apply to everyone assigned this role, including through a team. Permissions determine which resources those actions reach."
+        title="Edit role"
+        description="Changes apply to everyone with this role, including through a team."
         size="large"
         className="h-auto max-h-[90vh]"
       >
@@ -617,37 +594,16 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleEditRole}
         >
-          <DialogBody className="space-y-6 p-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Role Name *</Label>
-                <Input
-                  id="edit-name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  rows={2}
-                  placeholder="What this role is used for"
-                  value={roleDescription}
-                  onChange={(e) => setRoleDescription(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions *</Label>
-              <RolePermissionBuilder
-                permission={permission}
-                onChange={setPermission}
-                userPermissions={authorPermissions ?? {}}
-              />
-            </div>
-          </DialogBody>
+          <RoleFormBody
+            idPrefix="edit-role"
+            name={roleName}
+            onNameChange={setRoleName}
+            description={roleDescription}
+            onDescriptionChange={setRoleDescription}
+            permission={permission}
+            onPermissionChange={setPermission}
+            userPermissions={authorPermissions ?? {}}
+          />
           <DialogStickyFooter className="mt-0">
             <Button
               type="button"
@@ -675,45 +631,26 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             closeViewPermissionsDialog();
           }
         }}
-        title="View Predefined Role"
-        description="This is a predefined role. It cannot be modified."
+        title={
+          <span className="capitalize">{viewPermissionsRole?.name ?? ""}</span>
+        }
+        description={
+          viewPermissionsRole
+            ? viewPermissionsRole.description ||
+              roleDescriptions[viewPermissionsRole.name as PredefinedRoleName]
+            : undefined
+        }
         size="large"
+        className="h-auto max-h-[90vh]"
       >
         {viewPermissionsRole && (
-          <DialogBody className="space-y-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="view-name">Role Name</Label>
-              <Input
-                id="view-name"
-                value={viewPermissionsRole.name}
-                disabled
-                className="capitalize"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="view-description">Description</Label>
-              <Textarea
-                id="view-description"
-                value={
-                  viewPermissionsRole.description ||
-                  roleDescriptions[
-                    viewPermissionsRole.name as PredefinedRoleName
-                  ] ||
-                  ""
-                }
-                disabled
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions</Label>
-              <RolePermissionBuilder
-                permission={viewPermissionsRole.permission}
-                onChange={() => {}}
-                userPermissions={viewPermissionsRole.permission}
-                readOnly
-                readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
-              />
-            </div>
+          <DialogBody className="p-6">
+            <RolePermissionBuilder
+              permission={viewPermissionsRole.permission}
+              onChange={() => {}}
+              userPermissions={viewPermissionsRole.permission}
+              readOnly
+            />
           </DialogBody>
         )}
         <DialogStickyFooter className="mt-0">
@@ -741,5 +678,54 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         onConfirm={handleDeleteRole}
       />
     </>
+  );
+}
+
+function RoleFormBody(props: {
+  idPrefix: string;
+  name: string;
+  onNameChange: (name: string) => void;
+  description: string;
+  onDescriptionChange: (description: string) => void;
+  permission: Permissions;
+  onPermissionChange: (permission: Permissions) => void;
+  userPermissions: Permissions;
+}) {
+  return (
+    <DialogBody className="space-y-5 p-6">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className="space-y-2">
+          <Label htmlFor={`${props.idPrefix}-name`}>Name</Label>
+          <Input
+            id={`${props.idPrefix}-name`}
+            placeholder="e.g. Developer"
+            value={props.name}
+            onChange={(event) => props.onNameChange(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${props.idPrefix}-description`}>
+            Description{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+          <Input
+            id={`${props.idPrefix}-description`}
+            placeholder="What this role is for"
+            value={props.description}
+            onChange={(event) => props.onDescriptionChange(event.target.value)}
+          />
+        </div>
+      </div>
+      <section className="space-y-2" aria-label="Permissions">
+        <h3 className="text-sm font-medium">Permissions</h3>
+        <RolePermissionBuilder
+          permission={props.permission}
+          onChange={props.onPermissionChange}
+          userPermissions={props.userPermissions}
+        />
+      </section>
+    </DialogBody>
   );
 }

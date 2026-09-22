@@ -92,9 +92,9 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Roles",
     description: (
       <>
-        Manage predefined and custom roles, permissions, and access control. New
-        users who join via email/password self-signup or ChatOps
-        auto-provisioning are assigned a default role. Change it in{" "}
+        Manage built-in and custom roles and what they allow. People who sign up
+        with email and password, or join through ChatOps, get the default role.
+        You can change it in{" "}
         <Link
           href="/settings/auth"
           className="font-medium underline underline-offset-4"

@@ -156,8 +156,8 @@ describe("APPA Guide feature availability", () => {
     const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
       (match) => match[1],
     );
-    const [header, read, write, fallback, remote] = blocks;
-    expect(blocks).toHaveLength(5);
+    const [header, read, write, fallback, remote, declarations] = blocks;
+    expect(blocks).toHaveLength(6);
     const binding =
       '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
@@ -166,12 +166,15 @@ describe("APPA Guide feature availability", () => {
       header + write,
       header + fallback + binding,
       header + remote,
+      // Declarations are root-level keys, so they precede the first table.
+      declarations + header,
     ]) {
       expect(
         await guardrailsPolicyService.validate(candidate, { organizationId }),
       ).toEqual({
         valid: true,
         errors: [],
+        warnings: [],
       });
     }
   });

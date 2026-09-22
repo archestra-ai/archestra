@@ -26,6 +26,17 @@ export type PolicyBattery = PolicyDeclarations["batteries"][number];
 export type EffectivePolicy =
   archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 
+/** Why a catalog cannot take a battery yet, for the surfaces that offer one. */
+export const ATTACH_NOTES: Record<
+  Exclude<BatteryMatches["attach"], "ready">,
+  string
+> = {
+  unsynced:
+    "Sync the server's tools first: the battery attaches to their prefix.",
+  conflicting:
+    "This server cannot take a battery: one of its tool prefixes holds a double underscore, which an alias cannot target.",
+};
+
 export const batteryMatchesQueryKey = (catalogId: string) => [
   batteryMatchesPrefix,
   catalogId,

@@ -486,6 +486,33 @@ test("detaching a server deletes that server's install alone", async () => {
   await waitFor(() => expect(deleted).toBe("install-2"));
 });
 
+test("a failed readiness lookup for the picked server shows an error with a retry", async () => {
+  declarations = emptyDeclarations();
+  batteries = [githubBattery()];
+  let attempts = 0;
+  server.use(
+    http.get(`${baseUrl}/api/openappa/battery-matches`, () => {
+      attempts += 1;
+      return attempts === 1
+        ? new HttpResponse(null, { status: 503 })
+        : HttpResponse.json({ attach: "ready", matches: [] });
+    }),
+  );
+  show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
+  await user.click(screen.getByRole("option", { name: "github" }));
+  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(screen.getByRole("option", { name: "Code" }));
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 test("removing an entry takes its include out in one write", async () => {
   const removed: string[] = [];
   batteries = [

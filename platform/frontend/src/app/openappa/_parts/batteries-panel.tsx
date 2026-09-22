@@ -32,7 +32,7 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  type BatteryMatches,
+  ATTACH_NOTES,
   type BatterySummary,
   type PolicyBattery,
   type PolicyDeclarations,
@@ -600,19 +600,22 @@ function AttachForm({
           {ATTACH_NOTES[attach]}
         </p>
       ) : null}
+      {readiness.isError ? (
+        <p role="alert" className="basis-full text-sm text-destructive">
+          <span>Could not check whether this server can take a battery. </span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0"
+            onClick={() => readiness.refetch()}
+          >
+            Retry
+          </Button>
+        </p>
+      ) : null}
     </div>
   );
 }
-
-const ATTACH_NOTES: Record<
-  Exclude<BatteryMatches["attach"], "ready">,
-  string
-> = {
-  unsynced:
-    "Sync this server's tools first: the battery attaches to their prefix.",
-  conflicting:
-    "This server cannot take a battery: one of its tool prefixes holds a double underscore, which an alias cannot target.",
-};
 
 function PackageRow({
   battery,

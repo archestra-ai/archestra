@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
+  ATTACH_NOTES,
   type BatteryMatch,
-  type BatteryMatches,
   useBatteries,
   useBatteryMatches,
   useSetBatteryEnabled,
@@ -137,16 +137,6 @@ const STATUS_NOTES: Record<InstallStatus, string> = {
   server_missing: "Off: it is bound to no server this deployment carries.",
   refused: "Off: the policy it composes into was refused.",
   unavailable: "Off: the battery package is gone.",
-};
-
-const ATTACH_NOTES: Record<
-  Exclude<BatteryMatches["attach"], "ready">,
-  string
-> = {
-  unsynced:
-    "Sync the server's tools first: the battery attaches to their prefix.",
-  conflicting:
-    "Cannot attach: a tool prefix of this server holds a double underscore, which an alias cannot target.",
 };
 
 const EVIDENCE_NOTES: Record<BatteryMatch["evidence"], string> = {

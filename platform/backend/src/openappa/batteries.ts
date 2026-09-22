@@ -380,12 +380,10 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
+        const { targets } = await this.attachTargets({
+          organizationId,
+          catalogId: existing.catalogId,
         });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const edits: PolicyEditInput[] = [];
         if (changes.enabled !== undefined)
           edits.push(
@@ -459,12 +457,10 @@ class OpenAppaBatteriesService {
         );
         if (!included) return [];
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
+        const { targets } = await this.attachTargets({
+          organizationId,
+          catalogId: existing.catalogId,
         });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const remaining = namespaces.some(
           (namespace) =>
             remainingTargets({ resolution, namespace, targets }).length > 0,
@@ -502,27 +498,32 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const included = resolution.entries.find(
+        // A stored text may spell one battery twice; the battery goes as a whole.
+        const included = resolution.entries.filter(
           (entry) => entry.name === name,
         );
-        if (!included)
+        if (included.length === 0)
           throw new ApiError(404, `The policy includes no ${name} battery`);
-        const namespaces = included.battery?.namespaces ?? [];
+        const namespaces = [
+          ...new Set(
+            included.flatMap((entry) => entry.battery?.namespaces ?? []),
+          ),
+        ];
         const targets = new Set(
           namespaces.flatMap((namespace) =>
             boundTargets({ resolution, namespace }),
           ),
         );
-        // Kept by entry, not by name: a hand-written duplicate of the same
-        // battery still declares its namespaces.
-        const keep = new Set(
-          resolution.entries
-            .filter((entry) => entry !== included)
-            .flatMap((entry) => entry.battery?.namespaces ?? []),
-        );
         return [
-          { kind: "removeInclude", entry: included.entry },
-          ...unbindEdits({ resolution, namespaces, targets, keep }),
+          ...included.map(
+            (entry) => ({ kind: "removeInclude", entry: entry.entry }) as const,
+          ),
+          ...unbindEdits({
+            resolution,
+            namespaces,
+            targets,
+            keep: otherNamespaces(resolution, name),
+          }),
         ];
       },
     });

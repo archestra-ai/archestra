@@ -34,7 +34,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
   const { data: canBindCredentials } = useHasPermissions({
     credential: ["update"],
   });
-  const { data: batteries } = useBatteries(openappaEnabled);
+  const batteries = useBatteries(openappaEnabled);
   const setEnabled = useSetBatteryEnabled(catalogId);
   // A failed lookup must not read as "no battery applies".
   if (isError)
@@ -56,9 +56,12 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
     <div className="space-y-2 rounded-md border p-3">
       {matches.map((match) => {
         const id = `battery-${match.battery}`;
-        const declaresCredentials =
-          (batteries?.find((battery) => battery.name === match.battery)
-            ?.credentials.length ?? 0) > 0;
+        // Until the battery list answers, whether this one reads a credential
+        // is unknown; a failed list is treated as if it does.
+        const declaresCredentials = batteries.data
+          ? (batteries.data.find((battery) => battery.name === match.battery)
+              ?.credentials.length ?? 0) > 0
+          : batteries.isError;
         const credentialIsSomeoneElses =
           declaresCredentials && canBindCredentials !== true;
         return (
@@ -67,7 +70,11 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
               id={id}
               className="mt-0.5"
               checked={match.install?.enabled ?? false}
-              disabled={canManage !== true || setEnabled.isPending}
+              disabled={
+                canManage !== true ||
+                setEnabled.isPending ||
+                batteries.isLoading
+              }
               onCheckedChange={(checked) =>
                 setEnabled.mutate({ match, enabled: checked === true })
               }

@@ -86,9 +86,12 @@ export function BatteriesPanel() {
   // by the next pull, so the panel only reads.
   const writable = canManage === true && !managedInGithub;
   const bindable = canBind === true && !managedInGithub;
+  // Unknown while the catalog loads; only a loaded catalog can say a server is gone.
   const catalogName = (catalogId: string) =>
-    catalog.data?.find((entry) => entry.id === catalogId)?.name ??
-    "Removed server";
+    catalog.data
+      ? (catalog.data.find((entry) => entry.id === catalogId)?.name ??
+        "Removed server")
+      : "";
   const installsOf = (name: string) =>
     batteries.data
       .find((battery) => battery.name === name)
@@ -495,13 +498,6 @@ function AttachRow({
       .filter((catalogId): catalogId is string => catalogId !== null) ?? [],
   );
   const options = catalog.filter((entry) => !attached.has(entry.id));
-  // Which bytes an entry already names wins over the newest upload: a second
-  // server must join the version the policy text already spells.
-  const packageHash = included
-    ? included.packageHash
-    : battery.source === "upload"
-      ? battery.contentHash
-      : null;
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="font-medium">{battery.name}</span>
@@ -512,11 +508,7 @@ function AttachRow({
         value=""
         disabled={create.isPending || options.length === 0}
         onValueChange={(catalogId) =>
-          create.mutate({
-            batteryName: battery.name,
-            catalogId,
-            ...(packageHash === null ? {} : { packageHash }),
-          })
+          create.mutate({ batteryName: battery.name, catalogId })
         }
       >
         <SelectTrigger

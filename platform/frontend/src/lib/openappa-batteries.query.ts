@@ -110,13 +110,9 @@ export function useSetBatteryEnabled(catalogId: string) {
       // A battery is off by being absent from the policy, so turning an
       // unattached one off is nothing to write.
       if (!enabled) return null;
-      const packageHash = await includedPackageHash(match.battery);
-      const created = await archestraApiSdk.createOpenappaBatteryInstall({
-        body: {
-          batteryName: match.battery,
-          catalogId,
-          ...(packageHash === null ? {} : { packageHash }),
-        },
+      const created = await createInstall({
+        batteryName: match.battery,
+        catalogId,
       });
       if (getApiErrorType(created.error) !== "api_conflict_error")
         return settled(created);
@@ -141,10 +137,11 @@ export function useSetBatteryEnabled(catalogId: string) {
  * policy is to spell: an entry already included governs which bytes win, so
  * the caller passes that entry's hash rather than the newest upload's.
  */
+/** Include a battery for a catalog entry, spelling the package the policy governs. */
 export function useCreateBatteryInstall() {
   return useBatteryMutation(
-    async (body: archestraApiTypes.CreateOpenappaBatteryInstallData["body"]) =>
-      settled(await archestraApiSdk.createOpenappaBatteryInstall({ body })),
+    async (params: { batteryName: string; catalogId: string }) =>
+      settled(await createInstall(params)),
     (battery) => toast.success(`Battery "${battery.name}" attached`),
   );
 }
@@ -204,11 +201,25 @@ export function useDeleteBatteryPackage() {
 }
 
 /**
- * The bytes a fresh include has to spell. A battery is included once, so a
- * second server joining one the policy already includes has to name that
- * entry's package — the server refuses any other spelling. Read at write time,
- * not from a render's data, so a policy that moved meanwhile still lands.
+ * The one create call: a battery is included once, so a second server joining
+ * one the policy already includes has to name that entry's package — the
+ * server refuses any other spelling. The package is read at write time, not
+ * from a render's data, so a policy that moved meanwhile still lands.
  */
+async function createInstall(params: {
+  batteryName: string;
+  catalogId: string;
+}) {
+  const packageHash = await includedPackageHash(params.batteryName);
+  return archestraApiSdk.createOpenappaBatteryInstall({
+    body: {
+      ...params,
+      ...(packageHash === null ? {} : { packageHash }),
+    },
+  });
+}
+
+/** The included entry's package, else the newest upload's, else none (bundled). */
 async function includedPackageHash(name: string): Promise<string | null> {
   const declarations = settled(
     await archestraApiSdk.getOpenappaPolicyDeclarations(),

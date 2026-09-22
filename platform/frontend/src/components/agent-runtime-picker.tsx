@@ -4,13 +4,14 @@ import {
   type AgentCatalogId,
   E2eTestId,
   getAgentRuntimeAllowedProtocols,
-  getDefaultAgentRuntimeImage,
 } from "@archestra/shared";
 import { CircleAlert, Code } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import {
   CatalogAgentIcon,
   getAgentCatalogTemplates,
+  PlatformAgentIcon,
+  useAgentCatalogImages,
 } from "@/components/agent-pages/agent-catalog";
 import {
   AGENT_RUNTIME_PROTOCOL_LABELS,
@@ -65,12 +66,7 @@ export function AgentRuntimePicker({
   const appName = useAppName();
   const appIconLogo = useAppIconLogo();
   const runtimeEnabled = useFeature("agentRuntime");
-  const configuredImage = useFeature("agentRuntimeBaseImage");
-  const defaultImage =
-    typeof configuredImage === "string"
-      ? configuredImage
-      : getDefaultAgentRuntimeImage("latest");
-  const templates = getAgentCatalogTemplates(defaultImage, appName);
+  const templates = getAgentCatalogTemplates(useAgentCatalogImages(), appName);
   const options: Array<{
     id: AgentRuntimeSelection;
     name: string;
@@ -148,11 +144,7 @@ export function AgentRuntimePicker({
               className="flex size-6 items-center justify-center rounded bg-muted"
             >
               {option.id === "chat" ? (
-                <CatalogAgentIcon
-                  id="archestra"
-                  appIconLogo={appIconLogo}
-                  size={16}
-                />
+                <PlatformAgentIcon appIconLogo={appIconLogo} size={16} />
               ) : option.id === "custom" ? (
                 <Code className="size-4" />
               ) : (

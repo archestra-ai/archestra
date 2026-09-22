@@ -149661,8 +149661,11 @@
                         "agentRuntime": {
                           "type": "boolean"
                         },
-                        "agentRuntimeBaseImage": {
-                          "type": "string"
+                        "agentRuntimeCatalogImages": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "agentRuntimeBackend": {
                           "nullable": true,
@@ -149676,9 +149679,6 @@
                             },
                             "available": {
                               "type": "boolean"
-                            },
-                            "defaultImage": {
-                              "type": "string"
                             },
                             "defaultTtlHours": {
                               "type": "number"
@@ -149713,7 +149713,6 @@
                           "required": [
                             "name",
                             "available",
-                            "defaultImage",
                             "defaultTtlHours",
                             "defaultIdleTimeoutMinutes",
                             "allowPrivileged",
@@ -149903,7 +149902,7 @@
                         "mcpServerAlertingEnabled",
                         "sandbox",
                         "agentRuntime",
-                        "agentRuntimeBaseImage",
+                        "agentRuntimeCatalogImages",
                         "agentRuntimeBackend",
                         "plugins",
                         "sandboxArtifactBytesLimit",

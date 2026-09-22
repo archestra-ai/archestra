@@ -75,18 +75,14 @@ describe("AgentRuntimeFields", () => {
     );
   });
 
-  it("starts without an image rather than the platform's runtime image, and preserves explicit run controls", async () => {
+  it("starts without an image and preserves explicit run controls", async () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) => {
       if (flag === "agentRuntime") return true;
-      if (flag === "agentRuntimeBaseImage") {
-        return "registry.example.com/coding-agent:1.2.3";
-      }
       if (flag === "agentRuntimeBackend") {
         return {
           name: "kubernetes",
           available: true,
-          defaultImage: "",
           defaultTtlHours: 36,
           defaultIdleTimeoutMinutes: 45,
           allowPrivileged: false,

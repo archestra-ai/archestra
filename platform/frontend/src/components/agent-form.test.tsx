@@ -1,6 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   E2eTestId,
+  getAgentCatalogImages,
   type SupportedProvider,
 } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -28,6 +29,11 @@ import {
 } from "./agent-form";
 import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
 import { defaultAgentRuntime } from "./agent-runtime-fields";
+
+const TEST_CATALOG_IMAGES = getAgentCatalogImages({
+  registry: "example.com",
+  tag: "latest",
+});
 
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -3785,7 +3791,7 @@ describe("AgentForm save payload and failure handling", () => {
     });
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    const codex = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const codex = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "codex",
     );
     const user = userEvent.setup();
@@ -4224,7 +4230,7 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+          ...getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
             (template) => template.id === "codex",
           )?.initialValues,
         }}
@@ -4263,7 +4269,7 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+          ...getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
             (template) => template.id === "codex",
           )?.initialValues,
         }}
@@ -4282,7 +4288,7 @@ describe("AgentForm save payload and failure handling", () => {
   it("preserves the entered identity and instructions while switching runtime and reapplying the Codex subscription gate", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     render(
@@ -4442,7 +4448,7 @@ describe("AgentForm save payload and failure handling", () => {
       label: "OpenAI · GPT-5.6 Luna",
     } as never);
     const user = userEvent.setup();
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     render(
@@ -4502,7 +4508,7 @@ describe("AgentForm save payload and failure handling", () => {
         },
       ],
     });
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     const user = userEvent.setup();

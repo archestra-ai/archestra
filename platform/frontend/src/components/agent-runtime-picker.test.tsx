@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,7 +46,10 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
-const defaultImage = "registry.example.com/agent:1.2.3";
+const catalogImages = getAgentCatalogImages({
+  registry: "registry.example.com",
+  tag: "1.2.3",
+});
 
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
@@ -55,8 +58,8 @@ beforeEach(() => {
   vi.mocked(useFeature).mockImplementation((flag) =>
     flag === "agentRuntime"
       ? true
-      : flag === "agentRuntimeBaseImage"
-        ? defaultImage
+      : flag === "agentRuntimeCatalogImages"
+        ? catalogImages
         : undefined,
   );
 });
@@ -244,7 +247,7 @@ function runtimeFor(
   id: Exclude<AgentRuntimeSelection, "chat">,
 ): AgentRuntimeConfig {
   return (
-    getAgentCatalogTemplates(defaultImage, "Test Platform").find(
+    getAgentCatalogTemplates(catalogImages, "Test Platform").find(
       (template) => template.id === id,
     )?.initialValues.runtime ?? defaultAgentRuntime()
   );

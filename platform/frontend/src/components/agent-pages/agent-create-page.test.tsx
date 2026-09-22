@@ -1,4 +1,4 @@
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getAgentCatalogImages } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -182,8 +182,8 @@ describe("AgentCreatePage", () => {
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime"
         ? true
-        : feature === "agentRuntimeBaseImage"
-          ? "agent-archestra:dev"
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
           : undefined,
     );
 
@@ -223,7 +223,7 @@ describe("AgentCreatePage", () => {
           icon: "/model-logos/openai.svg",
           runtime: expect.objectContaining({
             command: ["archestra-codex"],
-            image: "agent-codex:dev",
+            image: "archestra.local/agent-codex:dev",
             credentials: [],
           }),
         }),
@@ -237,8 +237,8 @@ describe("AgentCreatePage", () => {
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime"
         ? true
-        : feature === "agentRuntimeBaseImage"
-          ? "agent-archestra:dev"
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
           : undefined,
     );
 
@@ -251,7 +251,7 @@ describe("AgentCreatePage", () => {
           name: "OpenCode",
           icon: "/agent-logos/opencode.svg",
           runtime: expect.objectContaining({
-            image: "agent-opencode:dev",
+            image: "archestra.local/agent-opencode:dev",
             command: ["archestra-opencode"],
             inferenceProtocol: "openai_responses",
             steerMode: "tmux_keys",
@@ -266,8 +266,8 @@ describe("AgentCreatePage", () => {
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime"
         ? true
-        : feature === "agentRuntimeBaseImage"
-          ? "agent-archestra:dev"
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
           : undefined,
     );
 

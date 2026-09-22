@@ -38,25 +38,29 @@ if agent_runtime_enabled:
     labels=['dev'],
   )
 # The public GAR images are the normal local-development path. Build and anchor
-# local targets only when the configured catalog base image explicitly selects
-# the stable :dev tag used by dynamically-created Sandboxes.
+# local targets only when the catalog tag explicitly selects the stable :dev tag
+# used by dynamically-created Sandboxes. The backend builds the same references
+# from ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY, so a local registry name is
+# exported to it when none is configured.
 agent_catalog_image_names = read_json('../shared/agent-catalog-images.json')
 build_agent_catalog_images_locally = (
   agent_runtime_enabled and
-  os.getenv('ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE', '').strip() == agent_catalog_image_names['archestra'] + ':dev'
+  os.getenv('ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG', '').strip() == 'dev'
 )
-agent_catalog_images = agent_catalog_image_names.values()
 if build_agent_catalog_images_locally:
-  for image_name in agent_catalog_images:
+  agent_catalog_registry = os.getenv('ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY', '').strip() or 'archestra.local'
+  os.putenv('ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY', agent_catalog_registry)
+  for image_name in agent_catalog_image_names.values():
+    image_ref = agent_catalog_registry + '/' + image_name
     docker_build(
-      image_name,
+      image_ref,
       '..',
       dockerfile='../agent_images/Dockerfile',
       target=image_name,
       # Sandboxes are created dynamically by the backend, outside
       # Tilt's image-reference injection. Keep their stable local tag current
       # alongside Tilt's content-addressed anchor Deployment tag.
-      extra_tag=image_name + ':dev',
+      extra_tag=image_ref + ':dev',
     )
     k8s_yaml(blob('''
 apiVersion: apps/v1
@@ -78,7 +82,7 @@ spec:
         - name: image-anchor
           image: %s:dev
           command: ["sleep", "infinity"]
-''' % (image_name, mcp_namespace, image_name, image_name, image_name)))
+''' % (image_name, mcp_namespace, image_name, image_name, image_ref)))
     k8s_resource(
       image_name + '-image',
       labels=['dev'],

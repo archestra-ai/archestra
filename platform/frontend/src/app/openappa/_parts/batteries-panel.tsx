@@ -41,6 +41,7 @@ import {
   useDeleteBatteryInstall,
   useDeleteBatteryPackage,
   usePolicyDeclarations,
+  useRemoveBatteryInclude,
   useUpdateBatteryInstall,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
@@ -185,14 +186,11 @@ export function BatteriesPanel() {
         {writable && (
           <div className="space-y-2 border-t pt-3">
             <h3 className="text-sm font-medium">Attach a battery</h3>
-            {batteries.data.map((battery) => (
-              <AttachRow
-                key={battery.name}
-                battery={battery}
-                included={included.find((entry) => entry.name === battery.name)}
-                catalog={catalog.data ?? []}
-              />
-            ))}
+            <AttachForm
+              batteries={batteries.data}
+              included={included}
+              catalog={catalog.data ?? []}
+            />
           </div>
         )}
         {declarations.data.unusedAliases.length > 0 && (
@@ -298,7 +296,7 @@ function IncludedBattery({
   writable: boolean;
   bindable: boolean;
 }) {
-  const remove = useDeleteBatteryInstall();
+  const remove = useRemoveBatteryInclude();
   const [removing, setRemoving] = useState(false);
   const status = enforced ? battery.status : "refused";
   const source =
@@ -313,7 +311,7 @@ function IncludedBattery({
         <Badge variant={BATTERY_STATUS_BADGES[status].variant}>
           {BATTERY_STATUS_BADGES[status].label}
         </Badge>
-        {writable && installs.length > 0 && (
+        {writable && (
           <Button
             variant="ghost"
             size="icon"
@@ -323,13 +321,6 @@ function IncludedBattery({
           >
             <Trash2 className="size-4" />
           </Button>
-        )}
-        {writable && installs.length === 0 && (
-          // An include with no install row is removed by editing the text:
-          // every panel write goes through an install.
-          <span className="ml-auto text-xs text-muted-foreground">
-            Remove its include line in the policy editor.
-          </span>
         )}
       </div>
       {battery.servers.length === 0 ? (
@@ -375,12 +366,10 @@ function IncludedBattery({
         pendingLabel="Removing…"
         isPending={remove.isPending}
         onConfirm={async () => {
-          // Independent rows go together; whatever failed, the refetch shows
-          // what is left and the dialog never outlives the attempt.
+          // Whatever failed, the refetch shows what is left and the dialog
+          // never outlives the attempt.
           try {
-            await Promise.all(
-              installs.map((install) => remove.mutateAsync(install.id)),
-            );
+            await remove.mutateAsync(battery.name);
           } finally {
             setRemoving(false);
           }
@@ -517,49 +506,97 @@ function CredentialRow({
   );
 }
 
-function AttachRow({
-  battery,
+function AttachForm({
+  batteries,
   included,
   catalog,
 }: {
-  battery: BatterySummary;
-  included: PolicyBattery | undefined;
-  catalog: { id: string; name: string }[];
+  batteries: BatterySummary[];
+  included: PolicyBattery[];
+  catalog: { id: string; name: string; toolCount: number }[];
 }) {
   const create = useCreateBatteryInstall();
+  const [batteryName, setBatteryName] = useState("");
+  const [catalogId, setCatalogId] = useState("");
+  const chosen = batteries.find((battery) => battery.name === batteryName);
   const attached = new Set(
-    included?.servers
-      .map((server) => server.catalogId)
-      .filter((catalogId): catalogId is string => catalogId !== null) ?? [],
+    included
+      .find((entry) => entry.name === batteryName)
+      ?.servers.map((server) => server.catalogId) ?? [],
   );
-  const options = catalog.filter((entry) => !attached.has(entry.id));
+  const servers = catalog.filter((entry) => !attached.has(entry.id));
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="font-medium">{battery.name}</span>
-      <span className="text-muted-foreground">{battery.description}</span>
-      <Select
-        // Attaching is an action, not a state: the row goes back to its
-        // prompt and the choice shows up in the included list above.
-        value=""
-        disabled={create.isPending || options.length === 0}
-        onValueChange={(catalogId) =>
-          create.mutate({ batteryName: battery.name, catalogId })
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="min-w-48 flex-1 space-y-1">
+        <Label htmlFor="attach-battery">Battery</Label>
+        <Select
+          value={batteryName}
+          disabled={create.isPending}
+          onValueChange={(name) => {
+            setBatteryName(name);
+            setCatalogId("");
+          }}
+        >
+          <SelectTrigger id="attach-battery" className="w-full">
+            <SelectValue placeholder="Pick a battery" />
+          </SelectTrigger>
+          <SelectContent>
+            {batteries.map((battery) => (
+              <SelectItem key={battery.name} value={battery.name}>
+                {battery.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="min-w-48 flex-1 space-y-1">
+        <Label htmlFor="attach-server">Server</Label>
+        <Select
+          value={catalogId}
+          disabled={create.isPending || batteryName === ""}
+          onValueChange={setCatalogId}
+        >
+          <SelectTrigger id="attach-server" className="w-full">
+            <SelectValue placeholder="Pick a server" />
+          </SelectTrigger>
+          <SelectContent>
+            {servers.map((entry) =>
+              // The alias points at the server's tool prefix, which exists
+              // once its tools are synced; the attach is refused before that.
+              entry.toolCount === 0 ? (
+                <SelectItem key={entry.id} value={entry.id} disabled>
+                  {entry.name} (sync its tools first)
+                </SelectItem>
+              ) : (
+                <SelectItem key={entry.id} value={entry.id}>
+                  {entry.name}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button
+        disabled={batteryName === "" || catalogId === "" || create.isPending}
+        onClick={() =>
+          create.mutate(
+            { batteryName, catalogId },
+            {
+              onSuccess: () => {
+                setBatteryName("");
+                setCatalogId("");
+              },
+            },
+          )
         }
       >
-        <SelectTrigger
-          className="ml-auto w-64"
-          aria-label={`Attach the ${battery.name} battery to a server`}
-        >
-          <SelectValue placeholder="Attach to server…" />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((entry) => (
-            <SelectItem key={entry.id} value={entry.id}>
-              {entry.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <span>Attach</span>
+      </Button>
+      {chosen ? (
+        <p className="basis-full text-sm text-muted-foreground">
+          {chosen.description}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -576,13 +613,18 @@ function PackageRow({
   const remove = useDeleteBatteryPackage();
   const [removing, setRemoving] = useState(false);
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <li className="flex items-center gap-3 py-2 text-sm">
+      <div className="min-w-0 flex-1">
         <span className="font-medium">{battery.name}</span>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="ml-2 font-mono text-xs text-muted-foreground">
           {battery.contentHash?.slice(0, 12) ?? ""}
         </span>
-        <span className="text-muted-foreground">{battery.description}</span>
+        <p
+          className="truncate text-muted-foreground"
+          title={battery.description}
+        >
+          {battery.description}
+        </p>
       </div>
       {canManage && (
         <Button

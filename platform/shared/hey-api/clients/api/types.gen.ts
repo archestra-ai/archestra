@@ -85618,6 +85618,7 @@ export type GetOpenappaBatteryMatchesResponses = {
             createdAt: string;
             updatedAt: string;
         } | null;
+        targets: Array<string>;
     }>;
 };
 
@@ -85914,6 +85915,91 @@ export type UpdateOpenappaBatteryInstallResponses = {
 };
 
 export type UpdateOpenappaBatteryInstallResponse = UpdateOpenappaBatteryInstallResponses[keyof UpdateOpenappaBatteryInstallResponses];
+
+export type DeleteOpenappaBatteryIncludeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/openappa/battery-includes/{name}';
+};
+
+export type DeleteOpenappaBatteryIncludeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteOpenappaBatteryIncludeError = DeleteOpenappaBatteryIncludeErrors[keyof DeleteOpenappaBatteryIncludeErrors];
+
+export type DeleteOpenappaBatteryIncludeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: true;
+    };
+};
+
+export type DeleteOpenappaBatteryIncludeResponse = DeleteOpenappaBatteryIncludeResponses[keyof DeleteOpenappaBatteryIncludeResponses];
 
 export type UploadOpenappaBatteryPackageData = {
     body: {

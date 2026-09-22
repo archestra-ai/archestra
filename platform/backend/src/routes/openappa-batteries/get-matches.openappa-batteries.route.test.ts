@@ -46,7 +46,12 @@ describe("guardrails battery matches", () => {
     // A synced catalog is only a suggestion: nothing is declared for it.
     await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
     expect((await matches(catalog.id)).json()).toEqual([
-      { battery: "github", evidence: "host", install: null },
+      {
+        battery: "github",
+        evidence: "host",
+        install: null,
+        targets: ["github"],
+      },
     ]);
     expect(
       (
@@ -76,7 +81,7 @@ describe("guardrails battery matches", () => {
     });
     await openappaBatteriesService.onCatalogToolsChanged(byName.id);
     expect((await matches(byName.id)).json()).toEqual([
-      { battery: "slack", evidence: "name", install: null },
+      { battery: "slack", evidence: "name", install: null, targets: [] },
     ]);
     const plain = await makeInternalMcpCatalog({
       organizationId,

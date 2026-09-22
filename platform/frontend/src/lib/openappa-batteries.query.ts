@@ -156,6 +156,17 @@ export function useDeleteBatteryInstall() {
   );
 }
 
+/** Take a battery out of the policy text, install rows or not. */
+export function useRemoveBatteryInclude() {
+  return useBatteryMutation(
+    async (name: string) =>
+      settled(
+        await archestraApiSdk.deleteOpenappaBatteryInclude({ path: { name } }),
+      ),
+    () => toast.success("Battery removed"),
+  );
+}
+
 export function useUploadBatteryPackage() {
   return useBatteryMutation(
     async (params: {

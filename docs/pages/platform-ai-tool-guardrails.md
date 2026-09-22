@@ -54,8 +54,10 @@ A battery is a ready-made policy package for one provider, such as GitHub. Your 
 Nothing includes a battery on its own. You add one in three places:
 
 - the **Add the … battery** checkbox in the MCP server setup wizard, which is off until you turn it on;
-- **Attach to server** in the Batteries panel of the OpenAPPA page;
+- **Attach a battery** in the Batteries panel of the OpenAPPA page: pick the battery, then the server;
 - the policy editor, where you write the include line yourself.
+
+A server takes a battery once its tools are synced. Until then the checkbox and the server list say so.
 
 ![The setup wizard offering the matching battery](/docs/automated_screenshots/platform-ai-tool-guardrails_wizard-battery.webp)
 

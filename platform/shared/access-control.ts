@@ -1948,6 +1948,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInclude]: { toolPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { toolPolicy: ["read"] },

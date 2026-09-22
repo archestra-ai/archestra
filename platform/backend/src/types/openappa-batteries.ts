@@ -92,6 +92,11 @@ export const BatteryMatchSchema = z.object({
   battery: z.string(),
   evidence: BatteryMatchEvidenceSchema,
   install: BatteryInstallSchema.nullable(),
+  /**
+   * The alias targets an attach to this catalog binds: the prefixes of its
+   * synced tools. Empty until the tools are synced, and an attach is refused.
+   */
+  targets: z.array(z.string()),
 });
 export type BatteryMatch = z.infer<typeof BatteryMatchSchema>;
 

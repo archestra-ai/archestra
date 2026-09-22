@@ -134,11 +134,16 @@ text: every recompose plans the rows from the declarations and replaces them
 wholesale, preserving ids. `enabled` is `true` for every declared battery; a
 battery is off by being absent from the text. Unticking the wizard checkbox
 unbinds the alias but keeps the include, which then composes as the
-`server_missing` stub until the entry is detached elsewhere or removed from
-the text. Every write path edits the text
+`server_missing` stub until the panel removes the battery
+(`DELETE /api/openappa/battery-includes/:name`, which drops the entry and every
+alias its namespaces bind) or the text is edited. An attach to a catalog with no
+synced tools is refused with 409, since the alias would have no target; the
+wizard and the panel read the catalog's tool prefixes (`targets` on a battery
+match, `toolCount` on the catalog) and disable the control until a sync. Every
+write path edits the text
 through the addon's `editOpenappaPolicy` and saves a revision: the batteries
-routes (attach, detach, rebind, upload), the wizard checkbox, the editor, the MCP
-guardrails tools, and GitHub sync. Attaching through the routes requires
+routes (attach, detach, remove, rebind, upload), the wizard checkbox, the
+editor, the MCP guardrails tools, and GitHub sync. Attaching through the routes requires
 `toolPolicy:update` and `organization:update`; nothing attaches a battery on
 catalog install, and the bundled match list
 (`backend/src/openappa/battery-match.ts`) is advisory only, served by

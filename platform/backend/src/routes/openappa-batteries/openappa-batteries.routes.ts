@@ -171,6 +171,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       return { success: true as const };
     },
   );
+  app.delete(
+    "/api/openappa/battery-includes/:name",
+    {
+      schema: {
+        operationId: RouteId.DeleteOpenappaBatteryInclude,
+        tags: ["OpenAPPA"],
+        params: PackageNameParamsSchema,
+        response: constructResponseSchema(DeletedSchema),
+      },
+    },
+    async (request) => {
+      await openappaBatteriesService.removeInclude({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        name: request.params.name,
+      });
+      return { success: true as const };
+    },
+  );
   app.put(
     "/api/openappa/battery-packages/:name",
     {

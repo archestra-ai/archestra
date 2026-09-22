@@ -38,6 +38,7 @@ type PolicyBattery = Declarations["batteries"][number];
 const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
 const otherCatalogId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const freshCatalogId = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f";
 const uploadHash = "a".repeat(64);
 const server = setupServer();
 let batteries: Battery[];
@@ -152,8 +153,9 @@ beforeEach(() => {
     ),
     http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
       HttpResponse.json([
-        { id: catalogId, name: "Code" },
-        { id: otherCatalogId, name: "Docs" },
+        { id: catalogId, name: "Code", toolCount: 3 },
+        { id: otherCatalogId, name: "Docs", toolCount: 2 },
+        { id: freshCatalogId, name: "Fresh", toolCount: 0 },
       ]),
     ),
     http.get(`${baseUrl}/api/credentials`, () =>
@@ -183,6 +185,16 @@ function show() {
 
 const entry = (name: string) =>
   screen.findByRole("listitem", { name: `${name} battery` });
+
+/** Pick a battery and a server in the attach form and submit it. */
+async function attach(battery: string, serverName: string) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
+  await user.click(screen.getByRole("option", { name: battery }));
+  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(screen.getByRole("option", { name: serverName }));
+  await user.click(screen.getByRole("button", { name: "Attach" }));
+}
 
 test("an empty policy leads to MCP Registry", async () => {
   declarations = emptyDeclarations();
@@ -384,13 +396,7 @@ test("attaching a second server carries the package hash the entry already names
     ),
   );
   show();
-  const user = userEvent.setup();
-  await user.click(
-    await screen.findByRole("combobox", {
-      name: "Attach the github battery to a server",
-    }),
-  );
-  await user.click(screen.getByRole("option", { name: "Docs" }));
+  await attach("github", "Docs");
   await waitFor(() =>
     expect(body).toEqual({
       batteryName: "github",
@@ -414,15 +420,27 @@ test("attaching a bundled battery that is not included yet names no package", as
     ),
   );
   show();
-  const user = userEvent.setup();
-  await user.click(
-    await screen.findByRole("combobox", {
-      name: "Attach the github battery to a server",
-    }),
-  );
-  await user.click(screen.getByRole("option", { name: "Code" }));
+  await attach("github", "Code");
   await waitFor(() =>
     expect(body).toEqual({ batteryName: "github", catalogId }),
+  );
+});
+
+test("a server whose tools are not synced yet cannot be picked", async () => {
+  declarations = emptyDeclarations();
+  batteries = [githubBattery()];
+  show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
+  await user.click(screen.getByRole("option", { name: "github" }));
+  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  expect(screen.getByRole("option", { name: /Fresh/ })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  expect(screen.getByRole("option", { name: "Code" })).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
   );
 });
 
@@ -460,8 +478,8 @@ test("detaching a server deletes that server's install alone", async () => {
   await waitFor(() => expect(deleted).toBe("install-2"));
 });
 
-test("removing an entry deletes every install it has", async () => {
-  const deleted: string[] = [];
+test("removing an entry takes its include out in one write", async () => {
+  const removed: string[] = [];
   batteries = [
     githubBattery([
       install(),
@@ -480,9 +498,9 @@ test("removing an entry deletes every install it has", async () => {
   });
   server.use(
     http.delete(
-      `${baseUrl}/api/openappa/battery-installs/:id`,
+      `${baseUrl}/api/openappa/battery-includes/:name`,
       ({ params }) => {
-        deleted.push(String(params.id));
+        removed.push(String(params.name));
         return HttpResponse.json({ success: true });
       },
     ),
@@ -492,7 +510,35 @@ test("removing an entry deletes every install it has", async () => {
     await screen.findByRole("button", { name: "Remove the github battery" }),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-  await waitFor(() => expect(deleted).toEqual(["install-1", "install-2"]));
+  await waitFor(() => expect(removed).toEqual(["github"]));
+});
+
+test("an entry bound to no server this deployment carries is removed the same way", async () => {
+  const removed: string[] = [];
+  batteries = [githubBattery()];
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        status: "server_missing",
+        servers: [{ target: "gone", catalogId: null }],
+      }),
+    ],
+  });
+  server.use(
+    http.delete(
+      `${baseUrl}/api/openappa/battery-includes/:name`,
+      ({ params }) => {
+        removed.push(String(params.name));
+        return HttpResponse.json({ success: true });
+      },
+    ),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Remove the github battery" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+  await waitFor(() => expect(removed).toEqual(["github"]));
 });
 
 test("a package the policy includes cannot be deleted", async () => {
@@ -589,9 +635,7 @@ test("a policy the repository owns is read-only", async () => {
     screen.queryByRole("button", { name: "Remove the github battery" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("combobox", {
-      name: "Attach the github battery to a server",
-    }),
+    screen.queryByRole("combobox", { name: "Battery" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /upload package/i }),

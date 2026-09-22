@@ -104,6 +104,9 @@ class OpenAppaBatteriesService {
     const catalog = await this.requireCatalog(params);
     const { installs } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
+    const targets = [
+      ...(await this.attachTargets({ organizationId, catalogId })).targets,
+    ].sort();
     return matchBatteries(catalog, new Set(available.keys())).map((match) => ({
       ...match,
       install:
@@ -112,6 +115,7 @@ class OpenAppaBatteriesService {
             install.catalogId === catalogId &&
             install.batteryName === match.battery,
         ) ?? null,
+      targets,
     }));
   }
 
@@ -307,11 +311,22 @@ class OpenAppaBatteriesService {
             409,
             `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
           );
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [catalog.id],
+        // An include with no alias would compose as a stub governing nothing,
+        // so a catalog with no prefix to point at is refused instead.
+        const { targets, conflicting } = await this.attachTargets({
+          organizationId,
+          catalogId: catalog.id,
         });
-        const targets = prefixes.byCatalog.get(catalog.id) ?? new Set<string>();
+        if (conflicting)
+          throw new ApiError(
+            409,
+            `The tools of ${catalog.name} carry a prefix holding "__", which a composed alias cannot target.`,
+          );
+        if (targets.size === 0)
+          throw new ApiError(
+            409,
+            `${catalog.name} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+          );
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -452,6 +467,50 @@ class OpenAppaBatteriesService {
             ? []
             : [{ kind: "removeInclude" as const, entry: included.entry }]),
           ...unbindEdits({ resolution, namespaces, targets, keep }),
+        ];
+      },
+    });
+    await this.recompile(organizationId);
+  }
+
+  /**
+   * Take a battery out of the policy: its include entry and every alias its
+   * namespaces bind, whether or not a catalog still answers to them. An alias
+   * another included battery declares stays that battery's.
+   */
+  async removeInclude(params: {
+    userId: string;
+    organizationId: string;
+    name: string;
+  }): Promise<void> {
+    const { userId, organizationId, name } = params;
+    await this.editRoot({
+      organizationId,
+      userId,
+      edits: async (latest) => {
+        const resolution = await openappaDeclarations.resolve({
+          organizationId,
+          content: latest.content,
+        });
+        const included = resolution.entries.find(
+          (entry) => entry.name === name,
+        );
+        if (!included)
+          throw new ApiError(404, `The policy includes no ${name} battery`);
+        const namespaces = included.battery?.namespaces ?? [];
+        const targets = new Set(
+          namespaces.flatMap((namespace) =>
+            boundTargets({ resolution, namespace }),
+          ),
+        );
+        return [
+          { kind: "removeInclude", entry: included.entry },
+          ...unbindEdits({
+            resolution,
+            namespaces,
+            targets,
+            keep: otherNamespaces(resolution, name),
+          }),
         ];
       },
     });
@@ -1132,6 +1191,22 @@ class OpenAppaBatteriesService {
       { organizationId: params.organizationId, grants: added },
       "OpenAPPA composition grants credentials the previous composition did not",
     );
+  }
+
+  /** The alias targets an attach to one catalog binds: its synced tool prefixes. */
+  private async attachTargets(params: {
+    organizationId: string;
+    catalogId: string;
+  }): Promise<{ targets: ReadonlySet<string>; conflicting: boolean }> {
+    const { organizationId, catalogId } = params;
+    const prefixes = await catalogToolPrefixes(organizationId, {
+      targets: [],
+      catalogIds: [catalogId],
+    });
+    return {
+      targets: prefixes.byCatalog.get(catalogId) ?? new Set<string>(),
+      conflicting: prefixes.conflicting.has(catalogId),
+    };
   }
 
   private async requireCatalog(params: {

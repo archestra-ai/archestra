@@ -64,6 +64,9 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
           : batteries.isError;
         const credentialIsSomeoneElses =
           declaresCredentials && canBindCredentials !== true;
+        // The alias points at the server's tool prefix, which exists once its
+        // tools are synced; the attach is refused before that.
+        const unsynced = match.install === null && match.targets.length === 0;
         return (
           <div key={match.battery} className="flex items-start gap-2 text-sm">
             <Checkbox
@@ -72,6 +75,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
               checked={match.install?.enabled ?? false}
               disabled={
                 canManage !== true ||
+                unsynced ||
                 setEnabled.isPending ||
                 batteries.isLoading
               }
@@ -95,6 +99,12 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
                   </Link>
                 ) : null}
               </p>
+              {unsynced ? (
+                <p role="note" className="text-muted-foreground">
+                  Sync the server's tools first: the battery attaches to their
+                  prefix.
+                </p>
+              ) : null}
               {credentialIsSomeoneElses ? (
                 <p role="note" className="text-muted-foreground">
                   <span>

@@ -24,11 +24,6 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: Log the decision for every open PR without commenting or closing.
-        type: boolean
-        default: false
 
 permissions: {}
 
@@ -43,7 +38,6 @@ env:
     Describe the change you'd like in a GitHub issue written by a human (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents.
 
     This PR is closed automatically.
-  DRY_RUN: ${{ inputs.dry_run == true }}
 
 concurrency:
   group: close-external-prs
@@ -65,7 +59,6 @@ jobs:
             const exemptBotLogins = JSON.parse(process.env.EXEMPT_BOT_LOGINS);
             const marker = process.env.CLOSE_MARKER;
             const body = `${marker}\n${process.env.CLOSE_COMMENT}`;
-            const dryRun = process.env.DRY_RUN === 'true';
             let closedPrs = 0;
 
             for await (const response of github.paginate.iterator(github.rest.pulls.list, {
@@ -86,11 +79,6 @@ jobs:
 
                 if (isSameRepoBranch(pr)) {
                   console.log(`Keeping #${pr.number}: ${author} pushed a branch to this repo`);
-                  continue;
-                }
-
-                if (dryRun) {
-                  console.log(`Would close #${pr.number} from ${author} (dry run)`);
                   continue;
                 }
 

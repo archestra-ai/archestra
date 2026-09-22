@@ -1,10 +1,11 @@
 import { describe, expect, test } from "@/test";
+import type { AskUserArguments } from "../types";
 import { AppaClaudeCodeAdapter } from "./claude-code";
 import { AppaCodexAdapter } from "./codex";
 import { AppaOpenCodeAdapter } from "./opencode";
 
 describe("native local tool identities", () => {
-  const askUser = {
+  const askUser: AskUserArguments = {
     question: "Who can see this app?",
     header: "Visibility settings",
     options: [
@@ -80,9 +81,67 @@ describe("native local tool identities", () => {
     });
   });
 
-  test("does not rewrite ask_user through Codex's gated question tool", () => {
-    expect(new AppaCodexAdapter().nativeQuestion).toEqual({
-      toolName: "request_user_input",
+  test("converts ask_user to Codex's native question schema", () => {
+    const nativeQuestion = new AppaCodexAdapter().nativeQuestion;
+    expect(nativeQuestion.isAvailable({})).toBe(false);
+    expect(
+      nativeQuestion.isAvailable({
+        "x-archestra-native-question": "request_user_input",
+      }),
+    ).toBe(true);
+    expect(nativeQuestion.fromAskUser(askUser)).toEqual({
+      questions: [
+        {
+          id: "archestra_question",
+          question: askUser.question,
+          header: "Visibility s",
+          options: [
+            { label: "Team", description: "Only team members" },
+            { label: "Private", description: "Private" },
+          ],
+        },
+      ],
     });
+  });
+
+  test.each([
+    {
+      adapter: new AppaClaudeCodeAdapter(),
+      content: JSON.stringify(
+        'Your questions have been answered: "Review this call."="Approve". You can now continue.',
+      ),
+    },
+    {
+      adapter: new AppaCodexAdapter(),
+      content: '{"answers":{"archestra_question":{"answers":["Approve"]}}}',
+    },
+  ])("reads a structured native approval from $adapter.id", ({
+    adapter,
+    content,
+  }) => {
+    expect(adapter.nativeQuestion.rulingFromResult({ content })).toBe(
+      "approve",
+    );
+    expect(
+      adapter.nativeQuestion.rulingFromResult({ content, isError: true }),
+    ).toBe("none");
+  });
+
+  test("reads OpenCode's native denial", () => {
+    expect(
+      new AppaOpenCodeAdapter().nativeQuestion.rulingFromResult({
+        content: 'approval="Deny"',
+      }),
+    ).toBe("deny");
+  });
+
+  test("uses Claude's selected answer, not approval-like review text", () => {
+    expect(
+      new AppaClaudeCodeAdapter().nativeQuestion.rulingFromResult({
+        content: JSON.stringify(
+          'Your questions have been answered: "argument=\\"Approve\\". You can now continue"="Deny". You can now continue with the user\'s answers in mind.',
+        ),
+      }),
+    ).toBe("deny");
   });
 });

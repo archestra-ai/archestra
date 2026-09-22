@@ -17,6 +17,7 @@ import {
   executeArchestraTool,
   getAllArchestraMcpTools,
   getArchestraMcpTools,
+  preflightArchestraToolCall,
 } from ".";
 import { archestraMcpBranding } from "./branding";
 
@@ -297,5 +298,122 @@ describe("executeArchestraTool", () => {
         );
       }
     });
+  });
+});
+
+describe("preflightArchestraToolCall", () => {
+  const todoWrite = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
+  const todo = { id: 1, content: "a", status: "pending" };
+  let mockContext: ArchestraContext;
+  let agentId: string;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+    });
+    agentId = agent.id;
+    organizationId = org.id;
+    mockContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+  });
+
+  test.each([
+    { name: "valid arguments", args: { todos: [todo] }, runs: true },
+    {
+      name: "an item missing its required id",
+      args: { todos: [{ content: "a", status: "pending" }] },
+      runs: false,
+    },
+    {
+      name: "a JSON-string array the executor reparses",
+      args: { todos: JSON.stringify([todo]) },
+      runs: true,
+    },
+    {
+      name: "a JSON-string array that is still invalid",
+      args: { todos: JSON.stringify([{ content: "a" }]) },
+      runs: false,
+    },
+    {
+      name: "an unknown top-level key",
+      args: { todos: [todo], extra: true },
+      runs: false,
+    },
+  ])("reaches the executor's verdict and error for $name", async ({
+    args,
+    runs,
+  }) => {
+    const refused = await preflightArchestraToolCall({
+      toolName: todoWrite,
+      args,
+      context: mockContext,
+    });
+    const executed = await executeArchestraTool(todoWrite, args, mockContext);
+
+    expect(refused === null).toBe(runs);
+    expect(Boolean(executed.isError)).toBe(!runs);
+    if (refused) expect(refused).toEqual(executed);
+  });
+
+  test("refuses with the executor's permission error, before any argument check", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const context = { ...mockContext, userId: member.id };
+    const createTeam = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_team`;
+
+    const refused = await preflightArchestraToolCall({
+      toolName: createTeam,
+      args: {},
+      context,
+    });
+
+    expect(refused).toEqual(
+      await executeArchestraTool(createTeam, {}, context),
+    );
+    expect((refused?.content[0] as any).text).toContain("requires team:create");
+  });
+
+  test("refuses with the executor's assignment error when the agent lacks the tool", async () => {
+    const context = { ...mockContext, agentId };
+
+    const refused = await preflightArchestraToolCall({
+      toolName: todoWrite,
+      args: { todos: [todo] },
+      context,
+    });
+
+    expect(refused).toEqual(
+      await executeArchestraTool(todoWrite, { todos: [todo] }, context),
+    );
+    expect((refused?.content[0] as any).text).toContain("is not assigned");
+  });
+
+  test("passes an argument that run_tool unwraps, since run_tool runs it", async () => {
+    const args = { todos: { items: [todo] } };
+
+    expect(
+      await preflightArchestraToolCall({
+        toolName: todoWrite,
+        args,
+        context: mockContext,
+      }),
+    ).toBeNull();
+    const viaRunTool = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+      { tool_name: todoWrite, tool_args: args },
+      mockContext,
+    );
+    expect(viaRunTool.isError).toBeFalsy();
   });
 });

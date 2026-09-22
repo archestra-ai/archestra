@@ -2221,6 +2221,25 @@ class ToolModel {
     return rows.map((r) => r.name);
   }
 
+  /**
+   * Which of `names` belong to a tool an installed MCP server serves: a
+   * catalog row, soft-deleted or not, as opposed to one the LLM proxy
+   * discovered.
+   */
+  static async getCatalogToolNames(names: string[]): Promise<Set<string>> {
+    if (names.length === 0) return new Set();
+    const rows = await db
+      .selectDistinct({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.name, names),
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      );
+    return new Set(rows.map((row) => row.name));
+  }
+
   static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
     const assignedMcpTools = await db
       .select({

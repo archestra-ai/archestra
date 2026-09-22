@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import {
   PROXY_STAMPED_TOOL_ARGUMENTS,
   TimeInMs,
@@ -8,7 +9,13 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
+import logger from "@/logging";
 import { clientSessionId } from "@/openappa/actor";
+import {
+  getHitlAskUserArguments,
+  getHitlReview,
+  recordHitlRuling,
+} from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
 import {
@@ -17,11 +24,7 @@ import {
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
-import {
-  type AppaRequestTools,
-  namespacedToolName,
-  underscoreLabeledPlatformToolName,
-} from "@/openappa/request";
+import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   cancelCalls,
   endTurn,
@@ -47,6 +50,7 @@ import type {
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -57,15 +61,31 @@ import {
 
 type AppaPluginBinding = {
   session: OpenAppaSession;
-  canonicalizeToolName: (name: string) => string;
+  identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  requestHeaders: IncomingHttpHeaders;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
+  /** A remedy notice requires an immediate control-tool call. */
+  requiresRemedyContinuation: boolean;
+  /** Offers whose first control call requested a native client review. */
+  pendingHitlReviewOfferIds: string[];
+  /** Verified native answers that must control the next model action. */
+  nativeHitlRulings: RecordedNativeHitlRuling[];
+};
+
+type NativeQuestionClaim = {
+  offerIds?: string[];
+};
+
+type RecordedNativeHitlRuling = {
+  offerId: string;
+  ruling: "approve" | "deny" | "none";
 };
 
 export class AppaPluginArchestra implements LlmProxyPlugin {
@@ -82,12 +102,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Copy trusted context before adapter inspection to isolate plugin state.
     const binding: AppaPluginBinding = {
       session: { ...trustedContext.session },
-      canonicalizeToolName: trustedContext.canonicalizeToolName,
+      identity: trustedContext.toolIdentity,
       adapter: undefined,
       request: trustedContext.request,
       turnOpen: false,
       chat: trustedContext.chatSource !== undefined,
+      requestHeaders: context.headers,
       requiresQuestionContinuation: false,
+      requiresRemedyContinuation: false,
+      pendingHitlReviewOfferIds: [],
+      nativeHitlRulings: [],
     };
     const adapter = this.clientAdapters.find((candidate) =>
       candidate.matches({
@@ -115,10 +139,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding,
       results: context.toolResults,
     });
+    binding.nativeHitlRulings = await recordNativeHitlRulings({
+      binding,
+      verifiedNativeQuestionResults,
+    });
+    binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
+      binding,
+      results: context.toolResults,
+      resolvedOfferIds: new Set(
+        binding.nativeHitlRulings.map((entry) => entry.offerId),
+      ),
+    });
+    binding.requiresRemedyContinuation = hasRemedyOfferResult({
+      binding,
+      results: context.toolResults,
+      verifiedNativeQuestionResults,
+    });
     const result = await processProxyResults({
       session: binding.session,
       results: [...context.toolResults],
-      canonicalize: (name) => this.canonicalize(binding, name),
+      canonicalize: (name: string, namespace?: string) =>
+        this.canonicalize(binding, { name, namespace }),
       isUserQuestion: (answer) =>
         isUserQuestionResult({
           binding,
@@ -126,7 +167,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           verifiedNativeQuestionResults,
         }),
       controlToolName:
-        binding.request.tools?.controlToolName ??
+        binding.request.tools?.control.name ??
         binding.request.historicalControlToolName,
       trustedChat: binding.chat,
     });
@@ -164,6 +205,44 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
+    if (binding && binding.adapter?.id !== "archestra-chat") {
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+      });
+    }
+    if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
+      const offerIds = binding.pendingHitlReviewOfferIds;
+      binding.pendingHitlReviewOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: hitlQuestionGuidance(offerIds),
+      });
+      requireCodexToolCall({ binding, context });
+    }
+    if (binding?.requiresRemedyContinuation) {
+      binding.requiresRemedyContinuation = false;
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: REMEDY_OFFER_CONTINUATION_GUIDANCE,
+      });
+      requireCodexToolCall({ binding, context });
+    }
+    if (binding && binding.nativeHitlRulings.length > 0) {
+      const rulings = binding.nativeHitlRulings;
+      binding.requiresQuestionContinuation = false;
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: hitlDecisionGuidance(rulings),
+      });
+      if (rulings.some((entry) => entry.ruling === "approve")) {
+        requireCodexToolCall({ binding, context });
+      }
+    }
     if (binding?.requiresQuestionContinuation) {
       appendQuestionContinuation({
         request: context.request,
@@ -182,15 +261,91 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
     let changed = false;
-    const claimedOfferIds = new Set<string>();
-    const issuedNativeQuestions: Array<{ id: string; name: string }> = [];
-    const toolCalls = context.toolCalls.map((call) => {
-      // The control tool the gateway declared, in the namespace it declared
-      // it in: a same-named member of another server is a foreign tool, and
-      // never carries this session's offers.
+    let incomingToolCalls = context.toolCalls;
+    if (binding.nativeHitlRulings.length > 0) {
+      const blocked = context.toolCalls[0];
+      if (!blocked) return;
       if (
-        call.name === tools.controlToolName &&
-        call.namespace === tools.controlNamespace
+        binding.nativeHitlRulings.some((entry) => entry.ruling !== "approve")
+      ) {
+        const message =
+          "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: message,
+            contentMessage: message,
+            reason: "openappa_hitl_not_approved",
+            blockedToolName: blocked.name,
+            blockedToolId: blocked.id,
+            toolInput: toolInputOf(blocked.arguments),
+            allToolCallNames: context.toolCalls.map((call) => call.name),
+          },
+        };
+      }
+      if (binding.nativeHitlRulings.length !== 1) {
+        const message = "Complete one approved OpenAPPA offer at a time.";
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: message,
+            contentMessage: message,
+            reason: "openappa_hitl_offer_count",
+            blockedToolName: blocked.name,
+            blockedToolId: blocked.id,
+            toolInput: toolInputOf(blocked.arguments),
+            allToolCallNames: context.toolCalls.map((call) => call.name),
+          },
+        };
+      }
+      const approved = binding.nativeHitlRulings[0];
+      const pending = await getHitlReview({
+        session: binding.session,
+        offerId: approved.offerId,
+      });
+      if (!pending?.remedyArguments) {
+        const message =
+          "The approved OpenAPPA review is no longer available. Keep the tool call blocked.";
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: message,
+            contentMessage: message,
+            reason: "openappa_hitl_review_missing",
+            blockedToolName: blocked.name,
+            blockedToolId: blocked.id,
+            toolInput: toolInputOf(blocked.arguments),
+            allToolCallNames: context.toolCalls.map((call) => call.name),
+          },
+        };
+      }
+      incomingToolCalls = [
+        {
+          id: blocked.id,
+          name: tools.control.name,
+          ...(tools.control.namespace
+            ? { namespace: tools.control.namespace }
+            : {}),
+          arguments: JSON.stringify(pending.remedyArguments),
+        },
+      ];
+      binding.nativeHitlRulings = [];
+      changed = true;
+    }
+    const claimedOfferIds = new Set<string>();
+    const issuedNativeQuestions: Array<{
+      id: string;
+      name: string;
+      offerIds: string[];
+    }> = [];
+    const toolCalls: Array<(typeof context.toolCalls)[number]> = [];
+    for (const call of incomingToolCalls) {
+      // The declared control tool itself, in its own namespace: a same-named
+      // tool of another server gets no receipt. Only offers the client's own
+      // session minted may ride it.
+      if (
+        call.name === tools.control.name &&
+        call.namespace === tools.control.namespace
       ) {
         const stamped = stampControlExecution(
           call,
@@ -200,40 +355,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ),
         );
         changed ||= stamped !== call;
-        return stamped;
+        toolCalls.push(stamped);
+        continue;
       }
-      // Before any policy sees it: the call the policies rule on is the one
-      // the client will run.
-      let prepared = this.asNativeQuestion(binding, call);
-      if (prepared !== call) {
-        changed = true;
-      }
-      const issuedQuestionName = nativeQuestionName(binding, prepared.name);
-      if (issuedQuestionName) {
-        const alreadyIssued = verifyNativeQuestionId({
-          session: binding.session,
-          name: issuedQuestionName,
-          id: prepared.id,
-        });
-        if (!alreadyIssued) {
-          const issuedId = issueNativeQuestionId({
-            session: binding.session,
-            name: issuedQuestionName,
-            currentId: prepared.id,
-          });
-          prepared = { ...prepared, id: issuedId };
-          issuedNativeQuestions.push({
-            id: issuedId,
-            name: issuedQuestionName,
-          });
-          changed = true;
-        }
-      }
-      if (prepared !== call) return prepared;
+      let prepared = call;
+      let offerIds: string[] = [];
       if (
-        binding.request.platformToolNames?.has(call.name) === true &&
+        tools.platformToolNames.has(call.name) &&
         archestraMcpBranding.getToolShortName(
-          this.canonicalize(binding, call.name),
+          this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
       ) {
         const stamped = stampAskUserOffers(
@@ -241,11 +371,54 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           binding.request.askUserOfferClaims,
           claimedOfferIds,
         );
-        changed ||= stamped !== call;
-        return stamped;
+        prepared = stamped.call;
+        offerIds = stamped.offerIds;
+        const canonical = await canonicalizeHitlAskUserCall({
+          binding,
+          call: prepared,
+          offerIds,
+        });
+        if (canonical.invalidOfferCount) {
+          const message =
+            "Submit each pending OpenAPPA HITL offer in a separate ask_user call.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_offer_count",
+              blockedToolName: call.name,
+              blockedToolId: call.id,
+              toolInput: toolInputOf(call.arguments),
+              allToolCallNames: context.toolCalls.map((item) => item.name),
+            },
+          };
+        }
+        prepared = canonical.call;
+        changed ||= prepared !== call;
       }
-      return call;
-    });
+      // Before any policy sees it: the call the policies rule on is the one
+      // the client will run.
+      const nativeQuestion = this.asNativeQuestion(binding, prepared);
+      changed ||= nativeQuestion !== prepared;
+      prepared = nativeQuestion;
+      const issuedQuestionName = nativeQuestionName(binding, prepared.name);
+      if (issuedQuestionName) {
+        const issuedId = issueNativeQuestionId({
+          session: binding.session,
+          name: issuedQuestionName,
+          currentId: prepared.id,
+        });
+        prepared = { ...prepared, wireId: issuedId };
+        issuedNativeQuestions.push({
+          id: issuedId,
+          name: issuedQuestionName,
+          offerIds,
+        });
+        changed = true;
+      }
+      toolCalls.push(prepared);
+    }
     await Promise.all(
       issuedNativeQuestions.map((question) =>
         cacheManager.set(
@@ -253,7 +426,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             session: binding.session,
             id: question.id,
           }),
-          { name: question.name },
+          {
+            name: question.name,
+            ...(question.offerIds.length > 0
+              ? { offerIds: question.offerIds }
+              : {}),
+          },
           TimeInMs.Minute * 10,
         ),
       ),
@@ -273,8 +451,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding || !tools) return;
     const calls = [...context.hostedToolCalls];
     const decisions = await evaluateHostedToolCalls(binding.session, calls, {
-      canonicalize: (name) => this.canonicalize(binding, name),
-      controlToolName: tools.controlToolName,
+      ...this.resolution(binding),
+      control: tools.control,
     });
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
@@ -287,8 +465,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.turnOpen = true;
     const notices = held.map(({ call, feedback }) => ({
       id: call.id,
-      name: tools.noticeToolName,
-      ...noticeNamespace(tools),
+      name: tools.notice.name,
+      ...(tools.notice.namespace ? { namespace: tools.notice.namespace } : {}),
       arguments: JSON.stringify(
         buildNoticeArguments({
           id: call.id,
@@ -316,28 +494,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     const calls = [...context.toolCalls];
-    const tools = binding.request.tools;
-    const decisions = await evaluateToolCalls(
-      binding.session,
-      calls.map((call) => ({
-        ...call,
-        name: namespacedToolName(call.name, call.namespace),
-      })),
-      {
-        canonicalize: (name) => this.canonicalize(binding, name),
-        isUserQuestion: (name) => isUserQuestionCall(binding, name),
-        ...(tools
-          ? {
-              controlToolName: namespacedToolName(
-                tools.controlToolName,
-                tools.controlNamespace,
-              ),
-            }
-          : {}),
-      },
-    );
+    const decisions = await evaluateToolCalls(binding.session, calls, {
+      ...this.resolution(binding),
+      isUserQuestion: (name) => isUserQuestionCall(binding, name),
+      ...(binding.request.tools
+        ? { control: binding.request.tools.control }
+        : {}),
+    });
 
-    const notice = tools?.noticeToolName;
+    const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const released: typeof calls = [];
     for (const [index, call] of calls.entries()) {
@@ -379,8 +544,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       blocked.push({ id: call.id, name: call.name, reason: decision.feedback });
       released.push({
         id: call.id,
-        name: notice,
-        ...noticeNamespace(tools),
+        name: notice.name,
+        // The client runs the notice like any tool it declared, so it must
+        // name the namespace the notice tool was declared in.
+        ...(notice.namespace ? { namespace: notice.namespace } : {}),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -429,8 +596,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   /**
    * Converts an ask_user call to the client's native question tool when the
-   * client cannot show MCP choice forms. Preserves the original tool call ID.
-   * Leaves the call unchanged for clients without native question tools.
+   * client declares that tool. Preserves the original tool call ID. Leaves the
+   * call unchanged when the request has no native question declaration, so the
+   * gateway can use MCP elicitation or fail closed without a deadlock.
    */
   private asNativeQuestion(
     binding: AppaPluginBinding,
@@ -439,43 +607,55 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const native = binding.adapter?.nativeQuestion;
     if (
       !native?.fromAskUser ||
-      binding.request.spellings.get(native.toolName) !== native.toolName ||
+      native.isAvailable?.(binding.requestHeaders) === false ||
+      !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
-        this.canonicalize(binding, call.name),
+        this.canonicalize(binding, call),
       ) !== TOOL_ASK_USER_SHORT_NAME
     ) {
       return call;
     }
     const args = parseAskUserArguments(call.arguments);
     if (!args) return call;
+    if (args.allowMultiple && native.supportsMultiple === false) return call;
     return {
       id: call.id,
       name: native.toolName,
+      // An explicit empty namespace tells Responses rewrites not to inherit
+      // the gateway namespace from the ask_user call this local tool replaces.
+      namespace: "",
       arguments: JSON.stringify(native.fromAskUser(args)),
     };
   }
 
-  private canonicalize(binding: AppaPluginBinding, name: string): string {
-    const platformTool = underscoreLabeledPlatformToolName(
-      name,
-      binding.canonicalizeToolName,
-    );
-    if (platformTool) return platformTool;
-    const canonical = binding.canonicalizeToolName(name);
-    // A gateway tool whatever the client's local naming says: a name the
-    // canonicalizer rewrote is a client's decoration of one (OpenCode's
-    // `<label>_<tool>`), and Codex declares an MCP server's tools inside the
-    // server's namespace under their bare names.
-    const gateway =
-      canonical !== name ||
-      binding.request.namespaces
-        .get(name)
-        ?.startsWith(CODEX_MCP_NAMESPACE_PREFIX);
-    return !gateway && binding.adapter?.classifyToolName(name) === "local"
-      ? binding.canonicalizeToolName(
-          binding.adapter.normalizeLocalToolName(name),
-        )
-      : canonical;
+  /**
+   * A call's canonical name, from its own name and the namespace it names. A
+   * client's own tool is named the way the adapter records local tools; a
+   * declaration the gateway attested is the gateway's, never the client's,
+   * whatever the adapter's name heuristic says.
+   */
+  private canonicalize(
+    binding: AppaPluginBinding,
+    call: { name: string; namespace?: string },
+  ): string {
+    if (
+      !binding.identity.attestationOf(call.name, call.namespace) &&
+      binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
+    ) {
+      return binding.identity.canonicalize(
+        binding.adapter.normalizeLocalToolName(call.name),
+      );
+    }
+    return binding.identity.canonicalize(call.name, call.namespace);
+  }
+
+  /** The name resolution this binding's calls are ruled under. */
+  private resolution(binding: AppaPluginBinding): ToolNameResolution {
+    return {
+      canonicalize: (name: string, namespace?: string) =>
+        this.canonicalize(binding, { name, namespace }),
+      looseRunToolDispatch: binding.identity.looseRunToolDispatch,
+    };
   }
 
   /**
@@ -499,11 +679,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const [normalized] = normalizeToolCallsForPolicy(
       [
         {
-          name: namespacedToolName(call.name, call.namespace),
+          name: call.name,
           arguments: call.arguments,
+          namespace: call.namespace,
         },
       ],
-      (name) => this.canonicalize(binding, name),
+      this.resolution(binding),
     );
     if (normalized.isRunToolDispatchTarget) {
       // The target has no declaration of its own on this wire: it is neither a
@@ -520,7 +701,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       name: call.name,
       arguments: call.arguments,
       custom: binding.request.customTools.has(call.name),
-      namespace: call.namespace ?? binding.request.namespaces.get(call.name),
+      namespace: call.namespace,
     };
   }
 }
@@ -558,7 +739,7 @@ function getTrustedContext(
     trustedContext !== null &&
     "session" in trustedContext &&
     "profileId" in trustedContext &&
-    "canonicalizeToolName" in trustedContext &&
+    "toolIdentity" in trustedContext &&
     "request" in trustedContext
     ? (trustedContext as AppaTrustedContext)
     : undefined;
@@ -690,7 +871,10 @@ function stampAskUserOffers(
   call: LlmProxyToolCallsContext["toolCalls"][number],
   offerClaims: readonly OfferJws[] | undefined,
   claimedOfferIds: Set<string>,
-): LlmProxyToolCallsContext["toolCalls"][number] {
+): {
+  call: LlmProxyToolCallsContext["toolCalls"][number];
+  offerIds: string[];
+} {
   const originalArguments =
     typeof call.arguments === "string"
       ? call.arguments
@@ -699,14 +883,14 @@ function stampAskUserOffers(
   try {
     argumentsValue = JSON.parse(originalArguments);
   } catch {
-    return call;
+    return { call, offerIds: [] };
   }
   if (
     !argumentsValue ||
     typeof argumentsValue !== "object" ||
     Array.isArray(argumentsValue)
   )
-    return call;
+    return { call, offerIds: [] };
   const argumentRecord = argumentsValue as Record<string, unknown>;
   const clientArguments = withoutStampedArguments({
     tool: TOOL_ASK_USER_SHORT_NAME,
@@ -739,18 +923,74 @@ function stampAskUserOffers(
   if (selectedOffers.length === 0) {
     // No offer from this turn to carry, but a copy the model wrote itself
     // still goes.
-    return Object.keys(clientArguments).length ===
-      Object.keys(argumentRecord).length
-      ? call
-      : { ...call, arguments: JSON.stringify(clientArguments) };
+    return {
+      call:
+        Object.keys(clientArguments).length ===
+        Object.keys(argumentRecord).length
+          ? call
+          : { ...call, arguments: JSON.stringify(clientArguments) },
+      offerIds: [],
+    };
   }
   for (const id of requestedOfferIds) claimedOfferIds.add(id);
   return {
-    ...call,
-    arguments: JSON.stringify({
-      ...clientArguments,
-      remedy_offers: selectedOffers,
-    }),
+    call: {
+      ...call,
+      arguments: JSON.stringify({
+        ...clientArguments,
+        remedy_offers: selectedOffers,
+      }),
+    },
+    offerIds: requestedOfferIds,
+  };
+}
+
+async function canonicalizeHitlAskUserCall(params: {
+  binding: AppaPluginBinding;
+  call: LlmProxyToolCallsContext["toolCalls"][number];
+  offerIds: readonly string[];
+}): Promise<{
+  call: LlmProxyToolCallsContext["toolCalls"][number];
+  invalidOfferCount: boolean;
+}> {
+  if (params.offerIds.length !== 1) {
+    const pending = await Promise.all(
+      params.offerIds.map((offerId) =>
+        getHitlReview({ session: params.binding.session, offerId }),
+      ),
+    );
+    return {
+      call: params.call,
+      invalidOfferCount: pending.some(Boolean),
+    };
+  }
+  const hitl = await getHitlAskUserArguments({
+    session: params.binding.session,
+    offerIds: params.offerIds,
+  });
+  if (!hitl) return { call: params.call, invalidOfferCount: false };
+  const raw =
+    typeof params.call.arguments === "string"
+      ? params.call.arguments
+      : JSON.stringify(params.call.arguments);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { call: params.call, invalidOfferCount: false };
+  }
+  if (!isRecord(parsed)) return { call: params.call, invalidOfferCount: false };
+  return {
+    call: {
+      ...params.call,
+      arguments: JSON.stringify({
+        ...hitl,
+        ...(Array.isArray(parsed.remedy_offers)
+          ? { remedy_offers: parsed.remedy_offers }
+          : {}),
+      }),
+    },
+    invalidOfferCount: false,
   };
 }
 
@@ -785,23 +1025,28 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Revisit a rejected decision only after a new user request.",
 ].join(" ");
 
+const REMEDY_OFFER_CONTINUATION_GUIDANCE =
+  "The get_remedy_plans result immediately above offers a remedy for the blocked call. Do not reply to the user and do not ask whether to continue. Immediately call execute_remedy_plan with the exact offer_id and plan from that result. The control call opens the human review when required.";
+
+const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE =
+  "When get_remedy_plans offers a remedy for a blocked call, do not ask the user whether to submit it. Immediately call execute_remedy_plan with the exact offer_id and plan from that ruling. If execute_remedy_plan returns outcome review_required, do not reply that review is pending. Immediately call the declared ask_user tool with that offer ID in remedy_offer_ids, header Approval, and options Approve and Deny. The platform supplies the exact review text. Wait for successful authorization before retrying the blocked tool.";
+
 const NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
 function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
-  const namespace = binding.request.namespaces.get(name);
+  const namespace = binding.request.tools?.namespaces.get(name);
   if (namespace) {
     const namespaced = `${namespace}__${name}`;
-    const canonical = binding.canonicalizeToolName(namespaced);
+    const canonical = binding.identity.canonicalize(namespaced);
     return (
       canonical !== namespaced &&
       archestraMcpBranding.getToolShortName(canonical) ===
         TOOL_ASK_USER_SHORT_NAME
     );
   }
-  const labeled = underscoreLabeledPlatformToolName(
-    name,
-    binding.canonicalizeToolName,
+  const labeled = underscoreLabeledPlatformToolName(name, (toolName) =>
+    binding.identity.canonicalize(toolName),
   );
   if (labeled) {
     return (
@@ -809,7 +1054,7 @@ function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
       TOOL_ASK_USER_SHORT_NAME
     );
   }
-  const canonical = binding.canonicalizeToolName(name);
+  const canonical = binding.identity.canonicalize(name);
   return (
     canonical !== name &&
     archestraMcpBranding.getToolShortName(canonical) ===
@@ -819,7 +1064,7 @@ function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
 
 function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
   return (
-    binding.request.platformToolNames?.has(name) === true ||
+    binding.request.tools?.platformToolNames.has(name) === true ||
     nativeQuestionName(binding, name) !== undefined ||
     isGatewayAskUser(binding, name)
   );
@@ -828,10 +1073,11 @@ function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
 function isUserQuestionResult(params: {
   binding: AppaPluginBinding;
   answer: { id: string; name: string };
-  verifiedNativeQuestionResults: ReadonlySet<object>;
+  verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
 }): boolean {
   if (
-    params.binding.request.platformToolNames?.has(params.answer.name) === true
+    params.binding.request.tools?.platformToolNames.has(params.answer.name) ===
+    true
   )
     return true;
   if (isGatewayAskUser(params.binding, params.answer.name)) return true;
@@ -845,7 +1091,7 @@ function isUserQuestionResult(params: {
 async function claimNativeQuestionResults(params: {
   binding: AppaPluginBinding;
   results: ReadonlyArray<{ id: string; name: string }>;
-}): Promise<Set<object>> {
+}): Promise<Map<object, NativeQuestionClaim>> {
   const candidates = params.results.flatMap((result) => {
     const name = nativeQuestionName(params.binding, result.name);
     if (
@@ -869,21 +1115,75 @@ async function claimNativeQuestionResults(params: {
       },
     ];
   });
-  const verified = new Set<object>();
+  const verified = new Map<object, NativeQuestionClaim>();
   if (candidates.length === 0) return verified;
   const claimed = new Map(
     (
-      await cacheManager.getAndDeleteMany<{ name?: unknown }>(
-        candidates.map((candidate) => candidate.key),
-      )
+      await cacheManager.getAndDeleteMany<{
+        name?: unknown;
+        offerIds?: unknown;
+      }>(candidates.map((candidate) => candidate.key))
     ).map((entry) => [entry.key, entry.value]),
   );
   for (const candidate of candidates) {
-    if (claimed.get(candidate.key)?.name === candidate.name) {
-      verified.add(candidate.result);
+    const entry = claimed.get(candidate.key);
+    if (entry?.name === candidate.name) {
+      const offerIds = Array.isArray(entry.offerIds)
+        ? entry.offerIds.filter(
+            (offerId): offerId is string =>
+              typeof offerId === "string" && offerId.length > 0,
+          )
+        : undefined;
+      verified.set(candidate.result, {
+        ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
+      });
     }
   }
   return verified;
+}
+
+async function recordNativeHitlRulings(params: {
+  binding: AppaPluginBinding;
+  verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
+}): Promise<RecordedNativeHitlRuling[]> {
+  const parse = params.binding.adapter?.nativeQuestion?.rulingFromResult;
+  if (!parse) return [];
+  const recorded: RecordedNativeHitlRuling[] = [];
+  for (const [answer, claim] of params.verifiedNativeQuestionResults) {
+    if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
+      continue;
+    const ruling = parse({
+      content:
+        typeof answer.content === "string"
+          ? answer.content
+          : JSON.stringify(answer.content ?? null),
+      ...(typeof answer.isError === "boolean"
+        ? { isError: answer.isError }
+        : {}),
+    });
+    logger.debug(
+      {
+        ruling,
+        offerIds: claim.offerIds,
+        contentType: Array.isArray(answer.content)
+          ? "array"
+          : typeof answer.content,
+      },
+      "Recorded native OpenAPPA HITL answer",
+    );
+    for (const offerId of claim.offerIds) {
+      if (
+        await recordHitlRuling({
+          session: params.binding.session,
+          offerId,
+          ruling,
+        })
+      ) {
+        recorded.push({ offerId, ruling });
+      }
+    }
+  }
+  return recorded;
 }
 
 function assertUniqueNativeQuestionResultIds(params: {
@@ -922,14 +1222,28 @@ function nativeQuestionName(
 ): string | undefined {
   const native = binding.adapter?.nativeQuestion;
   if (!native || !binding.adapter) return undefined;
-  const namespace = binding.request.namespaces.get(name);
+  const namespace = binding.request.tools?.namespaces.get(name);
   const gateway =
     namespace?.startsWith(CODEX_MCP_NAMESPACE_PREFIX) ||
     binding.adapter.classifyToolName(name) === "gateway" ||
-    binding.canonicalizeToolName(name) !== name;
+    binding.identity.canonicalize(name) !== name;
   if (gateway) return undefined;
   const normalized = binding.adapter.normalizeLocalToolName(name);
   return normalized === native.toolName ? normalized : undefined;
+}
+
+function declaresNativeQuestion(
+  binding: AppaPluginBinding,
+  nativeToolName: string,
+): boolean {
+  const adapter = binding.adapter;
+  if (!adapter) return false;
+  return (binding.request.declaredTools ?? []).some((tool) => {
+    if (binding.identity.attestationOf(tool.name, tool.namespace)) return false;
+    if (adapter.classifyToolName(tool.name, tool.namespace) !== "local")
+      return false;
+    return adapter.normalizeLocalToolName(tool.name) === nativeToolName;
+  });
 }
 
 function issueNativeQuestionId(params: {
@@ -979,13 +1293,12 @@ function nativeQuestionCacheKey(params: {
   session: OpenAppaSession;
   id: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaNativeQuestion}-${encodeURIComponent(
-    params.session.organization_id,
-  )}:${encodeURIComponent(params.session.caller_id ?? "")}:${encodeURIComponent(
-    params.session.session_id,
-  )}:${encodeURIComponent(params.session.parent_id ?? "")}:${encodeURIComponent(
-    params.id,
-  )}`;
+  const scope = nativeQuestionTag({
+    session: params.session,
+    name: "cache",
+    nonce: params.id,
+  }).toString("base64url");
+  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
 }
 
 function nativeQuestionTag(params: {
@@ -1009,18 +1322,202 @@ function nativeQuestionTag(params: {
     .subarray(0, 16);
 }
 
+async function pendingNativeHitlOfferIds(params: {
+  binding: AppaPluginBinding;
+  results: LlmProxyToolResultsContext["toolResults"];
+  resolvedOfferIds: ReadonlySet<string>;
+}): Promise<string[]> {
+  const control = params.binding.request.tools?.control;
+  if (!control) return [];
+  const offerIds = new Set<string>();
+  for (const result of params.results) {
+    if (result.isError) continue;
+    const canonicalResult = params.binding.identity.canonicalize(
+      result.name,
+      params.binding.request.tools?.namespaces.get(result.name),
+    );
+    const canonicalControl = params.binding.identity.canonicalize(
+      control.name,
+      control.namespace,
+    );
+    const resultShortName = archestraMcpBranding.getToolShortName(result.name);
+    if (
+      result.name !== control.name &&
+      canonicalResult !== canonicalControl &&
+      resultShortName !== TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
+      !result.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    )
+      continue;
+    const offerId = reviewRequiredOfferId(result, 0);
+    if (offerId && !params.resolvedOfferIds.has(offerId)) offerIds.add(offerId);
+  }
+  const pending = await Promise.all(
+    [...offerIds].map(async (offerId) => ({
+      offerId,
+      review: await getHitlReview({
+        session: params.binding.session,
+        offerId,
+      }),
+    })),
+  );
+  return pending
+    .filter((entry) => entry.review !== undefined)
+    .map((entry) => entry.offerId);
+}
+
+function hasRemedyOfferResult(params: {
+  binding: AppaPluginBinding;
+  results: LlmProxyToolResultsContext["toolResults"];
+  verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
+}): boolean {
+  let latestBlockedResult = -1;
+  for (const [index, result] of params.results.entries()) {
+    if (result.isError) continue;
+    const content =
+      typeof result.content === "string"
+        ? result.content
+        : JSON.stringify(result.content ?? null);
+    if (
+      content.includes("[appa] Blocked") &&
+      content.includes("execute_remedy_plan") &&
+      content.includes("offer_id")
+    ) {
+      latestBlockedResult = index;
+    }
+  }
+  if (latestBlockedResult < 0) return false;
+
+  const control = params.binding.request.tools?.control;
+  for (
+    let index = latestBlockedResult + 1;
+    index < params.results.length;
+    index++
+  ) {
+    const result = params.results[index];
+    if (params.verifiedNativeQuestionResults.has(result)) return false;
+    if (!control) continue;
+    const canonicalResult = params.binding.identity.canonicalize(
+      result.name,
+      params.binding.request.tools?.namespaces.get(result.name),
+    );
+    const canonicalControl = params.binding.identity.canonicalize(
+      control.name,
+      control.namespace,
+    );
+    if (
+      result.name === control.name ||
+      canonicalResult === canonicalControl ||
+      archestraMcpBranding.getToolShortName(result.name) ===
+        TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+      result.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function reviewRequiredOfferId(value: unknown, depth: number): string | null {
+  if (depth > 4 || value === null || value === undefined) return null;
+  if (typeof value === "string") {
+    try {
+      return reviewRequiredOfferId(JSON.parse(value), depth + 1);
+    } catch {
+      for (const line of value.split(/\r?\n/)) {
+        const candidate = line.trim();
+        if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
+        try {
+          const offerId = reviewRequiredOfferId(
+            JSON.parse(candidate),
+            depth + 1,
+          );
+          if (offerId) return offerId;
+        } catch {
+          // Continue past non-JSON log lines and bounded metadata.
+        }
+      }
+      return null;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const offerId = reviewRequiredOfferId(item, depth + 1);
+      if (offerId) return offerId;
+    }
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  if (
+    value.outcome === "review_required" &&
+    typeof value.offer_id === "string" &&
+    value.offer_id.length > 0
+  ) {
+    return value.offer_id;
+  }
+  for (const nested of [value.structuredContent, value.content, value.text]) {
+    const offerId = reviewRequiredOfferId(nested, depth + 1);
+    if (offerId) return offerId;
+  }
+  return null;
+}
+
+function hitlQuestionGuidance(offerIds: readonly string[]): string {
+  return [
+    "The last execute_remedy_plan result requires human review.",
+    "Do not reply to the user and do not ask for approval in plain text.",
+    "Immediately call the declared ask_user tool once for each offer ID below.",
+    "For each call, use question 'Open the pending HITL review.', header 'Approval', options Approve and Deny, and remedy_offer_ids containing only that offer ID.",
+    "The platform replaces that placeholder text with the reviewed tool call and displays the client native question UI when available.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
+}
+
+function hitlDecisionGuidance(
+  rulings: readonly RecordedNativeHitlRuling[],
+): string {
+  const approved = rulings
+    .filter((entry) => entry.ruling === "approve")
+    .map((entry) => entry.offerId);
+  if (approved.length > 0) {
+    return [
+      `The verified human answer approved OpenAPPA offer IDs ${JSON.stringify(approved)}.`,
+      "Your next and only tool calls must be execute_remedy_plan calls for those offers, using the plan shown earlier in the conversation.",
+      "Do not call or retry the blocked tool in the same response.",
+      "Wait for execute_remedy_plan to report successful authorization. Only then retry the blocked tool in a new response.",
+      "Do not ask another question and do not describe this step in prose.",
+    ].join(" ");
+  }
+  return [
+    "The verified human answer did not approve the pending OpenAPPA review.",
+    "Do not call execute_remedy_plan and do not retry the blocked tool.",
+    "State briefly that the action remains blocked, then stop that action.",
+  ].join(" ");
+}
+
 function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
+  guidance?: string;
 }): void {
+  const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
   if (!isRecord(params.request)) return;
   if (params.interactionType === "openai:responses") {
-    if (typeof params.request.instructions === "string") {
-      appendInstruction(params.request, "instructions");
-      return;
+    let input: unknown[];
+    if (typeof params.request.input === "string") {
+      input = [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: params.request.input }],
+        },
+      ];
+      params.request.input = input;
+    } else if (Array.isArray(params.request.input)) {
+      input = params.request.input;
+    } else {
+      input = [];
+      params.request.input = input;
     }
-    const input = params.request.input;
-    if (!Array.isArray(input)) return;
     if (
       !input.some(
         (item) =>
@@ -1031,14 +1528,14 @@ function appendQuestionContinuation(params: {
             (block) =>
               isRecord(block) &&
               block.type === "input_text" &&
-              block.text === QUESTION_CONTINUATION_GUIDANCE,
+              block.text === guidance,
           ),
       )
     ) {
       input.push({
         type: "message",
         role: "developer",
-        content: [{ type: "input_text", text: QUESTION_CONTINUATION_GUIDANCE }],
+        content: [{ type: "input_text", text: guidance }],
       });
     }
     return;
@@ -1051,14 +1548,14 @@ function appendQuestionContinuation(params: {
         (message) =>
           isRecord(message) &&
           message.role === "developer" &&
-          message.content === QUESTION_CONTINUATION_GUIDANCE,
+          message.content === guidance,
       )
     ) {
       return;
     }
     messages.push({
       role: "developer",
-      content: QUESTION_CONTINUATION_GUIDANCE,
+      content: guidance,
     });
     return;
   }
@@ -1067,37 +1564,52 @@ function appendQuestionContinuation(params: {
       if (
         !params.request.system.some(
           (block) =>
-            isRecord(block) &&
-            block.type === "text" &&
-            block.text === QUESTION_CONTINUATION_GUIDANCE,
+            isRecord(block) && block.type === "text" && block.text === guidance,
         )
       ) {
         params.request.system.push({
           type: "text",
-          text: QUESTION_CONTINUATION_GUIDANCE,
+          text: guidance,
         });
       }
       return;
     }
-    appendInstruction(params.request, "system");
+    appendInstruction(params.request, "system", guidance);
   }
+}
+
+/** Prevents Codex from converting a required HITL workflow step into prose. */
+function requireCodexToolCall(params: {
+  binding: AppaPluginBinding;
+  context: LlmProxyBeforeModelContext;
+}): void {
+  if (
+    params.binding.adapter?.id !== "codex" ||
+    params.context.interactionType !== "openai:responses" ||
+    !isRecord(params.context.request)
+  ) {
+    return;
+  }
+  // Namespace members cannot be selected individually through Responses API
+  // tool_choice, so require one call and let the adjacent developer instruction
+  // select the exact OpenAPPA workflow tool.
+  params.context.request.tool_choice = "required";
+  params.context.request.parallel_tool_calls = false;
 }
 
 function appendInstruction(
   request: Record<string, unknown>,
   key: "instructions" | "system",
+  guidance: string,
 ): void {
   const instructions = request[key];
-  if (
-    typeof instructions === "string" &&
-    instructions.includes(QUESTION_CONTINUATION_GUIDANCE)
-  ) {
+  if (typeof instructions === "string" && instructions.includes(guidance)) {
     return;
   }
   request[key] =
     typeof instructions === "string" && instructions.length > 0
-      ? `${instructions}\n\n${QUESTION_CONTINUATION_GUIDANCE}`
-      : QUESTION_CONTINUATION_GUIDANCE;
+      ? `${instructions}\n\n${guidance}`
+      : guidance;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1123,12 +1635,6 @@ function toolInputOf(
  * Returns the gateway namespace declared for the notice tool in Codex.
  * Dispatches notices to this namespace.
  */
-function noticeNamespace(tools: AppaRequestTools | undefined): {
-  namespace?: string;
-} {
-  return tools?.noticeNamespace ? { namespace: tools.noticeNamespace } : {};
-}
-
 /**
  * Appends trajectory stamps to tool-call IDs for supported wire families.
  * Stamped IDs identify source session lineage in future turns.
@@ -1160,7 +1666,9 @@ function trajectoryStamper(
   return (call) => ({
     ...call,
     wireId: stampToolCallId({
-      callId: call.id,
+      // Compose transport stamps instead of replacing inner wire identities,
+      // such as the signed native-question ID used to claim a HITL answer.
+      callId: call.wireId ?? call.id,
       sessionId,
       organizationId: session.organization_id,
       callerId,

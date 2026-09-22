@@ -2,6 +2,7 @@ import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { AppaClientAdapter, AskUserArguments } from "../types";
 import { questionHeader, readHeader } from "../utils";
+import { openCodeQuestionRuling } from "./native-question-ruling";
 
 // OpenCode labels each question's tab with a header of at most 30 characters,
 // the same bound ask_user declares for it.
@@ -26,7 +27,10 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   classifyToolName(name: string): "gateway" | "local" {
-    return name.startsWith("mcp:") ? "gateway" : "local";
+    // OpenCode formats MCP tools as `<alias>_<advertised name>` under `mcp:` namespaces.
+    // Gateway tool names use the `<server>__<tool>` format.
+    // Native OpenCode tools (such as `bash` or `read`) do not contain these patterns.
+    return name.startsWith("mcp:") || name.includes("__") ? "gateway" : "local";
   }
 
   normalizeLocalToolName(name: string): string {
@@ -52,6 +56,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
         },
       ],
     }),
+    rulingFromResult: openCodeQuestionRuling,
   };
 
   /**

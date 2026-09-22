@@ -25,6 +25,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import config from "@/config";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -944,6 +946,124 @@ describe("Anthropic proxy routing", () => {
 
     // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("Anthropic count_tokens passthrough", () => {
+  const PROXY_ID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
+  let upstream: FastifyInstance;
+  let forwardedBodies: string[];
+
+  beforeEach(async () => {
+    forwardedBodies = [];
+    upstream = Fastify();
+    upstream.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      (_request, body, done) => done(null, body),
+    );
+    upstream.post("/v1/messages/count_tokens", async (request) => {
+      forwardedBodies.push(request.body as string);
+      return { input_tokens: 42 };
+    });
+    await upstream.listen({ port: 0 });
+    const address = upstream.server.address();
+    const port = typeof address === "string" ? 0 : address?.port;
+    // Read when the catch-all proxy registers.
+    config.llm.anthropic.baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await upstream.close();
+  });
+
+  async function countTokens(payload: string) {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    try {
+      return await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${PROXY_ID}/v1/messages/count_tokens`,
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "test-anthropic-key",
+        },
+        payload,
+      });
+    } finally {
+      await app.close();
+    }
+  }
+
+  test("takes the gateway's markers out of the tool list before it reaches Anthropic", async () => {
+    const attested = (advertisedName: string, description?: string) =>
+      attestToolDescription({
+        organizationId: "org-count-tokens",
+        gatewayId: PROXY_ID,
+        advertisedName,
+        kind: "b",
+        description,
+      });
+    const inputSchema = { type: "object", properties: {} };
+
+    const response = await countTokens(
+      JSON.stringify({
+        model: "claude-opus-4-20250514",
+        messages: [
+          {
+            role: "user",
+            content: `Tools found: ${attested("archestra__whoami")}`,
+          },
+        ],
+        tools: [
+          {
+            name: "mcp__gw__archestra__search_tools",
+            description: attested(
+              "archestra__search_tools",
+              "Search the catalog.",
+            ),
+            input_schema: inputSchema,
+          },
+          {
+            name: "mcp__gw__archestra__whoami",
+            description: attested("archestra__whoami"),
+            input_schema: inputSchema,
+          },
+        ],
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ input_tokens: 42 });
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toContain("[[gwa1.");
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      model: "claude-opus-4-20250514",
+      messages: [{ role: "user", content: "Tools found: " }],
+      tools: [
+        {
+          name: "mcp__gw__archestra__search_tools",
+          description: "Search the catalog.",
+          input_schema: inputSchema,
+        },
+        { name: "mcp__gw__archestra__whoami", input_schema: inputSchema },
+      ],
+    });
+  });
+
+  test("forwards a body without markers byte for byte", async () => {
+    // Re-serializing would reformat this and round the integer.
+    const payload =
+      '{ "model": "claude-opus-4-20250514", "seed": 12345678901234567890,\n' +
+      '  "messages": [{ "role": "user", "content": "gwa1 is not a marker" }] }';
+
+    const response = await countTokens(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(forwardedBodies).toEqual([payload]);
   });
 });
 

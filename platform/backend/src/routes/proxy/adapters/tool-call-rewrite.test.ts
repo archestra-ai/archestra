@@ -126,6 +126,54 @@ describe("OpenAI chat formatToolCallsSSE", () => {
       "archestra__run_tool",
     );
   });
+
+  test("uses a native question's signed wire id in streaming and non-streaming responses", () => {
+    const nativeQuestion = [
+      {
+        id: "call_provider",
+        wireId: "call_aq1_signed",
+        name: "question",
+        arguments: '{"questions":[]}',
+      },
+    ];
+    const stream = openaiAdapterFactory.createStreamAdapter();
+    const [event] = sseData<OpenAiFrame>(
+      stream.formatToolCallsSSE?.(nativeQuestion) ?? [],
+    );
+    expect(event.choices[0].delta.tool_calls?.[0]).toMatchObject({
+      id: "call_aq1_signed",
+      function: { name: "question" },
+    });
+
+    const response = openaiAdapterFactory.createResponseAdapter({
+      id: "chatcmpl_1",
+      object: "chat.completion",
+      created: 0,
+      model: "model",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_provider",
+                type: "function",
+                function: { name: "archestra__ask_user", arguments: "{}" },
+              },
+            ],
+          },
+        },
+      ],
+    } as never);
+    const rewritten = response.withRewrittenToolCalls?.(nativeQuestion);
+    expect(rewritten?.choices[0].message.tool_calls?.[0]).toMatchObject({
+      id: "call_aq1_signed",
+      function: { name: "question" },
+    });
+  });
 });
 
 describe("Anthropic formatToolCallsSSE", () => {
@@ -183,6 +231,49 @@ describe("Anthropic formatToolCallsSSE", () => {
         name: "archestra__run_tool",
       }),
     );
+  });
+
+  test("uses a native question's signed wire id in streaming and non-streaming responses", () => {
+    const nativeQuestion = [
+      {
+        id: "toolu_provider",
+        wireId: "toolu_aq1_signed",
+        name: "AskUserQuestion",
+        arguments: '{"questions":[]}',
+      },
+    ];
+    const stream = anthropicAdapterFactory.createStreamAdapter();
+    const events = sseData<AnthropicFrame>(
+      stream.formatToolCallsSSE?.(nativeQuestion) ?? [],
+    );
+    expect(events[0].content_block).toMatchObject({
+      id: "toolu_aq1_signed",
+      name: "AskUserQuestion",
+    });
+
+    const response = anthropicAdapterFactory.createResponseAdapter({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "model",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_provider",
+          name: "archestra__ask_user",
+          input: {},
+        },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as never);
+    const rewritten = response.withRewrittenToolCalls?.(nativeQuestion);
+    expect(rewritten?.content[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_aq1_signed",
+      name: "AskUserQuestion",
+    });
   });
 });
 

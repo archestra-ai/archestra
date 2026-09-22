@@ -425,6 +425,11 @@ class ToolInvocationPolicyModel {
       toolCallName: string;
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
+      /**
+       * The default action to rule by when no tool row carries this name.
+       * Unset, such a call is allowed: there is nothing to rule on.
+       */
+      actionWithoutToolRow?: ToolInvocation.ToolInvocationPolicyAction;
     }>,
     context: PolicyEvaluationContext,
     isContextTrusted: boolean,
@@ -508,16 +513,22 @@ class ToolInvocationPolicyModel {
 
     const toolIds = [...new Set(toolIdsByName.values())];
 
-    if (toolIds.length === 0) {
+    if (
+      toolIds.length === 0 &&
+      !externalToolCalls.some((tc) => tc.actionWithoutToolRow)
+    ) {
       // No tools found, allow all
       return { isAllowed: true, reason: "" };
     }
 
     // Fetch all policies for all tools
-    const allPolicies = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+    const allPolicies =
+      toolIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.toolInvocationPoliciesTable)
+            .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
 
     logger.debug(
       { allPolicies },
@@ -536,9 +547,27 @@ class ToolInvocationPolicyModel {
     }
 
     // Evaluate each tool call
-    for (const { toolCallName, toolInput } of externalToolCalls) {
+    for (const {
+      toolCallName,
+      toolInput,
+      actionWithoutToolRow,
+    } of externalToolCalls) {
       const toolId = toolIdsByName.get(toolCallName);
-      if (!toolId) continue;
+      // With no row, the caller's default, when it gives one, stands in as
+      // the tool's one default policy.
+      const policies:
+        | Array<
+            Pick<
+              (typeof allPolicies)[number],
+              "action" | "conditions" | "reason"
+            >
+          >
+        | undefined = toolId
+        ? policiesByToolId.get(toolId) || []
+        : actionWithoutToolRow
+          ? [{ action: actionWithoutToolRow, conditions: [], reason: null }]
+          : undefined;
+      if (!policies) continue;
 
       const blocked = (reason: string) => ({
         isAllowed: false as const,
@@ -546,8 +575,6 @@ class ToolInvocationPolicyModel {
         toolCallName,
         toolId,
       });
-
-      const policies = policiesByToolId.get(toolId) || [];
 
       // Separate policies into specific (has conditions) and default (empty conditions)
       const specificPolicies = policies.filter((p) => p.conditions.length > 0);

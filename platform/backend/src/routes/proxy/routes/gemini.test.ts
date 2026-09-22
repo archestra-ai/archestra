@@ -21,6 +21,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -862,6 +863,86 @@ describe("Gemini proxy routing", () => {
 
     // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("Gemini countTokens passthrough", () => {
+  let upstream: FastifyInstance;
+  let forwardedBodies: string[];
+
+  beforeEach(async () => {
+    forwardedBodies = [];
+    upstream = Fastify();
+    upstream.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      (_request, body, done) => done(null, body),
+    );
+    upstream.post("/v1/models/*", async (request) => {
+      forwardedBodies.push(request.body as string);
+      return { totalTokens: 42 };
+    });
+    await upstream.listen({ port: 0 });
+    const address = upstream.server.address();
+    const port = typeof address === "string" ? 0 : address?.port;
+    // Read when the catch-all proxy registers.
+    config.llm.gemini.baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await upstream.close();
+  });
+
+  test("takes the gateway's markers out of the tool list before it reaches Gemini", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+    const description = attestToolDescription({
+      organizationId: "org-count-tokens",
+      gatewayId: "44f56e01-7167-42c1-88ee-64b566fbc34d",
+      advertisedName: "archestra__search_tools",
+      kind: "b",
+      description: "Search the catalog.",
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: { "content-type": "application/json" },
+        payload: {
+          generateContentRequest: {
+            contents: [{ role: "user", parts: [{ text: "Hello!" }] }],
+            tools: [
+              {
+                functionDeclarations: [
+                  { name: "archestra__search_tools", description },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toContain("[[gwa1.");
+    expect(JSON.parse(forwardedBodies[0]).generateContentRequest.tools).toEqual(
+      [
+        {
+          functionDeclarations: [
+            {
+              name: "archestra__search_tools",
+              description: "Search the catalog.",
+            },
+          ],
+        },
+      ],
+    );
   });
 });
 

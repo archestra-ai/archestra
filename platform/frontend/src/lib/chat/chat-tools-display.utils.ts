@@ -1,6 +1,8 @@
 import {
   type ArchestraToolShortName,
+  extractMcpHumanRuling,
   extractMcpToolError,
+  type McpHumanRuling,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -110,6 +112,12 @@ export function getCompactToolState({
     return "error";
   }
 
+  // The remedy executed, but the user denied the reviewed tool call.
+  // Mark the tool as denied instead of completed.
+  if (extractMcpHumanRuling(toolResultPart?.output ?? part.output) === "deny") {
+    return "denied";
+  }
+
   if (toolResultPart || part.state === "output-available") {
     return "completed";
   }
@@ -121,6 +129,26 @@ export function getCompactToolState({
   }
 
   return "running";
+}
+
+/**
+ * Returns display text for a reviewed remedy decision.
+ * Returns null if the result contains an error or lacks a human ruling.
+ */
+export function getHumanRulingDisplay({
+  part,
+  toolResultPart,
+}: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+}): { ruling: McpHumanRuling; label: string } | null {
+  if (getToolErrorText({ part, toolResultPart })) return null;
+  const ruling = extractMcpHumanRuling(toolResultPart?.output ?? part.output);
+  if (!ruling) return null;
+  return {
+    ruling,
+    label: ruling === "deny" ? "Denied by you" : "Approved by you",
+  };
 }
 
 export function isCompactEligible(params: {

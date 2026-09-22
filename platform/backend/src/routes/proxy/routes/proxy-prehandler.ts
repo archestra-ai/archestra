@@ -1,9 +1,12 @@
-import type {
-  FastifyReply,
-  FastifyRequest,
-  HookHandlerDoneFunction,
+import { Readable } from "node:stream";
+import {
+  errorCodes,
+  type FastifyReply,
+  type FastifyRequest,
+  type HookHandlerDoneFunction,
 } from "fastify";
 import logger from "@/logging";
+import { removeMarkersFromForwardedJson } from "../utils/gateway-tool-declarations";
 
 const UUID_REGEX =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -13,6 +16,7 @@ const UUID_REGEX =
  * 1. Rejects POST requests matching the custom-handled endpoint suffix with a 400
  * 2. Strips agent UUIDs from the URL path so the proxy forwards to the correct upstream
  * 3. Logs the rewrite or pass-through for debugging
+ * 4. Takes the gateway's tool attestation markers out of a forwarded JSON body
  *
  * `rejectUnhandledPaths` (GitHub Copilot): every supported endpoint has its own
  * explicit route, so anything reaching this catch-all proxy is unsupported.
@@ -125,6 +129,95 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    next();
+    removeForwardedAttestationMarkers(request).then(() => next(), next);
   };
+}
+
+/**
+ * Takes the gateway's tool attestation markers out of a JSON body before a
+ * catch-all proxy forwards it upstream, so they never reach a provider. The
+ * dedicated routes strip them in handleLLMProxy, but clients also send their
+ * tool list to endpoints only the catch-all serves: Anthropic's
+ * `/v1/messages/count_tokens`, OpenAI's `/responses/input_tokens`, Gemini's
+ * `:countTokens`.
+ *
+ * The catch-all hands its preHandler the raw body stream, so a JSON body is
+ * read here, within the route's body limit, and put back: byte for byte when
+ * it holds no marker, re-serialized when it did. Compressed and non-JSON
+ * bodies are forwarded as they are.
+ */
+export async function removeForwardedAttestationMarkers(
+  request: FastifyRequest,
+): Promise<void> {
+  const body = request.body;
+  if (!(body instanceof Readable) || !isUncompressedJson(request.headers)) {
+    return;
+  }
+  const raw = await readBody({
+    stream: body,
+    limit: request.routeOptions.bodyLimit,
+    contentLength: request.headers["content-length"],
+  });
+  // @fastify/reply-from pipes a stream upstream as it is, and serializes an
+  // object for an application/json request with a fresh content-length.
+  request.body =
+    removeMarkersFromForwardedJson(raw) ??
+    Readable.from([raw], { objectMode: false });
+}
+
+// === Internal helpers ===
+
+function isUncompressedJson(headers: FastifyRequest["headers"]): boolean {
+  const mediaType = headers["content-type"]?.split(";")[0].trim().toLowerCase();
+  const encoding = headers["content-encoding"]?.trim().toLowerCase();
+  return (
+    mediaType === "application/json" && (!encoding || encoding === "identity")
+  );
+}
+
+/**
+ * Buffers a request body, failing with Fastify's own 413 past `limit`. Stops
+ * listening rather than destroying the stream, so the error reply still
+ * reaches the client.
+ */
+function readBody(params: {
+  stream: Readable;
+  limit: number;
+  contentLength: string | undefined;
+}): Promise<Buffer> {
+  const { stream, limit } = params;
+  return new Promise((resolve, reject) => {
+    if (Number(params.contentLength) > limit) {
+      reject(new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE());
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const stop = () => {
+      stream.off("data", onData);
+      stream.off("end", onEnd);
+      stream.off("error", onError);
+    };
+    const onData = (chunk: Buffer | string) => {
+      const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      size += bytes.length;
+      if (size > limit) {
+        stop();
+        reject(new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE());
+        return;
+      }
+      chunks.push(bytes);
+    };
+    const onEnd = () => {
+      stop();
+      resolve(Buffer.concat(chunks));
+    };
+    const onError = (error: Error) => {
+      stop();
+      reject(error);
+    };
+    stream.on("data", onData);
+    stream.on("end", onEnd);
+    stream.on("error", onError);
+  });
 }

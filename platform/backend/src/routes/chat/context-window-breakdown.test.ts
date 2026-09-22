@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { ChatMessage } from "@/types";
 import { __testEstimateChatMessagesTokens } from "./context-compaction";
 import {
   BINARY_BYTES_PER_TOKEN,
   buildContextWindowBreakdown,
   CHARS_PER_TOKEN,
+  estimateToolsTokens,
   IMAGE_TOKEN_MAX_ESTIMATE,
   PDF_BYTES_PER_TOKEN,
   refreshBreakdownUsedTokens,
@@ -134,6 +136,41 @@ describe("buildContextWindowBreakdown", () => {
     });
 
     expect(tokensFor(breakdown, "tools")).toBeGreaterThan(0);
+  });
+
+  it("does not count the gateway attestation marker the LLM proxy strips", () => {
+    const plain = "Search the knowledge base for relevant documents";
+    const marked = attestToolDescription({
+      organizationId: "org-context-window",
+      gatewayId: "3f1c2a9e-5b7d-4e8f-9a0b-1c2d3e4f5a6b",
+      advertisedName: "archestra__search",
+      kind: "b",
+      description: plain,
+    });
+    const toolsWith = (description: string | undefined) => ({
+      archestra__search: {
+        description,
+        inputSchema: { jsonSchema: { type: "object" } },
+      },
+    });
+    const toolTokens = (description: string | undefined) => ({
+      breakdown: tokensFor(
+        buildContextWindowBreakdown({
+          ...baseParams,
+          tools: toolsWith(description),
+          messages: [],
+        }),
+        "tools",
+      ),
+      compaction: estimateToolsTokens({
+        provider: baseParams.provider,
+        model: baseParams.model,
+        tools: toolsWith(description),
+      }),
+    });
+
+    expect(marked).toContain("[[gwa1.");
+    expect(toolTokens(marked)).toEqual(toolTokens(plain));
   });
 
   // -------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import {
   getCompactToolState,
   getCurrentEnabledToolIds,
   getDefaultEnabledToolIds,
+  getHumanRulingDisplay,
   getToolErrorText,
   getToolNameFromPart,
   isCompactEligible,
@@ -333,6 +334,73 @@ describe("tool display helpers", () => {
         toolResultPart: null,
       }),
     ).toBe("denied");
+  });
+});
+
+describe("reviewed remedy rulings", () => {
+  function remedyPart(output: unknown) {
+    return {
+      type: "tool-archestra__execute_remedy_plan",
+      toolCallId: "call-remedy",
+      state: "output-available",
+      input: { offer_id: "offer-1" },
+      output,
+    } as never;
+  }
+
+  it("shows a remedy the viewer denied as denied, not completed", () => {
+    const part = remedyPart({
+      content: "[appa] Denied: the human reviewer refused this call.",
+      _meta: { archestraHumanRuling: "deny" },
+    });
+
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe("denied");
+    expect(getHumanRulingDisplay({ part, toolResultPart: null })).toEqual({
+      ruling: "deny",
+      label: "Denied by you",
+    });
+  });
+
+  it("reads the ruling off the result part when the call and result are split", () => {
+    const toolResultPart = remedyPart({
+      content: "[appa] Denied: the human reviewer refused this call.",
+      _meta: { archestraHumanRuling: "deny" },
+    });
+    const part = {
+      type: "tool-archestra__execute_remedy_plan",
+      toolCallId: "call-remedy",
+      state: "input-available",
+      input: { offer_id: "offer-1" },
+    } as never;
+
+    expect(getCompactToolState({ part, toolResultPart })).toBe("denied");
+  });
+
+  it("keeps an approved remedy completed, labelled as the viewer's approval", () => {
+    const part = remedyPart({
+      content: "[appa] Authorized.",
+      _meta: { archestraHumanRuling: "approve" },
+    });
+
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe(
+      "completed",
+    );
+    expect(getHumanRulingDisplay({ part, toolResultPart: null })?.label).toBe(
+      "Approved by you",
+    );
+  });
+
+  it("lets an error outrank the ruling it answered", () => {
+    const part = remedyPart({
+      content: "[appa] offer invalidated",
+      _meta: {
+        archestraError: { type: "generic", message: "offer invalidated" },
+        archestraHumanRuling: "deny",
+      },
+    });
+
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe("error");
+    expect(getHumanRulingDisplay({ part, toolResultPart: null })).toBeNull();
   });
 });
 

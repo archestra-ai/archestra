@@ -52,9 +52,6 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
       </p>
     );
   if (!data?.matches.length) return null;
-  // The alias points at the server's tool prefix. With none an alias can
-  // target no write lands: not an attach, and not the detach of a row that
-  // outlived its prefixes. The box says why before it is tried.
   const attachNote = data.attach === "ready" ? null : ATTACH_NOTES[data.attach];
   return (
     <div className="space-y-2 rounded-md border p-3">
@@ -68,15 +65,19 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
           : batteries.isError;
         const credentialIsSomeoneElses =
           declaresCredentials && canBindCredentials !== true;
+        const checked = match.install?.enabled ?? false;
+        // The alias points at the server's tool prefix. Turning the battery on
+        // needs one an alias can take, and with no synced tools not even the
+        // detach of a row that outlived its prefixes edits anything. The box
+        // says why before it is tried.
         const blocked =
-          data.attach === "unsynced" ||
-          (match.install === null && attachNote !== null);
+          data.attach === "unsynced" || (data.attach !== "ready" && !checked);
         return (
           <div key={match.battery} className="flex items-start gap-2 text-sm">
             <Checkbox
               id={id}
               className="mt-0.5"
-              checked={match.install?.enabled ?? false}
+              checked={checked}
               disabled={
                 canManage !== true ||
                 blocked ||

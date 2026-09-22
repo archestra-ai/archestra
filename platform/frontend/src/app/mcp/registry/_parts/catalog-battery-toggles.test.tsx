@@ -284,6 +284,20 @@ test("an installed battery cannot be switched while its server's tools are not s
   expect(screen.getByRole("note")).toBeInTheDocument();
 });
 
+test("a server with a conflicting prefix cannot take a battery but can let one go", async () => {
+  attach = "conflicting";
+  matches = [
+    { battery: "github", evidence: "host", install: null },
+    { battery: "linear", evidence: "name", install: install({}) },
+  ];
+  batteries = [battery({}), battery({ name: "linear" })];
+  show();
+  expect(
+    await screen.findByRole("checkbox", { name: /github/ }),
+  ).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /linear/ })).toBeEnabled();
+});
+
 test("a battery is off until the policy declares it, whatever matched it", async () => {
   matches = [{ battery: "linear", evidence: "host", install: null }];
   show();

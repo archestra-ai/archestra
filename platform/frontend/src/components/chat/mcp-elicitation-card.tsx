@@ -14,6 +14,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AskUserGroupMember } from "./ask-user-outcome";
@@ -28,6 +34,7 @@ import {
   isSingleChoiceForm,
   normalizeValues,
 } from "./mcp-elicitation-fields";
+import { parseReviewPresentation } from "./openappa-review-presentation";
 
 /**
  * Long enough for the picked row to visibly highlight before the next
@@ -545,12 +552,7 @@ export function McpElicitationCard({
               value={question.request.id}
               className="flex min-w-0 flex-col gap-4 p-4"
             >
-              <p
-                id={questionMessageId(question.request.id)}
-                className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-              >
-                {question.request.message}
-              </p>
+              <ElicitationMessage request={question.request} />
               {renderFields(question)}
             </TabsContent>
           ))}
@@ -562,12 +564,7 @@ export function McpElicitationCard({
             <AnswerSummary members={settledMembers} label="Saved answers" />
           ) : null}
           <div className="flex min-w-0 flex-col gap-4 p-4">
-            <p
-              id={questionMessageId(activeQuestion.request.id)}
-              className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-            >
-              {activeQuestion.request.message}
-            </p>
+            <ElicitationMessage request={activeQuestion.request} />
             {renderFields(activeQuestion)}
           </div>
         </>
@@ -634,6 +631,66 @@ export function McpElicitationCard({
         </div>
       ) : null}
     </form>
+  );
+}
+
+function ElicitationMessage({
+  request,
+}: {
+  request: ChatMcpElicitationRequest;
+}) {
+  const id = questionMessageId(request.id);
+  if (request.kind !== "openappa_review") {
+    return (
+      <p
+        id={id}
+        className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
+      >
+        {request.message}
+      </p>
+    );
+  }
+
+  const presentation = parseReviewPresentation({
+    message: request.message,
+    reviewedTool: request.reviewedTool,
+    reviewedArguments: request.reviewedArguments,
+  });
+  const toolType = `tool-${presentation.tool ?? "call"}` as const;
+
+  return (
+    <div id={id} className="flex min-w-0 flex-col gap-3">
+      {presentation.intro ? (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+          {presentation.intro}
+        </p>
+      ) : null}
+      {presentation.tool || presentation.arguments !== undefined ? (
+        <Tool defaultOpen className="mb-0">
+          <ToolHeader
+            type={toolType}
+            state="approval-requested"
+            title={presentation.tool}
+            isCollapsible={false}
+            statusLabel="Needs review"
+          />
+          {presentation.arguments !== undefined ? (
+            <ToolContent>
+              <ToolInput input={presentation.arguments} />
+            </ToolContent>
+          ) : null}
+        </Tool>
+      ) : (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+          {request.message}
+        </p>
+      )}
+      {presentation.rest ? (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+          {presentation.rest}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

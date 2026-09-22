@@ -16,9 +16,14 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
+import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
+import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
 export const APPA_CHAT_SOURCES = [
@@ -64,6 +69,14 @@ const NativeDecisionSchema = z
       decision: z.literal("deny_call"),
       feedback: z.string(),
       offers: z.array(NativeOfferSchema).optional(),
+      review: z
+        .array(
+          z.object({
+            offer_id: z.string(),
+            text: z.string(),
+          }),
+        )
+        .optional(),
       ...ResultDecisionFields,
     }),
     z.object({
@@ -151,6 +164,30 @@ export function openappaEnabled(): boolean {
   return config.openappa.enabled;
 }
 
+/**
+ * Carry the legacy `openappa_battery_installs` rows into the policy text every
+ * composition now reads from. Runs before the runtime opens and before the
+ * periodic recompile is registered, because a recompose rewrites the rows from
+ * the text and deletes every row the text does not declare.
+ *
+ * Idempotent on every boot, and a per-organization failure never stops the
+ * others. A failure of the whole step does not stop the server either: the
+ * installs of an organization the step did not reach are still readable in the
+ * log it wrote, and the operator can run `pnpm db:openappa-declare-installs`.
+ */
+export async function declareOpenappaInstalls(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    const summary = await declareExistingInstalls();
+    logger.info(summary, "Declared the legacy OpenAPPA battery installs");
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+    );
+  }
+}
+
 export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
@@ -194,7 +231,7 @@ async function binding(content: string) {
   // names the helper bridge bearer as a `token_env` the runtime resolves from
   // this process's environment. Publish it on every crossing, not once at
   // import time, so opening and reloading never depend on module order.
-  openappaBatteriesService.publishBridgeToken();
+  openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());
@@ -494,16 +531,28 @@ export async function processProxyResults(params: {
 type AppaCallDecision =
   | { kind: "allow" }
   | { kind: "control" }
-  | { kind: "deny"; feedback: string; offers?: string[] };
+  | {
+      kind: "deny";
+      feedback: string;
+      offers?: string[];
+      review?: Array<{ offer_id: string; text: string }>;
+    };
 
 export async function evaluateToolCalls(
   session: OpenAppaSession,
-  calls: Array<{ id: string; name: string; arguments: string | object }>,
+  calls: Array<{
+    id: string;
+    name: string;
+    arguments: string | object;
+    namespace?: string;
+  }>,
   options: {
-    canonicalize: (name: string) => string;
+    canonicalize: ToolNameCanonicalizer;
     isUserQuestion?: (name: string) => boolean;
-    /** This session's declared spelling of the control tool. */
-    controlToolName?: string;
+    /** Compat only: recognize a `run_tool` wrapper behind any client label. */
+    looseRunToolDispatch?: boolean;
+    /** This session's control tool declaration, as the client spells it. */
+    control?: DeclaredToolSpelling;
   },
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
@@ -524,13 +573,22 @@ export async function evaluateToolCalls(
       }
     }
   }
-  const normalized = normalizeToolCallsForPolicy(calls, options.canonicalize);
+  const normalized = normalizeToolCallsForPolicy(calls, {
+    canonicalize: options.canonicalize,
+    looseRunToolDispatch: options.looseRunToolDispatch === true,
+  });
   const admitted: string[] = [];
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
-      if (options.controlToolName && call.name === options.controlToolName) {
+      // Only the declared control tool itself, in its own namespace: a
+      // same-named tool elsewhere is someone else's and is evaluated.
+      if (
+        options.control &&
+        call.name === options.control.name &&
+        call.namespace === options.control.namespace
+      ) {
         return { kind: "control" as const };
       }
       if (
@@ -539,20 +597,20 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      // The target is already canonical, so it is read, not re-canonicalized.
       const tool =
-        archestraMcpBranding.getToolShortName(
-          options.canonicalize(target.toolCallName),
-        ) === "yell"
+        archestraMcpBranding.getToolShortName(target.toolCallName) === "yell"
           ? "yell"
           : target.toolCallName;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
         tool,
-        ...(tool !== call.name && options.canonicalize(call.name) === tool
+        ...(tool !== call.name &&
+        options.canonicalize(call.name, call.namespace) === tool
           ? { spelling: call.name }
           : {}),
-        presentation: nativePresentation(options.controlToolName),
+        presentation: nativePresentation(options.control?.name),
         arguments: JSON.parse(target.toolCallArgs),
         // Delegation evaluates through the parent policy until child adapters exist.
         spawn: false,
@@ -575,6 +633,12 @@ export async function evaluateToolCalls(
                 .map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
+        review:
+          decision.decision === "deny_call"
+            ? "review" in decision
+              ? decision.review
+              : undefined
+            : undefined,
       };
     }),
   );
@@ -655,7 +719,7 @@ export async function evaluateHostedToolCalls(
       toolCallId: call.id,
       output: call.output,
       outcome: "success",
-      controlToolName: options.controlToolName,
+      controlToolName: options.control?.name,
     });
     verdicts.push(
       approved.outputSource === "tool" && approved.content === call.output
@@ -770,6 +834,13 @@ export async function executeRemedyByOffer(params: {
   /** Exact validated client arguments, retained for durable receipt fingerprinting. */
   originalArguments: string;
   args: unknown;
+  ruling?: "approve" | "deny";
+  /**
+   * Model-visible reason the host asked no one: the reviewed call could not
+   * run even if approved. Recorded verbatim as the remedy's result; the offer
+   * stays unspent. Only for a remedy without a ruling.
+   */
+  precheckRefusal?: string;
 }): Promise<{
   result: CallToolResult;
   /** Authorized owner lookup, not proof that the offer remains spendable. */
@@ -793,6 +864,10 @@ export async function executeRemedyByOffer(params: {
         original_arguments: params.originalArguments,
         arguments: params.args,
         presentation: nativePresentation(params.controlToolName),
+        ...(params.ruling ? { ruling: params.ruling } : {}),
+        ...(params.precheckRefusal
+          ? { precheck_refusal: params.precheckRefusal }
+          : {}),
       }),
       policy,
     ),
@@ -804,6 +879,49 @@ export async function executeRemedyByOffer(params: {
     result: runtimeToolResult(decision),
     known: decision.offer.status === "known",
   };
+}
+
+/**
+ * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+ * Session routing comes from the verified offer claims.
+ */
+export async function loadOfferReview(params: {
+  organizationId: string;
+  sessionId: string;
+  offerId: string;
+}): Promise<{
+  offer_id: string;
+  text: string;
+  session_id: string;
+  /** The reviewed call's tool, as the proxy proposed it for ruling. */
+  tool?: string;
+  /** The reviewed call's arguments as JSON text. */
+  arguments?: string;
+} | null> {
+  try {
+    if (!(await isGuardrailsV2Active())) return null;
+    const policy = await guardrailsPolicyService.get(params.organizationId);
+    const module = await binding(policy.content);
+    const result = await module.loadOfferReview(
+      params.organizationId,
+      params.sessionId,
+      params.offerId,
+    );
+    if (!result) return null;
+    return {
+      offer_id: result.offerId,
+      text: result.text,
+      session_id: result.sessionId,
+      ...(result.tool ? { tool: result.tool } : {}),
+      ...(result.arguments ? { arguments: result.arguments } : {}),
+    };
+  } catch (error) {
+    logger.warn(
+      { err: error, offerId: params.offerId },
+      "Failed to load OpenAPPA offer review",
+    );
+    throw unsafeToProceed(error);
+  }
 }
 
 function nativePresentation(controlToolName?: string): {

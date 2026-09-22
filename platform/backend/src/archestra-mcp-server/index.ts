@@ -89,6 +89,7 @@ import {
 } from "./projects";
 import { checkToolPermission } from "./rbac";
 import {
+  repairEnvelopedToolArgs,
   toolEntries as runToolEntries,
   tools as runToolTools,
 } from "./run-tool";
@@ -350,52 +351,24 @@ export async function executeArchestraTool(
     return handleSkillDelegation(toolName, parsedArgs.value, context);
   }
 
-  // Centralized RBAC check — ensures the user has the required permission
-  const rbacDenied = await checkToolPermission(toolName, context);
-  if (rbacDenied) return rbacDenied;
-
-  // Centralized assignment check — an agent may only execute Archestra tools
-  // that are actually assigned to it (the same set advertised by tools/list and
-  // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. Under
-  // dynamic tool access ("access all tools") unassigned built-ins are exempt
-  // (see below).
-  const assignmentDenied = await resolveToolAssignment(toolName, context);
-  if (assignmentDenied) return assignmentDenied;
-
-  const resolvedToolName =
-    getToolEntries()[toolName as ArchestraToolFullName] != null
-      ? toolName
-      : resolveArchestraToolName(toolName);
-  const toolEntry = resolvedToolName
-    ? getToolEntries()[resolvedToolName as ArchestraToolFullName]
-    : undefined;
-  if (!toolEntry) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
-  if ("error" in parsedArgs) {
-    return parsedArgs.error;
-  }
+  const admitted = await admitArchestraToolCall({ toolName, args, context });
+  if ("error" in admitted) return admitted.error;
+  const { toolEntry, resolvedToolName } = admitted;
 
   // Mutating built-ins get an org-audit row, same event vocabulary as their
   // /api/* twins (the MCP surface bypasses the HTTP audit hook entirely).
   // Target id + before-state resolve ahead of the invoke; the row itself is
   // written fire-and-forget after it.
   const auditCapture = await captureToolAuditBefore({
-    toolName: resolvedToolName ?? toolName,
-    args: parsedArgs.value as Record<string, unknown>,
+    toolName: resolvedToolName,
+    args: admitted.args,
     organizationId: context.organizationId,
     userId: context.userId,
   });
 
   try {
     const result = await toolEntry.invoke({
-      args: parsedArgs.value,
+      args: admitted.args,
       context,
       toolName,
     });
@@ -417,8 +390,8 @@ export async function executeArchestraTool(
     if (auditCapture) {
       void recordToolAudit({
         capture: auditCapture,
-        toolName: resolvedToolName ?? toolName,
-        args: parsedArgs.value as Record<string, unknown>,
+        toolName: resolvedToolName,
+        args: admitted.args,
         result: finalResult,
       });
     }
@@ -430,6 +403,26 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+/**
+ * Validates a built-in tool call without executing it.
+ * Runs RBAC, tool assignment, tool existence, and argument validation checks.
+ * Returns the error result if validation fails, or null if the call is valid.
+ * Applies envelope repair to arguments first.
+ * OpenAPPA uses this check so users are not asked to approve invalid calls.
+ */
+export async function preflightArchestraToolCall(params: {
+  toolName: string;
+  args: Record<string, unknown>;
+  context: ArchestraContext;
+}): Promise<CallToolResult | null> {
+  const { toolArgs } = repairEnvelopedToolArgs({
+    toolArgs: params.args,
+    schema: getArchestraToolInputSchema(params.toolName),
+  });
+  const admitted = await admitArchestraToolCall({ ...params, args: toolArgs });
+  return "error" in admitted ? admitted.error : null;
 }
 
 /**
@@ -538,6 +531,56 @@ async function resolveToolAssignment(
       toolName,
     },
   });
+}
+
+/**
+ * Shared validation gates between a call and a built-in handler.
+ * Used by executeArchestraTool and preflightArchestraToolCall to ensure
+ * consistent admission decisions.
+ */
+async function admitArchestraToolCall(params: {
+  toolName: string;
+  args: Record<string, unknown> | undefined;
+  context: ArchestraContext;
+}): Promise<
+  | { error: CallToolResult }
+  | {
+      toolEntry: ArchestraRuntimeToolEntry;
+      resolvedToolName: string;
+      args: Record<string, unknown>;
+    }
+> {
+  const { toolName, args, context } = params;
+  // Centralized RBAC check — ensures the user has the required permission
+  const rbacDenied = await checkToolPermission(toolName, context);
+  if (rbacDenied) return { error: rbacDenied };
+
+  // Centralized assignment check — an agent may only execute Archestra tools
+  // that are actually assigned to it (the same set advertised by tools/list and
+  // search_tools). Without this, run_tool or a raw tools/call could invoke any
+  // Archestra tool the user has RBAC for, regardless of assignment. Under
+  // dynamic tool access ("access all tools") unassigned built-ins are exempt
+  // (see resolveToolAssignment).
+  const assignmentDenied = await resolveToolAssignment(toolName, context);
+  if (assignmentDenied) return { error: assignmentDenied };
+
+  const resolvedToolName =
+    getToolEntries()[toolName as ArchestraToolFullName] != null
+      ? toolName
+      : resolveArchestraToolName(toolName);
+  const toolEntry = resolvedToolName
+    ? getToolEntries()[resolvedToolName as ArchestraToolFullName]
+    : undefined;
+  if (!resolvedToolName || !toolEntry) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+
+  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  if ("error" in parsedArgs) return parsedArgs;
+  return { toolEntry, resolvedToolName, args: parsedArgs.value };
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

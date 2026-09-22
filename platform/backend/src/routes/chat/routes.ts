@@ -39,6 +39,7 @@ import {
   markOpenAiReasoningSummaryUnsupported,
   openAiReasoningSummaryCacheKey,
 } from "@/agents/openai-reasoning-summary";
+import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
@@ -2796,10 +2797,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // No conversation context here as this is just fetching available tools
       });
 
-      // Convert AI SDK Tool format to simple array for frontend
+      // Convert AI SDK Tool format to simple array for frontend. Chat keeps the
+      // gateway's attestation markers on its model path, where the LLM proxy
+      // verifies and strips them; only this UI view drops them.
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({
         name,
-        description: tool.description || "",
+        description: removeAttestationTokens(tool.description ?? ""),
         parameters:
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,

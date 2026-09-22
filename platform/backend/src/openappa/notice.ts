@@ -14,7 +14,7 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { type OfferJws, OfferJwsSchema } from "./offer-claims";
+import { type OfferJws, OfferJwsSchema, withoutOfferJws } from "./offer-claims";
 
 /** Incremented when the notice payload structure changes. */
 const NOTICE_VERSION = 1;
@@ -197,10 +197,14 @@ export function readRemedyExecution(params: {
     return null;
   const parsedOriginalArguments = parseJson(parsed.data.original_arguments);
   if (!isRecord(parsedOriginalArguments)) return null;
+  // The stamp attaches the receipt, proxy metadata, and offer JWS members
+  // to the arguments, replacing any values echoed by the model.
+  // The remaining arguments represent the model's original tool call.
+  // Restoration returns the original payload bytes.
   if (
     !isDeepStrictEqual(
-      withoutProxyMembers(argumentsValue),
-      parsedOriginalArguments,
+      withoutOfferJws(withoutProxyMembers(argumentsValue)),
+      withoutOfferJws(withoutProxyMembers(parsedOriginalArguments)),
     )
   )
     return null;

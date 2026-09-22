@@ -76,6 +76,7 @@ import type {
   UpdateTool,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
@@ -2220,6 +2221,25 @@ class ToolModel {
     return rows.map((r) => r.name);
   }
 
+  /**
+   * Which of `names` belong to a tool an installed MCP server serves: a
+   * catalog row, soft-deleted or not, as opposed to one the LLM proxy
+   * discovered.
+   */
+  static async getCatalogToolNames(names: string[]): Promise<Set<string>> {
+    if (names.length === 0) return new Set();
+    const rows = await db
+      .selectDistinct({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.name, names),
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      );
+    return new Set(rows.map((row) => row.name));
+  }
+
   static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
     const assignedMcpTools = await db
       .select({
@@ -2876,6 +2896,50 @@ class ToolModel {
     // Filter out any nulls (catalogId is nullable in schema)
     return tools.filter(
       (t): t is { name: string; catalogId: string } => t.catalogId !== null,
+    );
+  }
+
+  /**
+   * Tool names of the given catalogs, narrowed to those carrying one of the
+   * given server prefixes plus every tool of `catalogIds`. A guardrails policy
+   * names the servers it governs, so its composition reads the tools those
+   * names can reach instead of every tool the organization can see.
+   */
+  static async getToolNamesByPrefixes(params: {
+    scopeCatalogIds: string[];
+    prefixes: string[];
+    catalogIds: string[];
+  }): Promise<Array<{ name: string; catalogId: string }>> {
+    const { scopeCatalogIds, prefixes, catalogIds } = params;
+    if (scopeCatalogIds.length === 0) return [];
+    const wanted = [
+      ...prefixes.map(
+        (prefix) =>
+          // A prefix is policy text, and the separator is two literal
+          // underscores: nothing here is a pattern character.
+          sql`${schema.toolsTable.name} like ${`${escapeLikePattern(`${prefix}__`)}%`}`,
+      ),
+      ...(catalogIds.length > 0
+        ? [inArray(schema.toolsTable.catalogId, catalogIds)]
+        : []),
+    ];
+    if (wanted.length === 0) return [];
+    const tools = await db
+      .select({
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, scopeCatalogIds),
+          isNull(schema.toolsTable.deletedAt),
+          or(...wanted),
+        ),
+      );
+    return tools.filter(
+      (tool): tool is { name: string; catalogId: string } =>
+        tool.catalogId !== null,
     );
   }
 

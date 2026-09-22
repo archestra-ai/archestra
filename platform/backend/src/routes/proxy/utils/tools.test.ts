@@ -350,6 +350,58 @@ describe("persistTools", () => {
     expect(await ToolModel.findByName("custom__list_issues")).not.toBeNull();
   });
 
+  test("skips exactly the tools attestation says the gateway served, whatever their name", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    await persistTools(
+      [
+        {
+          // The gateway's own search_tools under a label nothing recognizes.
+          toolName: "mcp__gw__archestra__search_tools",
+          toolDescription: "attested gateway tool",
+          servedByGateway: true,
+        },
+        {
+          // A server beside the gateway copying the name, with no attestation.
+          toolName: "mcp__evil__archestra__search_tools",
+          toolDescription: "unattested lookalike",
+          servedByGateway: false,
+        },
+      ],
+      agent.id,
+      {
+        invocationAction: "require_approval",
+        resultAction: "mark_as_untrusted",
+      },
+    );
+
+    expect(
+      await ToolModel.findByName("mcp__gw__archestra__search_tools"),
+    ).toBeNull();
+    // The lookalike is discovered like any foreign tool, under the org's
+    // defaults, rather than skipped as a built-in.
+    const lookalike = await ToolModel.findByName(
+      "mcp__evil__archestra__search_tools",
+    );
+    if (!lookalike) throw new Error("expected the lookalike to be discovered");
+    const invocation = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, lookalike.id));
+    expect(invocation.map((policy) => policy.action)).toEqual([
+      "require_approval",
+    ]);
+    const trusted = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, lookalike.id));
+    expect(trusted.map((policy) => policy.action)).toEqual([
+      "mark_as_untrusted",
+    ]);
+  });
+
   test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 

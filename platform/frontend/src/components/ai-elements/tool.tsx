@@ -67,6 +67,8 @@ export type ToolHeaderProps = {
   actionButton?: React.ReactNode;
   /** Names the identity the call ran as upstream (e.g. whose connection served it) */
   identityBadge?: React.ReactNode;
+  /** Replaces the state's default status text, keeping its dot */
+  statusLabel?: string;
 };
 
 const getStatusBadge = (
@@ -75,6 +77,7 @@ const getStatusBadge = (
     | "output-available-dual-llm"
     | "output-denied"
     | "output-cancelled",
+  label?: string,
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -105,7 +108,7 @@ const getStatusBadge = (
   return (
     <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
       <span className={cn("size-1.5 rounded-full", dotClass[status])} />
-      {labels[status]}
+      {label ?? labels[status]}
     </div>
   );
 };
@@ -119,6 +122,7 @@ export const ToolHeader = ({
   isCollapsible = true,
   actionButton,
   identityBadge,
+  statusLabel,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -137,7 +141,7 @@ export const ToolHeader = ({
     </div>
     <div className="flex items-center gap-3">
       {identityBadge}
-      {getStatusBadge(state)}
+      {getStatusBadge(state, statusLabel)}
       {actionButton && (
         // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation
         <div

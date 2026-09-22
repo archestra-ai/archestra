@@ -233,7 +233,16 @@ class AzureResponsesRequestAdapter
       return [];
     }
 
-    return this.request.input.flatMap((item) => toCommonMessages(item));
+    // Pair function_call_output items with their function_call by call_id so
+    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
+    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
+    // conversations look tool-free to the evaluator and sanitization is
+    // silently bypassed.
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
+
+    return this.request.input.flatMap((item) =>
+      toCommonMessages(item, toolCallsByCallId),
+    );
   }
 
   getToolResults(): CommonToolResult[] {
@@ -253,6 +262,7 @@ class AzureResponsesRequestAdapter
         {
           id: item.call_id,
           name: toolCall?.name ?? "unknown",
+          ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
           isError: false,
@@ -327,8 +337,11 @@ class AzureResponsesRequestAdapter
           return item;
         }
 
+        // Presence, not truthiness: a sanitizer that reduces sensitive output
+        // to nothing has replaced it, and forwarding the original instead would
+        // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (!updatedOutput) {
+        if (updatedOutput === undefined) {
           return item;
         }
 
@@ -392,6 +405,9 @@ class AzureResponsesResponseAdapter
           id: item.call_id,
           name: item.name,
           arguments: tryParseJsonObject(item.arguments),
+          // Codex calls a namespaced tool by its bare name and names the
+          // namespace beside it; the pair is which tool it called.
+          ...namespaceOf(item),
         },
       ];
     });
@@ -722,7 +738,8 @@ class AzureResponsesStreamAdapter
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
     const firstOutputIndex = upstreamOutput.filter(
-      (item) => item.type !== "function_call",
+      (item) =>
+        item.type !== "function_call" && item.type !== "custom_tool_call",
     ).length;
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
@@ -1016,7 +1033,10 @@ class AzureResponsesStreamAdapter
   }
 }
 
-function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
+function toCommonMessages(
+  item: ResponseInputItem,
+  toolCallsByCallId: Map<string, HistoryToolCall>,
+): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
   // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
@@ -1031,13 +1051,28 @@ function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
   }
 
   if (item.type === "function_call_output") {
+    const toolCall = toolCallsByCallId.get(item.call_id);
+    const content =
+      typeof item.output === "string"
+        ? item.output
+        : JSON.stringify(item.output);
     return [
       {
         role: "tool",
-        content:
-          typeof item.output === "string"
-            ? item.output
-            : JSON.stringify(item.output),
+        content,
+        // An output whose function_call was pruned from the input still
+        // carries untrusted data — surface it under the "unknown" name so
+        // default trusted-data policies apply rather than nothing.
+        toolCalls: [
+          {
+            id: item.call_id,
+            name: toolCall?.name ?? "unknown",
+            ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
+            arguments: toolCall?.arguments,
+            content,
+            isError: false,
+          },
+        ],
       },
     ];
   }
@@ -1136,11 +1171,22 @@ function isResponsesToolCallChunk(
   );
 }
 
+/**
+ * A call in the request history, as its output is paired with it. A Codex call
+ * to a namespaced tool names that namespace, which is part of which tool it
+ * called.
+ */
+type HistoryToolCall = {
+  name: string;
+  namespace?: string;
+  arguments?: Record<string, unknown>;
+};
+
 function getToolCallsByCallId(
   input: ResponseInputItem[],
-): Map<string, { name: string; arguments?: Record<string, unknown> }> {
+): Map<string, HistoryToolCall> {
   return new Map(
-    input.flatMap((item) => {
+    input.flatMap((item): Array<[string, HistoryToolCall]> => {
       if (!isResponseInputFunctionCall(item)) {
         return [];
       }
@@ -1150,9 +1196,10 @@ function getToolCallsByCallId(
           item.call_id,
           {
             name: item.name,
+            ...namespaceOf(item),
             arguments: extractCommonToolCallArguments(item.arguments),
           },
-        ] as const,
+        ],
       ];
     }),
   );

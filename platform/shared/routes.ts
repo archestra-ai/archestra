@@ -848,6 +848,8 @@ export const RouteId = {
   DeleteOpenappaBatteryInstall: "deleteOpenappaBatteryInstall",
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
+  GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
+  AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",

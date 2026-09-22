@@ -32,6 +32,10 @@ const source = {
   sourceCommit: "a".repeat(40),
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
+  declarationsPendingPublish: false,
+  heldContentHash: null,
+  heldSourceCommit: null,
+  heldReasons: [],
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {

@@ -126,6 +126,12 @@ export async function evaluateIfContextIsTrusted(params: {
    * show the dual LLM workflow on (tool-execution checks).
    */
   sanitizeCacheOnly?: boolean;
+  /**
+   * Compat only: also recognize a `run_tool` wrapper behind a client label, for
+   * a request whose gateway tools carry no valid attestation. See
+   * `resolveRunToolDispatch`.
+   */
+  looseRunToolDispatch?: boolean;
 }): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
@@ -188,19 +194,25 @@ export async function evaluateIfContextIsTrusted(params: {
         // would be auto-trusted and the target's "sensitive" policy would
         // never fire. A dispatch whose target cannot be recovered from the
         // call's arguments is flagged to fail closed below.
-        const dispatch = resolveRunToolDispatch(
-          toolCall.name,
-          toolCall.arguments,
-        );
+        const dispatchCall = {
+          toolName: toolCall.name,
+          args: toolCall.arguments,
+          loose: params.looseRunToolDispatch,
+        };
+        const dispatch = resolveRunToolDispatch(dispatchCall);
         allToolCalls.push({
           toolCallId: toolCall.id,
           toolName:
             dispatch.kind === "target" ? dispatch.toolName : toolCall.name,
           // For run_tool dispatches this unwraps to the target tool's own
           // arguments, mirroring the name resolution above.
-          toolArguments: resolveRunToolTarget(toolCall.name, toolCall.arguments)
-            .toolInput,
-          isRunToolDispatchTarget: dispatch.kind === "target",
+          toolArguments: resolveRunToolTarget(dispatchCall).toolInput,
+          // A wrapper not proven to be ours does not earn the unknown-target
+          // trust exception: the "run_tool refused it" reasoning holds only
+          // for the platform's own run_tool, so a lookalike's result about a
+          // name no tool row knows stays untrusted.
+          isRunToolDispatchTarget:
+            dispatch.kind === "target" && dispatch.loose !== true,
           toolResult: toolCall.content,
           // Results the platform itself authored carry no external data and
           // must not flip the context to untrusted:

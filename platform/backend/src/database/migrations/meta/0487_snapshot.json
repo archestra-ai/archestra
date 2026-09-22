@@ -1,6 +1,6 @@
 {
-  "id": "291d7573-78f6-4b55-b15e-b9ae7cc12411",
-  "prevId": "0de85bc9-2e2a-4d19-937f-06ea9cc26e4d",
+  "id": "b4d9aa8c-de4f-43cd-b5af-57e44fea073e",
+  "prevId": "0db7b53b-f45b-41b9-9047-02392181ecd6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -26934,6 +26934,25 @@
           "notNull": true,
           "default": true
         },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "package_hash": {
+          "name": "package_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "credential_bindings": {
           "name": "credential_bindings",
           "type": "jsonb",
@@ -27091,8 +27110,29 @@
         }
       },
       "indexes": {
-        "openappa_battery_packages_org_name_idx": {
-          "name": "openappa_battery_packages_org_name_idx",
+        "openappa_battery_packages_org_hash_idx": {
+          "name": "openappa_battery_packages_org_hash_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "openappa_battery_packages_org_name_list_idx": {
+          "name": "openappa_battery_packages_org_name_list_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -27107,7 +27147,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "with": {},
           "method": "btree",
           "concurrently": false
@@ -27223,7 +27263,7 @@
           "name": "repo",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "ref": {
           "name": "ref",
@@ -27235,7 +27275,7 @@
           "name": "path",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "interval": {
           "name": "interval",
@@ -27285,6 +27325,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "declarations_pending_publish": {
+          "name": "declarations_pending_publish",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "held_content": {
+          "name": "held_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_content_hash": {
+          "name": "held_content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_source_commit": {
+          "name": "held_source_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_reasons": {
+          "name": "held_reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         }
       },
       "indexes": {},

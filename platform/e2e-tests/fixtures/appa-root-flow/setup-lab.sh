@@ -71,7 +71,7 @@ fi
 printf 'Export these before running a scenario (see README.md, "Setup"):\n'
 printf '  export APPA_LAB_HOME=%s\n' "$APPA_LAB_HOME"
 printf '  export ARCHESTRA_BASE_URL=...      # optional, default http://localhost:9000\n'
-printf '  export ARCHESTRA_GATEWAY_LABEL=... # optional, default my_gateway\n'
+printf '  export ARCHESTRA_GATEWAY_LABEL=... # optional, default gw\n'
 printf '  export ARCHESTRA_AGENT_ID=...      # agent the LLM proxy runs under\n'
 printf '  export ARCHESTRA_GATEWAY_ID=...    # MCP gateway id or slug\n'
 printf '  export ARCHESTRA_GATEWAY_TOKEN=... # personal gateway token\n'

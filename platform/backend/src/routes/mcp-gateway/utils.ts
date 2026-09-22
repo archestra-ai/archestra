@@ -58,6 +58,7 @@ import {
   resolveDynamicTool,
 } from "@/archestra-mcp-server/dynamic-tools";
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import {
@@ -468,10 +469,10 @@ export async function createAgentServer(params: {
         ...mcpTools.filter(
           (tool) => !tool.delegateToAgentId && !tool.delegateToA2aConnectionId,
         ),
-        ...implicitMetaTools,
-        ...implicitTaskControlTools,
-        ...implicitOpenAppaTools,
-        ...implicitAskUserTools,
+        ...implicitMetaTools.map(asBuiltInTool),
+        ...implicitTaskControlTools.map(asBuiltInTool),
+        ...implicitOpenAppaTools.map(asBuiltInTool),
+        ...implicitAskUserTools.map(asBuiltInTool),
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -634,6 +635,10 @@ export async function createAgentServer(params: {
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
       }));
+    // Names are unique after dedupe, so the name keys each tool's provenance.
+    const builtInToolNames = new Set(
+      permittedTools.filter((tool) => tool.builtIn).map((tool) => tool.name),
+    );
 
     // Log tools/list request
     try {
@@ -656,14 +661,36 @@ export async function createAgentServer(params: {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
+    // Attest each served tool so the LLM proxy can identify gateway tools
+    // regardless of client labels.
+    // The marker is placed in the description because clients forward descriptions
+    // unchanged to model providers.
+    // Minting is deterministic to preserve prompt and client caches.
+    // Browser surfaces using session auth do not forward tools through the proxy
+    // and do not receive markers.
+    const servedTools = tokenAuth?.isSessionAuth
+      ? toolsList
+      : toolsList.map((tool) => ({
+          ...tool,
+          description: attestToolDescription({
+            organizationId: agent.organizationId,
+            gatewayId: agent.id,
+            advertisedName: tool.name,
+            kind: builtInToolNames.has(tool.name) ? "b" : "t",
+            description: tool.description,
+          }),
+        }));
+
     // SEP-2549 freshness hints. Always private: this list is filtered per
     // caller, so it must never be shared across users by an intermediary.
     // Deterministic order: the revision asks servers to return tools stably so
     // client-side caching and LLM prompt caches can actually hit. Without it
     // the ttlMs hint above advertises freshness for a list that reshuffles.
-    toolsList.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    servedTools.sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    );
 
-    return complete({ tools: toolsList, ...buildPrivateListCacheHint() });
+    return complete({ tools: servedTools, ...buildPrivateListCacheHint() });
   });
 
   server.setRequestHandler(
@@ -984,6 +1011,12 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
                 contextIsTrusted,
+                mrtr: {
+                  enabled: mrtrEnabled,
+                  inputResponses: mrtr?.inputResponses,
+                  clientCapabilities: mrtr?.clientCapabilities,
+                  round: mrtr?.round,
+                },
                 elicitation: {
                   elicit: createGatewayUserElicit({
                     extra,
@@ -1299,7 +1332,13 @@ export async function createAgentServer(params: {
         organizationId: tokenAuth?.organizationId,
       }),
       toolName: name,
-      execute: executeCallToolRequest,
+      // All results must include `resultType`.
+      // Clients using protocol 2026-07-28 reject results without this property.
+      // `InputRequiredResult` includes its own `resultType`.
+      execute: async (signal) => {
+        const result = await executeCallToolRequest(signal);
+        return "resultType" in result ? result : complete(result);
+      },
     });
   });
 
@@ -2346,6 +2385,8 @@ type McpListToolCandidate = {
     annotations?: McpListTool["annotations"];
     _meta?: McpListTool["_meta"];
   };
+  /** A platform built-in by catalog provenance, never by name. */
+  builtIn: boolean;
 };
 
 function toMcpListTool(tool: {
@@ -2358,6 +2399,7 @@ function toMcpListTool(tool: {
     annotations?: Record<string, unknown>;
     _meta?: Record<string, unknown>;
   } | null;
+  builtIn?: boolean;
 }): McpListToolCandidate {
   return {
     name: tool.name,
@@ -2365,7 +2407,19 @@ function toMcpListTool(tool: {
     parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
     catalogId: tool.catalogId,
     meta: tool.meta ?? undefined,
+    builtIn:
+      tool.builtIn === true || tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
   };
+}
+
+/**
+ * Marks a tool taken straight from the platform's own built-in set, the same
+ * catalog-provenance rule run_tool applies to control tools. Assigned tools
+ * come first and dedupe keeps the first occurrence, so an upstream tool that
+ * merely shares a built-in's name keeps its own provenance.
+ */
+function asBuiltInTool<T extends object>(tool: T): T & { builtIn: true } {
+  return { ...tool, builtIn: true };
 }
 
 function getImplicitArchestraMetaTools() {

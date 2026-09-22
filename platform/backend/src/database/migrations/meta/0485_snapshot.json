@@ -1,5 +1,5 @@
 {
-  "id": "bfa3bead-2cf8-4cb5-adf2-b30f12d0835e",
+  "id": "04fcabe2-8815-495e-bc12-5f8ec849efbc",
   "prevId": "070a44ed-fb7d-4eb1-9bbf-ed1a05951f03",
   "version": "7",
   "dialect": "postgresql",
@@ -19825,95 +19825,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.resource_permission_policies": {
-      "name": "resource_permission_policies",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resource": {
-          "name": "resource",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "grants": {
-          "name": "grants",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "legacy_sharing_migrated": {
-          "name": "legacy_sharing_migrated",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "legacy_organization_audience": {
-          "name": "legacy_organization_audience",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "resource_permission_policies_organization_id_organization_id_fk": {
-          "name": "resource_permission_policies_organization_id_organization_id_fk",
-          "tableFrom": "resource_permission_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "resource_permission_policies_organization_id_resource_scope_pk": {
-          "name": "resource_permission_policies_organization_id_resource_scope_pk",
-          "columns": [
-            "organization_id",
-            "resource",
-            "scope"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.credential_connections": {
       "name": "credential_connections",
       "schema": "",
@@ -26934,6 +26845,25 @@
           "notNull": true,
           "default": true
         },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "package_hash": {
+          "name": "package_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "credential_bindings": {
           "name": "credential_bindings",
           "type": "jsonb",
@@ -27091,8 +27021,29 @@
         }
       },
       "indexes": {
-        "openappa_battery_packages_org_name_idx": {
-          "name": "openappa_battery_packages_org_name_idx",
+        "openappa_battery_packages_org_hash_idx": {
+          "name": "openappa_battery_packages_org_hash_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_battery_packages_org_name_list_idx": {
+          "name": "openappa_battery_packages_org_name_list_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -27107,7 +27058,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -27223,7 +27174,7 @@
           "name": "repo",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "ref": {
           "name": "ref",
@@ -27235,7 +27186,7 @@
           "name": "path",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "interval": {
           "name": "interval",
@@ -27285,6 +27236,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "declarations_pending_publish": {
+          "name": "declarations_pending_publish",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "held_content": {
+          "name": "held_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_content_hash": {
+          "name": "held_content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_source_commit": {
+          "name": "held_source_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_reasons": {
+          "name": "held_reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         }
       },
       "indexes": {},

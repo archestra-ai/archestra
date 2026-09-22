@@ -1,6 +1,7 @@
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import type { AppaClientAdapter, AskUserArguments } from "../types";
 import { questionHeader, readHeader } from "../utils";
+import { structuredQuestionRuling } from "./native-question-ruling";
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
@@ -21,8 +22,8 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
         },
       ],
     }),
+    rulingFromResult: structuredQuestionRuling,
   };
-
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""

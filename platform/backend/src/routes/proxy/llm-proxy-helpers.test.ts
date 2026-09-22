@@ -4,10 +4,12 @@
  * Unit tests for shared helper functions extracted from llm-proxy-handler.ts.
  */
 
+import { randomUUID } from "node:crypto";
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import { vi } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -87,9 +89,12 @@ import {
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
+  toolCallsForPolicyEvaluation,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import type { GatewayToolDeclaration } from "./utils/gateway-tool-declarations";
+import { resolveGatewayToolIdentity } from "./utils/gateway-tool-names";
 
 // --------------------------------------------------------------------------
 // toSpanUserInfo
@@ -272,14 +277,166 @@ describe("planDispatchModeToolCallRewrites", () => {
     });
   });
 
-  test("canonicalizes a client-decorated name before dispatching it", () => {
+  test("canonicalizes a client-decorated name before dispatching it (compat)", () => {
     const result = planDispatchModeToolCallRewrites({
       toolCalls: [{ id: "a", name: "mcp__gw__gh__read", arguments: "{}" }],
       enabledToolNames: DISPATCH_PAIR,
-      canonicalizeToolName: (name) => name.replace("mcp__gw__", ""),
+      toolIdentity: {
+        canonicalize: (name) => name.replace("mcp__gw__", ""),
+        spellingOf: (canonicalName) => ({ name: canonicalName }),
+        attestationOf: () => undefined,
+      },
     });
     expect(JSON.parse(result?.[0].arguments ?? "{}").tool_name).toBe(
       "gh__read",
+    );
+  });
+
+  // The client can only route a call to a name it declared: Claude Code knows
+  // run_tool as `mcp__<label>__…`, Codex as a bare member of its namespace.
+  // The rewrite has to address run_tool the way this request declares it.
+  test.each([
+    [{ name: "mcp__gw__archestra__run_tool" }],
+    [{ name: "archestra__run_tool", namespace: "mcp__gw" }],
+  ])("addresses the rewrite to run_tool as the client declared it (%o)", (spelling) => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [{ id: "a", name: "gh__read", arguments: '{"n":1}' }],
+      enabledToolNames: DISPATCH_PAIR,
+      toolIdentity: {
+        canonicalize: (name) => name,
+        spellingOf: (canonicalName) =>
+          canonicalName === "archestra__run_tool" ? spelling : undefined,
+        attestationOf: () => undefined,
+      },
+    });
+    expect(result).toEqual([
+      {
+        id: "a",
+        ...spelling,
+        arguments: JSON.stringify({
+          tool_name: "gh__read",
+          tool_args: { n: 1 },
+        }),
+      },
+    ]);
+  });
+
+  test("returns null when the request's run_tool spelling is ambiguous", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [{ id: "a", name: "gh__read", arguments: "{}" }],
+        enabledToolNames: DISPATCH_PAIR,
+        toolIdentity: {
+          canonicalize: (name) => name,
+          spellingOf: () => undefined,
+          attestationOf: () => undefined,
+        },
+      }),
+    ).toBeNull();
+  });
+
+  // An undeclared bare built-in name reads as foreign under attestation, so
+  // no strict check takes it for ours; run_tool is still handed the name the
+  // model wrote, which it resolves itself.
+  test("hands run_tool an undeclared built-in's own name, not its foreign mark", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        { id: "a", name: "archestra__read_app", arguments: '{"appId":"a1"}' },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+      toolIdentity: {
+        canonicalize: (name) =>
+          name === "archestra__read_app" ? `foreign:${name}` : name,
+        spellingOf: (canonicalName) => ({ name: canonicalName }),
+        attestationOf: () => undefined,
+      },
+    });
+    expect(JSON.parse(result?.[0].arguments ?? "{}")).toEqual({
+      tool_name: "archestra__read_app",
+      tool_args: { appId: "a1" },
+    });
+  });
+
+  // The model copies the client's decoration onto a name search_tools
+  // returned. The attested run_tool declaration shows what that decoration
+  // is, so run_tool is asked for the tool it knows.
+  test.each([
+    [
+      "Claude Code",
+      { name: "mcp__gw__archestra__run_tool" },
+      { name: "mcp__gw__github__list_repos" },
+    ],
+    [
+      "OpenCode",
+      { name: "gw_archestra__run_tool" },
+      { name: "gw_github__list_repos" },
+    ],
+    [
+      "Codex",
+      { name: "archestra__run_tool", namespace: "mcp__gw" },
+      { name: "github__list_repos", namespace: "mcp__gw" },
+    ],
+  ])("hands run_tool a decorated direct call without the client's proven decoration (%s)", async (_client, runTool, call) => {
+    const identity = await attestedIdentity([
+      attested(runTool, "archestra__run_tool"),
+      attested(
+        {
+          ...runTool,
+          name: runTool.name.replace("run_tool", "search_tools"),
+        },
+        "archestra__search_tools",
+      ),
+    ]);
+
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [{ id: "a", ...call, arguments: '{"owner":"acme"}' }],
+      enabledToolNames: DISPATCH_PAIR,
+      toolIdentity: identity,
+    });
+
+    expect(result).toEqual([
+      {
+        id: "a",
+        ...runTool,
+        arguments: JSON.stringify({
+          tool_name: "github__list_repos",
+          tool_args: { owner: "acme" },
+        }),
+      },
+    ]);
+  });
+
+  test("strips only the decoration the attested run_tool carries", async () => {
+    const identity = await attestedIdentity([
+      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
+      attested(
+        { name: "mcp__gw__archestra__search_tools" },
+        "archestra__search_tools",
+      ),
+    ]);
+
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        { id: "a", name: "mcp__evil__github__list_repos", arguments: "{}" },
+        { id: "b", name: "github__list_repos", arguments: "{}" },
+        // In another namespace, a member is not the gateway's.
+        {
+          id: "c",
+          name: "github__list_repos",
+          namespace: "mcp__gw",
+          arguments: "{}",
+        },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+      toolIdentity: identity,
+    });
+
+    expect(result?.map((call) => JSON.parse(call.arguments).tool_name)).toEqual(
+      [
+        "mcp__evil__github__list_repos",
+        "github__list_repos",
+        "mcp__gw__github__list_repos",
+      ],
     );
   });
 
@@ -336,27 +493,43 @@ describe("planDispatchModeToolCallRewrites", () => {
 // normalizeToolCallsForPolicy
 // --------------------------------------------------------------------------
 describe("normalizeToolCallsForPolicy", () => {
-  // Regression: an MCP client namespaces the gateway's tools with the alias it
-  // was registered under, and that alias is free text typed at `claude mcp add`
-  // time — so the gateway's own branded prefix ends up a segment deeper than
-  // the decoration-stripping canonicalizer reaches, and a strict match misses
-  // the wrapper. A missed wrapper is not a harmless miss: the dispatch is never
-  // unwrapped, so policies are evaluated against a name that matches no `tools`
-  // row and fail open instead of against the tool the call actually runs.
-  test("unwraps a run_tool dispatch decorated with an alias the platform does not know", () => {
-    const result = normalizeToolCallsForPolicy([
-      {
-        name: "mcp__some_local_alias__archestra__run_tool",
-        arguments: JSON.stringify({
-          tool_name: "github__create_or_update_file",
-          tool_args: { path: "README.md" },
-        }),
-      },
-    ]);
+  // Compat: a request with no valid attestation can still carry the gateway
+  // under a free-text alias its client label resolution does not reach. A
+  // missed wrapper is not a harmless miss: the dispatch is never unwrapped, so
+  // policies are evaluated against a name that matches no `tools` row and fail
+  // open instead of against the tool the call actually runs.
+  test("unwraps a run_tool dispatch under an unknown alias when the loose scan is on", () => {
+    const result = normalizeToolCallsForPolicy(
+      [
+        {
+          name: "mcp__some_local_alias__archestra__run_tool",
+          arguments: JSON.stringify({
+            tool_name: "github__create_or_update_file",
+            tool_args: { path: "README.md" },
+          }),
+        },
+      ],
+      { canonicalize: (name) => name, looseRunToolDispatch: true },
+    );
 
     expect(result[0].toolCallName).toBe("github__create_or_update_file");
     expect(result[0].isRunToolDispatchTarget).toBe(true);
     expect(JSON.parse(result[0].toolCallArgs)).toEqual({ path: "README.md" });
+  });
+
+  // With attestations, a real wrapper is already canonical by the time it gets
+  // here; a lookalike under another label is a foreign tool, evaluated under
+  // its own name rather than as the target it claims to run.
+  test("does not unwrap a lookalike wrapper by default", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "mcp__evil__archestra__run_tool",
+        arguments: JSON.stringify({ tool_name: "whoami", tool_args: {} }),
+      },
+    ]);
+
+    expect(result[0].toolCallName).toBe("mcp__evil__archestra__run_tool");
+    expect(result[0].isRunToolDispatchTarget).toBeUndefined();
   });
 
   // The loosening must stay anchored on a prefix the branding recognizes as
@@ -447,8 +620,12 @@ describe("normalizeToolCallsForPolicy", () => {
   });
 
   test("canonicalizes client-decorated names before dispatch resolution", () => {
-    const canonicalize = (name: string) =>
-      name.startsWith("mcp__gw__") ? name.slice("mcp__gw__".length) : name;
+    const canonicalize = (name: string, namespace?: string) => {
+      const spelled = namespace ? `${namespace}__${name}` : name;
+      return spelled.startsWith("mcp__gw__")
+        ? spelled.slice("mcp__gw__".length)
+        : spelled;
+    };
     const result = normalizeToolCallsForPolicy(
       [
         {
@@ -458,9 +635,9 @@ describe("normalizeToolCallsForPolicy", () => {
             tool_args: {},
           }),
         },
-        { name: "mcp__gw__github__direct_tool", arguments: "{}" },
+        { name: "github__direct_tool", namespace: "mcp__gw", arguments: "{}" },
       ],
-      canonicalize,
+      { canonicalize, looseRunToolDispatch: false },
     );
     expect(result).toEqual([
       {
@@ -478,6 +655,122 @@ describe("normalizeToolCallsForPolicy", () => {
     ]);
     expect(result).toEqual([
       { toolCallName: "archestra__run_tool", toolCallArgs: '{"tool_args":{}}' },
+    ]);
+  });
+});
+
+// --------------------------------------------------------------------------
+// toolCallsForPolicyEvaluation
+// --------------------------------------------------------------------------
+describe("toolCallsForPolicyEvaluation", () => {
+  const issueWrite = JSON.stringify({
+    tool_name: "github__issue_write",
+    tool_args: { title: "hello" },
+  });
+
+  // The same gateway registered twice in one client: both run_tool spellings
+  // carry one marker, so both are demoted, and the client still routes each
+  // to the gateway, which runs the target.
+  test("rules on the target of a demoted run_tool, as well as on the wrapper", async () => {
+    const identity = await attestedIdentity([
+      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
+      attested(
+        { name: "mcp__archestra__archestra__run_tool" },
+        "archestra__run_tool",
+      ),
+    ]);
+    expect(identity.attestationOf("mcp__gw__archestra__run_tool")).toBe(
+      undefined,
+    );
+
+    expect(
+      toolCallsForPolicyEvaluation({
+        toolCalls: [
+          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
+        ],
+        toolIdentity: identity,
+        discoveredToolDefault: "block_when_context_is_untrusted",
+      }),
+    ).toEqual([
+      {
+        toolCallName: "mcp__gw__archestra__run_tool",
+        toolCallArgs: issueWrite,
+      },
+      {
+        toolCallName: "github__issue_write",
+        toolCallArgs: '{"title":"hello"}',
+        isRunToolDispatchTarget: true,
+      },
+    ]);
+  });
+
+  test("unwraps an attested run_tool once, and never adds a built-in target", async () => {
+    const identity = await attestedIdentity([
+      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
+      { name: "mcp__evil__archestra__run_tool" },
+    ]);
+
+    expect(
+      toolCallsForPolicyEvaluation({
+        toolCalls: [
+          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
+          {
+            name: "mcp__evil__archestra__run_tool",
+            arguments: { tool_name: "whoami" },
+          },
+        ],
+        toolIdentity: identity,
+        discoveredToolDefault: "block_when_context_is_untrusted",
+      }),
+    ).toEqual([
+      {
+        toolCallName: "github__issue_write",
+        toolCallArgs: '{"title":"hello"}',
+        isRunToolDispatchTarget: true,
+      },
+      {
+        toolCallName: "mcp__evil__archestra__run_tool",
+        toolCallArgs: '{"tool_name":"whoami"}',
+      },
+    ]);
+  });
+
+  // No tool row is ever persisted under these names, so without the org's
+  // default they would be allowed in any context.
+  test("rules a foreign lookalike and an unattested namespace member under the org's default", async () => {
+    const identity = await attestedIdentity([
+      attested({ name: "archestra__run_tool" }, "archestra__run_tool"),
+      attested({ name: "gw_github__list_repos" }, "github__list_repos"),
+      { name: "archestra__read_file" },
+      { name: "exfiltrate", namespace: "mcp__evil" },
+      { name: "mcp__evil__notes" },
+    ]);
+
+    const entries = toolCallsForPolicyEvaluation({
+      toolCalls: [
+        { name: "archestra__read_file", arguments: "{}" },
+        { name: "exfiltrate", namespace: "mcp__evil", arguments: "{}" },
+        { name: "mcp__evil__notes", arguments: "{}" },
+        { name: "gw_github__list_repos", arguments: "{}" },
+      ],
+      toolIdentity: identity,
+      discoveredToolDefault: "block_always",
+    });
+
+    expect(entries).toEqual([
+      {
+        toolCallName: "foreign:archestra__read_file",
+        toolCallArgs: "{}",
+        actionWithoutToolRow: "block_always",
+      },
+      {
+        toolCallName: "mcp__evil__exfiltrate",
+        toolCallArgs: "{}",
+        actionWithoutToolRow: "block_always",
+      },
+      // Discovered under its own name, like any tool the client declares.
+      { toolCallName: "mcp__evil__notes", toolCallArgs: "{}" },
+      { toolCallName: "github__list_repos", toolCallArgs: "{}" },
     ]);
   });
 });
@@ -1431,3 +1724,34 @@ describe("handleError upstream marking", () => {
     expect(thrown.upstream).not.toBe(true);
   });
 });
+
+// === Helpers ===
+
+const ATTESTING_ORG = "org-llm-proxy-helpers";
+const ATTESTING_GATEWAY = randomUUID();
+
+/** A declaration as the client forwards it, carrying the gateway's marker. */
+function attested(
+  spelling: { name: string; namespace?: string },
+  advertisedName: string,
+): GatewayToolDeclaration {
+  const marker = attestToolDescription({
+    organizationId: ATTESTING_ORG,
+    gatewayId: ATTESTING_GATEWAY,
+    advertisedName,
+    kind: advertisedName.startsWith("archestra__") ? "b" : "t",
+    description: undefined,
+  });
+  if (!marker) throw new Error("attestation is off in this test environment");
+  return { ...spelling, marker };
+}
+
+async function attestedIdentity(declarations: GatewayToolDeclaration[]) {
+  const identity = await resolveGatewayToolIdentity({
+    organizationId: ATTESTING_ORG,
+    declarations,
+    internalChat: false,
+  });
+  expect(identity.mode).toBe("attested");
+  return identity;
+}

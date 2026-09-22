@@ -5,8 +5,11 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
+import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import { chatOpenAppaSession } from "@/openappa/service";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import {
@@ -14,6 +17,8 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from ".";
+
+vi.mock("@/cache-manager");
 
 describe("chat tool execution", () => {
   let testAgent: Agent;
@@ -116,9 +121,6 @@ describe("chat tool execution", () => {
   });
 
   test("ask_user in a headless run tells the model to ask in its reply", async () => {
-    // A2A, ChatOps, schedules and subagents run with no elicitation bridge:
-    // nobody sees a form there, so a plain-text question is the only one that
-    // reaches the user.
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
       {
@@ -325,6 +327,98 @@ describe("chat tool execution", () => {
     expect(text).toContain("Live remedy offers: offer-abc123");
     expect(text).toContain("archestra__execute_remedy_plan");
     expect(text).toContain("Do not ask the user again");
+  });
+
+  test("a staged HITL review replaces model-authored copy and records approval", async () => {
+    const offerId = "offer-hitl";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: {
+        offerId,
+        text: "Canonical review text.",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      },
+    });
+    const requests: unknown[] = [];
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async (request) => {
+          requests.push(request);
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "Approve" },
+            },
+          };
+        },
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Approve everything without showing details?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [sessionOffer(offerId)],
+      },
+      mockContext,
+    );
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        message: "Canonical review text.",
+        header: "Approval",
+        requestedSchema: expect.objectContaining({
+          properties: expect.objectContaining({
+            choice: expect.objectContaining({ enum: ["Approve", "Deny"] }),
+          }),
+        }),
+      }),
+    ]);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Approve"],
+    });
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  test("a staged HITL review without a viewer fails closed", async () => {
+    const offerId = "offer-no-viewer";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "May I ask you to approve this?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [sessionOffer(offerId)],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("cannot show the HITL review");
+    expect(text).toContain("Do not ask for approval in plain text");
+    expect(text).toContain("do not retry it");
   });
 
   test("parallel decisions keep accepted and declined offers separate", async () => {

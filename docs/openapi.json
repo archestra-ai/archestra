@@ -170059,11 +170059,18 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
                     "valid",
-                    "errors"
+                    "errors",
+                    "warnings"
                   ],
                   "additionalProperties": false
                 }
@@ -329625,8 +329632,12 @@
                         "type": "string",
                         "enum": [
                           "bundled",
-                          "organization"
+                          "upload"
                         ]
+                      },
+                      "contentHash": {
+                        "nullable": true,
+                        "type": "string"
                       },
                       "namespaces": {
                         "type": "array",
@@ -329674,6 +329685,25 @@
                             "enabled": {
                               "type": "boolean"
                             },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "unavailable",
+                                "missing_credentials",
+                                "naming_conflict",
+                                "server_missing",
+                                "refused",
+                                "active"
+                              ]
+                            },
+                            "packageHash": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "lastError": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "credentialBindings": {
                               "type": "object",
                               "additionalProperties": {
@@ -329689,17 +329719,6 @@
                             "updatedAt": {
                               "type": "string",
                               "format": "date-time"
-                            },
-                            "status": {
-                              "type": "string",
-                              "enum": [
-                                "active",
-                                "disabled",
-                                "missing_credentials",
-                                "naming_conflict",
-                                "superseded",
-                                "unavailable"
-                              ]
                             }
                           },
                           "required": [
@@ -329708,10 +329727,12 @@
                             "batteryName",
                             "catalogId",
                             "enabled",
+                            "status",
+                            "packageHash",
+                            "lastError",
                             "credentialBindings",
                             "createdAt",
-                            "updatedAt",
-                            "status"
+                            "updatedAt"
                           ],
                           "additionalProperties": false
                         }
@@ -329721,6 +329742,7 @@
                       "name",
                       "description",
                       "source",
+                      "contentHash",
                       "namespaces",
                       "helpers",
                       "credentials",
@@ -329729,6 +329751,440 @@
                     ],
                     "additionalProperties": false
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+      }
+    },
+    "/api/openappa/policy-declarations": {
+      "get": {
+        "operationId": "getOpenappaPolicyDeclarations",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batteries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entry": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "bundled",
+                              "upload"
+                            ]
+                          },
+                          "packageHash": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "missing_credentials",
+                              "naming_conflict",
+                              "server_missing",
+                              "refused",
+                              "active"
+                            ]
+                          },
+                          "line": {
+                            "type": "number"
+                          },
+                          "servers": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "target": {
+                                  "type": "string"
+                                },
+                                "catalogId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "target",
+                                "catalogId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "credentials": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "readers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "key",
+                                "readers"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "helpers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "entry",
+                          "name",
+                          "source",
+                          "packageHash",
+                          "status",
+                          "line",
+                          "servers",
+                          "credentials",
+                          "helpers"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "unusedAliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "servers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "line": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "servers",
+                          "line"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "rootRevision": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "managedInGithub": {
+                      "type": "boolean"
+                    },
+                    "heldPull": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "contentHash": {
+                          "type": "string"
+                        },
+                        "sourceCommit": {
+                          "type": "string"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "contentHash",
+                        "sourceCommit",
+                        "reasons"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "batteries",
+                    "unusedAliases",
+                    "rootRevision",
+                    "lastError",
+                    "managedInGithub",
+                    "heldPull"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -330331,6 +330787,25 @@
                           "enabled": {
                             "type": "boolean"
                           },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "missing_credentials",
+                              "naming_conflict",
+                              "server_missing",
+                              "refused",
+                              "active"
+                            ]
+                          },
+                          "packageHash": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "lastError": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "credentialBindings": {
                             "type": "object",
                             "additionalProperties": {
@@ -330346,17 +330821,6 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "active",
-                              "disabled",
-                              "missing_credentials",
-                              "naming_conflict",
-                              "superseded",
-                              "unavailable"
-                            ]
                           }
                         },
                         "required": [
@@ -330365,10 +330829,12 @@
                           "batteryName",
                           "catalogId",
                           "enabled",
+                          "status",
+                          "packageHash",
+                          "lastError",
                           "credentialBindings",
                           "createdAt",
-                          "updatedAt",
-                          "status"
+                          "updatedAt"
                         ],
                         "additionalProperties": false
                       }
@@ -330645,18 +331111,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "enabled": {
-                    "default": true,
-                    "type": "boolean"
-                  },
-                  "credentialBindings": {
-                    "default": {},
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 200
-                    }
+                  "packageHash": {
+                    "default": null,
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
                   }
                 },
                 "required": [
@@ -330676,63 +331135,101 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "organizationId": {
+                    "entry": {
                       "type": "string"
                     },
-                    "batteryName": {
+                    "name": {
                       "type": "string"
                     },
-                    "catalogId": {
+                    "source": {
                       "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "enum": [
+                        "bundled",
+                        "upload"
+                      ]
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "credentialBindings": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 200
-                      }
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
+                    "packageHash": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "status": {
                       "type": "string",
                       "enum": [
-                        "active",
-                        "disabled",
+                        "unavailable",
                         "missing_credentials",
                         "naming_conflict",
-                        "superseded",
-                        "unavailable"
+                        "server_missing",
+                        "refused",
+                        "active"
                       ]
+                    },
+                    "line": {
+                      "type": "number"
+                    },
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "target": {
+                            "type": "string"
+                          },
+                          "catalogId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "target",
+                          "catalogId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "credentials": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "variable": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "readers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "variable",
+                          "key",
+                          "readers"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "helpers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
-                    "id",
-                    "organizationId",
-                    "batteryName",
-                    "catalogId",
-                    "enabled",
-                    "credentialBindings",
-                    "createdAt",
-                    "updatedAt",
-                    "status"
+                    "entry",
+                    "name",
+                    "source",
+                    "packageHash",
+                    "status",
+                    "line",
+                    "servers",
+                    "credentials",
+                    "helpers"
                   ],
                   "additionalProperties": false
                 }
@@ -331027,63 +331524,101 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "organizationId": {
+                    "entry": {
                       "type": "string"
                     },
-                    "batteryName": {
+                    "name": {
                       "type": "string"
                     },
-                    "catalogId": {
+                    "source": {
                       "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "enum": [
+                        "bundled",
+                        "upload"
+                      ]
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "credentialBindings": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 200
-                      }
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
+                    "packageHash": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "status": {
                       "type": "string",
                       "enum": [
-                        "active",
-                        "disabled",
+                        "unavailable",
                         "missing_credentials",
                         "naming_conflict",
-                        "superseded",
-                        "unavailable"
+                        "server_missing",
+                        "refused",
+                        "active"
                       ]
+                    },
+                    "line": {
+                      "type": "number"
+                    },
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "target": {
+                            "type": "string"
+                          },
+                          "catalogId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "target",
+                          "catalogId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "credentials": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "variable": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "readers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "variable",
+                          "key",
+                          "readers"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "helpers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
-                    "id",
-                    "organizationId",
-                    "batteryName",
-                    "catalogId",
-                    "enabled",
-                    "credentialBindings",
-                    "createdAt",
-                    "updatedAt",
-                    "status"
+                    "entry",
+                    "name",
+                    "source",
+                    "packageHash",
+                    "status",
+                    "line",
+                    "servers",
+                    "credentials",
+                    "helpers"
                   ],
                   "additionalProperties": false
                 }
@@ -331678,12 +332213,11 @@
                     "description": {
                       "type": "string"
                     },
-                    "source": {
-                      "type": "string",
-                      "enum": [
-                        "bundled",
-                        "organization"
-                      ]
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "entry": {
+                      "type": "string"
                     },
                     "namespaces": {
                       "type": "array",
@@ -331706,83 +332240,17 @@
                     "setup": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "installs": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "organizationId": {
-                            "type": "string"
-                          },
-                          "batteryName": {
-                            "type": "string"
-                          },
-                          "catalogId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "enabled": {
-                            "type": "boolean"
-                          },
-                          "credentialBindings": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "active",
-                              "disabled",
-                              "missing_credentials",
-                              "naming_conflict",
-                              "superseded",
-                              "unavailable"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "organizationId",
-                          "batteryName",
-                          "catalogId",
-                          "enabled",
-                          "credentialBindings",
-                          "createdAt",
-                          "updatedAt",
-                          "status"
-                        ],
-                        "additionalProperties": false
-                      }
                     }
                   },
                   "required": [
                     "name",
                     "description",
-                    "source",
+                    "contentHash",
+                    "entry",
                     "namespaces",
                     "helpers",
                     "credentials",
-                    "setup",
-                    "installs"
+                    "setup"
                   ],
                   "additionalProperties": false
                 }
@@ -332025,7 +332493,9 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
-      },
+      }
+    },
+    "/api/openappa/battery-packages/{contentHash}": {
       "delete": {
         "operationId": "deleteOpenappaBatteryPackage",
         "tags": [
@@ -332035,12 +332505,10 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 100,
-              "pattern": "^[a-z0-9][a-z0-9-]*$"
+              "pattern": "^[0-9a-f]{64}$"
             },
             "in": "path",
-            "name": "name",
+            "name": "contentHash",
             "required": true
           }
         ],
@@ -332330,6 +332798,7 @@
                           "type": "string"
                         },
                         "repo": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "ref": {
@@ -332337,6 +332806,7 @@
                           "type": "string"
                         },
                         "path": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "interval": {
@@ -332387,6 +332857,27 @@
                         "lastSyncError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "declarationsPendingPublish": {
+                          "type": "boolean"
+                        },
+                        "heldContentHash": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldSourceCommit": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldReasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -332400,7 +332891,11 @@
                         "revision",
                         "sourceCommit",
                         "lastSyncedAt",
-                        "lastSyncError"
+                        "lastSyncError",
+                        "declarationsPendingPublish",
+                        "heldContentHash",
+                        "heldSourceCommit",
+                        "heldReasons"
                       ],
                       "additionalProperties": false
                     },
@@ -332737,6 +333232,7 @@
                           "type": "string"
                         },
                         "repo": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "ref": {
@@ -332744,6 +333240,7 @@
                           "type": "string"
                         },
                         "path": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "interval": {
@@ -332794,6 +333291,27 @@
                         "lastSyncError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "declarationsPendingPublish": {
+                          "type": "boolean"
+                        },
+                        "heldContentHash": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldSourceCommit": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldReasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -332807,7 +333325,11 @@
                         "revision",
                         "sourceCommit",
                         "lastSyncedAt",
-                        "lastSyncError"
+                        "lastSyncError",
+                        "declarationsPendingPublish",
+                        "heldContentHash",
+                        "heldSourceCommit",
+                        "heldReasons"
                       ],
                       "additionalProperties": false
                     },
@@ -333151,6 +333673,7 @@
                           "type": "string"
                         },
                         "repo": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "ref": {
@@ -333158,6 +333681,7 @@
                           "type": "string"
                         },
                         "path": {
+                          "nullable": true,
                           "type": "string"
                         },
                         "interval": {
@@ -333208,6 +333732,27 @@
                         "lastSyncError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "declarationsPendingPublish": {
+                          "type": "boolean"
+                        },
+                        "heldContentHash": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldSourceCommit": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldReasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -333221,7 +333766,11 @@
                         "revision",
                         "sourceCommit",
                         "lastSyncedAt",
-                        "lastSyncError"
+                        "lastSyncError",
+                        "declarationsPendingPublish",
+                        "heldContentHash",
+                        "heldSourceCommit",
+                        "heldReasons"
                       ],
                       "additionalProperties": false
                     },
@@ -333475,6 +334024,426 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+      }
+    },
+    "/api/openappa/github-sync/accept-held": {
+      "post": {
+        "operationId": "acceptHeldAppaGithubPull",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "sourceCommit": {
+                      "type": "string"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "drops_batteries",
+                          "changes_credentials"
+                        ]
+                      }
+                    },
+                    "droppedBatteries": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "changedVariables": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "organizationId": {
+                              "type": "string"
+                            },
+                            "repo": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "ref": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "path": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "interval": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "15m",
+                                    "1h",
+                                    "1d"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "githubPatId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "githubAppConfigId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "sourceCommit": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "lastSyncedAt": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "lastSyncError": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "declarationsPendingPublish": {
+                              "type": "boolean"
+                            },
+                            "heldContentHash": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "heldSourceCommit": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "heldReasons": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "drops_batteries",
+                                  "changes_credentials"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "organizationId",
+                            "repo",
+                            "ref",
+                            "path",
+                            "interval",
+                            "githubPatId",
+                            "githubAppConfigId",
+                            "revision",
+                            "sourceCommit",
+                            "lastSyncedAt",
+                            "lastSyncError",
+                            "declarationsPendingPublish",
+                            "heldContentHash",
+                            "heldSourceCommit",
+                            "heldReasons"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "hasPolicy": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "source",
+                        "hasPolicy"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "contentHash",
+                    "sourceCommit",
+                    "reasons",
+                    "droppedBatteries",
+                    "changedVariables",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
       }
     },
     "/api/openappa/helpers/{installId}/{externalName}": {

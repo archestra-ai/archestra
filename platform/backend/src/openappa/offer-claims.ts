@@ -40,6 +40,19 @@ export const OfferJwsSchema = z.object({
 export type OfferJws = z.infer<typeof OfferJwsSchema>;
 type OfferClaims = z.infer<typeof OfferClaimsSchema>;
 
+/**
+ * Drops the flattened JWS members from remedy call arguments. The proxy is
+ * their only writer: it stamps them beside the model's arguments, so they are
+ * never part of what the model itself sent.
+ */
+export function withoutOfferJws(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args).filter(([key]) => !OFFER_JWS_KEYS.has(key)),
+  );
+}
+
 export function signOfferClaims(claims: OfferClaims, secret: string): OfferJws {
   const encodedHeader = base64UrlEncode(
     JSON.stringify({
@@ -154,3 +167,7 @@ function parseJson(value: string): unknown {
     return undefined;
   }
 }
+
+const OFFER_JWS_KEYS: ReadonlySet<string> = new Set(
+  OfferJwsSchema.keyof().options,
+);

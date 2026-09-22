@@ -47155,6 +47155,7 @@ export type ValidateGuardrailsPolicyResponses = {
     200: {
         valid: boolean;
         errors: Array<string>;
+        warnings: Array<string>;
     };
 };
 
@@ -85447,7 +85448,8 @@ export type GetOpenappaBatteriesResponses = {
     200: Array<{
         name: string;
         description: string;
-        source: 'bundled' | 'organization';
+        source: 'bundled' | 'upload';
+        contentHash: string | null;
         namespaces: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
@@ -85458,17 +85460,132 @@ export type GetOpenappaBatteriesResponses = {
             batteryName: string;
             catalogId: string;
             enabled: boolean;
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            packageHash: string | null;
+            lastError: string | null;
             credentialBindings: {
                 [key: string]: string;
             };
             createdAt: string;
             updatedAt: string;
-            status: 'active' | 'disabled' | 'missing_credentials' | 'naming_conflict' | 'superseded' | 'unavailable';
         }>;
     }>;
 };
 
 export type GetOpenappaBatteriesResponse = GetOpenappaBatteriesResponses[keyof GetOpenappaBatteriesResponses];
+
+export type GetOpenappaPolicyDeclarationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-declarations';
+};
+
+export type GetOpenappaPolicyDeclarationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaPolicyDeclarationsError = GetOpenappaPolicyDeclarationsErrors[keyof GetOpenappaPolicyDeclarationsErrors];
+
+export type GetOpenappaPolicyDeclarationsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        batteries: Array<{
+            entry: string;
+            name: string;
+            source: 'bundled' | 'upload';
+            packageHash: string | null;
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            line: number;
+            servers: Array<{
+                target: string;
+                catalogId: string | null;
+            }>;
+            credentials: Array<{
+                variable: string;
+                key: string | null;
+                readers: Array<string>;
+            }>;
+            helpers: Array<string>;
+        }>;
+        unusedAliases: Array<{
+            namespace: string;
+            servers: Array<string>;
+            line: number;
+        }>;
+        rootRevision: number;
+        lastError: string | null;
+        managedInGithub: boolean;
+        heldPull: {
+            contentHash: string;
+            sourceCommit: string;
+            reasons: Array<'drops_batteries' | 'changes_credentials'>;
+        } | null;
+    };
+};
+
+export type GetOpenappaPolicyDeclarationsResponse = GetOpenappaPolicyDeclarationsResponses[keyof GetOpenappaPolicyDeclarationsResponses];
 
 export type GetOpenappaEffectivePolicyData = {
     body?: never;
@@ -85647,12 +85764,14 @@ export type GetOpenappaBatteryMatchesResponses = {
             batteryName: string;
             catalogId: string;
             enabled: boolean;
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            packageHash: string | null;
+            lastError: string | null;
             credentialBindings: {
                 [key: string]: string;
             };
             createdAt: string;
             updatedAt: string;
-            status: 'active' | 'disabled' | 'missing_credentials' | 'naming_conflict' | 'superseded' | 'unavailable';
         } | null;
     }>;
 };
@@ -85663,10 +85782,7 @@ export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
         catalogId: string;
-        enabled?: boolean;
-        credentialBindings?: {
-            [key: string]: string;
-        };
+        packageHash?: string | null;
     };
     path?: never;
     query?: never;
@@ -85743,17 +85859,22 @@ export type CreateOpenappaBatteryInstallResponses = {
      * Default Response
      */
     200: {
-        id: string;
-        organizationId: string;
-        batteryName: string;
-        catalogId: string;
-        enabled: boolean;
-        credentialBindings: {
-            [key: string]: string;
-        };
-        createdAt: string;
-        updatedAt: string;
-        status: 'active' | 'disabled' | 'missing_credentials' | 'naming_conflict' | 'superseded' | 'unavailable';
+        entry: string;
+        name: string;
+        source: 'bundled' | 'upload';
+        packageHash: string | null;
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        line: number;
+        servers: Array<{
+            target: string;
+            catalogId: string | null;
+        }>;
+        credentials: Array<{
+            variable: string;
+            key: string | null;
+            readers: Array<string>;
+        }>;
+        helpers: Array<string>;
     };
 };
 
@@ -85928,106 +86049,26 @@ export type UpdateOpenappaBatteryInstallResponses = {
      * Default Response
      */
     200: {
-        id: string;
-        organizationId: string;
-        batteryName: string;
-        catalogId: string;
-        enabled: boolean;
-        credentialBindings: {
-            [key: string]: string;
-        };
-        createdAt: string;
-        updatedAt: string;
-        status: 'active' | 'disabled' | 'missing_credentials' | 'naming_conflict' | 'superseded' | 'unavailable';
+        entry: string;
+        name: string;
+        source: 'bundled' | 'upload';
+        packageHash: string | null;
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        line: number;
+        servers: Array<{
+            target: string;
+            catalogId: string | null;
+        }>;
+        credentials: Array<{
+            variable: string;
+            key: string | null;
+            readers: Array<string>;
+        }>;
+        helpers: Array<string>;
     };
 };
 
 export type UpdateOpenappaBatteryInstallResponse = UpdateOpenappaBatteryInstallResponses[keyof UpdateOpenappaBatteryInstallResponses];
-
-export type DeleteOpenappaBatteryPackageData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: never;
-    url: '/api/openappa/battery-packages/{name}';
-};
-
-export type DeleteOpenappaBatteryPackageErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteOpenappaBatteryPackageError = DeleteOpenappaBatteryPackageErrors[keyof DeleteOpenappaBatteryPackageErrors];
-
-export type DeleteOpenappaBatteryPackageResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: true;
-    };
-};
-
-export type DeleteOpenappaBatteryPackageResponse = DeleteOpenappaBatteryPackageResponses[keyof DeleteOpenappaBatteryPackageResponses];
 
 export type UploadOpenappaBatteryPackageData = {
     body: {
@@ -86115,28 +86156,101 @@ export type UploadOpenappaBatteryPackageResponses = {
     200: {
         name: string;
         description: string;
-        source: 'bundled' | 'organization';
+        contentHash: string;
+        entry: string;
         namespaces: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
-        installs: Array<{
-            id: string;
-            organizationId: string;
-            batteryName: string;
-            catalogId: string;
-            enabled: boolean;
-            credentialBindings: {
-                [key: string]: string;
-            };
-            createdAt: string;
-            updatedAt: string;
-            status: 'active' | 'disabled' | 'missing_credentials' | 'naming_conflict' | 'superseded' | 'unavailable';
-        }>;
     };
 };
 
 export type UploadOpenappaBatteryPackageResponse = UploadOpenappaBatteryPackageResponses[keyof UploadOpenappaBatteryPackageResponses];
+
+export type DeleteOpenappaBatteryPackageData = {
+    body?: never;
+    path: {
+        contentHash: string;
+    };
+    query?: never;
+    url: '/api/openappa/battery-packages/{contentHash}';
+};
+
+export type DeleteOpenappaBatteryPackageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteOpenappaBatteryPackageError = DeleteOpenappaBatteryPackageErrors[keyof DeleteOpenappaBatteryPackageErrors];
+
+export type DeleteOpenappaBatteryPackageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: true;
+    };
+};
+
+export type DeleteOpenappaBatteryPackageResponse = DeleteOpenappaBatteryPackageResponses[keyof DeleteOpenappaBatteryPackageResponses];
 
 export type GetAppaGithubSyncData = {
     body?: never;
@@ -86218,9 +86332,9 @@ export type GetAppaGithubSyncResponses = {
         enabled: boolean;
         source: {
             organizationId: string;
-            repo: string;
+            repo: string | null;
             ref: string | null;
-            path: string;
+            path: string | null;
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
@@ -86228,6 +86342,10 @@ export type GetAppaGithubSyncResponses = {
             sourceCommit: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
+            declarationsPendingPublish: boolean;
+            heldContentHash: string | null;
+            heldSourceCommit: string | null;
+            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
     };
@@ -86322,9 +86440,9 @@ export type UpdateAppaGithubSyncResponses = {
         enabled: boolean;
         source: {
             organizationId: string;
-            repo: string;
+            repo: string | null;
             ref: string | null;
-            path: string;
+            path: string | null;
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
@@ -86332,6 +86450,10 @@ export type UpdateAppaGithubSyncResponses = {
             sourceCommit: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
+            declarationsPendingPublish: boolean;
+            heldContentHash: string | null;
+            heldSourceCommit: string | null;
+            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
     };
@@ -86426,9 +86548,9 @@ export type ConfigureAppaGithubSyncResponses = {
         enabled: boolean;
         source: {
             organizationId: string;
-            repo: string;
+            repo: string | null;
             ref: string | null;
-            path: string;
+            path: string | null;
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
@@ -86436,12 +86558,124 @@ export type ConfigureAppaGithubSyncResponses = {
             sourceCommit: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
+            declarationsPendingPublish: boolean;
+            heldContentHash: string | null;
+            heldSourceCommit: string | null;
+            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
     };
 };
 
 export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[keyof ConfigureAppaGithubSyncResponses];
+
+export type AcceptHeldAppaGithubPullData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/accept-held';
+};
+
+export type AcceptHeldAppaGithubPullErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AcceptHeldAppaGithubPullError = AcceptHeldAppaGithubPullErrors[keyof AcceptHeldAppaGithubPullErrors];
+
+export type AcceptHeldAppaGithubPullResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        contentHash: string;
+        sourceCommit: string;
+        reasons: Array<'drops_batteries' | 'changes_credentials'>;
+        droppedBatteries: Array<string>;
+        changedVariables: Array<string>;
+        status: {
+            enabled: boolean;
+            source: {
+                organizationId: string;
+                repo: string | null;
+                ref: string | null;
+                path: string | null;
+                interval: '15m' | '1h' | '1d' | null;
+                githubPatId: string | null;
+                githubAppConfigId: string | null;
+                revision: string;
+                sourceCommit: string | null;
+                lastSyncedAt: string | null;
+                lastSyncError: string | null;
+                declarationsPendingPublish: boolean;
+                heldContentHash: string | null;
+                heldSourceCommit: string | null;
+                heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
+            } | null;
+            hasPolicy: boolean;
+        };
+    };
+};
+
+export type AcceptHeldAppaGithubPullResponse = AcceptHeldAppaGithubPullResponses[keyof AcceptHeldAppaGithubPullResponses];
 
 export type ConsultOpenappaBatteryHelperData = {
     body: {

@@ -1,18 +1,35 @@
+import type { IncomingHttpHeaders } from "node:http";
 import { isCodexClientMetadata } from "@archestra/shared";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
-import type { AppaClientAdapter } from "../types";
-import { readHeader } from "../utils";
+import type { AppaClientAdapter, AskUserArguments } from "../types";
+import { questionHeader, readHeader } from "../utils";
+import { structuredQuestionRuling } from "./native-question-ruling";
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
-  // Codex advertises request_user_input even when Default mode cannot run it.
-  // Keep ask_user on the gateway so Codex shows an MCP elicitation form.
   readonly nativeQuestion = {
     toolName: "request_user_input",
+    supportsMultiple: false,
+    isAvailable: (headers: IncomingHttpHeaders) =>
+      readHeader(headers, "x-archestra-native-question") ===
+      "request_user_input",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          id: "archestra_question",
+          header: questionHeader(args.header, 12),
+          question: args.question,
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+        },
+      ],
+    }),
+    rulingFromResult: structuredQuestionRuling,
   };
-
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
@@ -28,10 +45,12 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     );
   }
 
-  classifyToolName(name: string): "gateway" | "local" {
-    // `mcp__<server>__<tool>` is a namespace member joined with its
-    // `mcp__<server>` namespace: an MCP server's tool, not a Codex built-in.
-    return name.startsWith("mcp:") || name.startsWith("mcp__")
+  classifyToolName(name: string, namespace?: string): "gateway" | "local" {
+    // Codex declares MCP server tools in `mcp__<server>` namespaces
+    // and invokes them using bare advertised names.
+    return name.startsWith("mcp:") ||
+      name.startsWith("mcp__") ||
+      namespace?.startsWith("mcp__")
       ? "gateway"
       : "local";
   }

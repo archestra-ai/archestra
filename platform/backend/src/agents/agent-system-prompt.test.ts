@@ -178,7 +178,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(withoutTool).not.toContain(askUserToolName);
   });
 
-  test("requires accepted remedy consent while OpenAPPA enforces", async ({
+  test("opens remedy review without a redundant consent question", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -223,22 +223,22 @@ describe("buildAgentSystemPrompt", () => {
       ).toContain(instruction);
       expect(instruction).toContain("returns a ruling as its result");
       expect(instruction).not.toContain('starts with "[appa]"');
-      expect(instruction).toContain("Name the plans to the user");
+      expect(instruction).not.toContain("Name the plans to the user");
       // Rulings count readers without naming them; the model must not guess.
       expect(instruction).toContain(
         "describe the block and each plan only in the ruling's own words",
       );
       expect(instruction).toContain("never guess who the readers are");
-      expect(instruction).not.toContain("Choose one yourself");
       expect(instruction).toContain(
-        "Call archestra__execute_remedy_plan only after its result explicitly accepts that plan",
+        "call archestra__execute_remedy_plan immediately",
       );
+      expect(instruction).toContain("Do not ask permission first");
       expect(instruction).toContain(
-        `Use ${askUserToolName} to present the remedy plans, never a plain-text question`,
+        "That tool itself collects any required human approval",
       );
-      expect(instruction).toContain(
-        "Put the exact offer id for the plan or plans this question decides in remedy_offer_ids",
-      );
+      expect(instruction).not.toContain(askUserToolName);
+      expect(instruction).not.toContain("remedy_offer_ids");
+      expect(instruction).not.toContain("only after");
       expect(instruction).not.toContain("get_remedy_plans");
       // A run nobody can answer a question in describes the plans and stops;
       // it must never self-select or execute one.

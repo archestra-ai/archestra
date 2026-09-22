@@ -3,6 +3,7 @@
 
 mod adapter;
 mod batteries;
+mod declarations;
 mod policy;
 
 use appa_eventlog::{
@@ -21,7 +22,7 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef,
     ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
@@ -136,6 +137,13 @@ impl Principal {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RulingInput {
+    Approve,
+    Deny,
+}
+
 /// Request payload to execute a remedy by offer ID.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -164,6 +172,13 @@ struct OfferInput {
     /// Original argument JSON string before execution metadata stripping.
     original_arguments: String,
     presentation: PresentationInput,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
+    /// Explains why the host did not prompt for human review.
+    /// Used when the target call would fail even if approved.
+    /// Recorded as the remedy result.
+    #[serde(default)]
+    precheck_refusal: Option<String>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -214,7 +229,15 @@ struct Input {
     dispatch: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
+    #[serde(default)]
+    precheck_refusal: Option<String>,
 }
+
+/// Maximum byte length for precheck refusal text.
+/// Refusal text is recorded and replayed verbatim as the remedy result.
+const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -369,6 +392,10 @@ pub async fn initialize_openappa(
     Ok(())
 }
 
+/// Validates a root document that declares no battery: [`compose_openappa_policy`]
+/// with nothing to resolve. A root whose `include` list names a battery does not
+/// validate this way — the entry resolves to nothing — so a caller holding
+/// declarations composes instead.
 #[napi(js_name = "validateOpenappaPolicy")]
 pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<String>> {
     tokio::task::spawn_blocking(move || {
@@ -378,12 +405,6 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
     })
     .await
     .map_err(error)?
-}
-
-#[napi(object)]
-pub struct ServerAliasInput {
-    pub alias: String,
-    pub targets: Vec<String>,
 }
 
 #[napi(object)]
@@ -397,6 +418,8 @@ pub struct HelperBindingInput {
 
 #[napi(object)]
 pub struct ComposeBatteryInput {
+    /// The include entry this battery answers, as the root document spells it.
+    pub entry: String,
     pub name: String,
     pub policy: String,
     pub helpers: Option<HelperBindingInput>,
@@ -405,7 +428,6 @@ pub struct ComposeBatteryInput {
 #[napi(object)]
 pub struct ComposePolicyInput {
     pub root: String,
-    pub server_aliases: Vec<ServerAliasInput>,
     pub batteries: Vec<ComposeBatteryInput>,
 }
 
@@ -413,26 +435,25 @@ pub struct ComposePolicyInput {
 pub struct ComposedPolicy {
     /// The composed document, absent when composition failed.
     pub content: Option<String>,
+    /// The composed credential table, variable → store key, absent when composition
+    /// failed.
+    pub credentials: Option<HashMap<String, String>>,
     pub errors: Vec<String>,
 }
 
-/// Composes the effective policy: the root with the host's server aliases, then the
-/// batteries under it. Deterministic in its inputs, so equal inputs give equal bytes.
+/// Composes the effective policy: the root's own declarations, with every battery its
+/// `include` list names composed under it. An entry outside `batteries` is unresolved
+/// and refuses the composition. The composed document is opened in a memory runtime,
+/// so a composition that returns content is also a successful validation.
+/// Deterministic in its inputs, so equal inputs give equal bytes.
 #[napi(js_name = "composeOpenappaPolicy")]
 pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<ComposedPolicy> {
     tokio::task::spawn_blocking(move || {
-        let aliases: Vec<policy::ServerAlias> = input
-            .server_aliases
-            .into_iter()
-            .map(|alias| policy::ServerAlias {
-                alias: alias.alias,
-                targets: alias.targets,
-            })
-            .collect();
-        let batteries: Vec<policy::ComposeBattery> = input
+        let batteries: Vec<policy::ResolvedBattery> = input
             .batteries
             .into_iter()
-            .map(|battery| policy::ComposeBattery {
+            .map(|battery| policy::ResolvedBattery {
+                entry: battery.entry,
                 name: battery.name,
                 policy: battery.policy,
                 helpers: battery.helpers.map(|helpers| policy::HelperBinding {
@@ -441,18 +462,154 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 }),
             })
             .collect();
-        std::panic::catch_unwind(|| policy::compose(&input.root, &aliases, &batteries))
+        std::panic::catch_unwind(|| policy::compose(&input.root, &batteries))
             .map(|result| match result {
-                Ok(content) => ComposedPolicy {
-                    content: Some(content),
+                Ok(composed) => ComposedPolicy {
+                    content: Some(composed.content),
+                    credentials: Some(composed.credentials.into_iter().collect()),
                     errors: Vec::new(),
                 },
                 Err(message) => ComposedPolicy {
                     content: None,
+                    credentials: None,
                     errors: vec![message],
                 },
             })
             .map_err(|_| error("OpenAPPA policy composition failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct IncludeDeclaration {
+    pub entry: String,
+    /// The 1-based line the entry is authored on.
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct ServerAliasDeclaration {
+    pub namespace: String,
+    pub servers: Vec<String>,
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct CredentialDeclaration {
+    pub variable: String,
+    pub key: String,
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct PolicyDeclarations {
+    pub include: Vec<IncludeDeclaration>,
+    pub server_aliases: Vec<ServerAliasDeclaration>,
+    pub credentials: Vec<CredentialDeclaration>,
+    /// A shape the reader could not make sense of, naming the key and its line. An
+    /// unparsable document is one error and no declarations.
+    pub errors: Vec<String>,
+}
+
+/// Reads what a root document declares about its batteries, with the line each
+/// declaration is authored on. Unknown top-level keys are the loader's concern, not
+/// this reader's.
+#[napi(js_name = "parseOpenappaDeclarations")]
+pub async fn parse_openappa_declarations(content: String) -> napi::Result<PolicyDeclarations> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| declarations::parse(&content))
+            .map(|parsed| PolicyDeclarations {
+                include: parsed
+                    .include
+                    .into_iter()
+                    .map(|include| IncludeDeclaration {
+                        entry: include.entry,
+                        line: include.line,
+                    })
+                    .collect(),
+                server_aliases: parsed
+                    .server_aliases
+                    .into_iter()
+                    .map(|alias| ServerAliasDeclaration {
+                        namespace: alias.namespace,
+                        servers: alias.servers,
+                        line: alias.line,
+                    })
+                    .collect(),
+                credentials: parsed
+                    .credentials
+                    .into_iter()
+                    .map(|credential| CredentialDeclaration {
+                        variable: credential.variable,
+                        key: credential.key,
+                        line: credential.line,
+                    })
+                    .collect(),
+                errors: parsed.errors,
+            })
+            .map_err(|_| error("OpenAPPA declaration parsing failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct PolicyEditInput {
+    /// `addInclude`, `removeInclude`, `bindServers`, `unbindServers` or
+    /// `setCredential`. The fields the kind does not take are ignored; one it takes
+    /// and the caller left out is an error.
+    pub kind: String,
+    pub entry: Option<String>,
+    pub namespace: Option<String>,
+    pub servers: Option<Vec<String>>,
+    pub namespaces: Option<Vec<String>>,
+    pub variable: Option<String>,
+    /// Absent removes the variable's binding.
+    pub key: Option<String>,
+}
+
+#[napi(object)]
+pub struct EditedPolicy {
+    /// The edited document, absent when an edit was refused.
+    pub content: Option<String>,
+    pub errors: Vec<String>,
+}
+
+/// Applies the edits to one root document in order, through the runtime's own
+/// comment-preserving editor: a document that already says what an edit asks for
+/// comes back byte for byte. The first refusal stops the sequence and returns no
+/// text.
+#[napi(js_name = "editOpenappaPolicy")]
+pub async fn edit_openappa_policy(
+    content: String,
+    edits: Vec<PolicyEditInput>,
+) -> napi::Result<EditedPolicy> {
+    tokio::task::spawn_blocking(move || {
+        let requests: Vec<declarations::EditRequest> = edits
+            .into_iter()
+            .map(|edit| declarations::EditRequest {
+                kind: edit.kind,
+                entry: edit.entry,
+                namespace: edit.namespace,
+                servers: edit.servers,
+                namespaces: edit.namespaces,
+                variable: edit.variable,
+                key: edit.key,
+            })
+            .collect();
+        std::panic::catch_unwind(|| declarations::edit(&content, requests))
+            .map(|result| match result {
+                Ok(content) => EditedPolicy {
+                    content: Some(content),
+                    errors: Vec::new(),
+                },
+                Err(message) => EditedPolicy {
+                    content: None,
+                    errors: vec![message],
+                },
+            })
+            .map_err(|_| error("OpenAPPA policy editing failed"))
     })
     .await
     .map_err(error)?
@@ -604,6 +761,16 @@ fn validate(input: &Input) -> napi::Result<()> {
             && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
         {
             return Err(error(format!("invalid {name}")));
+        }
+    }
+    if let Some(refusal) = &input.precheck_refusal {
+        // A refusal answers a remedy no human ruled on, so a ruling beside
+        // it would be silently dropped.
+        if input.event != HookEventKind::Remedy || input.ruling.is_some() {
+            return Err(error("a precheck refusal only answers an unruled remedy"));
+        }
+        if refusal.trim().is_empty() || refusal.len() > MAX_PRECHECK_REFUSAL_BYTES {
+            return Err(error("invalid precheck refusal"));
         }
     }
     // Reject malformed host requests before writing an interrupted-operation
@@ -775,11 +942,93 @@ pub async fn execute_remedy_by_offer(
         spelling: owner.spelling,
         dispatch: owner.dispatch,
         presentation: Some(input.presentation),
+        ruling: input.ruling,
+        precheck_refusal: input.precheck_refusal,
     };
     validate(&input)?;
     let response: Value =
         serde_json::from_str(&run(input, policy_content).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct OfferReviewOutput {
+    pub offer_id: String,
+    pub text: String,
+    pub session_id: String,
+    /// The reviewed call's tool, as the host proposed it.
+    pub tool: Option<String>,
+    /// The reviewed call's arguments as JSON text. The ledger keeps them as
+    /// JSONB, so key order and spacing can differ from the proposal; the
+    /// values cannot.
+    pub arguments: Option<String>,
+}
+
+/// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+/// Session routing comes from the verified offer claims; no offer-owner lookup.
+#[napi(js_name = "loadOfferReview")]
+pub async fn load_offer_review(
+    organization_id: String,
+    session_id: String,
+    offer_id: String,
+) -> napi::Result<Option<OfferReviewOutput>> {
+    let session_id_for_output = session_id.clone();
+    // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
+    // a connection before host SQL so review loads never contend with
+    // dispatches on the runtime state mutex.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    // The SQL closure needs its own offer id copy because it must be 'static.
+    let target_offer_id = offer_id.clone();
+    let review = pg
+        .with_client(move |client| {
+            // session_id is the leading PK column of openappa_operations, and
+            // organization_id is an additional tenancy guard. The JSONB match
+            // is pushed into SQL so only the matching entry's text crosses the
+            // boundary instead of every reviewed decision. The lateral join
+            // scans each reviewed decision's entries linearly, which is
+            // bounded by the handful of review entries a policy's DenyCall
+            // carries; it is not sized for unbounded per-decision reviews.
+            // The reviewed call is the one this receipt admitted or blocked:
+            // its host context, or the semantic input of a receipt that
+            // predates context.
+            let row = client.query_opt(
+                "SELECT entry->>'text' AS text, \
+                 COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
+                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
+                 FROM openappa_operations o \
+                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                 AND o.decision->'review' IS NOT NULL \
+                 AND entry->>'offer_id' = $3 \
+                 ORDER BY o.created_at DESC \
+                 LIMIT 1",
+                &[&organization_id, &session_id, &target_offer_id],
+            )?;
+            Ok(row.map(|row| {
+                (
+                    row.get::<_, String>("text"),
+                    row.get::<_, Option<String>>("tool"),
+                    row.get::<_, Option<String>>("arguments"),
+                )
+            }))
+        })
+        .map_err(error)?;
+
+    Ok(review.map(|(text, tool, arguments)| OfferReviewOutput {
+        offer_id,
+        text,
+        session_id: session_id_for_output,
+        tool,
+        arguments,
+    }))
 }
 
 struct SessionLock {
@@ -1131,8 +1380,17 @@ impl State {
                     ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
                 }
             }
+            if let Some(refusal) = &input.precheck_refusal {
+                // The host found the target call would fail even if approved,
+                // so no human was asked. The runtime never sees this act: the
+                // offer is neither vouched nor spent, and a corrected call
+                // earns its own review.
+                let response = runtime_refusal(refusal.clone())?;
+                return finish_remedy(pg, &input, &operation, result_key, response);
+            }
             let args: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let offer_id = args.offer_id.clone();
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
@@ -1140,6 +1398,10 @@ impl State {
                     .clone()
                     .ok_or_else(|| error("missing remedy arguments"))?,
             };
+            let ruling = input.ruling.as_ref().map(|r| match r {
+                RulingInput::Approve => Ruling::Approve,
+                RulingInput::Deny => Ruling::Deny,
+            });
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
@@ -1147,7 +1409,7 @@ impl State {
                     call,
                     call_id: None,
                     spawn: false,
-                    ruling: None,
+                    ruling,
                 },
             )
             .await;
@@ -1158,24 +1420,8 @@ impl State {
                     HookDecision::Refuse { detail } => detail,
                     _ => return Err(error("unexpected remedy control decision")),
                 };
-                let response = serde_json::to_value(HostMcpResult {
-                    decision: "mcp_result",
-                    approved_output: text.clone(),
-                    output_source: OutputSource::Runtime,
-                    reason: None,
-                    result: HostToolResult {
-                        is_error: true,
-                        content: vec![HostText { kind: "text", text }],
-                    },
-                })
-                .map_err(error)?;
-                finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
-                if let Some(result_key) = result_key {
-                    let approved = decision_text(&response)?;
-                    pg.complete_processed_result(result_key, approved, response.clone())
-                        .map_err(error)?;
-                }
-                return Ok(response);
+                let response = runtime_refusal(text)?;
+                return finish_remedy(pg, &input, &operation, result_key, response);
             }
             let outcome = self
                 .runtime
@@ -1192,14 +1438,15 @@ impl State {
                 spelling: input.spelling.clone(),
                 dispatch: input.dispatch.clone(),
             };
-            let response = render_remedy_outcome(outcome, Some(&owner))?;
-            finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
-            if let Some(result_key) = result_key {
-                let approved = decision_text(&response)?;
-                pg.complete_processed_result(result_key, approved, response.clone())
-                    .map_err(error)?;
-            }
-            return Ok(response);
+            let response = render_remedy_outcome(
+                outcome,
+                &RemedyAct {
+                    owner: &owner,
+                    offer_id: &offer_id,
+                    ruling: input.ruling,
+                },
+            )?;
+            return finish_remedy(pg, &input, &operation, result_key, response);
         }
 
         let operation = input
@@ -1567,6 +1814,22 @@ fn render_unknown_offer() -> napi::Result<Value> {
     .map_err(error)
 }
 
+/// Constructs a refusal response not generated by the runtime engine.
+/// Used for control-gate refusals and host precheck refusals.
+fn runtime_refusal(text: String) -> napi::Result<Value> {
+    serde_json::to_value(HostMcpResult {
+        decision: "mcp_result",
+        approved_output: text.clone(),
+        output_source: OutputSource::Runtime,
+        reason: None,
+        result: HostToolResult {
+            is_error: true,
+            content: vec![HostText { kind: "text", text }],
+        },
+    })
+    .map_err(error)
+}
+
 fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<Value> {
     serde_json::to_value(OfferStatusResponse {
         response: &response,
@@ -1610,10 +1873,16 @@ fn presentation_offer_ids(presentation: Option<&RemedyPresentation>) -> Vec<Offe
         .unwrap_or_default()
 }
 
-fn render_remedy_outcome(
-    outcome: RemedyOutcome,
-    owner: Option<&OfferOwner>,
-) -> napi::Result<Value> {
+/// Context for a remedy outcome, including offer ownership, offer ID,
+/// and human review decision.
+struct RemedyAct<'a> {
+    owner: &'a OfferOwner,
+    offer_id: &'a str,
+    ruling: Option<RulingInput>,
+}
+
+fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Result<Value> {
+    let owner = Some(act.owner);
     let (output_source, reason, is_error, text) = match outcome {
         RemedyOutcome::Authorized { call } => (
             OutputSource::Runtime,
@@ -1622,9 +1891,12 @@ fn render_remedy_outcome(
             render_released_call("Authorized", &call, owner),
         ),
         RemedyOutcome::Returned { value } => (OutputSource::Tool, None, false, value),
-        RemedyOutcome::Declined { presentation } => {
-            (OutputSource::Runtime, None, false, presentation.feedback)
-        }
+        RemedyOutcome::Declined { presentation } => (
+            OutputSource::Runtime,
+            None,
+            false,
+            render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
+        ),
         RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, false, feedback),
         RemedyOutcome::Refused { reason } => (
             OutputSource::Runtime,
@@ -1644,6 +1916,42 @@ fn render_remedy_outcome(
         },
     })
     .map_err(error)
+}
+
+/// Formats a human reviewer denial message.
+/// The runtime records the denial and retires the offer.
+/// Rewriting requires three conditions: the host recorded a denial, the runtime
+/// returned a block, and the offer was retired.
+/// Otherwise, the original runtime text returns unchanged.
+fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Option<String> {
+    let denied = act.ruling == Some(RulingInput::Deny)
+        && presentation.feedback.starts_with("[appa] Blocked:")
+        && !presentation
+            .offers
+            .iter()
+            .any(|offer| offer.id == act.offer_id);
+    if !denied {
+        return None;
+    }
+    let target = act
+        .owner
+        .spelling
+        .as_deref()
+        .or(act.owner.tool.as_deref())
+        .map_or_else(
+            || "this call".to_owned(),
+            |tool| format!("this call to {tool}"),
+        );
+    let mut text = format!(
+        "[appa] Denied: the human reviewer refused {target}. It did not run and will not run. \
+         Do not retry it or re-submit it with changed arguments or encoding to get another \
+         approval; tell the user it was denied."
+    );
+    if !presentation.offers.is_empty() {
+        text.push_str("\n\nThe policy still offers options that do not need this reviewer:\n");
+        text.push_str(&presentation.feedback);
+    }
+    Some(text)
 }
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
@@ -2031,6 +2339,25 @@ fn claim_operation(
         OperationClaim::Complete { decision } => Ok(Some(decision)),
     }
 }
+
+/// Completes a remedy's operation receipt and, for a tracked call, its
+/// processed result, so a retry of either replays this response.
+fn finish_remedy(
+    pg: &PostgresStore,
+    input: &Input,
+    operation: &str,
+    result_key: Option<ProcessedResultKey>,
+    response: Value,
+) -> napi::Result<Value> {
+    finish_operation(pg, input, operation, &response, ReceiptBinding::Caller)?;
+    if let Some(result_key) = result_key {
+        let approved = decision_text(&response)?;
+        pg.complete_processed_result(result_key, approved, response.clone())
+            .map_err(error)?;
+    }
+    Ok(response)
+}
+
 fn finish_operation(
     pg: &PostgresStore,
     input: &Input,
@@ -2119,8 +2446,9 @@ mod root_lock_tests {
 #[cfg(test)]
 mod typed_tests {
     use super::{
-        OfferId, OfferOwner, RemedyOutcome, RemedyPresentation, authoritative_unexecuted_response,
-        owner_can_be_spent_by, presentation_offer_ids, render_released_call, render_remedy_outcome,
+        OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
+        authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
+        render_released_call, render_remedy_outcome,
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
@@ -2275,8 +2603,15 @@ mod typed_tests {
             arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 2 })).unwrap(),
         };
 
-        let result =
-            render_remedy_outcome(RemedyOutcome::Authorized { call }, Some(&owner)).unwrap();
+        let result = render_remedy_outcome(
+            RemedyOutcome::Authorized { call },
+            &RemedyAct {
+                owner: &owner,
+                offer_id: "offer-1",
+                ruling: None,
+            },
+        )
+        .unwrap();
         let text = result["result"]["content"][0]["text"].as_str().unwrap();
         let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
@@ -2347,5 +2682,189 @@ mod typed_tests {
     #[test]
     fn legacy_presentation_fallback_never_advertises_delegation() {
         assert!(!super::native_presentation_options().supports_delegation);
+    }
+}
+
+#[cfg(test)]
+mod remedy_tests {
+    use super::{
+        HookEventKind, Input, MAX_PRECHECK_REFUSAL_BYTES, OfferOwner, RemedyAct, RemedyOutcome,
+        RemedyPresentation, RulingInput, render_remedy_outcome, validate,
+    };
+    use appa_runtime_api::OfferedRemedy;
+    use serde_json::{Value, json};
+
+    const QUOTED: &str = "0123456789abcdef";
+    const OTHER: &str = "fedcba9876543210";
+    // The runtime's re-rendered block after a denial: the operator plan is
+    // filtered out, so no Continue section remains.
+    const DENIED_BLOCK: &str =
+        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+
+    fn owner(spelling: Option<&str>) -> OfferOwner {
+        OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: None,
+            tool: Some("archestra__todo_write".to_owned()),
+            spelling: spelling.map(str::to_owned),
+            dispatch: None,
+        }
+    }
+
+    fn declined(feedback: &str, offers: &[&str]) -> RemedyOutcome {
+        RemedyOutcome::Declined {
+            presentation: RemedyPresentation {
+                feedback: feedback.to_owned(),
+                offers: offers
+                    .iter()
+                    .map(|id| OfferedRemedy {
+                        id: (*id).to_owned(),
+                        returns: None,
+                        input_sanitizer: None,
+                    })
+                    .collect(),
+                review: Vec::new(),
+                display: Vec::new(),
+            },
+        }
+    }
+
+    fn render(outcome: RemedyOutcome, owner: &OfferOwner, ruling: Option<RulingInput>) -> Value {
+        render_remedy_outcome(
+            outcome,
+            &RemedyAct {
+                owner,
+                offer_id: QUOTED,
+                ruling,
+            },
+        )
+        .unwrap()
+    }
+
+    fn text(response: &Value) -> &str {
+        response["approved_output"].as_str().unwrap()
+    }
+
+    #[test]
+    fn a_human_denial_reads_as_final_under_the_name_the_model_called() {
+        let owner = owner(Some("mcp__archestra__todo_write"));
+        let response = render(declined(DENIED_BLOCK, &[]), &owner, Some(RulingInput::Deny));
+
+        let text = text(&response);
+        assert!(text.starts_with("[appa] Denied:"), "{text}");
+        assert!(text.contains("this call to mcp__archestra__todo_write"));
+        assert!(text.contains("will not run"));
+        assert!(text.contains("Do not retry it"));
+        assert!(!text.contains("cannot run yet"));
+        assert_eq!(response["result"]["content"][0]["text"], text);
+        assert_eq!(response["result"]["isError"], false);
+        assert_eq!(response["output_source"], "runtime");
+    }
+
+    #[test]
+    fn a_human_denial_names_the_canonical_tool_without_a_client_spelling() {
+        let response = render(
+            declined(DENIED_BLOCK, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert!(text(&response).contains("this call to archestra__todo_write."));
+    }
+
+    #[test]
+    fn a_block_without_a_deny_ruling_keeps_the_runtime_text() {
+        for ruling in [None, Some(RulingInput::Approve)] {
+            let response = render(declined(DENIED_BLOCK, &[]), &owner(None), ruling);
+            assert_eq!(text(&response), DENIED_BLOCK);
+        }
+    }
+
+    #[test]
+    fn a_deny_ruling_on_a_non_block_decline_keeps_the_runtime_text() {
+        let invalidated =
+            "[appa] the state changed and this offer no longer applies; re-propose the call";
+        let response = render(
+            declined(invalidated, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert_eq!(text(&response), invalidated);
+    }
+
+    #[test]
+    fn a_block_that_still_offers_the_quoted_offer_is_not_a_denial() {
+        let response = render(
+            declined(DENIED_BLOCK, &[QUOTED]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert_eq!(text(&response), DENIED_BLOCK);
+    }
+
+    #[test]
+    fn a_denial_keeps_the_options_that_do_not_need_the_reviewer() {
+        let remaining =
+            format!("{DENIED_BLOCK}\n\nContinue:\n  - execute_remedy_plan(offer_id: \"{OTHER}\")");
+        let response = render(
+            declined(&remaining, &[OTHER]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        let text = text(&response);
+        assert!(text.starts_with("[appa] Denied:"), "{text}");
+        assert!(text.contains("The policy still offers options that do not need this reviewer:"));
+        assert!(text.ends_with(&remaining));
+    }
+
+    fn remedy_input(extra: Value) -> Input {
+        let mut input = json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "remedy",
+            "tool_call_id": "provider-call",
+            "arguments": { "offer_id": QUOTED },
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(input).unwrap()
+    }
+
+    #[test]
+    fn a_precheck_refusal_is_accepted_only_on_an_unruled_remedy() {
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted" })
+            ))
+            .is_ok()
+        );
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted", "ruling": "approve" })
+            ))
+            .is_err()
+        );
+        let mut result = remedy_input(json!({ "precheck_refusal": "[appa] Not submitted" }));
+        result.event = HookEventKind::ToolResult;
+        result.output = Some("output".to_owned());
+        assert!(validate(&result).is_err());
+    }
+
+    #[test]
+    fn a_precheck_refusal_must_carry_bounded_text() {
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": " \n " }))).is_err());
+        let oversized = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES + 1);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
+        let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
     }
 }

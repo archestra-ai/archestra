@@ -1,7 +1,9 @@
 import {
   extractMcpExecutedAs,
+  extractMcpHumanRuling,
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
+  MCP_HUMAN_RULING_META_KEY,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -2013,6 +2015,33 @@ describe("buildArchestraToolOutput", () => {
     expect(extractMcpExecutedAs(result)).toEqual({
       kind: "platform",
       callerUserId: null,
+    });
+  });
+
+  test("shows a reviewed remedy's ruling on the card, never to the model", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const denial =
+      "[appa] Denied: the human reviewer refused this call to archestra__todo_write.";
+    const built = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: denial }],
+        _meta: { [MCP_HUMAN_RULING_META_KEY]: "deny" },
+      },
+      toolName: "archestra__execute_remedy_plan",
+      toolArguments: { offer_id: "offer-1" },
+      agentId: agent.id,
+    });
+
+    expect(extractMcpHumanRuling(built)).toBe("deny");
+    expect(extractMcpExecutedAs(built)).toEqual({
+      kind: "platform",
+      callerUserId: null,
+    });
+    expect(mcpToolToModelOutput({ output: built })).toEqual({
+      type: "text",
+      value: denial,
     });
   });
 

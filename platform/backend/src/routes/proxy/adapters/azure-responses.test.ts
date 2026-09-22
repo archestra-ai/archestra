@@ -120,19 +120,21 @@ describe("azureResponsesAdapterFactory", () => {
       ],
     });
 
+    const result = {
+      id: "call_123",
+      name: "read_file",
+      arguments: { file_path: "/tmp/test" },
+      content: '{"value":1}',
+      isError: false,
+    };
+    // The output is paired with the call behind it: that is the shape
+    // trusted-data / Dual LLM policy evaluation reads, and without it the
+    // conversation looks tool-free to the evaluator.
     expect(adapter.getMessages()).toEqual([
       { role: "user", content: "hello from responses" },
-      { role: "tool", content: '{"value":1}' },
+      { role: "tool", content: '{"value":1}', toolCalls: [result] },
     ]);
-    expect(adapter.getToolResults()).toEqual([
-      {
-        id: "call_123",
-        name: "read_file",
-        arguments: { file_path: "/tmp/test" },
-        content: '{"value":1}',
-        isError: false,
-      },
-    ]);
+    expect(adapter.getToolResults()).toEqual([result]);
     expect(adapter.getTools()).toEqual([
       {
         name: "read_file",
@@ -167,6 +169,84 @@ describe("azureResponsesAdapterFactory", () => {
         isError: false,
       },
     ]);
+    // Still untrusted data: the default trusted-data policies apply to it.
+    expect(adapter.getMessages()).toEqual([
+      {
+        role: "tool",
+        content: '{"value":1}',
+        toolCalls: [
+          {
+            id: "call_missing",
+            name: "unknown",
+            content: '{"value":1}',
+            isError: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  // Codex calls a namespaced tool by its bare name and names the namespace
+  // beside it; the pair is the tool's identity, so trusted-data evaluation
+  // must see both.
+  test("carries the namespace a paired history call named", () => {
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-4.1",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_gw",
+          name: "archestra__search_tools",
+          namespace: "mcp__gw",
+          arguments: '{"query":"issues"}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_gw",
+          output: "matching tools",
+        },
+      ],
+    } as never);
+    const expected = {
+      id: "call_gw",
+      name: "archestra__search_tools",
+      namespace: "mcp__gw",
+      arguments: { query: "issues" },
+      content: "matching tools",
+      isError: false,
+    };
+
+    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getMessages()).toEqual([
+      { role: "tool", content: "matching tools", toolCalls: [expected] },
+    ]);
+  });
+
+  test("forwards a tool result a sanitizer reduced to nothing", () => {
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-4.1",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_secret",
+          name: "read_file",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_secret",
+          output: "the secret",
+        },
+      ],
+    } as never);
+
+    adapter.applyToolResultUpdates({ call_secret: "" });
+
+    expect(adapter.toProviderRequest().input).toContainEqual({
+      type: "function_call_output",
+      call_id: "call_secret",
+      output: "",
+    });
   });
 
   test("extracts text and tool calls from a responses payload", () => {
@@ -226,6 +306,70 @@ describe("azureResponsesAdapterFactory", () => {
       reasoningTokens: 0,
     });
     expect(adapter.getFinishReasons()).toEqual(["tool_calls"]);
+  });
+
+  test("keeps the namespace a call names", () => {
+    const adapter = azureResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_ns",
+      object: "response",
+      created_at: 123,
+      model: "gpt-4.1",
+      status: "completed",
+      output: [
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_gw",
+          name: "archestra__run_tool",
+          namespace: "mcp__gw",
+          arguments: '{"tool_name":"github__issue_write"}',
+          status: "completed",
+        },
+      ],
+    } as never);
+
+    expect(adapter.getToolCalls()).toEqual([
+      {
+        id: "call_gw",
+        name: "archestra__run_tool",
+        namespace: "mcp__gw",
+        arguments: { tool_name: "github__issue_write" },
+      },
+    ]);
+  });
+
+  test("keeps the namespace a streamed call names", () => {
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: {
+        id: "fc_1",
+        type: "function_call",
+        call_id: "call_gw",
+        name: "archestra__run_tool",
+        namespace: "mcp__gw",
+        arguments: "",
+        status: "in_progress",
+      },
+    } as never);
+    adapter.processChunk({
+      type: "response.function_call_arguments.delta",
+      item_id: "fc_1",
+      output_index: 0,
+      delta: '{"tool_name":"github__issue_write"}',
+      sequence_number: 1,
+    } as never);
+
+    expect(adapter.state.toolCalls).toEqual([
+      {
+        id: "call_gw",
+        name: "archestra__run_tool",
+        namespace: "mcp__gw",
+        arguments: '{"tool_name":"github__issue_write"}',
+      },
+    ]);
   });
 
   test("passes through Azure responses streaming events and completes on response.completed", () => {

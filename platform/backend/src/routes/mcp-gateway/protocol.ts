@@ -502,12 +502,11 @@ export function buildDiscoverResult(params: {
   const serverInfo = { name: `archestra-agent-${agentId}`, version };
   return {
     resultType: COMPLETE_RESULT_TYPE,
-    // Every version the server supports, not just the one this request used,
-    // so a client can pick before committing. A client that validates the
-    // result (Claude Code does) treats a server without this field as
-    // legacy-only and falls back to `initialize`.
+    // Servers advertise all supported protocol versions so the client can select one.
+    // Clients using protocol 2026-07-28 validate `supportedVersions`.
+    // Missing this field causes clients to fall back to `initialize` on 2025-11-25.
     supportedVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
-    // Earlier drafts' spellings, kept for clients written against them.
+    // Earlier drafts named this property `protocolVersions`.
     protocolVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
     protocolVersion: revision,
     serverInfo,

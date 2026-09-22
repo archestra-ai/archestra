@@ -1,5 +1,13 @@
-import { describe, expect, test } from "@/test";
-import { rewriteOllamaProxyUrl } from "./ollama";
+import Fastify, { type FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import config from "@/config";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import ollamaProxyRoutes, { rewriteOllamaProxyUrl } from "./ollama";
 
 const API_PREFIX = "/v1/ollama";
 
@@ -163,5 +171,80 @@ describe("rewriteOllamaProxyUrl", () => {
         strippedUuid: true,
       });
     });
+  });
+});
+
+describe("Ollama passthrough", () => {
+  let upstream: FastifyInstance;
+  let forwardedBodies: string[];
+
+  beforeEach(async () => {
+    forwardedBodies = [];
+    upstream = Fastify();
+    upstream.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      (_request, body, done) => done(null, body),
+    );
+    upstream.post("/api/chat", async (request) => {
+      forwardedBodies.push(request.body as string);
+      return { done: true };
+    });
+    await upstream.listen({ port: 0 });
+    const address = upstream.server.address();
+    const port = typeof address === "string" ? 0 : address?.port;
+    // Read when the catch-all proxy registers.
+    config.llm.ollama.baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await upstream.close();
+  });
+
+  test("takes the gateway's markers out of a native chat request's tools", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(ollamaProxyRoutes);
+    const description = attestToolDescription({
+      organizationId: "org-ollama-passthrough",
+      gatewayId: "da0e7287-c7dd-46a6-a0bf-69e6412d7a9c",
+      advertisedName: "archestra__search_tools",
+      kind: "b",
+      description: "Search the catalog.",
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `${API_PREFIX}/api/chat`,
+        headers: { "content-type": "application/json" },
+        payload: {
+          model: "llama3.2",
+          messages: [{ role: "user", content: "Hello!" }],
+          tools: [
+            {
+              type: "function",
+              function: { name: "gw_archestra__search_tools", description },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toContain("[[gwa1.");
+    expect(JSON.parse(forwardedBodies[0]).tools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: "gw_archestra__search_tools",
+          description: "Search the catalog.",
+        },
+      },
+    ]);
   });
 });

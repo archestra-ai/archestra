@@ -453,4 +453,25 @@ describe("createProxyPreHandler", () => {
       expect(upstreamHits).toBe(0);
     });
   });
+
+  describe("forwarded bodies", () => {
+    test("a JSON body over the route's limit is refused, not forwarded", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/anthropic",
+        endpointSuffix: "/messages",
+        providerName: "Anthropic",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/anthropic/v1/messages/count_tokens",
+        headers: { "content-type": "application/json" },
+        // Fastify's default body limit is 1 MiB.
+        payload: JSON.stringify({ padding: "x".repeat(1_100_000) }),
+      });
+
+      expect(response.statusCode).toBe(413);
+      expect(upstreamHits).toBe(0);
+    });
+  });
 });

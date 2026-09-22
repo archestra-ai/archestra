@@ -1,17 +1,26 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  MCP_HUMAN_RULING_META_KEY,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import config from "@/config";
+import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import {
+  clearHitlReview,
+  consumeHitlRuling,
+  stageHitlReview,
+} from "@/openappa/hitl-review";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
+  loadOfferReview,
 } from "@/openappa/service";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
@@ -19,8 +28,8 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
-import type { EffectivePolicy } from "@/types/openappa-batteries";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
+import type { ArchestraContext } from "./types";
 
 const RemedyPlanArgumentsSchema = z.object({
   offer_id: z.string().min(1),
@@ -33,6 +42,23 @@ const RemedyPlanArgumentsSchema = z.object({
     .optional(),
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
+
+// Shared by the chat elicitation bridge and the MRTR input-required signal.
+// Both channels request the same approve/deny ruling form.
+const HITL_RULING_SCHEMA = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["approve", "deny"],
+      description: "Approve or deny this remedy plan",
+    },
+  },
+  required: ["action"],
+} as const;
+
+// The binding records a precheck refusal verbatim and rejects values over 64 KiB.
+const MAX_PRECHECK_REFUSAL_BYTES = 64 * 1024;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -71,33 +97,39 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read guardrails policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; batteries installed for MCP servers compose into enforcement on top of it, and `effective` shows the composed result the runtime enforces. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
       const [root, effective] = await Promise.all([
         guardrailsPolicyService.get(context.organizationId),
-        openappaBatteriesService.getEffectivePolicy(context.organizationId),
+        enforced(context.organizationId),
       ]);
-      return result({ ...root, effective: enforced(effective) });
+      return result({ ...root, effective });
     },
   }),
   defineArchestraTool({
     shortName: "validate_guardrails_policy",
     title: "Validate guardrails policy",
     description:
-      "Validate proposed organization.appa.toml without applying changes. Explain the intended behavior to the user before updating their policy.",
+      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
-    async handler({ args }) {
-      return result(await guardrailsPolicyService.validate(args.content));
+    async handler({ args, context }) {
+      if (!context.organizationId)
+        throw new ApiError(401, "Organization context is required");
+      return result(
+        await guardrailsPolicyService.validate(args.content, {
+          organizationId: context.organizationId,
+        }),
+      );
     },
   }),
   defineArchestraTool({
     shortName: "update_guardrails_policy",
     title: "Update guardrails policy",
     description:
-      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission.",
+      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission, and credential:update as well whenever the saved text hands a credential to a battery it did not already reach — a new `[credentials]` entry, a changed key, or a newly included battery that reads a variable the table already binds. Removing a battery or a binding needs no extra permission. The answer carries `effective.batteries` with each battery's status: report any that is not `active`.",
     schema: UpdateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId || !context.userId)
@@ -110,17 +142,17 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         userId: context.userId,
       });
-      const effective = await openappaBatteriesService.getEffectivePolicy(
-        context.organizationId,
-      );
-      return result({ ...saved, effective: enforced(effective) });
+      return result({
+        ...saved,
+        effective: await enforced(context.organizationId),
+      });
     },
   }),
   defineArchestraTool({
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, name it to the user, choose it, and call execute_remedy_plan with the offer_id and plan from the ruling. Then retry the original call. If the ruling offers no plan, explain the block. If you need the user's decision, use ask_user, never a plain-text question.",
+      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, choose the appropriate plan and immediately call execute_remedy_plan with the offer_id and plan from the ruling. Do not ask the user for permission first. The execute_remedy_plan tool opens required human reviews directly. Then retry the original call. If the ruling offers no plan, explain the block.",
     schema: NoticeArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
@@ -134,7 +166,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Execute a remedy plan offered by the guardrails policy for a blocked call. Pass the exact offer_id and the plan description shown in the ruling. The plan argument describes what will change so the user can review it before approving the call. After execution succeeds, retry the original call or use the admitted output. If permission is denied, stop and inform the user.",
+      "Execute a remedy plan offered by the guardrails policy for a blocked call. Call this tool as soon as a ruling offers the plan. Do not ask the user for permission first. Pass the exact offer_id and plan description from the ruling. If the result says review_required, immediately call the declared ask_user tool with that offer ID. Do not ask the user in plain text. After approval, call execute_remedy_plan again with the same offer and plan. After execution succeeds, retry the original call or use the admitted output. If review is denied, canceled, unavailable, or unanswered, stop and state that the action remains blocked.",
     schema: RemedyPlanArgumentsSchema.extend({
       execution: RemedyExecutionSchema.optional().describe(
         "Transport record added by the proxy for retry identity and exact history restoration. It does not authorize the remedy.",
@@ -205,6 +237,81 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+
+      // Check if this offer requires human review before executing or acquiring locks.
+      // Session routing uses the verified claims, so the review lookup
+      // requires no offer-owner table.
+      const review = await loadOfferReview({
+        organizationId: context.organizationId,
+        sessionId: claims.session_id,
+        offerId: remedy.offer_id,
+      });
+
+      let ruling: "approve" | "deny" | undefined;
+      let precheckRefusal: string | undefined;
+      if (review) {
+        const reviewSession = {
+          organization_id: claims.organization_id,
+          session_id: claims.session_id,
+          ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
+          ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
+        };
+        // Check that the reviewed call can run before prompting the user.
+        // A refusal is recorded as this remedy's result.
+        const precheck = {
+          review,
+          spelling: claims.spelling ?? claims.tool ?? undefined,
+          context,
+        };
+        precheckRefusal = await precheckReviewedCall(precheck);
+        if (precheckRefusal) {
+          await clearHitlReview({
+            session: reviewSession,
+            offerId: remedy.offer_id,
+          });
+        } else {
+          const cachedRuling = await consumeHitlRuling({
+            session: reviewSession,
+            offerId: remedy.offer_id,
+          });
+          if (cachedRuling === "approve" || cachedRuling === "deny") {
+            ruling = cachedRuling;
+          } else if (cachedRuling === "none") {
+            ruling = undefined;
+          } else if (context.mrtr) {
+            // External MCP clients reach their native question tool through ask_user.
+            // Stage the exact review first so the model cannot alter
+            // the question or bind an answer to a different offer.
+            await stageHitlReview({
+              session: reviewSession,
+              review: {
+                offerId: remedy.offer_id,
+                text: review.text,
+                ...(review.tool ? { tool: review.tool } : {}),
+                ...(review.arguments ? { arguments: review.arguments } : {}),
+                remedyArguments: unstampedRemedyArguments(args),
+              },
+            });
+            return nativeReviewRequiredResult(remedy.offer_id);
+          } else if (context.elicitation) {
+            // Archestra Chat keeps its inline approval card.
+            const outcome = await context.elicitation.elicit({
+              toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+              message: review.text,
+              requestedSchema: HITL_RULING_SCHEMA,
+              kind: "openappa_review",
+              ...(review.tool ? { reviewedTool: review.tool } : {}),
+              ...(review.arguments
+                ? { reviewedArguments: review.arguments }
+                : {}),
+            });
+            ruling = parseHitlRuling(
+              outcome.status === "answered" ? outcome.result : undefined,
+            );
+          }
+        }
+      }
+
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
         ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
@@ -219,8 +326,19 @@ const registry = defineArchestraTools([
         originalArguments:
           originalArguments ?? JSON.stringify(submittedSemantic),
         args: remedy,
+        ruling,
+        ...(precheckRefusal ? { precheckRefusal } : {}),
       });
-      return byOffer.result;
+      if (!ruling || !byOffer.known) return byOffer.result;
+      // Display-only: the chat card displays the human ruling.
+      // `_meta` does not reach the model; the model reads the ruling from result text.
+      return {
+        ...byOffer.result,
+        _meta: {
+          ...byOffer.result._meta,
+          [MCP_HUMAN_RULING_META_KEY]: ruling,
+        },
+      };
     },
   }),
 ] as const);
@@ -229,11 +347,25 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 /**
- * What the runtime enforces: the root composed with the installed batteries,
- * or the root alone with the error when the last composition failed.
+ * What the runtime enforces: the root composed with the batteries it declares,
+ * or the last composition that opened with the error the newest one raised.
+ * Every declared battery is listed with its status, because a battery that
+ * governs nothing still composes and would otherwise read as success.
  */
-function enforced(effective: EffectivePolicy) {
-  return { content: effective.content, error: effective.lastError };
+async function enforced(organizationId: string) {
+  const [effective, declarations] = await Promise.all([
+    openappaBatteriesService.getEffectivePolicy(organizationId),
+    openappaBatteriesService.policyDeclarations(organizationId),
+  ]);
+  return {
+    content: effective.content,
+    error: effective.lastError,
+    batteries: declarations.batteries.map((battery) => ({
+      entry: battery.entry,
+      name: battery.name,
+      status: battery.status,
+    })),
+  };
 }
 
 function result(value: object) {
@@ -253,6 +385,130 @@ function unknownOfferResult() {
       },
     ],
   };
+}
+
+function nativeReviewRequiredResult(offerId: string): CallToolResult {
+  return result({
+    ok: false,
+    outcome: "review_required",
+    offer_id: offerId,
+    instruction:
+      "Call the declared ask_user tool now with this offer ID in remedy_offer_ids. Do not ask the user in plain text. The platform will show the exact review and fixed Approve/Deny choices in the client's native question UI when available. Follow the ask_user result. Call execute_remedy_plan again only after an Approve answer.",
+  });
+}
+
+function unstampedRemedyArguments(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...args };
+  for (const key of ["execution", "protected", "payload", "signature"]) {
+    delete result[key];
+  }
+  return result;
+}
+
+/**
+ * The model-visible refusal for a reviewed call that cannot run even if approved.
+ * Only Archestra built-in tools are checked through executor gates.
+ * Other tools, reviews without call details, or failed prechecks continue
+ * to the reviewer.
+ */
+async function precheckReviewedCall(params: {
+  review: { tool?: string; arguments?: string };
+  /** The name the model knows the tool by, when the claims carry one. */
+  spelling?: string;
+  context: ArchestraContext;
+}): Promise<string | undefined> {
+  const { review, context } = params;
+  const args = parseArgumentsRecord(review.arguments);
+  if (!review.tool || !args) return undefined;
+  // Dynamic import avoids the circular import between this file and ./index
+  // (index.ts imports every tool group, including this one).
+  const { getArchestraToolInputSchema, preflightArchestraToolCall } =
+    await import("./index");
+  if (!getArchestraToolInputSchema(review.tool)) return undefined;
+  let refused: CallToolResult | null;
+  try {
+    refused = await preflightArchestraToolCall({
+      toolName: review.tool,
+      args,
+      context,
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, tool: review.tool },
+      "OpenAPPA review precheck failed; asking the reviewer",
+    );
+    return undefined;
+  }
+  if (!refused) return undefined;
+  return precheckRefusalText({
+    tool: params.spelling ?? review.tool,
+    detail: refused.content
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n"),
+  });
+}
+
+function precheckRefusalText(params: { tool: string; detail: string }) {
+  const head = `[appa] Not submitted for approval: this call to ${params.tool} could not run even if approved.\n`;
+  const tail = `\nFix the arguments and call ${params.tool} again; the corrected call gets its own approval.`;
+  const budget =
+    MAX_PRECHECK_REFUSAL_BYTES - Buffer.byteLength(head + tail, "utf8");
+  if (budget <= 0) {
+    return truncateUtf8(head + tail, MAX_PRECHECK_REFUSAL_BYTES);
+  }
+  return head + truncateUtf8(params.detail, budget) + tail;
+}
+
+/** Cuts text to at most `maxBytes` of UTF-8, marking the cut with an ellipsis. */
+function truncateUtf8(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return "";
+  const bytes = Buffer.from(text, "utf8");
+  if (bytes.length <= maxBytes) return text;
+  let end = Math.max(0, maxBytes - Buffer.byteLength("…", "utf8"));
+  // Back off out of a continuation-byte run to cut on a character boundary.
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+  return `${bytes.subarray(0, end).toString("utf8")}…`;
+}
+
+function parseArgumentsRecord(
+  json: string | undefined,
+): Record<string, unknown> | undefined {
+  if (json === undefined) return undefined;
+  try {
+    const value: unknown = JSON.parse(json);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parses the unified elicitation envelope into a remedy ruling.
+ * An `accept` action must include an explicit `approve` or `deny` content action.
+ * Malformed or missing actions yield no ruling, causing the upstream runtime
+ * to resolve the review as `NoAnswer` (fail closed).
+ * A `decline` action maps to `deny`.
+ * A `cancel` action or unrecognized payload yields no ruling.
+ */
+function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
+  if (typeof envelope !== "object" || envelope === null) return undefined;
+  const { action, content } = envelope as {
+    action?: unknown;
+    content?: unknown;
+  };
+  if (action === "decline") return "deny";
+  if (action !== "accept") return undefined;
+  const contentAction =
+    typeof content === "object" && content !== null
+      ? (content as { action?: unknown }).action
+      : undefined;
+  if (contentAction === "approve") return "approve";
+  if (contentAction === "deny") return "deny";
+  return undefined;
 }
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {

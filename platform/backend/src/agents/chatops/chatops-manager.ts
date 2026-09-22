@@ -2294,10 +2294,10 @@ export class ChatOpsManager {
       for (const approvalRequest of approvalRequests) {
         // `run_tool` is a meta wrapper; show the user the underlying tool and
         // its arguments rather than the opaque wrapper name.
-        const { toolName, toolInput } = resolveRunToolTarget(
-          approvalRequest.toolName,
-          approvalRequest.toolInput,
-        );
+        const { toolName, toolInput } = resolveRunToolTarget({
+          toolName: approvalRequest.toolName,
+          args: approvalRequest.toolInput,
+        });
         await provider.addApprovalRequestForm({
           approvalId: approvalRequest.approvalId,
           taskId: task.id,

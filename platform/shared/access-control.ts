@@ -1962,6 +1962,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
+  [RouteId.GetOpenappaPolicyDeclarations]: { toolPolicy: ["read"] },
+  // Publishing a held pull is a policy write; each reason it names carries its
+  // own permission on top, checked where the pull's changes are known.
+  [RouteId.AcceptHeldAppaGithubPull]: { toolPolicy: ["update"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},

@@ -1,18 +1,17 @@
 /**
  * Prepares an OpenAPPA request before provider dispatch:
  * 1. Restores denial notices in history back to original calls and rulings.
- * 2. Removes the proxy's transport arguments from history and declarations.
- * 3. Resolves session remedy tools and validates client declarations.
+ * 2. Resolves session remedy tools and validates client declarations.
  */
 import {
   type ArchestraToolShortName,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import type { OfferJws } from "./offer-claims";
 import {
@@ -21,27 +20,28 @@ import {
   appaTurnBoundaries,
   appaWireFamily,
   collectSignedOfferClaims,
-  declaredToolName,
+  type DeclaredToolSpelling,
+  declaredToolEntries,
   declaredToolNamespaces,
-  declaredTools,
   isResultGovernedHostedTool,
   providerHostedTool,
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
   stripAppaTools,
   stripDeclaredParameters,
-  stripProxyArguments,
 } from "./wire";
 
 export type AppaRequestTools = {
-  /** Client-declared spelling of the control tool. */
-  controlToolName: string;
-  /** Client-declared spelling of the denial notice tool. */
-  noticeToolName: string;
-  /** The gateway namespace the control tool is declared in (Codex). */
-  controlNamespace?: string;
-  /** The gateway namespace the notice tool is declared in, which Codex needs to dispatch a notice. */
-  noticeNamespace?: string;
+  /** The control tool's declaration, as the client spells it. */
+  control: DeclaredToolSpelling;
+  /** The denial notice tool's declaration, as the client spells it. */
+  notice: DeclaredToolSpelling;
+  /** The ask_user tool's declaration, when this session declares one. */
+  askUser: DeclaredToolSpelling | undefined;
+  /** Declared spellings that resolve to the platform's ask_user. */
+  platformToolNames: ReadonlySet<string>;
+  /** Tool name to declaration namespace mapping (Codex). */
+  namespaces: ReadonlyMap<string, string>;
 };
 
 export type AppaPreparedRequest = {
@@ -53,20 +53,13 @@ export type AppaPreparedRequest = {
   session: AppaSessionIdentity;
   /** Tools declared as free-form custom tools. */
   customTools: ReadonlySet<string>;
-  /** Tool name to declaration namespace mapping (Codex). */
-  namespaces: ReadonlyMap<string, string>;
-  /** Canonical tool name to declared spelling mapping. */
-  spellings: ReadonlyMap<string, string>;
-  /** Client spellings whose user answers may bypass runtime result governance. */
-  platformToolNames?: ReadonlySet<string>;
+  /** Tool declarations retained so adapters can detect native local tools. */
+  declaredTools: readonly DeclaredToolSpelling[];
   promptOperationId?: string;
   turnEndOperationId?: string;
   /** Signed offer routing collected from notices before restoration. */
   offerClaims?: OfferJws[];
-  /**
-   * Offer claims from current-turn notices only. Earlier offers have expired
-   * or already executed.
-   */
+  /** Signed offers the proxy may stamp onto this turn's ask_user calls. */
   askUserOfferClaims?: OfferJws[];
 };
 
@@ -78,16 +71,25 @@ export function prepareAppaRequest(params: {
   interactionType: string;
   /** This client's session identity, as `appaSessionIdentity` read it. */
   session?: AppaSessionIdentity;
-  canonicalizeToolName: (name: string) => string;
   /** Internal Chat calls use platform tools without a client decoration. */
   trustBarePlatformTools?: boolean;
+  /** Which declared tools are this platform's gateway tools, and as what. */
+  identity: Pick<
+    GatewayToolIdentity,
+    | "mode"
+    | "canonicalize"
+    | "attestationOf"
+    | "verified"
+    | "unverifiedMarkerCount"
+  >;
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
   // and results are still ruled on, but a notice stays in the history as the
   // notice call the client ran, and no turn accounting runs.
   const family = appaWireFamily(params.interactionType);
-  const declared = declaredTools(params.body);
+  const entries = declaredToolEntries(params.body);
+  const declared = entries.map((entry) => entry.tool);
   if (params.interactionType === "azure:responses" && declared.length > 0) {
     throw new ApiError(
       400,
@@ -102,8 +104,8 @@ export function prepareAppaRequest(params: {
   };
   if (family) {
     const noticeMatch = {
-      isNoticeTool: (name: string) =>
-        shortToolName(params.canonicalizeToolName(name)) ===
+      isNoticeTool: (name: string, namespace?: string) =>
+        shortToolName(params.identity.canonicalize(name, namespace)) ===
         TOOL_GET_REMEDY_PLANS_SHORT_NAME,
       mayBeNoticeTool: (name: string) => NOTICE_TOOL_SPELLING.test(name),
     };
@@ -113,6 +115,8 @@ export function prepareAppaRequest(params: {
       ...noticeMatch,
     });
     if (collected.length > 0) offerClaims = collected;
+    // Only notices minted since the last user message may still be stamped
+    // onto this turn's ask_user calls; older ones belong to their turn.
     const thisTurn = collectSignedOfferClaims({
       family,
       body: params.body,
@@ -126,24 +130,14 @@ export function prepareAppaRequest(params: {
       allowHistoricalControl: declared.length === 0,
       // Current declarations bind live controls. Without declarations, only a
       // typed record bound to the same call and arguments can restore history.
-      isControlTool: (name) =>
-        shortToolName(params.canonicalizeToolName(name)) ===
+      isControlTool: (name, namespace) =>
+        shortToolName(params.identity.canonicalize(name, namespace)) ===
         TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     });
     restoreAppaNotices({
       family,
       body: params.body,
       ...noticeMatch,
-    });
-    // The control calls came back whole from their receipts above; ask_user
-    // calls carry the offers the proxy stamped for the tool alone.
-    stripProxyArguments({
-      family,
-      body: params.body,
-      isStampedTool: (name) =>
-        shortToolName(params.canonicalizeToolName(name)) ===
-        TOOL_ASK_USER_SHORT_NAME,
-      names: ASK_USER_PROXY_ARGUMENTS,
     });
   }
 
@@ -153,142 +147,140 @@ export function prepareAppaRequest(params: {
       tools: undefined,
       ...(historicalControlToolName ? { historicalControlToolName } : {}),
       session,
-      spellings: new Map(),
-      platformToolNames: new Set(),
       customTools: new Set(),
-      namespaces: new Map(),
+      declaredTools: [],
       ...(offerClaims ? { offerClaims } : {}),
       ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
     };
   }
-  const toolDeclarations = declared.map(({ tool }) => tool);
-  if (family)
-    refuseCodexCodeMode({
-      family,
-      declared: toolDeclarations,
-      body: params.body,
-    });
-  refuseProviderHostedTools({ family, declared: toolDeclarations });
-  refuseDeferredTools(toolDeclarations);
+  if (family) refuseCodexCodeMode({ family, declared, body: params.body });
+  refuseProviderHostedTools({ family, declared });
+  refuseDeferredTools(declared);
 
-  const found = new Map<string, AppaToolDeclaration>();
-  const spellings = new Map<string, string>();
-  const platformToolNames = new Set<string>();
   const customTools = new Set<string>();
-  for (const { tool, namespace } of declared) {
+  const declaredTools: DeclaredToolSpelling[] = [];
+  for (const entry of entries) {
     // The provider runs it, so the client never names or calls it: its calls
     // are ruled on from the response, not matched against a declared spelling.
-    if (isResultGovernedHostedTool({ family, tool })) continue;
-    const name = declaredToolName(tool);
-    if (name === undefined) {
+    if (isResultGovernedHostedTool({ family, tool: entry.tool })) continue;
+    if (entry.name === undefined) {
       // A tool this proxy cannot name is a tool it cannot gate or render.
       throw new ApiError(
         400,
-        "OpenAPPA cannot govern a tool declared without a name; remove it or disable OpenAPPA for this client",
+        "OpenAPPA cannot govern a tool declared without a name; remove it or disable OpenAPPA for this client.",
       );
     }
-    if (asToolDeclaration(tool)?.type === "custom") customTools.add(name);
-    // A Codex namespace member is read the way its calls are: joined with
-    // the `mcp__<server>` namespace that declares it, so the label anchored
-    // is the server's, not whatever its member is called.
-    const anchored = namespacedToolName(name, namespace);
-    const canonical = params.canonicalizeToolName(anchored);
-    spellings.set(canonical, name);
-    // Built-in status comes from the strict anchor alone: a decorated name
-    // counts only under a label the canonicalizer ties to one of this
-    // organization's gateways. A lookalike under any other label stays a
-    // foreign tool, which is what keeps a hostile MCP server from naming a
-    // tool of its own into the control tool, or into the notice tool that
-    // would carry it every denied call.
-    const short =
-      shortToolName(canonical) ??
-      anchoredLabelShort(anchored, params.canonicalizeToolName);
-    if (short) {
-      spellings.set(archestraMcpBranding.getToolName(short), name);
-      if (
-        short === TOOL_ASK_USER_SHORT_NAME &&
-        params.trustBarePlatformTools === true
-      ) {
-        platformToolNames.add(name);
-      }
+    declaredTools.push({
+      name: entry.name,
+      ...(entry.namespace ? { namespace: entry.namespace } : {}),
+    });
+    if (asToolDeclaration(entry.tool)?.type === "custom")
+      customTools.add(entry.name);
+  }
+
+  const askUserDeclarations = platformDeclarationsOf(
+    TOOL_ASK_USER_SHORT_NAME,
+    entries,
+    params.identity,
+    params.trustBarePlatformTools === true,
+  );
+  const platformToolNames = new Set(
+    askUserDeclarations.map((each) => each.name),
+  );
+
+  const remedyTool = (shortName: ArchestraToolShortName) =>
+    oneRemedyDeclaration({
+      shortName,
+      entries,
+      identity: params.identity,
+    });
+  let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  let notice = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  if (params.identity.mode === "attested" && control && notice) {
+    // Control and notice status come from one gateway: each declaration must
+    // still hold its attestation after demotion, and both must name the same
+    // gateway. A pair split across two gateways is not this session's pair.
+    const controlGateway = attestedGateway(params.identity, control);
+    const noticeGateway = attestedGateway(params.identity, notice);
+    if (!controlGateway || controlGateway !== noticeGateway) {
+      control = undefined;
+      notice = undefined;
     }
-    // The tool still takes them from the proxy; the model is never offered them.
-    const proxyArguments = short ? PROXY_ARGUMENTS.get(short) : undefined;
-    if (proxyArguments)
-      stripDeclaredParameters({ tool, names: proxyArguments });
-    if (
-      short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
-    ) {
-      if (customTools.has(name)) {
-        throw new ApiError(
-          400,
-          "OpenAPPA control tools require structured function arguments, not free-form custom input",
-        );
+  }
+  if (!control || !notice) {
+    // Markers that fail to verify, and none that do, most likely mean a tool
+    // list the client fetched under a different key or before this deploy;
+    // reconnecting fetches a fresh one. A demotion to compat mode is itself
+    // the markers failing, so it refuses the same way.
+    if (params.identity.unverifiedMarkerCount > 0) {
+      throw new ApiError(
+        400,
+        `OpenAPPA cannot verify the ${archestraMcpBranding.serverName} tools this session declares. Reconnect the ${archestraMcpBranding.serverName} MCP server to this client, then start a new session.`,
+      );
+    }
+    // Clients that limit tool listings (such as Claude Code at 50) may omit
+    // the remedy tools; injection keeps denials returning as notices during
+    // active sessions. Attested sessions cannot inject: a synthesized
+    // declaration carries no attestation and could never be trusted.
+    if (params.identity.mode !== "attested") {
+      const prefix = appaDeclarationPrefix({ control, notice });
+      if (!notice) {
+        notice = { name: `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}` };
+        appendDeclaredTool(params.body, family, notice.name);
       }
-      // One declaration each. A second spelling of the same tool, or the
-      // same one in a second gateway's namespace, leaves the session
-      // ambiguous about where to deliver a notice and which call to trust.
-      const first = found.get(short);
-      if (
-        first !== undefined &&
-        (first.name !== name || first.namespace !== namespace)
-      ) {
-        throw new ApiError(
-          400,
-          `OpenAPPA needs exactly one declaration of ${short}; this request declares both ${declarationLabel(first)} and ${declarationLabel({ name, namespace })}. Connect this client to one gateway of this platform at a time.`,
-        );
+      if (!control) {
+        control = { name: `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}` };
+        appendDeclaredTool(params.body, family, control.name);
       }
-      found.set(short, { name, ...(namespace ? { namespace } : {}) });
+    } else {
+      const missing = [
+        control ? undefined : TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+        notice ? undefined : TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+      ].filter((name): name is string => name !== undefined);
+      throw new ApiError(
+        400,
+        `OpenAPPA is enabled but this session does not declare ${missing.join(" and ")}. Connect the ${archestraMcpBranding.serverName} MCP server to this client and allow both tools, then start a new session.`,
+      );
     }
   }
 
-  let control = found.get(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  let notice = found.get(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
-  if (!control || !notice) {
-    // OpenAPPA is active for this request. Notice and control tools are available
-    // without manual assignment. The proxy detects the client's MCP prefix
-    // from declared tools, or falls back to platform defaults. Clients that
-    // limit tool listings (such as Claude Code at 50) may omit get_remedy_plans;
-    // injection ensures denials still return as notices during active sessions.
-    const prefix = appaDeclarationPrefix(found);
-    if (!notice) {
-      notice = { name: `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}` };
-      appendDeclaredTool(params.body, family, notice.name);
-      found.set(TOOL_GET_REMEDY_PLANS_SHORT_NAME, notice);
-      spellings.set(
-        archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
-        notice.name,
-      );
-    }
-    if (!control) {
-      control = { name: `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}` };
-      appendDeclaredTool(params.body, family, control.name);
-      found.set(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME, control);
-      spellings.set(
-        archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
-        control.name,
-      );
-    }
+  // The proxy, not the model, writes stamped arguments; the provider's schema
+  // never offers them.
+  for (const { tool, name, namespace } of entries) {
+    const short =
+      name === undefined
+        ? null
+        : control && name === control.name && namespace === control.namespace
+          ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+          : platformToolNames.has(name)
+            ? TOOL_ASK_USER_SHORT_NAME
+            : null;
+    const proxyArguments =
+      short !== null && short in PROXY_STAMPED_TOOL_ARGUMENTS
+        ? PROXY_STAMPED_TOOL_ARGUMENTS[
+            short as keyof typeof PROXY_STAMPED_TOOL_ARGUMENTS
+          ]
+        : undefined;
+    if (proxyArguments)
+      stripDeclaredParameters({ tool, names: new Set(proxyArguments) });
   }
 
   // Read before the strip: a denied call's notice records the namespace its
   // tool was declared in, so restoration can put the call back under it.
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
-  stripAppaTools({ body: params.body, names: new Set([notice.name]) });
+  stripAppaTools({ body: params.body, tools: [notice] });
   return {
     tools: {
-      controlToolName: control.name,
-      noticeToolName: notice.name,
-      ...(control.namespace ? { controlNamespace: control.namespace } : {}),
-      ...(notice.namespace ? { noticeNamespace: notice.namespace } : {}),
+      control,
+      notice,
+      askUser: askUserDeclarations[0],
+      platformToolNames,
+      namespaces,
     },
     session,
-    spellings,
-    platformToolNames,
     customTools,
-    namespaces,
+    declaredTools,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
     ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
@@ -314,52 +306,17 @@ export function underscoreLabeledPlatformToolName(
   return null;
 }
 
-/**
- * Normalizes a Codex namespace member into a qualified tool name.
- * Joined with the namespace, the result matches Claude Code tool naming.
- * Tools that already carry a gateway qualifier retain their spelling.
- */
-export function namespacedToolName(
-  name: string,
-  namespace: string | undefined,
-): string {
-  return namespace !== undefined &&
-    (namespace.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`) ||
-      shortToolName(name) !== null)
-    ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
-    : name;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asArray(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? (value as unknown[]) : null;
 }
 
 // === Internal helpers ===
-
-/** The offers the proxy stamps onto the model's ask_user calls. */
-const ASK_USER_PROXY_ARGUMENTS: ReadonlySet<string> = new Set(
-  PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
-);
-
-/** Per tool, the arguments the proxy writes onto the model's calls. */
-const PROXY_ARGUMENTS: ReadonlyMap<
-  ArchestraToolShortName,
-  ReadonlySet<string>
-> = new Map(
-  Object.entries(PROXY_STAMPED_TOOL_ARGUMENTS).map(([tool, names]) => [
-    tool as ArchestraToolShortName,
-    new Set<string>(names),
-  ]),
-);
-
-/** Where a request declares one of the APPA tools. */
-type AppaToolDeclaration = {
-  name: string;
-  /** The Codex namespace that declares it; absent for a flat declaration. */
-  namespace?: string;
-};
-
-function declarationLabel(declaration: AppaToolDeclaration): string {
-  return declaration.namespace
-    ? `${declaration.name} (namespace ${declaration.namespace})`
-    : declaration.name;
-}
 
 /** A name that ends in the notice tool's short name, under any client label. */
 const NOTICE_TOOL_SPELLING = new RegExp(
@@ -370,42 +327,139 @@ function shortToolName(name: string): ArchestraToolShortName | null {
   return archestraMcpBranding.getToolShortName(name);
 }
 
-/** Resolves OpenCode tool names formatted as <label>_<branded_name>. */
-function anchoredLabelShort(
-  name: string,
-  canonicalize: (name: string) => string,
-): ArchestraToolShortName | null {
-  const resolved = underscoreLabeledPlatformToolName(name, canonicalize);
-  const short = resolved ? shortToolName(resolved) : null;
-  return short === TOOL_ASK_USER_SHORT_NAME ||
-    short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-    short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
-    ? short
-    : null;
-}
-
-/** Refuses sessions where tools are deferred to a provider tool search. */
-function refuseDeferredTools(declared: readonly unknown[]): void {
-  const deferred = declared.some(
-    (tool) => asToolDeclaration(tool)?.type === "tool_search",
-  );
-  if (deferred) {
-    throw new ApiError(
-      400,
-      "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
-    );
+/**
+ * Every declaration that resolves to a platform tool, by the identity's own
+ * resolution: attested declarations count only while their attestation holds;
+ * without attestations, canonical resolution decides, and internal Chat calls
+ * may name platform tools bare.
+ */
+function platformDeclarationsOf(
+  shortName: ArchestraToolShortName,
+  entries: ReturnType<typeof declaredToolEntries>,
+  identity: Pick<
+    GatewayToolIdentity,
+    "mode" | "canonicalize" | "verified" | "attestationOf"
+  >,
+  trustBarePlatformTools: boolean,
+): DeclaredToolSpelling[] {
+  if (identity.mode === "attested") {
+    return identity.verified
+      .filter(
+        (declaration) =>
+          declaration.kind === "b" &&
+          shortToolName(declaration.advertisedName) === shortName,
+      )
+      .map((declaration) => ({
+        name: declaration.name,
+        ...(declaration.namespace ? { namespace: declaration.namespace } : {}),
+      }));
   }
+  const found: DeclaredToolSpelling[] = [];
+  for (const { name, namespace } of entries) {
+    if (name === undefined) continue;
+    if (
+      shortToolName(identity.canonicalize(name, namespace)) === shortName ||
+      (trustBarePlatformTools && shortToolName(name) === shortName)
+    ) {
+      found.push({ name, ...(namespace ? { namespace } : {}) });
+    }
+  }
+  return found;
 }
 
 /**
- * The MCP prefix a client's own APPA declarations use, so an injected pair
- * keeps the same spelling the client already knows.
+ * The one declaration of a remedy tool this session makes, if any.
+ *
+ * With attestations, only a declaration the gateway attested as that built-in
+ * counts, whatever its spelling, and a lookalike under any label stays a
+ * foreign tool; that is what keeps a hostile MCP server from naming a tool of
+ * its own into the control or notice tool. The count is taken before
+ * demotion, so a replayed marker or a second gateway reads as the conflict it
+ * is. Without attestations the identity's own resolution decides.
+ *
+ * A second declaration of the same tool leaves the session ambiguous about
+ * which name to render and which call to trust, so it is refused with the way
+ * out, as is a declaration that takes free-form input.
  */
-function appaDeclarationPrefix(
-  found: ReadonlyMap<string, AppaToolDeclaration>,
-): string {
-  for (const [short, { name }] of found) {
-    if (name.endsWith(short)) return name.slice(0, name.length - short.length);
+function oneRemedyDeclaration(params: {
+  shortName: ArchestraToolShortName;
+  entries: ReturnType<typeof declaredToolEntries>;
+  identity: Pick<GatewayToolIdentity, "mode" | "canonicalize" | "verified">;
+}): DeclaredToolSpelling | undefined {
+  const { shortName, entries, identity } = params;
+  const found =
+    identity.mode === "attested"
+      ? identity.verified.filter(
+          (declaration) =>
+            declaration.kind === "b" &&
+            shortToolName(declaration.advertisedName) === shortName,
+        )
+      : entries.flatMap(({ name, namespace }) =>
+          name !== undefined &&
+          shortToolName(identity.canonicalize(name, namespace)) === shortName
+            ? [{ name, namespace }]
+            : [],
+        );
+  const candidates = new Map<string, DeclaredToolSpelling>();
+  for (const { name, namespace } of found) {
+    candidates.set(`${namespace ?? ""}\u0000${name}`, {
+      name,
+      ...(namespace ? { namespace } : {}),
+    });
+  }
+  const [first, second] = candidates.values();
+  if (second) {
+    throw new ApiError(
+      400,
+      `OpenAPPA needs exactly one declaration of ${shortName}. This request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
+    );
+  }
+  if (!first) return undefined;
+  const custom = entries.some(
+    (entry) =>
+      entry.name === first.name &&
+      entry.namespace === first.namespace &&
+      asToolDeclaration(entry.tool)?.type === "custom",
+  );
+  if (custom) {
+    throw new ApiError(
+      400,
+      "OpenAPPA control tools require structured function arguments, not free-form custom input",
+    );
+  }
+  return first;
+}
+
+/** The gateway that attested this exact declaration, after demotion. */
+function attestedGateway(
+  identity: Pick<GatewayToolIdentity, "attestationOf">,
+  spelling: DeclaredToolSpelling,
+): string | undefined {
+  const attestation = identity.attestationOf(spelling.name, spelling.namespace);
+  return attestation?.kind === "b" ? attestation.gatewayId : undefined;
+}
+
+function spellingLabel(spelling: DeclaredToolSpelling): string {
+  return spelling.namespace
+    ? `${spelling.namespace}/${spelling.name}`
+    : spelling.name;
+}
+
+/** The prefix an injected declaration uses, from any declaration present. */
+function appaDeclarationPrefix(found: {
+  control?: DeclaredToolSpelling;
+  notice?: DeclaredToolSpelling;
+}): string {
+  for (const declaration of [found.control, found.notice]) {
+    if (!declaration) continue;
+    const { name } = declaration;
+    for (const short of [
+      TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+    ]) {
+      if (name.endsWith(short))
+        return name.slice(0, name.length - short.length);
+    }
   }
   const branded = archestraMcpBranding.getToolName(
     TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -421,36 +475,70 @@ function appendDeclaredTool(
   family: AppaWireFamily | undefined,
   name: string,
 ): void {
-  const holder = asToolDeclaration(body);
+  const holder = asRecord(body);
   if (!holder) return;
-  // Codex can declare its existing tools only in additional_tools input items.
-  if (family === "openai:responses" && holder.tools === undefined)
-    holder.tools = [];
-  if (!Array.isArray(holder.tools)) return;
-  if (family === "openai:responses") {
-    // Responses declares function tools flat; the nested Chat Completions
-    // shape is rejected by the provider for a missing `name`.
-    holder.tools.push({
-      type: "function",
-      name,
-      parameters: { type: "object", properties: {} },
-    });
-    return;
-  }
-  if (family === "openai:chatCompletions") {
-    holder.tools.push({
-      type: "function",
-      function: {
+  const declared = asArray(holder.tools);
+  if (!declared) {
+    // Codex can declare its existing tools only in additional_tools input
+    // items; anything else has nowhere to append.
+    if (family !== "openai:responses") return;
+    const input = asArray(holder.input);
+    const additional = input?.find(
+      (item) => asRecord(item)?.type === "additional_tools",
+    );
+    const record = asRecord(additional);
+    if (!record) return;
+    const tools = asArray(record.tools) ?? [];
+    record.tools = [
+      ...tools,
+      {
+        type: "function",
         name,
         parameters: { type: "object", properties: {} },
       },
-    });
+    ];
     return;
   }
-  holder.tools.push({
-    name,
-    input_schema: { type: "object", properties: {} },
-  });
+  if (family === "openai:responses") {
+    // Responses declares function tools flat; the nested Chat Completions
+    // shape is rejected by the provider for a missing `name`.
+    holder.tools = [
+      ...declared,
+      {
+        type: "function",
+        name,
+        parameters: { type: "object", properties: {} },
+      },
+    ];
+    return;
+  }
+  if (family === "openai:chatCompletions") {
+    holder.tools = [
+      ...declared,
+      {
+        type: "function",
+        function: { name, parameters: { type: "object", properties: {} } },
+      },
+    ];
+    return;
+  }
+  holder.tools = [
+    ...declared,
+    { name, input_schema: { type: "object", properties: {} } },
+  ];
+}
+
+/** Refuses sessions where tools are deferred to a provider tool search. */
+function refuseDeferredTools(declared: readonly unknown[]): void {
+  const deferred = declared.some(
+    (tool) => asToolDeclaration(tool)?.type === "tool_search",
+  );
+  if (deferred) {
+    throw new ApiError(
+      400,
+      "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
+    );
+  }
 }
 
 /**

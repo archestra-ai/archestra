@@ -1,15 +1,18 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  guardrailsPolicyQueryKey,
+  invalidatePolicyViews,
+} from "@/lib/openappa-policy-views";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
-const queryKey = ["guardrails-policy"];
 export type GuardrailsPolicy =
   archestraApiTypes.GetGuardrailsPolicyResponses["200"];
 
 export function useGuardrailsPolicy() {
   return useQuery({
-    queryKey,
+    queryKey: guardrailsPolicyQueryKey,
     refetchInterval: 10000,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getGuardrailsPolicy();
@@ -50,8 +53,10 @@ export function useUpdateGuardrailsPolicy() {
       return data;
     },
     onSuccess: (data) => {
-      client.setQueryData(queryKey, data);
+      client.setQueryData(guardrailsPolicyQueryKey, data);
       toast.success("Policy saved. Applies to new conversations.");
     },
+    // The text declares the batteries: a save moves what they compose to.
+    onSettled: () => invalidatePolicyViews(client),
   });
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0-rc.19](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.18...platform-v1.4.0-rc.19) (2026-09-22)
+
+
+### Bug Fixes
+
+* **frontend:** scope agent Environment copy to its own runtime state ([#8121](https://github.com/archestra-ai/archestra/issues/8121)) ([2268b53](https://github.com/archestra-ai/archestra/commit/2268b536b4e96a619feb252cccaeacdfe6e3ada9))
+* keep the configured https scheme in the connection documents ([#8122](https://github.com/archestra-ai/archestra/issues/8122)) ([cece1e9](https://github.com/archestra-ai/archestra/commit/cece1e976170035d312da10c6e92dc9002c83811))
+* **openappa:** refuse attaches the alias cannot target and rework the Batteries panel ([#8123](https://github.com/archestra-ai/archestra/issues/8123)) ([3e1d5b7](https://github.com/archestra-ai/archestra/commit/3e1d5b71eb5b812ee9b542cbe040de7bd62916e1))
+
+
+### Documentation
+
+* describe batteries as policy declarations ([#8119](https://github.com/archestra-ai/archestra/issues/8119)) ([42a3000](https://github.com/archestra-ai/archestra/commit/42a3000ac87496c15941e7e986a374944bba6935))
+
 ## [1.4.0-rc.18](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.17...platform-v1.4.0-rc.18) (2026-09-22)
 
 

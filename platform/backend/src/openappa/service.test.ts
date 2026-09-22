@@ -131,6 +131,23 @@ describe("APPA feature boundary", () => {
     ).toBe(true);
   });
 
+  test("a turn that began while enabled finishes after the switch turns off", async () => {
+    // The proxy read the switch when this request began. Turning it off
+    // mid-request must not fail the turn it already governs.
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    await GuardrailsDeploymentModel.setEnabled(false);
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "first", name: "read_file", arguments: {} }],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions).toEqual([{ kind: "allow" }]);
+  });
+
   test("reports through the authenticated native session after policy checking", async () => {
     config.openappa.yellEnabled = true;
     const args = { message: "Confusing feedback", with_trajectory: true };

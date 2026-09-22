@@ -6,6 +6,7 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
@@ -58,7 +59,7 @@ describe("battery helper bridge", () => {
       remoteAddress: params.remoteAddress ?? "127.0.0.1",
       payload: params.payload ?? envelope,
     });
-  const bridgeBearer = () => `Bearer ${openappaBatteriesService.bridgeToken}`;
+  const bridgeBearer = () => `Bearer ${openappaDeclarations.bridgeToken}`;
 
   const installGithub = async (
     catalogId: string,
@@ -68,7 +69,6 @@ describe("battery helper bridge", () => {
       organizationId,
       batteryName: "github",
       catalogId,
-      enabled: true,
       credentialBindings,
     });
 
@@ -177,7 +177,7 @@ describe("battery helper bridge", () => {
     ).toBe(403);
   });
 
-  test("an unknown, disabled or helper-less install is not found", async ({
+  test("an unknown, removed or helper-less install is not found", async ({
     makeInternalMcpCatalog,
   }) => {
     expect(
@@ -188,15 +188,16 @@ describe("battery helper bridge", () => {
         })
       ).statusCode,
     ).toBe(404);
-    const disabled = await attach({
+    // A battery whose declaration is gone loses its row, and its helper URL with it.
+    const removed = await attach({
       organizationId,
       batteryName: "github",
       catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
-      enabled: false,
       credentialBindings: {},
     });
+    await OpenAppaBatteryInstallModel.replaceAll({ organizationId, rows: [] });
     expect(
-      (await consult({ installId: disabled.id, authorization: bridgeBearer() }))
+      (await consult({ installId: removed.id, authorization: bridgeBearer() }))
         .statusCode,
     ).toBe(404);
     const enabled = await installGithub(
@@ -362,7 +363,6 @@ describe("battery helper bridge", () => {
         organizationId,
         batteryName: "acme",
         catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
-        enabled: true,
         credentialBindings: { APPA_PROVIDER_ACME_TOKEN: "acme-token" },
       });
       // Warm the engine session first: the bridge budget covers one consult,
@@ -400,11 +400,33 @@ describe("battery helper bridge", () => {
   );
 });
 
-/** An install the test relies on; the unique index cannot refuse a fresh catalog. */
-async function attach(
-  params: Parameters<typeof OpenAppaBatteryInstallModel.createIfAbsent>[0],
-) {
-  const install = await OpenAppaBatteryInstallModel.createIfAbsent(params);
-  if (!install) throw new Error("the battery install already existed");
+/**
+ * A derived install row the test relies on. Rows are only ever written as a
+ * whole organization, so an attach carries the rows already there.
+ */
+async function attach(params: {
+  organizationId: string;
+  batteryName: string;
+  catalogId: string;
+  credentialBindings: Record<string, string>;
+}) {
+  const { organizationId, ...row } = params;
+  const existing = await OpenAppaBatteryInstallModel.list(organizationId);
+  const rows = await OpenAppaBatteryInstallModel.replaceAll({
+    organizationId,
+    rows: [
+      ...existing.map((install) => ({
+        batteryName: install.batteryName,
+        catalogId: install.catalogId,
+        status: install.status,
+        packageHash: install.packageHash,
+        lastError: install.lastError,
+        credentialBindings: install.credentialBindings,
+      })),
+      { ...row, status: "active" as const, packageHash: null, lastError: null },
+    ],
+  });
+  const install = rows.at(-1);
+  if (!install) throw new Error("the battery install was not written");
   return install;
 }

@@ -39,8 +39,14 @@ import openAiProxyRoutes from "./routes/openai";
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
-  // No batteries installed: the composed policy is the root alone.
+  // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
+  parseOpenappaDeclarations: vi.fn(async () => ({
+    include: [],
+    serverAliases: [],
+    credentials: [],
+    errors: [],
+  })),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],

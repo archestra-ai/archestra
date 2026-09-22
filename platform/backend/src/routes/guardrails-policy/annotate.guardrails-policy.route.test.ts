@@ -28,15 +28,19 @@ describe("catch-all tool annotations", () => {
   test("an unconfigured organization gets a valid catch-all without specific tool rules", async ({
     makeOrganization,
   }) => {
-    const policy = await guardrailsPolicyService.get(
-      (await makeOrganization()).id,
-    );
+    const organizationId = (await makeOrganization()).id;
+    const policy = await guardrailsPolicyService.get(organizationId);
     expect(policy.revision).toBe(0);
     expect(policy.content).toContain('name = "*"');
     expect(policy.content).not.toContain('name = "archestra__');
-    expect(await guardrailsPolicyService.validate(policy.content)).toEqual({
+    expect(
+      await guardrailsPolicyService.validate(policy.content, {
+        organizationId,
+      }),
+    ).toEqual({
       valid: true,
       errors: [],
+      warnings: [],
     });
   });
 

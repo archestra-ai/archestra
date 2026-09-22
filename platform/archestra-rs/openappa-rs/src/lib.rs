@@ -3,6 +3,7 @@
 
 mod adapter;
 mod batteries;
+mod declarations;
 mod policy;
 
 use appa_eventlog::{
@@ -391,6 +392,10 @@ pub async fn initialize_openappa(
     Ok(())
 }
 
+/// Validates a root document that declares no battery: [`compose_openappa_policy`]
+/// with nothing to resolve. A root whose `include` list names a battery does not
+/// validate this way — the entry resolves to nothing — so a caller holding
+/// declarations composes instead.
 #[napi(js_name = "validateOpenappaPolicy")]
 pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<String>> {
     tokio::task::spawn_blocking(move || {
@@ -400,12 +405,6 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
     })
     .await
     .map_err(error)?
-}
-
-#[napi(object)]
-pub struct ServerAliasInput {
-    pub alias: String,
-    pub targets: Vec<String>,
 }
 
 #[napi(object)]
@@ -419,6 +418,8 @@ pub struct HelperBindingInput {
 
 #[napi(object)]
 pub struct ComposeBatteryInput {
+    /// The include entry this battery answers, as the root document spells it.
+    pub entry: String,
     pub name: String,
     pub policy: String,
     pub helpers: Option<HelperBindingInput>,
@@ -427,7 +428,6 @@ pub struct ComposeBatteryInput {
 #[napi(object)]
 pub struct ComposePolicyInput {
     pub root: String,
-    pub server_aliases: Vec<ServerAliasInput>,
     pub batteries: Vec<ComposeBatteryInput>,
 }
 
@@ -435,26 +435,25 @@ pub struct ComposePolicyInput {
 pub struct ComposedPolicy {
     /// The composed document, absent when composition failed.
     pub content: Option<String>,
+    /// The composed credential table, variable → store key, absent when composition
+    /// failed.
+    pub credentials: Option<HashMap<String, String>>,
     pub errors: Vec<String>,
 }
 
-/// Composes the effective policy: the root with the host's server aliases, then the
-/// batteries under it. Deterministic in its inputs, so equal inputs give equal bytes.
+/// Composes the effective policy: the root's own declarations, with every battery its
+/// `include` list names composed under it. An entry outside `batteries` is unresolved
+/// and refuses the composition. The composed document is opened in a memory runtime,
+/// so a composition that returns content is also a successful validation.
+/// Deterministic in its inputs, so equal inputs give equal bytes.
 #[napi(js_name = "composeOpenappaPolicy")]
 pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<ComposedPolicy> {
     tokio::task::spawn_blocking(move || {
-        let aliases: Vec<policy::ServerAlias> = input
-            .server_aliases
-            .into_iter()
-            .map(|alias| policy::ServerAlias {
-                alias: alias.alias,
-                targets: alias.targets,
-            })
-            .collect();
-        let batteries: Vec<policy::ComposeBattery> = input
+        let batteries: Vec<policy::ResolvedBattery> = input
             .batteries
             .into_iter()
-            .map(|battery| policy::ComposeBattery {
+            .map(|battery| policy::ResolvedBattery {
+                entry: battery.entry,
                 name: battery.name,
                 policy: battery.policy,
                 helpers: battery.helpers.map(|helpers| policy::HelperBinding {
@@ -463,18 +462,154 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 }),
             })
             .collect();
-        std::panic::catch_unwind(|| policy::compose(&input.root, &aliases, &batteries))
+        std::panic::catch_unwind(|| policy::compose(&input.root, &batteries))
             .map(|result| match result {
-                Ok(content) => ComposedPolicy {
-                    content: Some(content),
+                Ok(composed) => ComposedPolicy {
+                    content: Some(composed.content),
+                    credentials: Some(composed.credentials.into_iter().collect()),
                     errors: Vec::new(),
                 },
                 Err(message) => ComposedPolicy {
                     content: None,
+                    credentials: None,
                     errors: vec![message],
                 },
             })
             .map_err(|_| error("OpenAPPA policy composition failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct IncludeDeclaration {
+    pub entry: String,
+    /// The 1-based line the entry is authored on.
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct ServerAliasDeclaration {
+    pub namespace: String,
+    pub servers: Vec<String>,
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct CredentialDeclaration {
+    pub variable: String,
+    pub key: String,
+    pub line: u32,
+}
+
+#[napi(object)]
+pub struct PolicyDeclarations {
+    pub include: Vec<IncludeDeclaration>,
+    pub server_aliases: Vec<ServerAliasDeclaration>,
+    pub credentials: Vec<CredentialDeclaration>,
+    /// A shape the reader could not make sense of, naming the key and its line. An
+    /// unparsable document is one error and no declarations.
+    pub errors: Vec<String>,
+}
+
+/// Reads what a root document declares about its batteries, with the line each
+/// declaration is authored on. Unknown top-level keys are the loader's concern, not
+/// this reader's.
+#[napi(js_name = "parseOpenappaDeclarations")]
+pub async fn parse_openappa_declarations(content: String) -> napi::Result<PolicyDeclarations> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| declarations::parse(&content))
+            .map(|parsed| PolicyDeclarations {
+                include: parsed
+                    .include
+                    .into_iter()
+                    .map(|include| IncludeDeclaration {
+                        entry: include.entry,
+                        line: include.line,
+                    })
+                    .collect(),
+                server_aliases: parsed
+                    .server_aliases
+                    .into_iter()
+                    .map(|alias| ServerAliasDeclaration {
+                        namespace: alias.namespace,
+                        servers: alias.servers,
+                        line: alias.line,
+                    })
+                    .collect(),
+                credentials: parsed
+                    .credentials
+                    .into_iter()
+                    .map(|credential| CredentialDeclaration {
+                        variable: credential.variable,
+                        key: credential.key,
+                        line: credential.line,
+                    })
+                    .collect(),
+                errors: parsed.errors,
+            })
+            .map_err(|_| error("OpenAPPA declaration parsing failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct PolicyEditInput {
+    /// `addInclude`, `removeInclude`, `bindServers`, `unbindServers` or
+    /// `setCredential`. The fields the kind does not take are ignored; one it takes
+    /// and the caller left out is an error.
+    pub kind: String,
+    pub entry: Option<String>,
+    pub namespace: Option<String>,
+    pub servers: Option<Vec<String>>,
+    pub namespaces: Option<Vec<String>>,
+    pub variable: Option<String>,
+    /// Absent removes the variable's binding.
+    pub key: Option<String>,
+}
+
+#[napi(object)]
+pub struct EditedPolicy {
+    /// The edited document, absent when an edit was refused.
+    pub content: Option<String>,
+    pub errors: Vec<String>,
+}
+
+/// Applies the edits to one root document in order, through the runtime's own
+/// comment-preserving editor: a document that already says what an edit asks for
+/// comes back byte for byte. The first refusal stops the sequence and returns no
+/// text.
+#[napi(js_name = "editOpenappaPolicy")]
+pub async fn edit_openappa_policy(
+    content: String,
+    edits: Vec<PolicyEditInput>,
+) -> napi::Result<EditedPolicy> {
+    tokio::task::spawn_blocking(move || {
+        let requests: Vec<declarations::EditRequest> = edits
+            .into_iter()
+            .map(|edit| declarations::EditRequest {
+                kind: edit.kind,
+                entry: edit.entry,
+                namespace: edit.namespace,
+                servers: edit.servers,
+                namespaces: edit.namespaces,
+                variable: edit.variable,
+                key: edit.key,
+            })
+            .collect();
+        std::panic::catch_unwind(|| declarations::edit(&content, requests))
+            .map(|result| match result {
+                Ok(content) => EditedPolicy {
+                    content: Some(content),
+                    errors: Vec::new(),
+                },
+                Err(message) => EditedPolicy {
+                    content: None,
+                    errors: vec![message],
+                },
+            })
+            .map_err(|_| error("OpenAPPA policy editing failed"))
     })
     .await
     .map_err(error)?

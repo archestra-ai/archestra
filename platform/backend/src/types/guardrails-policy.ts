@@ -15,6 +15,8 @@ export const UpdateGuardrailsPolicySchema =
 export const GuardrailsValidationSchema = z.object({
   valid: z.boolean(),
   errors: z.array(z.string()),
+  /** Valid, but composed degraded: a battery the document names governs nothing. */
+  warnings: z.array(z.string()),
 });
 export type GuardrailsPolicy = z.infer<typeof GuardrailsPolicySchema>;
 

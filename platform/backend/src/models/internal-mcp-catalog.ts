@@ -653,6 +653,29 @@ class InternalMcpCatalogModel {
   }
 
   /**
+   * Ids of every catalog an organization's guardrails policy can alias: its own
+   * and the global ones. A `[server_aliases]` target is a tool prefix, and these
+   * are the catalogs whose tools carry the prefixes it can name.
+   */
+  static async findIdsVisibleToOrganization(
+    organizationId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Root-catalog lookup within an organization by sanitized tool-slug prefix —
    * the rename 409 gate. Tool names embed `sanitizeServerNameForSlug(name)` and
    * tool-call routing resolves purely by name string, so a sibling catalog whose
@@ -716,16 +739,17 @@ class InternalMcpCatalogModel {
    * row provably has no live deployment, so the frozen value cannot orphan
    * anything.
    */
+  /** Answers the tool renames it made, which is where tool prefixes moved. */
   static async renameCascade(params: {
     id: string;
     newName: string;
     flagReinstallRequired: boolean;
     freezeDeploymentNames: boolean;
-  }): Promise<void> {
+  }): Promise<Array<{ oldName: string; newName: string }>> {
     const { id, newName, flagReinstallRequired, freezeDeploymentNames } =
       params;
 
-    await withDbTransaction(async (tx) => {
+    return withDbTransaction(async (tx) => {
       const [catalog] = await tx
         .select()
         .from(schema.internalMcpCatalogTable)
@@ -829,6 +853,7 @@ class InternalMcpCatalogModel {
 
       // (5) Name-string-keyed limits.
       await LimitModel.renameNameKeys({ serverNamePairs, toolNamePairs }, tx);
+      return toolNamePairs;
     });
   }
 

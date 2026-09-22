@@ -105,6 +105,7 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { declareOpenappaInstalls } from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
@@ -1068,6 +1069,12 @@ const startWebServer = async () => {
 
     await seedRequiredStartingData();
 
+    // Carry the legacy OpenAPPA battery installs into the policy text, before
+    // the runtime opens and before the periodic recompile is registered below:
+    // a recompose rewrites those rows from the text and deletes every row the
+    // text does not declare.
+    await declareOpenappaInstalls();
+
     // With basic auth disabled, a password session that predates the flag
     // would otherwise stay valid until it expired. Runs after seeding so the
     // bootstrap admin exists first (and is itself swept when it has no
@@ -1578,6 +1585,11 @@ const startWorker = async () => {
       includeMcpMetrics: true,
       includeAgentRunMetrics: false,
     });
+
+    // The periodic recompile is one of the handlers registered below, and it
+    // deletes every install row the policy text does not declare: the worker
+    // carries the legacy rows into the text first, exactly as `start` does.
+    await declareOpenappaInstalls();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

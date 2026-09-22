@@ -147,14 +147,17 @@ describe("APPA Guide feature availability", () => {
     ]);
   });
 
-  test("policy examples compile with the embedded APPA version", async () => {
+  test("policy examples compile with the embedded APPA version", async ({
+    makeOrganization,
+  }) => {
     config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
     const reference = APPA_GUIDE_SKILL.files[0].content;
     const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
       (match) => match[1],
     );
-    const [header, read, write, fallback, remote] = blocks;
-    expect(blocks).toHaveLength(5);
+    const [header, read, write, fallback, remote, declarations] = blocks;
+    expect(blocks).toHaveLength(6);
     const binding =
       '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
@@ -163,10 +166,15 @@ describe("APPA Guide feature availability", () => {
       header + write,
       header + fallback + binding,
       header + remote,
+      // Declarations are root-level keys, so they precede the first table.
+      declarations + header,
     ]) {
-      expect(await guardrailsPolicyService.validate(candidate)).toEqual({
+      expect(
+        await guardrailsPolicyService.validate(candidate, { organizationId }),
+      ).toEqual({
         valid: true,
         errors: [],
+        warnings: [],
       });
     }
   });

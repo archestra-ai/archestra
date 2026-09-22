@@ -24,9 +24,9 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`4f2b89e05baef8a74c4a4ded3b8214996de01ae5`, the merge of
-archestra-ai/OpenAPPA#384 (a host that embeds the runtime brings its own
-adapter), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
+`8dd1272f4e093856a11ddc11d653180397afdc7d`, the merge of
+archestra-ai/OpenAPPA#386 (a hosted root document declares its batteries and
+their credentials), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.

@@ -25,6 +25,8 @@ export interface BatteryPackage {
 }
 
 export interface ComposeBatteryInput {
+  /** The include entry this battery answers, as the root document spells it. */
+  entry: string
   name: string
   policy: string
   helpers?: HelperBindingInput
@@ -33,22 +35,49 @@ export interface ComposeBatteryInput {
 export interface ComposedPolicy {
   /** The composed document, absent when composition failed. */
   content?: string
+  /**
+   * The composed credential table, variable → store key, absent when composition
+   * failed.
+   */
+  credentials?: Record<string, string>
   errors: Array<string>
 }
 
 /**
- * Composes the effective policy: the root with the host's server aliases, then the
- * batteries under it. Deterministic in its inputs, so equal inputs give equal bytes.
+ * Composes the effective policy: the root's own declarations, with every battery its
+ * `include` list names composed under it. An entry outside `batteries` is unresolved
+ * and refuses the composition. The composed document is opened in a memory runtime,
+ * so a composition that returns content is also a successful validation.
+ * Deterministic in its inputs, so equal inputs give equal bytes.
  */
 export declare function composeOpenappaPolicy(input: ComposePolicyInput): Promise<ComposedPolicy>
 
 export interface ComposePolicyInput {
   root: string
-  serverAliases: Array<ServerAliasInput>
   batteries: Array<ComposeBatteryInput>
 }
 
+export interface CredentialDeclaration {
+  variable: string
+  key: string
+  line: number
+}
+
 export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
+
+export interface EditedPolicy {
+  /** The edited document, absent when an edit was refused. */
+  content?: string
+  errors: Array<string>
+}
+
+/**
+ * Applies the edits to one root document in order, through the runtime's own
+ * comment-preserving editor: a document that already says what an edit asks for
+ * comes back byte for byte. The first refusal stops the sequence and returns no
+ * text.
+ */
+export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
 /** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
 export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
@@ -61,6 +90,12 @@ export interface HelperBindingInput {
   urlBase: string
   /** The runtime variable holding the bearer token the endpoint checks. */
   tokenEnv: string
+}
+
+export interface IncludeDeclaration {
+  entry: string
+  /** The 1-based line the entry is authored on. */
+  line: number
 }
 
 export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
@@ -97,14 +132,55 @@ export interface OfferReviewOutput {
   arguments?: string
 }
 
+/**
+ * Reads what a root document declares about its batteries, with the line each
+ * declaration is authored on. Unknown top-level keys are the loader's concern, not
+ * this reader's.
+ */
+export declare function parseOpenappaDeclarations(content: string): Promise<PolicyDeclarations>
+
+export interface PolicyDeclarations {
+  include: Array<IncludeDeclaration>
+  serverAliases: Array<ServerAliasDeclaration>
+  credentials: Array<CredentialDeclaration>
+  /**
+   * A shape the reader could not make sense of, naming the key and its line. An
+   * unparsable document is one error and no declarations.
+   */
+  errors: Array<string>
+}
+
+export interface PolicyEditInput {
+  /**
+   * `addInclude`, `removeInclude`, `bindServers`, `unbindServers` or
+   * `setCredential`. The fields the kind does not take are ignored; one it takes
+   * and the caller left out is an error.
+   */
+  kind: string
+  entry?: string
+  namespace?: string
+  servers?: Array<string>
+  namespaces?: Array<string>
+  variable?: string
+  /** Absent removes the variable's binding. */
+  key?: string
+}
+
 export interface ReportingOptions {
   endpoint: string
   hostname?: string
 }
 
-export interface ServerAliasInput {
-  alias: string
-  targets: Array<string>
+export interface ServerAliasDeclaration {
+  namespace: string
+  servers: Array<string>
+  line: number
 }
 
+/**
+ * Validates a root document that declares no battery: [`compose_openappa_policy`]
+ * with nothing to resolve. A root whose `include` list names a battery does not
+ * validate this way — the entry resolves to nothing — so a caller holding
+ * declarations composes instead.
+ */
 export declare function validateOpenappaPolicy(content: string): Promise<Array<string>>

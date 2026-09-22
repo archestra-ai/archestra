@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import config from "@/config";
-import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -34,7 +34,7 @@ const native = vi.hoisted(() => {
         name: "acme",
         description: "",
         namespaces: ["acme"],
-        policy: "",
+        policy: "[policy]\nversion = 2\n",
         helpers: [],
         credentials: [],
         externals: [],
@@ -64,7 +64,12 @@ const native = vi.hoisted(() => {
     ),
   };
 });
-vi.mock("@archestra/openappa-rs", () => native);
+// The composition is the one thing these tests drive: reading and editing the
+// declarations stay the real thing, so the root text under test is real too.
+vi.mock("@archestra/openappa-rs", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  ...native,
+}));
 
 describe("recompile coalescing", () => {
   beforeEach(() => {
@@ -76,10 +81,12 @@ describe("recompile coalescing", () => {
 
   test("a caller never joins a composition that started before its write", async ({
     makeOrganization,
+    makeUser,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "Acme",
@@ -95,13 +102,7 @@ describe("recompile coalescing", () => {
     native.stallNext();
     const stale = openappaBatteriesService.recompile(organizationId);
     await vi.waitFor(() => expect(native.composed).toHaveLength(1));
-    await attach({
-      organizationId,
-      batteryName: "acme",
-      catalogId: catalog.id,
-      enabled: true,
-      credentialBindings: {},
-    });
+    await declare({ organizationId, userId });
     const afterWrite = openappaBatteriesService.recompile(organizationId);
     const alsoAfterWrite = openappaBatteriesService.recompile(organizationId);
     native.release();
@@ -121,21 +122,14 @@ describe("recompile coalescing", () => {
 
   test("a failed recompose leaves a row the next read recomposes instead of serving", async ({
     makeOrganization,
+    makeUser,
     makeInternalMcpCatalog,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
     const stored = await openappaBatteriesService.recompile(organizationId);
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      name: "Acme",
-    });
-    await attach({
-      organizationId,
-      batteryName: "acme",
-      catalogId: catalog.id,
-      enabled: true,
-      credentialBindings: {},
-    });
+    await makeInternalMcpCatalog({ organizationId, name: "Acme" });
+    await declare({ organizationId, userId });
     native.failures.next = true;
     await expect(
       openappaBatteriesService.recompile(organizationId),
@@ -145,7 +139,7 @@ describe("recompile coalescing", () => {
     ).toBeLessThan(0);
     const served =
       await openappaBatteriesService.getEffectivePolicy(organizationId);
-    expect(served.rootRevision).toBe(stored.rootRevision);
+    expect(served.rootRevision).toBe(stored.rootRevision + 1);
     expect(served.installFingerprint).not.toBe(stored.installFingerprint);
   });
 
@@ -170,27 +164,20 @@ describe("recompile coalescing", () => {
 
   test("a refused composition records the refusal and a later success clears it", async ({
     makeOrganization,
+    makeUser,
     makeInternalMcpCatalog,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeInternalMcpCatalog({ organizationId, name: "Acme" });
+    await declare({ organizationId, userId });
     const root = await guardrailsPolicyService.get(organizationId);
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      name: "Acme",
-    });
-    await attach({
-      organizationId,
-      batteryName: "acme",
-      catalogId: catalog.id,
-      enabled: true,
-      credentialBindings: {},
-    });
 
     native.refusals.next = true;
     const refused = await openappaBatteriesService.recompile(organizationId);
     expect(refused.lastError).toContain("refused");
     expect(refused.lastErrorAt).toBeInstanceOf(Date);
-    // The root alone keeps being enforced: a refused document never serves.
+    // Nothing composed before, so the root is what the runtime keeps serving.
     expect(refused.content).toBe(root.content);
     expect(
       await OpenAppaEffectivePolicyModel.find(organizationId),
@@ -220,11 +207,21 @@ async function storeUnrelatedComposition(organizationId: string) {
   });
 }
 
-/** An install the test relies on; the unique index cannot refuse a fresh catalog. */
-async function attach(
-  params: Parameters<typeof OpenAppaBatteryInstallModel.createIfAbsent>[0],
-) {
-  const install = await OpenAppaBatteryInstallModel.createIfAbsent(params);
-  if (!install) throw new Error("the battery install already existed");
-  return install;
+/**
+ * The root revision that includes the acme battery and points it at a catalog,
+ * saved straight through the model: the service would compose the submitted text
+ * to check it, and these tests count compositions.
+ */
+async function declare(params: { organizationId: string; userId: string }) {
+  const latest = await guardrailsPolicyService.get(params.organizationId);
+  const content = `include = ["batteries/acme/appa.toml"]\n\n[server_aliases]\nacme = ["acme"]\n\n${latest.content}`;
+  const saved = await GuardrailsPolicyModel.save({
+    organizationId: params.organizationId,
+    updatedBy: params.userId,
+    content,
+    contentHash: createHash("sha256").update(content).digest("hex"),
+    expectedRevision: latest.revision,
+  });
+  if (!saved) throw new Error("the policy revision was not saved");
+  return saved;
 }

@@ -54,12 +54,15 @@ export function useSetBatteryEnabled(catalogId: string) {
     async (params: { match: BatteryMatch; enabled: boolean }) => {
       const { match, enabled } = params;
       if (match.install) return setInstallEnabled(match.install.id, enabled);
+      // A battery is off by being absent from the policy, so turning an
+      // unattached one off is nothing to write.
+      if (!enabled) return null;
       const created = await archestraApiSdk.createOpenappaBatteryInstall({
-        body: { batteryName: match.battery, catalogId, enabled },
+        body: { batteryName: match.battery, catalogId },
       });
       if (getApiErrorType(created.error) !== "api_conflict_error")
         return settled(created);
-      // A tool sync attached the battery first: carry the choice over to its install.
+      // A concurrent write attached it first: carry the choice over to its row.
       const matches = settled(
         await archestraApiSdk.getOpenappaBatteryMatches({
           query: { catalogId },
@@ -116,11 +119,14 @@ export function useUploadBatteryPackage() {
   );
 }
 
+/** Packages are deleted by the bytes they hold: a name may have several versions. */
 export function useDeleteBatteryPackage() {
   return useBatteryMutation(
-    async (name: string) =>
+    async (contentHash: string) =>
       settled(
-        await archestraApiSdk.deleteOpenappaBatteryPackage({ path: { name } }),
+        await archestraApiSdk.deleteOpenappaBatteryPackage({
+          path: { contentHash },
+        }),
       ),
     () => toast.success("Battery package deleted"),
   );

@@ -272,30 +272,12 @@ export default class ResourcePermissionPolicyModel {
     teams?: { id: string; level?: "use" | "write" }[];
     users?: string[];
   }) {
-    if (params.grants === undefined) {
-      const [migrated] = await params.tx
-        .select({ scope: schema.resourcePermissionPoliciesTable.scope })
-        .from(schema.resourcePermissionPoliciesTable)
-        .where(
-          and(
-            eq(
-              schema.resourcePermissionPoliciesTable.organizationId,
-              params.organizationId,
-            ),
-            eq(
-              schema.resourcePermissionPoliciesTable.resource,
-              params.resource,
-            ),
-            eq(schema.resourcePermissionPoliciesTable.scope, "*"),
-            eq(
-              schema.resourcePermissionPoliciesTable.legacySharingMigrated,
-              true,
-            ),
-          ),
-        )
-        .limit(1);
-      if (!migrated) return;
-    }
+    // Every object gets a policy, always. This used to wait for the
+    // organization's wildcard policy to be converted, because writing one
+    // sooner would have governed the object by grants while the old sharing
+    // fields still decided access elsewhere. The conversion is unconditional
+    // now and runs before the server accepts a request, so the object that
+    // skipped its policy would simply be unreachable by its own author.
     const initialGrants: ResourcePermissionGrant[] = params.grants ?? [];
     if (params.grants === undefined) {
       if (params.visibility === "org") {

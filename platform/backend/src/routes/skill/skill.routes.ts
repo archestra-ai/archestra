@@ -1100,8 +1100,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Two checks, as on the single-skill update: the caller must be
           // allowed to modify the skill where it is now, and to place it where
           // it is going.
+          // Naming the skill matters: without an id the grant check cannot
+          // run, and an organization whose policies are converted answers no
+          // to everyone, including an administrator.
           requireSkillModifyPermission({
             checker: context.checker,
+            skillId: skill.id,
             scope: skill.scope,
             authorId: skill.authorId,
             skillTeamIds: currentTeamIds,
@@ -1110,6 +1114,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
           authorizeSkillScope({
             checker: context.checker,
+            skillId: skill.id,
             scope,
             authorId: skill.authorId,
             requestedTeamIds: teamIds,
@@ -2376,6 +2381,8 @@ async function withTeamFkErrorMapped<T>(
  */
 function authorizeSkillScope(params: {
   checker: SkillPermissionChecker;
+  /** Omitted only before the skill exists, where no grant can name it. */
+  skillId?: string;
   scope: ResourceVisibilityScope;
   authorId: string | null;
   requestedTeamIds: string[];
@@ -2384,6 +2391,7 @@ function authorizeSkillScope(params: {
 }): void {
   requireSkillModifyPermission({
     checker: params.checker,
+    skillId: params.skillId,
     scope: params.scope,
     authorId: params.authorId,
     skillTeamIds: params.requestedTeamIds,

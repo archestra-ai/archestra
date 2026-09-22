@@ -50,7 +50,7 @@ describe("POST /api/skills/bulk-visibility", () => {
     });
 
   for (const scope of ["personal", "team", "org"] as const) {
-    test(`a retired ${scope} sharing write changes no grants`, async ({
+    test(`a ${scope} sharing write moves the retired column and no grants`, async ({
       makeTeam,
       makeUser,
     }) => {
@@ -72,23 +72,21 @@ describe("POST /api/skills/bulk-visibility", () => {
         teamIds: scope === "team" ? [team.id] : [],
         userIds: scope === "personal" ? [recipient.id] : [],
       });
-      // Once a skill answers to grants, this endpoint can no longer place it:
-      // the refusal is a plain permission failure, and — the point of the test
-      // — the authoritative grant policies are left exactly as they were.
+      // The author holds the skill's policy, so the permission check passes
+      // and the write lands. What it lands on is the retired scope column and
+      // its junctions, which no access check reads any more, so the grants
+      // that do decide access are untouched. The endpoint moves a value
+      // nothing consults.
       expect(response.statusCode, response.body).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toHaveLength(2);
-      for (const failure of response.json().failed)
-        expect(failure.error).toBe(
-          "You do not have permission to modify this skill",
-        );
+      expect(response.json().failed).toEqual([]);
+      expect(response.json().succeeded).toHaveLength(2);
       expect(
         await Promise.all(
           keys.map((key) => ResourcePermissionPolicyModel.find(key)),
         ),
       ).toEqual(before);
-      expect((await SkillModel.findById(first.id))?.scope).toBe("personal");
-      expect((await SkillModel.findById(second.id))?.scope).toBe("personal");
+      expect((await SkillModel.findById(first.id))?.scope).toBe(scope);
+      expect((await SkillModel.findById(second.id))?.scope).toBe(scope);
     });
   }
 

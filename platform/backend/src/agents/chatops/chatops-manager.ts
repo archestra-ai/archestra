@@ -32,10 +32,12 @@ import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
+  ChatOpsFileDestination,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
+  PreparedChatOpsFileUpload,
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -196,18 +198,34 @@ export class ChatOpsManager {
     );
   }
 
-  /**
-   * Discover all channels in a workspace and upsert them as bindings.
-   * Uses a distributed TTL cache to avoid rediscovering too frequently.
-   * Providers implement channel listing; this method handles caching, upsert, and stale cleanup.
-   */
-  /**
-   * Post one message into a bound channel's thread, outside any incoming
-   * message flow. This is how background work started FROM a chatops
-   * conversation (a runner task) reports back when it finishes — the promise
-   * "I'll follow up once it completes" only means something if something can
-   * actually follow up.
-   */
+  prepareThreadFileUpload(
+    destination: ChatOpsFileDestination,
+  ): PreparedChatOpsFileUpload {
+    const provider = this.getConfiguredFileProvider(destination.provider);
+    if (!provider.uploadFileToThread || !provider.prepareThreadFileUpload) {
+      throw new Error(
+        `The ${destination.provider} provider does not support private file delivery`,
+      );
+    }
+    const { networkUrls } = provider.prepareThreadFileUpload(destination);
+    if (networkUrls.length === 0) {
+      throw new Error(
+        "The file provider has no authorized upload destinations",
+      );
+    }
+    return {
+      destination: {
+        organizationId: destination.organizationId,
+        provider: destination.provider,
+        channelId: destination.channelId,
+        workspaceId: destination.workspaceId,
+        isDm: destination.isDm,
+        threadId: destination.threadId,
+      },
+      networkUrls: [...new Set(networkUrls)].sort(),
+    };
+  }
+
   /**
    * Upload a file into a bound channel thread (a task's demo recording, for
    * example) so it renders natively. Throws with a caller-visible reason when
@@ -220,7 +238,7 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
-    expectedSlackDestination?: { organizationId: string; channelId: string };
+    expectedUpload?: PreparedChatOpsFileUpload;
     /** Recheck the caller's lifetime after asynchronous destination validation. */
     assertDeliveryActive?: () => void | Promise<void>;
   }): Promise<undefined | { fileId: string }> {
@@ -228,42 +246,35 @@ export class ChatOpsManager {
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
     }
-    if (
-      params.expectedSlackDestination &&
-      (binding.organizationId !==
-        params.expectedSlackDestination.organizationId ||
-        binding.channelId !== params.expectedSlackDestination.channelId ||
-        binding.provider !== "slack" ||
-        binding.isDm)
-    ) {
-      throw new Error("The authorized Slack destination changed before upload");
-    }
-    const provider: ChatOpsProvider | null =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
-    if (!provider?.isConfigured()) {
-      throw new Error(`The ${binding.provider} provider is not configured`);
-    }
-    if (
-      params.expectedSlackDestination &&
-      (!binding.workspaceId ||
-        provider.getWorkspaceId() !== binding.workspaceId)
-    ) {
-      throw new Error(
-        "The Slack connection no longer matches the authorized workspace",
-      );
-    }
+    await params.assertDeliveryActive?.();
+    const provider = this.getConfiguredFileProvider(binding.provider);
     if (!provider.uploadFileToThread) {
       throw new Error(
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
-    await params.assertDeliveryActive?.();
+    if (params.expectedUpload) {
+      const current = this.prepareThreadFileUpload({
+        ...binding,
+        threadId: params.threadId,
+      });
+      const expected = params.expectedUpload;
+      if (
+        current.destination.organizationId !==
+          expected.destination.organizationId ||
+        current.destination.provider !== expected.destination.provider ||
+        current.destination.channelId !== expected.destination.channelId ||
+        current.destination.workspaceId !== expected.destination.workspaceId ||
+        current.destination.isDm !== expected.destination.isDm ||
+        current.destination.threadId !== expected.destination.threadId ||
+        JSON.stringify(current.networkUrls) !==
+          JSON.stringify(expected.networkUrls)
+      ) {
+        throw new Error(
+          "The authorized file destination changed before upload",
+        );
+      }
+    }
     const receipt = await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,
@@ -1098,6 +1109,16 @@ export class ChatOpsManager {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  private getConfiguredFileProvider(
+    providerId: ChatOpsProviderType,
+  ): ChatOpsProvider {
+    const provider = this.getChatOpsProvider(providerId);
+    if (!provider?.isConfigured()) {
+      throw new Error(`The ${providerId} provider is not configured`);
+    }
+    return provider;
+  }
 
   /**
    * Send a welcome DM to a newly auto-provisioned user.

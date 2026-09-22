@@ -161,15 +161,14 @@ export async function sendCapturedThreadFile(params: {
     assertDeliveryActive,
   } = params;
   const binding = await ChatOpsChannelBindingModel.findById(chatOpsBindingId);
-  if (
-    !binding ||
-    binding.organizationId !== organizationId ||
-    binding.provider !== "slack" ||
-    binding.isDm ||
-    !/^\d+\.\d+$/.test(chatOpsThreadId)
-  ) {
-    return errorResult("The current Slack channel thread is unavailable.");
+  if (!binding || binding.organizationId !== organizationId) {
+    return errorResult("The current messaging-channel thread is unavailable.");
   }
+  const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
+  const preparedUpload = chatOpsManager.prepareThreadFileUpload({
+    ...binding,
+    threadId: chatOpsThreadId,
+  });
   if (
     !file.sizeBytes ||
     file.sizeBytes > CHATOPS_ATTACHMENT_LIMITS.MAX_THREAD_FILE_SIZE
@@ -199,7 +198,7 @@ export async function sendCapturedThreadFile(params: {
   ) {
     return errorResult("The agent's environment is unavailable.");
   }
-  for (const serverUrl of ["https://slack.com", "https://files.slack.com"]) {
+  for (const serverUrl of preparedUpload.networkUrls) {
     const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy({
       serverType: "remote",
       serverUrl,
@@ -208,7 +207,7 @@ export async function sendCapturedThreadFile(params: {
     });
     if (!verdict.allowed) {
       return errorResult(
-        "The agent's environment does not allow Slack file uploads. It must permit slack.com and files.slack.com.",
+        "The agent's environment does not allow this provider's file upload destinations.",
       );
     }
   }
@@ -222,7 +221,7 @@ export async function sendCapturedThreadFile(params: {
     toolName,
     toolInput: {
       ...args,
-      provider: "slack",
+      provider: binding.provider,
       channel_id: binding.channelId,
       thread_ts: chatOpsThreadId,
       mime_type: file.mimeType,
@@ -298,17 +297,13 @@ export async function sendCapturedThreadFile(params: {
   logger.info(audit, "[ChatOps] Slack file upload claimed");
   let uploaded: undefined | { fileId: string };
   try {
-    const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
     uploaded = await chatOpsManager.uploadFileToBindingThread({
       bindingId: binding.id,
       threadId: chatOpsThreadId,
       filename: file.filename,
       data: file.data,
       comment: args.comment,
-      expectedSlackDestination: {
-        organizationId,
-        channelId: binding.channelId,
-      },
+      expectedUpload: preparedUpload,
       assertDeliveryActive,
     });
   } catch {

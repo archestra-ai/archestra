@@ -27,6 +27,7 @@ import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
+  ChatOpsFileDestination,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -543,6 +544,20 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     return firstTs;
+  }
+
+  prepareThreadFileUpload(destination: ChatOpsFileDestination): {
+    networkUrls: readonly string[];
+  } {
+    if (destination.isDm || !/^\d+\.\d+$/.test(destination.threadId)) {
+      throw new Error("The current Slack channel thread is unavailable");
+    }
+    if (!destination.workspaceId || this.teamId !== destination.workspaceId) {
+      throw new Error(
+        "The Slack connection no longer matches the authorized workspace",
+      );
+    }
+    return { networkUrls: ["https://slack.com", "https://files.slack.com"] };
   }
 
   async uploadFileToThread(options: {

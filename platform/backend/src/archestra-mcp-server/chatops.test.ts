@@ -238,6 +238,45 @@ describe("post_thread_file", () => {
     expect(finalizations).toHaveLength(0);
   });
 
+  test("rejects unsupported providers and invalid Slack destinations before uploading", async () => {
+    for (const overrides of [
+      { provider: "telegram" as const },
+      { provider: "ms-teams" as const },
+      { isDm: true },
+      { workspaceId: null },
+      { workspaceId: "T_OTHER" },
+      { threadId: "not-a-slack-thread" },
+    ]) {
+      const { threadId = scope.chatOpsThreadId, ...bindingOverrides } =
+        overrides;
+      const binding = await ChatOpsChannelBindingModel.create({
+        organizationId: scope.organizationId,
+        provider: "slack",
+        channelId: `C_${randomUUID()}`,
+        workspaceId: "T_IMAGE_TEST",
+        agentId: context.agent.id,
+        ...bindingOverrides,
+      });
+      const caller = {
+        ...context,
+        chatOpsBindingId: binding.id,
+        chatOpsThreadId: threadId,
+      };
+      const file = threadFileStore.retain({
+        scope: {
+          ...scope,
+          chatOpsBindingId: binding.id,
+          chatOpsThreadId: threadId,
+        },
+        data: png,
+        filename: "source.png",
+      });
+      expect((await send(file, false, caller)).isError).toBe(true);
+    }
+    expect(uploadRequests).toHaveLength(0);
+    expect(uploads).toHaveLength(0);
+  });
+
   test("replays a receipt and suppresses concurrent sends, including run_tool", async () => {
     const image = retain();
     const results = await Promise.all([send(image), send(image, true)]);
@@ -256,6 +295,49 @@ describe("post_thread_file", () => {
     });
     expect(freshTurn.isError).toBe(false);
     expect(uploads).toHaveLength(2);
+  });
+
+  test("revalidates the authorized destination and network targets before sending", async () => {
+    const binding = await ChatOpsChannelBindingModel.findById(
+      scope.chatOpsBindingId,
+    );
+    if (!binding) throw new Error("Missing test binding");
+    const expected = chatOpsManager.prepareThreadFileUpload({
+      ...binding,
+      threadId: scope.chatOpsThreadId,
+    });
+    for (const changed of [
+      { organizationId: randomUUID() },
+      { provider: "telegram" as const },
+      { channelId: "C_OTHER" },
+      { workspaceId: "T_OTHER" },
+      { isDm: true },
+      { threadId: "1780000000.000099" },
+    ]) {
+      await expect(
+        chatOpsManager.uploadFileToBindingThread({
+          bindingId: binding.id,
+          threadId: scope.chatOpsThreadId,
+          data: png,
+          filename: "source.png",
+          expectedUpload: {
+            ...expected,
+            destination: { ...expected.destination, ...changed },
+          },
+        }),
+      ).rejects.toThrow("destination changed");
+    }
+    await expect(
+      chatOpsManager.uploadFileToBindingThread({
+        bindingId: binding.id,
+        threadId: scope.chatOpsThreadId,
+        data: png,
+        filename: "source.png",
+        expectedUpload: { ...expected, networkUrls: ["https://slack.com"] },
+      }),
+    ).rejects.toThrow("destination changed");
+    expect(uploadRequests).toHaveLength(0);
+    expect(uploads).toHaveLength(0);
   });
 
   test("uploads a non-image binary unchanged without a sandbox", async () => {

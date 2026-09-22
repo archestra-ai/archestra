@@ -1,5 +1,16 @@
 import { z } from "zod";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import type { ChatOpsChannelBinding } from "./chatops-channel-binding";
+
+export type ChatOpsFileDestination = Pick<
+  ChatOpsChannelBinding,
+  "organizationId" | "provider" | "channelId" | "workspaceId" | "isDm"
+> & { threadId: string };
+
+export interface PreparedChatOpsFileUpload {
+  destination: ChatOpsFileDestination;
+  networkUrls: readonly string[];
+}
 
 /**
  * ChatOps provider types enum
@@ -371,6 +382,15 @@ export interface ChatOpsProvider {
     data: Buffer;
     comment?: string;
   }): Promise<undefined | { fileId: string }>;
+
+  /**
+   * Validate a captured file's trusted destination and declare its upload
+   * origins without network I/O. Required in addition to uploadFileToThread
+   * for private file delivery; legacy inline uploads keep their existing path.
+   */
+  prepareThreadFileUpload?(destination: ChatOpsFileDestination): {
+    networkUrls: readonly string[];
+  };
 
   /**
    * Send a message with Approve/Decline buttons for a single approval request

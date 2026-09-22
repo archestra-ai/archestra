@@ -29,6 +29,8 @@ env:
   # merged by whoever cuts the release), so skip reviewer auto-assignment.
   # Backport PRs from the release App still receive reviewers.
   REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]", "archestra-ci[bot]"]'
+  # Must match close-external-prs.yml: PRs outside these associations get closed.
+  MAINTAINER_ASSOCIATIONS: '["OWNER","MEMBER","COLLABORATOR"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}
@@ -127,6 +129,7 @@ jobs:
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
             const exemptLogins = JSON.parse(process.env.REVIEW_REQUEST_EXEMPT_LOGINS);
+            const maintainerAssociations = JSON.parse(process.env.MAINTAINER_ASSOCIATIONS);
             const isManualBackfill = context.eventName === 'workflow_dispatch';
             const updatedSince = isManualBackfill
               ? null
@@ -183,6 +186,13 @@ jobs:
 
                   if (coreTeam.includes(pr.user.login)) {
                     console.log(`Skipping reviewer request because ${pr.user.login} is on the core team`);
+                    continue;
+                  }
+
+                  // close-external-prs.yml polls on the same cadence and closes these.
+                  // Do not ping a maintainer about a PR that is about to close.
+                  if (!maintainerAssociations.includes(pr.author_association)) {
+                    console.log(`Skipping reviewer request because PR #${pr.number} is external (${pr.author_association})`);
                     continue;
                   }
 

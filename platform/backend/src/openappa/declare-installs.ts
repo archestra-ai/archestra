@@ -7,7 +7,10 @@ import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import { INITIAL_POLICY } from "@/services/guardrails-policy";
-import type { BatteryInstall } from "@/types/openappa-batteries";
+import {
+  BATTERY_CREDENTIAL_VARIABLE,
+  type BatteryInstall,
+} from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { catalogToolPrefixes } from "./batteries";
 import {
@@ -81,21 +84,24 @@ const SAVE_ATTEMPTS = 3;
 const DECLARE_CONCURRENCY = 4;
 
 /** The variables a `[credentials]` table admits; the editor refuses the rest. */
-const CREDENTIAL_VARIABLE = /^APPA_PROVIDER_[A-Z0-9_]+$/;
-
 type Outcome = keyof DeclareInstallsSummary;
 
 /** Why a row, or one of its bindings, is not carried into the declarations. */
 type DroppedReason = "disabled" | "unresolved" | "not_helper_owner";
 
 /** The edits one organization's rows imply, and the batteries they declare. */
-type Plan = { edits: PolicyEditInput[]; batteries: string[] };
+type Plan = {
+  edits: PolicyEditInput[];
+  batteries: string[];
+  /** Rows the declarations do not carry: an organization holding one has not migrated. */
+  dropped: number;
+};
 
 async function declareOrganization(organizationId: string): Promise<Outcome> {
   const rows = await OpenAppaBatteryInstallModel.list(organizationId);
   if (rows.length === 0) return "unchanged";
   const native = await import("@archestra/openappa-rs");
-  let planned: Plan = { edits: [], batteries: [] };
+  let planned: Plan = { edits: [], batteries: [], dropped: 0 };
   for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
     const latest = await latestRevision(organizationId);
     // What a row does not carry is lost once, not once per attempt.
@@ -105,7 +111,7 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
       content: latest.content,
       log: attempt === 0,
     });
-    if (planned.edits.length === 0) return "unchanged";
+    if (planned.edits.length === 0) return settled(planned);
     const edited = await native.editOpenappaPolicy(
       latest.content,
       planned.edits,
@@ -120,7 +126,7 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
     }
     // The editor is idempotent: a text that already says what the rows say comes
     // back byte for byte, which is what makes a second run of the step a no-op.
-    if (content === latest.content) return "unchanged";
+    if (content === latest.content) return settled(planned);
     const parsed = await native.parseOpenappaDeclarations(content);
     if (parsed.errors.length > 0) {
       logger.error(
@@ -179,9 +185,13 @@ async function planFor(params: {
   /** Namespace → its alias targets, the declared ones first, in order. */
   const targets = new Map<string, string[]>();
   const owners: BatteryInstall[] = [];
+  let dropped = 0;
 
   for (const row of rows)
-    if (!row.enabled) drop({ organizationId, row, reason: "disabled", log });
+    if (!row.enabled) {
+      dropped++;
+      drop({ organizationId, row, reason: "disabled", log });
+    }
 
   // `list` orders by `createdAt` then id, so the first enabled row of a battery
   // is the helper owner the bridge chose for it.
@@ -196,6 +206,7 @@ async function planFor(params: {
     if (settled.status === "rejected") throw settled.reason;
     const resolved = settled.value;
     if (!resolved) {
+      dropped += batteryRows.length;
       for (const row of batteryRows)
         drop({ organizationId, row, reason: "unresolved", log });
       continue;
@@ -237,7 +248,13 @@ async function planFor(params: {
       ...credentialEdits({ organizationId, owners, log }),
     ],
     batteries,
+    dropped,
   };
+}
+
+/** A text that already says what its rows say has migrated only if it carries every row. */
+function settled(plan: Plan): Outcome {
+  return plan.dropped > 0 ? "failed" : "unchanged";
 }
 
 /**
@@ -262,7 +279,7 @@ function credentialEdits(params: {
     }
   const edits: PolicyEditInput[] = [];
   for (const [variable, keys] of bound) {
-    if (!CREDENTIAL_VARIABLE.test(variable)) {
+    if (!BATTERY_CREDENTIAL_VARIABLE.test(variable)) {
       if (log)
         logger.warn(
           { organizationId, variable, keys: [...keys.keys()] },

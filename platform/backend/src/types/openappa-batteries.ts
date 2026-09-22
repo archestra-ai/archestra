@@ -13,9 +13,12 @@ export const BatteryPackageFileSchema = z.strictObject({
 });
 export type BatteryPackageFile = z.infer<typeof BatteryPackageFileSchema>;
 
+/** The variables a battery may read: the runtime's provider-credential namespace. */
+export const BATTERY_CREDENTIAL_VARIABLE = /^APPA_PROVIDER_[A-Z0-9_]+$/;
+
 /** Battery credential name (an `APPA_PROVIDER_*` variable) → runtime credential definition key. */
 export const BatteryCredentialBindingsSchema = z.record(
-  z.string().regex(/^APPA_PROVIDER_[A-Z0-9_]+$/),
+  z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
   z.string().min(1).max(200),
 );
 export type BatteryCredentialBindings = z.infer<

@@ -267,6 +267,28 @@ describe("declaring the legacy battery installs", () => {
     );
   });
 
+  test("an organization whose rows nothing carries is reported failed", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ catalogId: catalog.id, name: "github_prod__list" });
+    await legacyInstall({
+      organizationId,
+      batteryName: "github",
+      catalogId: catalog.id,
+      enabled: false,
+    });
+
+    expect(await declareExistingInstalls()).toEqual({
+      declared: [],
+      unchanged: [],
+      failed: [organizationId],
+    });
+  });
+
   test("writes no second revision when it runs again", async ({
     makeOrganization,
     makeInternalMcpCatalog,

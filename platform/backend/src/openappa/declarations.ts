@@ -14,6 +14,7 @@ import type {
   BatteryPackageFile,
   BatterySource,
 } from "@/types/openappa-batteries";
+import { mapWithConcurrency } from "@/utils/concurrency";
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -145,15 +146,21 @@ class OpenAppaDeclarations {
       declared.push({ entry: include.entry, line: include.line, spelling });
     }
     // Entries resolve against the bundle and the package store independently,
-    // so they are resolved together; the document's order is what is returned.
-    const batteries = await Promise.all(
-      declared.map(({ spelling }) =>
+    // so they are resolved together, a few at a time: each is a store read and
+    // a native inspection. The document's order is what is returned.
+    const settled = await mapWithConcurrency(
+      declared,
+      RESOLVE_CONCURRENCY,
+      ({ spelling }) =>
         this.resolveSpelling({
           organizationId: params.organizationId,
           ...spelling,
         }),
-      ),
     );
+    const batteries = settled.map((result) => {
+      if (result.status === "rejected") throw result.reason;
+      return result.value;
+    });
     const entries: EntryResolution[] = declared.map(
       ({ entry, line, spelling }, index) => ({
         entry,
@@ -414,8 +421,11 @@ function classify(entry: string): EntrySpelling | null {
   return null;
 }
 
-function grantKey(grant: Grant): string {
+/** What identifies a grant across revisions: the battery and the variable, not the key. */
+export function grantKey(grant: Pick<Grant, "battery" | "variable">): string {
   return JSON.stringify([grant.battery, grant.variable]);
 }
 
 const loadNative = () => import("@archestra/openappa-rs");
+
+const RESOLVE_CONCURRENCY = 4;

@@ -45,6 +45,7 @@ import { matchBatteries } from "./battery-match";
 import {
   addedGrants,
   bundledEntry,
+  grantKey,
   helperUrlBase,
   openappaDeclarations,
   type PolicyResolution,
@@ -1118,7 +1119,7 @@ class OpenAppaBatteriesService {
             Object.entries(row.credentialBindings).map(
               ([variable, key]) =>
                 [
-                  JSON.stringify([row.batteryName, variable]),
+                  grantKey({ battery: row.batteryName, variable }),
                   { battery: row.batteryName, variable, key },
                 ] as const,
             ),

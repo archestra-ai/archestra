@@ -2465,7 +2465,12 @@ export function AgentForm({
     isClaudeCodeRuntime &&
     !usesClaudeSubscription &&
     (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
-  const needsRuntimeImage = !agent && !!runtime && !runtime.image.trim();
+  // Nothing provides a default command any more, so a new runtime or a new
+  // image names its own. A saved runtime without one keeps its image's command.
+  const needsRuntimeContainer =
+    !!runtime &&
+    (!runtime.image.trim() ||
+      (!runtime.command?.length && runtime.image !== agent?.runtime?.image));
 
   // Moving an agent out of the environment its tools belong to strands them.
   // The tools editor refuses that itself, but the Configuration step does not
@@ -3007,7 +3012,7 @@ export function AgentForm({
     if (
       !requiredSubscriptionSatisfied ||
       needsClaudeProviderKey ||
-      needsRuntimeImage ||
+      needsRuntimeContainer ||
       runtimeModelIncompatibility
     ) {
       toast.error("Complete the runtime setup before saving");
@@ -3048,7 +3053,7 @@ export function AgentForm({
     hasCompleteLlmSelection,
     requiredSubscriptionSatisfied,
     needsClaudeProviderKey,
-    needsRuntimeImage,
+    needsRuntimeContainer,
     runtimeModelIncompatibility,
     llmApiKeyId,
     channelAssignmentsDirty,
@@ -3173,7 +3178,7 @@ export function AgentForm({
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
     !needsClaudeProviderKey &&
-    !needsRuntimeImage &&
+    !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&

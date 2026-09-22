@@ -10,7 +10,7 @@ lastUpdated: "2026-09-21"
 
 Agent Runtime runs an Agent in its own Kubernetes container for coding, commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work with the same files.
 
-A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose the built-in agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
+A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
 
 Chat and Projects open an interactive terminal for Agents with a dedicated runtime. Delegation, A2A, email, and schedules start unattended tasks that return a result when finished. Ordinary messaging-channel conversations stay in the foreground unless the channel Agent delegates work.
 
@@ -46,7 +46,7 @@ The **Agents** list marks an Agent with a dedicated runtime with a **Runtime** b
 
 **Settings → Agents → Runtime Backend** shows backend health and deployment defaults. Each Agent can override its image, command, environment variables, resources, and run controls. Deployment defaults remain managed by the operator.
 
-Use an image containing the tools your task needs. A coding image might include Git and a language toolchain. Leave **Command** blank when the image supplies `archestra-runtime-agent`; otherwise set its executable and arguments.
+Use an image containing the tools your task needs. A coding image might include Git and a language toolchain. Set **Command** to your client's executable and add any arguments.
 
 In the runtime's Advanced settings, enter any container ports you want to forward, such as `3000` for a web app. Separate multiple ports with commas. Open **Connection details** on an active run to copy its port forwarding command. Leave the field empty when the runtime exposes no ports.
 
@@ -57,12 +57,6 @@ Containers use the Agent's [Environment](/docs/platform-environments), including
 Allow the repositories, package registries, and services your task needs. Archestra keeps its control plane and DNS reachable. Continuing a run applies the current policy. Changing execution namespaces requires a new run.
 
 See [Network Egress Policies](/docs/platform-environments#network-egress-policies) for policy modes and cluster support.
-
-### Built-In Archestra Agent
-
-The built-in agent loop is available through **Custom image** using the default runtime image. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
-
-Use it when you need a general coding loop without a specific third-party client's behavior. The [runtime-agent source](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) provides a working integration example.
 
 ### Model Inference And MCP Tools
 
@@ -108,7 +102,7 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 | Requirement | What To Provide |
 | --- | --- |
 | Shell and terminal | `/bin/sh` and `tmux` on `PATH`. |
-| Command | Your client executable, or `archestra-runtime-agent` when Command is blank. |
+| Command | Your client executable. |
 | Initialization | Optional `archestra-agent-init` for setup before the client starts. |
 | Output | Progress and results on stdout or stderr. Never print credentials. |
 | Completion | Exit `0` after successful work; use a non-zero exit for failure. |
@@ -130,7 +124,7 @@ You can package an SDK-based Agent loop in a custom image. Configure its model c
 
 Read the task from `ARCHESTRA_AGENT_RUNTIME_TASK` and instructions from `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. Your loop handles model turns and tool execution. Archestra handles runtime lifecycle and access to platform services.
 
-The built-in [Archestra Agent](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) uses AI SDK and the MCP SDK. Use its source as an example for configuration, local tools, and follow-up handling. For clients outside the runtime, see [External Agent Clients](#external-agent-clients).
+For clients outside the runtime, see [External Agent Clients](#external-agent-clients).
 
 ### Continuing Work
 

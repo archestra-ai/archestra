@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  AGENT_CATALOG_IMAGE_REGISTRY,
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   BM25_B_DEFAULT,
   BM25_B_MAX,
@@ -22,7 +23,8 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
-  getDefaultAgentRuntimeImage,
+  getAgentCatalogImages,
+  getAgentCatalogImageTag,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   MAX_CHUNK_SIZE_TOKENS,
@@ -2426,10 +2428,19 @@ const config = {
      */
     allowPrivileged:
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
-    /** Built-in agent loop used when an Agent enables a dedicated runtime. */
-    defaultImage:
-      process.env.ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE?.trim() ||
-      getDefaultAgentRuntimeImage(appVersion),
+    /**
+     * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
+     * them can move the registry and pin the tag; the tag otherwise follows
+     * the platform version.
+     */
+    catalogImages: getAgentCatalogImages({
+      registry:
+        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+        AGENT_CATALOG_IMAGE_REGISTRY,
+      tag:
+        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
+        getAgentCatalogImageTag(appVersion),
+    }),
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,

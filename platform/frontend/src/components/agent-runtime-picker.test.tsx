@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,7 +46,10 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
-const defaultImage = "registry.example.com/agent:1.2.3";
+const catalogImages = getAgentCatalogImages({
+  registry: "registry.example.com",
+  tag: "1.2.3",
+});
 
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
@@ -55,8 +58,8 @@ beforeEach(() => {
   vi.mocked(useFeature).mockImplementation((flag) =>
     flag === "agentRuntime"
       ? true
-      : flag === "agentRuntimeBaseImage"
-        ? defaultImage
+      : flag === "agentRuntimeCatalogImages"
+        ? catalogImages
         : undefined,
   );
 });
@@ -154,7 +157,14 @@ describe("AgentRuntimePicker", () => {
     renderPicker("chat");
     await user.click(screen.getByRole("radio", { name: "Custom image" }));
     expect(screen.getByText("Model settings content")).toBeVisible();
-    expect(screen.getByLabelText("Container image")).toHaveValue(defaultImage);
+    // Custom image starts empty: it must not quietly fall back to the
+    // platform's own runtime image.
+    expect(screen.getByLabelText("Container image")).toHaveValue("");
+    expect(
+      screen.getByRole("img", {
+        name: "Set a container image before creating the agent",
+      }),
+    ).toBeVisible();
     fireEvent.change(screen.getByLabelText("Container image"), {
       target: { value: "registry.example.com/custom:2" },
     });
@@ -237,9 +247,9 @@ function runtimeFor(
   id: Exclude<AgentRuntimeSelection, "chat">,
 ): AgentRuntimeConfig {
   return (
-    getAgentCatalogTemplates(defaultImage, "Test Platform").find(
+    getAgentCatalogTemplates(catalogImages, "Test Platform").find(
       (template) => template.id === id,
-    )?.initialValues.runtime ?? defaultAgentRuntime(defaultImage)
+    )?.initialValues.runtime ?? defaultAgentRuntime()
   );
 }
 

@@ -10,7 +10,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Workspace files | `python3` must be on `PATH` for reading, writing and transferring workspace files. Archestra sends the helper program with each request, so the image needs no copy of it. Images without `python3` run normally; only file access is refused, with a message that says so. |
 | Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
 | Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
-| Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
+| Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |

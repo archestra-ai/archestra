@@ -41134,11 +41134,12 @@ export type GetConfigResponses = {
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
-            agentRuntimeBaseImage: string;
+            agentRuntimeCatalogImages: {
+                [key: string]: string;
+            };
             agentRuntimeBackend: {
                 name: 'kubernetes';
                 available: boolean;
-                defaultImage: string;
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;

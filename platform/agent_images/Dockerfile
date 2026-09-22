@@ -1,5 +1,5 @@
-# Curated Agent catalog images. The build context is platform/ so the built-in
-# Archestra loop and every native CLI share one hardened execution base.
+# Curated Agent catalog images. The build context is platform/ so every native
+# CLI shares one hardened execution base.
 FROM node:24-bookworm-slim AS agent-base
 
 RUN apt-get update -qq \
@@ -12,18 +12,6 @@ ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
-
-WORKDIR /opt/archestra
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY patches ./patches
-COPY runtime-agent/package.json ./runtime-agent/package.json
-RUN pnpm install --filter @archestra/runtime-agent --frozen-lockfile \
-      --ignore-scripts
-COPY runtime-agent/tsconfig.json ./runtime-agent/tsconfig.json
-COPY runtime-agent/src ./runtime-agent/src
-RUN pnpm --filter @archestra/runtime-agent build \
- && chmod +x /opt/archestra/runtime-agent/dist/index.js \
- && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent
 
 COPY agent_images/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
@@ -41,8 +29,6 @@ WORKDIR /home/node/workspace
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py
-
-FROM agent-base AS agent-archestra
 
 FROM agent-base AS agent-claude-code
 USER root

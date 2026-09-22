@@ -1,7 +1,9 @@
 import {
+  AGENT_CATALOG_IMAGE_REGISTRY,
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   type archestraApiTypes,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+  getAgentCatalogImages,
 } from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
@@ -36,8 +38,10 @@ export function makeConfig(
       mcpServerAlertingEnabled: false,
       sandbox: false,
       agentRuntime: false,
-      agentRuntimeBaseImage:
-        "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
+      agentRuntimeCatalogImages: getAgentCatalogImages({
+        registry: AGENT_CATALOG_IMAGE_REGISTRY,
+        tag: "latest",
+      }),
       agentRuntimeBackend: null,
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

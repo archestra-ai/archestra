@@ -63,7 +63,7 @@ jobs:
       # image; keep release builds on the same runners as dev (see
       # deploy-dev-platform-images.yml for the reasoning).
       amd64_runner: hetzner-amd64
-      arm64_runner: hetzner-arm64
+      arm64_runner: mac-mini-1
       # supply-chain-policy: allow-latest internal release channel
       previous_image: docker.io/archestra/${{ inputs.image_name }}:latest
     secrets:

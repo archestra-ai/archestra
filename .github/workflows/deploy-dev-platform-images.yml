@@ -99,12 +99,15 @@ jobs:
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Cold PR evidence: 11m36s on 4-vCPU ubuntu-latest versus 3m26s for the
-      # complete full-image build on this 16-vCPU runner. Use it for every
-      # compile-bound amd64 Platform build, including PR/manual multi-arch runs.
-      amd64_runner: blacksmith-16vcpu-ubuntu-2404
-      # 16-vCPU ARM measured 5m11s after cache/export optimization; use the
-      # native 32-vCPU tier to keep the complete job below the five-minute budget.
-      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
+      # complete full-image build on a 16-vCPU runner. The Hetzner fleet is
+      # amd64 only, one whole 32-thread box per job, with a warm local layer
+      # cache; use it for every compile-bound amd64 Platform build. This is a
+      # trusted push/dispatch path, so no fork fallback is needed here.
+      amd64_runner: hetzner
+      # The fleet has no ARM boxes. GitHub's arm64 standard runner is free
+      # for this public repo; the build reads the registry cache, so warm
+      # runs stay short and only a cold arm64 build pays the 4-vCPU price.
+      arm64_runner: ubuntu-24.04-arm
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.
       export_cache: ${{ github.event_name != 'pull_request' }}

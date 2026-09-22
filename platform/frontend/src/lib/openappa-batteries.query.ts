@@ -59,7 +59,10 @@ export function useEffectivePolicy(enabled = true) {
 
 /** Publish a held GitHub pull under the accepting user's permissions. */
 export function useAcceptHeldPull() {
-  return useBatteryMutation(
+  return useBatteryMutation<
+    void,
+    archestraApiTypes.AcceptHeldAppaGithubPullResponses["200"]
+  >(
     async () => settled(await archestraApiSdk.acceptHeldAppaGithubPull()),
     (accepted) =>
       toast.success(
@@ -124,6 +127,19 @@ export function useSetBatteryEnabled(catalogId: string) {
         ? setInstallEnabled(install.id, enabled)
         : settled(created);
     },
+  );
+}
+
+/**
+ * Include a battery for one catalog entry. The body names the package the
+ * policy is to spell: an entry already included governs which bytes win, so
+ * the caller passes that entry's hash rather than the newest upload's.
+ */
+export function useCreateBatteryInstall() {
+  return useBatteryMutation(
+    async (body: archestraApiTypes.CreateOpenappaBatteryInstallData["body"]) =>
+      settled(await archestraApiSdk.createOpenappaBatteryInstall({ body })),
+    (battery) => toast.success(`Battery "${battery.name}" attached`),
   );
 }
 

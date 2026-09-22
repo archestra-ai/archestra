@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import {
   PermissionRecipientIdentity,
@@ -40,7 +41,7 @@ import {
 } from "@/lib/resource-permissions.query";
 
 export function AddResourceAccessDialog(props: Props) {
-  return props.open ? <AccessDialogContent {...props} /> : null;
+  return props.open ? <ResourceAccessPicker {...props} /> : null;
 }
 
 type Props = {
@@ -65,7 +66,7 @@ type Props = {
   ) => void;
 };
 
-function AccessDialogContent({
+export function ResourceAccessPicker({
   open,
   onOpenChange,
   resource,
@@ -74,7 +75,13 @@ function AccessDialogContent({
   context,
   presets,
   onAdd,
-}: Props) {
+  inline,
+}: Props & {
+  inline?: {
+    footerContainer: HTMLElement | null;
+    onDirtyChange: (dirty: boolean) => void;
+  };
+}) {
   const [category, setCategory] = useState<PermissionSubject["type"] | null>(
     null,
   );
@@ -129,6 +136,13 @@ function AccessDialogContent({
     else categoryTitleRef.current?.focus();
   }, [category]);
 
+  const dirty = selected.length > 0 || category === "organization";
+  const reportDirty = inline?.onDirtyChange;
+  useEffect(() => {
+    reportDirty?.(dirty);
+    return () => reportDirty?.(false);
+  }, [dirty, reportDirty]);
+
   function chooseCategory(next: PermissionSubject["type"]) {
     form.setValue("search", "");
     setCategory(next);
@@ -163,49 +177,48 @@ function AccessDialogContent({
     onOpenChange(false);
   }
 
-  return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={context ? `Add access · ${context}` : "Add access"}
-      description={
-        scope === undefined
-          ? "Choose who should have access when this resource is created. You can change permissions later."
-          : "Choose who to add and set what each recipient can do."
-      }
-      isDirty={selected.length > 0}
-      bodyClassName="space-y-5"
-      footer={
-        <>
-          {category === null ? (
-            <DialogCancelButton />
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              aria-label="Back to recipient types"
-              onClick={() => setCategory(null)}
-            >
-              <span>Back</span>
-            </Button>
-          )}
-          {(category !== null || selected.length > 0) && (
-            <Button
-              type="button"
-              onClick={addAccess}
-              disabled={
-                !activePreset ||
-                audience.length === 0 ||
-                recipients.isError ||
-                recipients.isLoading
-              }
-            >
-              <span>Add access</span>
-            </Button>
-          )}
-        </>
-      }
-    >
+  const footer = (
+    <>
+      {category === null ? (
+        inline ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            <span>Back</span>
+          </Button>
+        ) : (
+          <DialogCancelButton />
+        )
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          aria-label="Back to recipient types"
+          onClick={() => setCategory(null)}
+        >
+          <span>Back</span>
+        </Button>
+      )}
+      {(category !== null || selected.length > 0) && (
+        <Button
+          type="button"
+          onClick={addAccess}
+          disabled={
+            !activePreset ||
+            audience.length === 0 ||
+            recipients.isError ||
+            recipients.isLoading
+          }
+        >
+          <span>Add access</span>
+        </Button>
+      )}
+    </>
+  );
+  const body = (
+    <div className="space-y-5">
       {category === null ? (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -378,6 +391,34 @@ function AccessDialogContent({
           ))}
         </div>
       )}
+    </div>
+  );
+  if (inline) {
+    return (
+      <>
+        {body}
+        {inline.footerContainer &&
+          createPortal(
+            <div className="flex w-full justify-end gap-2">{footer}</div>,
+            inline.footerContainer,
+          )}
+      </>
+    );
+  }
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={context ? `Add access · ${context}` : "Add access"}
+      description={
+        scope === undefined
+          ? "Choose who should have access when this resource is created. You can change permissions later."
+          : "Choose who to add and set what each recipient can do."
+      }
+      isDirty={dirty}
+      footer={footer}
+    >
+      {body}
     </StandardDialog>
   );
 }

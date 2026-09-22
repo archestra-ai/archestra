@@ -139,12 +139,40 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
     }),
   );
   await user.click(screen.getByRole("option", { name: /Can edit/ }));
-  await user.click(within(dialog).getByRole("button", { name: "Done" }));
+  const footer = within(dialog).getByRole("group", {
+    name: "Permission actions",
+  });
+  expect(footer).toHaveTextContent("Unsaved changes");
+  expect(
+    within(footer).getByRole("button", { name: "Save permissions" }),
+  ).toBeEnabled();
+  expect(
+    within(footer).getByRole("button", { name: "Discard changes" }),
+  ).toBeEnabled();
+  expect(
+    within(dialog).queryByRole("button", { name: "Done" }),
+  ).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Close" }));
   expect(
     screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
   ).toHaveTextContent("Discard unsaved changes");
   expect(writes).toHaveLength(0);
   await user.click(screen.getByRole("button", { name: "Keep editing" }));
+  await user.click(
+    within(footer).getByRole("button", { name: "Discard changes" }),
+  );
+  expect(within(footer).getByRole("button", { name: "Done" })).toBeEnabled();
+  expect(
+    within(footer).queryByRole("button", { name: "Save permissions" }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can view");
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  );
+  await user.click(screen.getByRole("option", { name: /Can edit/ }));
+
   await user.click(
     within(dialog).getByRole("button", { name: "Save permissions" }),
   );
@@ -205,4 +233,64 @@ it("opens a linked read-only permissions dialog for the current resource and pre
   expect(navigation.replace).toHaveBeenCalledWith("/agents?search=example", {
     scroll: false,
   });
+});
+
+it("adds recipients in the same dialog and preserves the permission draft when going back", async () => {
+  server.use(
+    http.get(`${origin}/api/resource-permissions/agent/:scope/subjects`, () =>
+      HttpResponse.json([
+        { subject: { type: "team", id: "design" }, name: "Design" },
+      ]),
+    ),
+  );
+  renderActions();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("menuitem", { name: "Permissions" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Permissions for all agents",
+  });
+  await user.click(
+    await within(dialog).findByRole("combobox", {
+      name: "Permission for Support",
+    }),
+  );
+  await user.click(screen.getByRole("option", { name: /Can edit/ }));
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
+  expect(screen.getByRole("dialog", { name: "Add access" })).toBe(dialog);
+  await user.click(within(dialog).getByRole("button", { name: "Back" }));
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can edit");
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  await user.click(within(dialog).getByRole("button", { name: /^Teams/ }));
+  await user.click(within(dialog).getByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Design/ }));
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
+  expect(
+    screen.getByRole("dialog", { name: "Permissions for all agents" }),
+  ).toBe(dialog);
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can edit");
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Design" }),
+  ).toHaveTextContent("Can view");
+  const footer = within(dialog).getByRole("group", {
+    name: "Permission actions",
+  });
+  expect(
+    within(footer).getByRole("button", { name: "Save permissions" }),
+  ).toBeEnabled();
+  await user.click(
+    within(footer).getByRole("button", { name: "Discard changes" }),
+  );
+  expect(
+    within(dialog).queryByRole("combobox", { name: "Permission for Design" }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can view");
 });

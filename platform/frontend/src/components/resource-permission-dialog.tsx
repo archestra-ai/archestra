@@ -2,9 +2,7 @@
 "use client";
 
 import type { ScopedResource } from "@archestra/shared";
-import { useState } from "react";
-import { ResourcePermissions } from "@/components/resource-permissions";
-import { StandardDialog } from "@/components/standard-dialog";
+import { ResourcePermissionsDialog } from "@/components/resource-permissions";
 
 export function ResourcePermissionDialog({
   resource,
@@ -19,22 +17,13 @@ export function ResourcePermissionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [isDirty, setIsDirty] = useState(false);
   return (
-    <StandardDialog
+    <ResourcePermissionsDialog
+      resource={resource}
+      scope={scope}
+      title={title}
       open={open}
       onOpenChange={onOpenChange}
-      title={title}
-      size="large"
-      isDirty={isDirty}
-    >
-      {open && (
-        <ResourcePermissions
-          resource={resource}
-          scope={scope}
-          onDirtyChange={setIsDirty}
-        />
-      )}
-    </StandardDialog>
+    />
   );
 }

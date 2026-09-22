@@ -457,8 +457,9 @@ function CredentialRow({
   const [kept, setKept] = useState(false);
   const credentials = useRuntimeCredentials(bindable);
   const others = credential.readers.filter((reader) => reader !== batteryName);
-  const options =
-    credentials.data?.filter((entry) => entry.allowOrganization) ?? [];
+  // The helper runs for the whole organization, so a personal-only
+  // credential cannot be bound; it is listed as such rather than hidden.
+  const options = credentials.data ?? [];
   // The policy can name a key the list does not offer — deleted, closed to
   // the organization, or a list this reader never loads — and the binding
   // still has to read as what it is.
@@ -507,10 +508,16 @@ function CredentialRow({
               </SelectItem>
             )}
             {options.map((entry) => (
-              <SelectItem key={entry.key} value={entry.key}>
-                {entry.organizationConfigured
-                  ? entry.name
-                  : `${entry.name} (no organization value)`}
+              <SelectItem
+                key={entry.key}
+                value={entry.key}
+                disabled={!entry.allowOrganization}
+              >
+                {!entry.allowOrganization
+                  ? `${entry.name} (personal only)`
+                  : entry.organizationConfigured
+                    ? entry.name
+                    : `${entry.name} (no organization value)`}
               </SelectItem>
             ))}
           </SelectContent>

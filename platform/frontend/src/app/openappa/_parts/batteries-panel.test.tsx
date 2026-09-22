@@ -672,6 +672,38 @@ test("a package no entry names can be deleted", async () => {
   ).toBeEnabled();
 });
 
+test("a personal-only credential is listed but cannot be bound", async () => {
+  server.use(
+    http.get(`${baseUrl}/api/credentials`, () =>
+      HttpResponse.json([
+        credential,
+        {
+          ...credential,
+          id: "cred-2",
+          key: "gh-real",
+          name: "GH real",
+          allowPersonal: true,
+          allowOrganization: false,
+          personalConfigured: true,
+          organizationConfigured: false,
+        },
+      ]),
+    ),
+  );
+  show();
+  const row = await entry("github");
+  const user = userEvent.setup();
+  await user.click(
+    within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
+  );
+  expect(
+    await screen.findByRole("option", { name: "GH real (personal only)" }),
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(
+    screen.getByRole("option", { name: "GitHub token" }),
+  ).not.toHaveAttribute("aria-disabled", "true");
+});
+
 test("a binding to a key the credential list no longer offers still reads as that key", async () => {
   declarations = emptyDeclarations({
     batteries: [

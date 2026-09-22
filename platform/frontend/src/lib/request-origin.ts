@@ -1,3 +1,5 @@
+import { parsePublicHostSchemes, resolvePublicScheme } from "@archestra/shared";
+
 /** Public document links must use the ingress origin, not Next.js's bind address. */
 export function requestOrigin(request: Request): string {
   const fallback = applyConfiguredScheme(new URL(request.url).origin);
@@ -45,35 +47,17 @@ function applyConfiguredScheme(origin: string): string {
   } catch {
     return origin;
   }
-  if (parsed.protocol !== "http:") return origin;
 
-  if (configuredHttpsHosts().has(parsed.host.toLowerCase())) {
-    parsed.protocol = "https:";
-    return parsed.origin;
-  }
-  return origin;
-}
-
-function configuredHttpsHosts(): Set<string> {
-  const hosts = new Set<string>();
-  // Read at call time: the server reads these at request time, and tests set
-  // them per case.
-  const configured = [
-    process.env.ARCHESTRA_FRONTEND_URL,
-    process.env.ARCHESTRA_API_BASE_URL,
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL,
-  ];
-  for (const entry of configured) {
-    for (const raw of entry?.split(",") ?? []) {
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-      try {
-        const url = new URL(trimmed);
-        if (url.protocol === "https:") hosts.add(url.host.toLowerCase());
-      } catch {
-        // ignore a malformed entry
-      }
-    }
-  }
-  return hosts;
+  parsed.protocol = `${resolvePublicScheme({
+    host: parsed.host,
+    observedScheme: parsed.protocol.replace(/:$/, ""),
+    // Read at call time: the server reads these at request time, and tests set
+    // them per case.
+    schemes: parsePublicHostSchemes([
+      process.env.ARCHESTRA_FRONTEND_URL,
+      process.env.ARCHESTRA_API_BASE_URL,
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL,
+    ]),
+  })}:`;
+  return parsed.origin;
 }

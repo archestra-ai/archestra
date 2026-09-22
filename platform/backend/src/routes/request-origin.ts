@@ -1,5 +1,5 @@
+import { resolvePublicScheme, servesHttps } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
-
 import {
   getMCPGatewayOauthAllowedPublicHosts,
   getMCPGatewayOauthPublicHostSchemes,
@@ -100,17 +100,18 @@ const ALLOWLIST_FIX_HINT =
  * http OAuth origin is the symptom operators report.
  */
 function resolveOrigin(host: string, protocol: string): string {
-  if (protocol !== "http") return `${protocol}://${host}`;
-
   const configured = getMCPGatewayOauthPublicHostSchemes();
-  const configuredScheme = configured.get(host.toLowerCase());
-  if (configuredScheme === "https") return `https://${host}`;
+  const scheme = resolvePublicScheme({
+    host,
+    observedScheme: protocol,
+    schemes: configured,
+  });
+  if (scheme !== "http") return `${scheme}://${host}`;
 
   // Only a deployment that published at least one https origin can be serving
   // this over TLS, so an all-http configuration (local development, plain-http
   // installs) is left alone rather than warned about on every OAuth challenge.
-  const servesHttps = Array.from(configured.values()).includes("https");
-  if (!configuredScheme && servesHttps) {
+  if (!configured.has(host.toLowerCase()) && servesHttps(configured)) {
     logger.warn(
       {
         host,

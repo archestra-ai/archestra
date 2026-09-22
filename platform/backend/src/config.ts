@@ -30,6 +30,7 @@ import {
   MCP_ORCHESTRATOR_DEFAULTS,
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
+  parsePublicHostSchemes,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -1321,44 +1322,22 @@ export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> =>
  * route cannot set that header at all). The scheme recorded here is the
  * operator's own declaration, never caller-supplied input.
  */
-export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> => {
-  const hosts = new Map<string, string>();
+export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> =>
+  parsePublicHostSchemes([
+    frontendBaseUrl,
 
-  const addHostFromUrl = (raw: string) => {
-    try {
-      const url = new URL(raw);
-      const host = url.host.toLowerCase();
-      const scheme = url.protocol.replace(/:$/, "");
-      // https wins when the same host is configured under both schemes.
-      if (scheme === "https" || !hosts.has(host)) hosts.set(host, scheme);
-    } catch {
-      // ignore malformed values
-    }
-  };
+    // In local development the Next.js dev server always serves on
+    // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
+    // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
+    // client connecting to the local origin can still complete the gateway
+    // OAuth handshake without extra config. Never enabled in production, where
+    // the allowlist must stay restricted to the configured public hosts.
+    ...(isDevelopment
+      ? ["http://localhost:3000", "http://127.0.0.1:3000"]
+      : []),
 
-  addHostFromUrl(frontendBaseUrl);
-
-  // In local development the Next.js dev server always serves on
-  // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
-  // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
-  // client connecting to the local origin can still complete the gateway OAuth
-  // handshake without extra config. Never enabled in production, where the
-  // allowlist must stay restricted to the configured public hosts.
-  if (isDevelopment) {
-    addHostFromUrl("http://localhost:3000");
-    addHostFromUrl("http://127.0.0.1:3000");
-  }
-
-  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
-  if (externalUrls) {
-    for (const url of externalUrls.split(",")) {
-      const trimmed = url.trim();
-      if (trimmed) addHostFromUrl(trimmed);
-    }
-  }
-
-  return hosts;
-};
+    process.env.ARCHESTRA_API_BASE_URL,
+  ]);
 
 /**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.

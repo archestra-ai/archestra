@@ -184,6 +184,28 @@ function show() {
 const entry = (name: string) =>
   screen.findByRole("listitem", { name: `${name} battery` });
 
+test("an empty policy leads to MCP Registry", async () => {
+  declarations = emptyDeclarations();
+  show();
+  expect(
+    await screen.findByRole("link", { name: "Browse MCP servers" }),
+  ).toHaveAttribute("href", "/mcp/registry");
+});
+
+test("asks before discarding a battery upload draft", async () => {
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: /upload package/i }),
+  );
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "acme" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(screen.getByLabelText("Name")).toHaveValue("acme");
+});
+
 test("an included entry shows the status the declaration gives it", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],

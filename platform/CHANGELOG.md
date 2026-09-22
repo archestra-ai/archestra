@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.4.0-rc.18](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.17...platform-v1.4.0-rc.18) (2026-09-22)
+
+
+### Features
+
+* **frontend:** batteries panel, wizard toggle and editor annotations on the policy's declarations ([#8114](https://github.com/archestra-ai/archestra/issues/8114)) ([6b8bc3c](https://github.com/archestra-ai/archestra/commit/6b8bc3cfe25577c0aaaeba6788d9691e53aed6d3))
+* **openappa:** add HITL authorization for chat and proxy clients ([#8028](https://github.com/archestra-ai/archestra/issues/8028)) ([23d2e3f](https://github.com/archestra-ai/archestra/commit/23d2e3f112cdcae3a65a2fe09f7f4653ebc3833b))
+* **openappa:** declare batteries in the organization's policy text ([#8112](https://github.com/archestra-ai/archestra/issues/8112)) ([a3b6d63](https://github.com/archestra-ai/archestra/commit/a3b6d632c026b9c1cd9dc588c283aad0b0830ad2))
+
+
+### Bug Fixes
+
+* explain model provider connection timeouts ([#8105](https://github.com/archestra-ai/archestra/issues/8105)) ([9a90cf6](https://github.com/archestra-ai/archestra/commit/9a90cf601d577d6736951039e18822111375bd71))
+* **frontend:** keep the Instructions hint on one line ([#8116](https://github.com/archestra-ai/archestra/issues/8116)) ([bd093f2](https://github.com/archestra-ai/archestra/commit/bd093f29c93e99ac5116f69e91f65f988ef528b6))
+* keep the configured https scheme in MCP gateway OAuth metadata ([#8117](https://github.com/archestra-ai/archestra/issues/8117)) ([e813fbe](https://github.com/archestra-ai/archestra/commit/e813fbe5452017451da4667821f8d48873213c24))
+* **openappa:** improve first-run and draft safety UX ([#8115](https://github.com/archestra-ai/archestra/issues/8115)) ([02aa870](https://github.com/archestra-ai/archestra/commit/02aa870069f8aa1a48e02074355df68b946c16f9))
+
+
+### Miscellaneous Chores
+
+* use stable latest images for Agent Runtime templates ([#8109](https://github.com/archestra-ai/archestra/issues/8109)) ([5942757](https://github.com/archestra-ai/archestra/commit/59427572ddf17904e5012baa9df789c566a375b6))
+
 ## [1.4.0-rc.17](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.16...platform-v1.4.0-rc.17) (2026-09-21)
 
 

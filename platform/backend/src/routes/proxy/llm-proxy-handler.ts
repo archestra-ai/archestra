@@ -34,7 +34,6 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -132,6 +131,7 @@ import {
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
   type ToolCallBlock,
+  type ToolInvocation,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
@@ -156,10 +156,10 @@ import {
   calculateInteractionCosts,
   canonicalizeCommonMessageToolNames,
   handleError,
-  normalizeToolCallsForPolicy,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
+  toolCallsForPolicyEvaluation,
   toSpanUserInfo,
   toToolCallBlock,
   withProviderToolCallIds,
@@ -196,8 +196,13 @@ export interface LLMProxyContext<TRequest> {
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
-  /** Maps client-decorated gateway tool names to the platform's own names. */
-  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
+  /** Which tool each client-presented name is, and whether the gateway attested it. */
+  toolIdentity: utils.gatewayToolNames.GatewayToolIdentity;
+  /**
+   * The org's default invocation policy for a discovered tool, which rules a
+   * call whose identity no tool row carries (see `toolCallsForPolicyEvaluation`).
+   */
+  discoveredToolInvocationDefault: ToolInvocation.ToolInvocationPolicyAction;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
@@ -634,6 +639,10 @@ export async function handleLLMProxy<
     request.headers,
   );
 
+  // Removes gateway tool attestation markers from the body in place
+  // before adapters, logs, provider requests, or database records access them.
+  const gatewayToolDeclarations =
+    utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   // When OpenAPPA is enabled, the proxy issues stamped tool-call IDs.
   // The proxy restores original provider IDs before inspection, and uses
   // the stamps to trace source session lineage.
@@ -1100,6 +1109,24 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
+    // Internal Chat requests arrive over loopback without platform credentials.
+    // Requests that include organization credentials and name a Chat source
+    // are treated as client requests. Their sessions scope to the credential
+    // rather than a conversation.
+    const isInternalChat =
+      isAppaChatSource(source) &&
+      isLoopbackRequest(request) &&
+      !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
+
+    // Identifies which declared tools the platform gateway served after
+    // verifying attestations with the organization key.
+    const toolIdentity =
+      await utils.gatewayToolNames.resolveGatewayToolIdentity({
+        organizationId: resolvedAgent.organizationId,
+        declarations: gatewayToolDeclarations,
+        internalChat: isInternalChat,
+      });
+
     // Resolve the agent's organization once, to apply its configured default
     // discovered-tool guardrails to any tools persisted below.
     const organization = await OrganizationModel.getById(
@@ -1121,6 +1148,15 @@ export async function handleLLMProxy<
             toolName: t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
+            // With attestations, tools served by the gateway are identified
+            // regardless of client labels. Unattested lookalikes are discovered
+            // as foreign tools.
+            ...(toolIdentity.mode === "attested" && !isInternalChat
+              ? {
+                  servedByGateway:
+                    toolIdentity.attestationOf(t.name) !== undefined,
+                }
+              : {}),
           })),
           resolvedAgentId,
           organization
@@ -1261,23 +1297,10 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
-    // Map client-decorated gateway tool names (e.g. Claude Code's
-    // `mcp__<gateway>__archestra__run_tool`) back to the platform's own names
-    // before any guardrail evaluation — trusted-data and tool-invocation
-    // lookups otherwise miss the real tool behind the decoration and the
-    // dispatch wrapper.
-    // The request's own tool list is passed in so the canonicalizer can learn
-    // the client's label for the gateway when it is not a name this
-    // organization knows — the label is free text typed at `claude mcp add`
-    // time, and a label nothing matches used to leave every decorated name
-    // untouched.
-    const canonicalizeToolName =
-      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer({
-        organizationId: resolvedAgent.organizationId,
-        declaredToolNames: utils.collectDeclaredToolNames(
-          requestAdapter.getOriginalRequest(),
-        ),
-      });
+    // Map client-decorated gateway tool names (such as Claude Code
+    // `mcp__<label>__archestra__run_tool`) to platform canonical names
+    // before guardrail evaluation. This ensures policy lookups evaluate
+    // the actual tool instead of the client prefix or dispatch wrapper.
     const effectiveConsiderContextUntrusted =
       resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
     const initialUntrustedReason = resolvedAgent.considerContextUntrusted
@@ -1321,13 +1344,14 @@ export async function handleLLMProxy<
         // just before analysis so signed transport footers reach no model.
         messages: canonicalizeCommonMessageToolNames(
           requestAdapter.getMessages(),
-          canonicalizeToolName,
+          toolIdentity.canonicalize,
         ),
         agentId: resolvedAgentId,
         organizationId: resolvedAgent.organizationId,
         userId,
         considerContextUntrusted: effectiveConsiderContextUntrusted,
         policyContext: { teamIds, externalAgentId },
+        looseRunToolDispatch: toolIdentity.looseRunToolDispatch,
         onDualLlmStart: (info) => {
           writeDualLlmKeepAlive?.();
           publishDualLlmEvent?.({ kind: "start", ...info });
@@ -1370,16 +1394,6 @@ export async function handleLLMProxy<
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
-    // Chat's own requests arrive over loopback and bring no credential of
-    // this platform that proves nobody: the stored provider secret goes to
-    // the provider. A request that brings an organization credential and
-    // names a Chat source is a client's, whatever its headers say, and is
-    // governed as one: its session scoped to that credential, never bound
-    // to a conversation.
-    const isInternalChat =
-      isAppaChatSource(source) &&
-      isLoopbackRequest(request) &&
-      !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
@@ -1608,13 +1622,13 @@ export async function handleLLMProxy<
           body,
           interactionType: provider.interactionType,
           session: appaIdentity,
-          canonicalizeToolName,
+          identity: toolIdentity,
           trustBarePlatformTools: isInternalChat,
         });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
-          canonicalizeToolName,
+          toolIdentity,
           request: appaRequest,
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
@@ -1854,34 +1868,16 @@ export async function handleLLMProxy<
     // keeps them reachable, which is what the caller asked for by declaring
     // them, and leaves the client — which is the one executing them — as the
     // boundary that governs them.
+    //
+    // Includes Codex namespace members resolved within their declared namespaces.
+    // Evaluated after removing the OpenAPPA notice tool from the request body.
     const enabledToolNames = new Set(
       utils
         .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
-        .map(canonicalizeToolName),
+        .map(({ name, namespace }) =>
+          toolIdentity.canonicalize(name, namespace),
+        ),
     );
-
-    // A gateway tool name the client decorated with an alias the platform does
-    // not recognize survives canonicalization untouched, and every guardrail
-    // downstream then reasons about the decoration rather than the tool. That
-    // degradation is otherwise completely silent, which is why it can sit in a
-    // deployment indefinitely — so say so once per request, naming the tool, so
-    // it is greppable and the gateway can be re-registered under the name the
-    // connection-setup script derives (`toMcpClientServerName`).
-    const unrecognizedGatewayToolNames = [...enabledToolNames].filter(
-      (toolName) =>
-        archestraMcpBranding.isLikelyToolName(toolName) &&
-        !archestraMcpBranding.isToolName(toolName),
-    );
-    if (unrecognizedGatewayToolNames.length > 0) {
-      logger.warn(
-        {
-          agentId: resolvedAgent.id,
-          organizationId: resolvedAgent.organizationId,
-          toolNames: unrecognizedGatewayToolNames,
-        },
-        `[${providerName}Proxy] Gateway tool names carry a client alias this organization does not know; guardrails cannot resolve the tools behind them`,
-      );
-    }
 
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};
@@ -1901,7 +1897,10 @@ export async function handleLLMProxy<
       actualModel,
       contextIsTrusted,
       enabledToolNames,
-      canonicalizeToolName,
+      toolIdentity,
+      discoveredToolInvocationDefault:
+        organization?.defaultDiscoveredToolInvocationPolicy ??
+        "block_when_context_is_untrusted",
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
@@ -2045,7 +2044,8 @@ async function handleStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    canonicalizeToolName,
+    toolIdentity,
+    discoveredToolInvocationDefault,
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
@@ -2406,7 +2406,7 @@ async function handleStreaming<
         supported: streamAdapter.formatToolCallsSSE !== undefined,
         toolCalls,
         enabledToolNames,
-        canonicalizeToolName,
+        toolIdentity,
         providerName,
       });
 
@@ -2424,7 +2424,11 @@ async function handleStreaming<
         rewrittenToolCalls ?? toolCalls,
         async (calls) =>
           await utils.toolInvocation.evaluatePolicies(
-            normalizeToolCallsForPolicy([...calls], canonicalizeToolName),
+            toolCallsForPolicyEvaluation({
+              toolCalls: [...calls],
+              toolIdentity,
+              discoveredToolDefault: discoveredToolInvocationDefault,
+            }),
             agent.id,
             {
               teamIds: teamIds ?? [],
@@ -2753,7 +2757,8 @@ async function handleNonStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    canonicalizeToolName,
+    toolIdentity,
+    discoveredToolInvocationDefault,
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
@@ -2980,7 +2985,7 @@ async function handleNonStreaming<
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
       toolCalls: emittedToolCalls,
       enabledToolNames,
-      canonicalizeToolName,
+      toolIdentity,
       providerName,
     });
 
@@ -2990,7 +2995,11 @@ async function handleNonStreaming<
       rewrittenToolCalls ?? emittedToolCalls,
       async (calls) =>
         await utils.toolInvocation.evaluatePolicies(
-          normalizeToolCallsForPolicy([...calls], canonicalizeToolName),
+          toolCallsForPolicyEvaluation({
+            toolCalls: [...calls],
+            toolIdentity,
+            discoveredToolDefault: discoveredToolInvocationDefault,
+          }),
           agent.id,
           {
             teamIds: teamIds ?? [],
@@ -3348,6 +3357,9 @@ async function holdProxyPluginHostedToolCalls(
     notices: outcome.notices.map((notice) => ({
       id: notice.id,
       name: notice.name,
+      // The notice call includes the namespace where the tool was declared.
+      // Codex requires this namespace to avoid an "unsupported call" error.
+      ...(notice.namespace ? { namespace: notice.namespace } : {}),
       arguments:
         typeof notice.arguments === "string"
           ? notice.arguments
@@ -3374,7 +3386,10 @@ function planDispatchRewrites(params: {
   supported: boolean;
   toolCalls: AccumulatedToolCall[];
   enabledToolNames: Set<string>;
-  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
+  toolIdentity: Pick<
+    utils.gatewayToolNames.GatewayToolIdentity,
+    "canonicalize" | "spellingOf" | "attestationOf"
+  >;
   providerName: string;
 }): AccumulatedToolCall[] | null {
   if (!params.supported) {
@@ -3384,7 +3399,7 @@ function planDispatchRewrites(params: {
   const rewritten = planDispatchModeToolCallRewrites({
     toolCalls: params.toolCalls,
     enabledToolNames: params.enabledToolNames,
-    canonicalizeToolName: params.canonicalizeToolName,
+    toolIdentity: params.toolIdentity,
   });
 
   if (rewritten) {

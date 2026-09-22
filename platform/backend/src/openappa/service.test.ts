@@ -16,6 +16,7 @@ import {
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
+  loadOfferReview,
   processProxyResults,
   sessionFromHeaders,
 } from "./service";
@@ -23,7 +24,7 @@ import {
 function signedRemedyArgs(offerId = "offer-1") {
   const jws = signOfferClaims(
     unsignedOfferClaims({
-      organizationId: "org",
+      organizationId,
       sessionId: "conversation",
       callerId: "user:alice",
       offerId,
@@ -37,6 +38,7 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadOfferReview: vi.fn(),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
   parseOpenappaDeclarations: vi.fn(async () => ({
@@ -52,38 +54,32 @@ const native = vi.hoisted(() => ({
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
+// The effective-policy store foreign-keys the organization: a real row must
+// exist for every organization_id the sessions below name.
+let organizationId = "org";
+
 const session = {
-  organization_id: "org",
+  get organization_id() {
+    return organizationId;
+  },
   caller_id: "user:alice",
   session_id: "conversation",
 };
-const canonicalize = (name: string) => name;
 
-beforeEach(async () => {
-  // The composed policy row references the organization, so the session's
-  // placeholder organization must exist.
-  await database.default
-    .insert(database.schema.organizationsTable)
-    .values({
-      id: session.organization_id,
-      name: "org",
-      slug: "org",
-      createdAt: new Date(),
-      theme: "cosmic-night",
-      customFont: "lato",
-    })
-    .onConflictDoNothing();
+beforeEach(async ({ makeOrganization }) => {
+  organizationId = (await makeOrganization()).id;
   config.llmProxy.plugins = ["appa"];
   config.openappa = {
-    ...config.openappa,
     enabled: true,
     yellEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
+    postgresMaxConnections: 10,
   };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );
+  native.loadOfferReview.mockReset();
   native.executeRemedyByOffer.mockReset();
   native.executeRemedyByOffer.mockResolvedValue(
     JSON.stringify({
@@ -121,7 +117,7 @@ describe("APPA feature boundary", () => {
         { message: "Confusing feedback", with_trajectory: true },
         {
           agent: { id: "agent", name: "Assistant" },
-          organizationId: "org",
+          organizationId,
           userId: "alice",
           sessionId: "conversation",
           currentToolCallId: "report",
@@ -156,7 +152,7 @@ describe("APPA feature boundary", () => {
     const result = await executeArchestraTool("archestra__yell", args, {
       agent: { id: "agent", name: "Assistant" },
       agentId: "agent",
-      organizationId: "org",
+      organizationId,
       userId: "alice",
       sessionId: "conversation",
       currentToolCallId: "report",
@@ -194,7 +190,7 @@ describe("APPA feature boundary", () => {
     await expect(
       executeArchestraTool("archestra__yell", args, {
         agent: { id: "agent", name: "Assistant" },
-        organizationId: "org",
+        organizationId,
         userId: "alice",
       }),
     ).rejects.toThrow("requires an authenticated session");
@@ -204,7 +200,7 @@ describe("APPA feature boundary", () => {
       executeArchestraTool("archestra__yell", args, {
         agent: { id: child, name: "Child" },
         delegationChain: `${parent}:${child}`,
-        organizationId: "org",
+        organizationId,
         sessionId: "conversation",
         currentToolCallId: "report",
       }),
@@ -487,7 +483,7 @@ describe("APPA feature boundary", () => {
       ],
       {
         canonicalize: (name) => name,
-        controlToolName: "mcp__archestra__execute_remedy_plan",
+        control: { name: "mcp__archestra__execute_remedy_plan" },
       },
     );
 
@@ -582,6 +578,48 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases the control call only in the namespace its tool was declared in", async () => {
+    // Codex calls a namespace member by its bare name. A server beside the
+    // gateway can declare a member spelled like the control tool; its call is
+    // an ordinary tool call, evaluated like any other.
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Not declared" }),
+    );
+    const call = (id: string, namespace: string) => ({
+      id,
+      name: "archestra__execute_remedy_plan",
+      namespace,
+      arguments: { offer_id: "offer-1" },
+    });
+    const decisions = await evaluateToolCalls(
+      session,
+      [call("ours", "mcp__gw"), call("foreign", "mcp__evil")],
+      {
+        canonicalize: (name, namespace) =>
+          namespace ? `${namespace}__${name}` : name,
+        control: {
+          name: "archestra__execute_remedy_plan",
+          namespace: "mcp__gw",
+        },
+      },
+    );
+
+    expect(decisions).toEqual([
+      { kind: "control" },
+      { kind: "deny", feedback: "Not declared", offers: [] },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:foreign",
+        tool: "mcp__evil__archestra__execute_remedy_plan",
+        spelling: "archestra__execute_remedy_plan",
+      }),
+    ]);
+  });
+
   test.each([
     "agent__research",
     "skill__research",
@@ -644,7 +682,7 @@ describe("APPA feature boundary", () => {
           agent: { id: child, name: "Child" },
           agentId: child,
           delegationChain: `${parent}:${child}`,
-          organizationId: "org",
+          organizationId,
           sessionId: "conversation",
           currentToolCallId: "child-remedy",
         },
@@ -658,7 +696,11 @@ describe("APPA feature boundary", () => {
     // An explicit plugin entry must not override the feature flag.
     config.llmProxy.plugins = ["appa"];
     await expect(
-      processProxyResults({ session, results: [], canonicalize }),
+      processProxyResults({
+        session,
+        results: [],
+        canonicalize: (name) => name,
+      }),
     ).rejects.toThrow("OpenAPPA could not safely complete");
     expect(native.initializeOpenappa).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
@@ -679,7 +721,7 @@ describe("APPA feature boundary", () => {
         { offer_id: "offer" },
         {
           agent: { id: "agent", name: "Assistant" },
-          organizationId: "org",
+          organizationId,
           userId: "alice",
           sessionId: "conversation",
         },
@@ -710,7 +752,7 @@ describe("APPA feature boundary", () => {
       {
         agent: { id: "agent", name: "Assistant" },
         agentId: "agent",
-        organizationId: "org",
+        organizationId,
         userId: "alice",
         sessionId: "conversation",
         currentToolCallId: "remedy-call-1",
@@ -725,7 +767,7 @@ describe("APPA feature boundary", () => {
   test("the public notice tool preserves custom-call validation across encoded arguments", async () => {
     const context = {
       agent: { id: "agent", name: "Gateway" },
-      organizationId: "org",
+      organizationId,
     };
     const notice = {
       tool: "exec",
@@ -774,7 +816,7 @@ describe("APPA feature boundary", () => {
       {
         agent: { id: "agent", name: "Assistant" },
         agentId: "agent",
-        organizationId: "org",
+        organizationId,
         userId: "alice",
         sessionId: "conversation",
         currentToolCallId: "remedy-call-2",
@@ -789,7 +831,7 @@ describe("APPA feature boundary", () => {
   test("admits the first client result without Chat execution reporting", async () => {
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       controlToolName: "mcp__gateway__archestra__execute_remedy_plan",
       results: [
         {
@@ -846,7 +888,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "remedy",
@@ -890,7 +932,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "remedy",
@@ -926,7 +968,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "denied_call",
@@ -956,7 +998,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "blocked_call",
@@ -993,7 +1035,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "mcp_call",
@@ -1035,7 +1077,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "deliver_call",
@@ -1073,7 +1115,7 @@ describe("APPA feature boundary", () => {
     await expect(
       processProxyResults({
         session,
-        canonicalize,
+        canonicalize: (name: string) => name,
         results: [
           {
             id: "future_call",
@@ -1088,7 +1130,7 @@ describe("APPA feature boundary", () => {
   test("keeps a structured cancellation indeterminate when processing proxy results", async () => {
     await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       results: [
         {
           id: "cancelled",
@@ -1124,7 +1166,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
-      canonicalize,
+      canonicalize: (name: string) => name,
       trustedChat,
       results: [{ id: "seed", name: "render_app", content, isError: false }],
     });
@@ -1154,7 +1196,11 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "first",
     expectedRevision: 0,
   });
-  await processProxyResults({ session: scoped, results: [], canonicalize });
+  await processProxyResults({
+    session: scoped,
+    results: [],
+    canonicalize: (name) => name,
+  });
   expect(native.dispatchHook).toHaveBeenLastCalledWith(
     expect.any(String),
     content,
@@ -1167,7 +1213,11 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "second",
     expectedRevision: 1,
   });
-  await processProxyResults({ session: scoped, results: [], canonicalize });
+  await processProxyResults({
+    session: scoped,
+    results: [],
+    canonicalize: (name) => name,
+  });
   expect(native.dispatchHook).toHaveBeenLastCalledWith(
     expect.any(String),
     updated,
@@ -1190,7 +1240,7 @@ describe("remedy by offer", () => {
     );
 
     const result = await executeRemedyByOffer({
-      organizationId: "org",
+      organizationId,
       sessionId: "session",
       toolCallId: "client-remedy-1",
       originalArguments: '{"offer_id":"offer-1"}',
@@ -1202,7 +1252,7 @@ describe("remedy by offer", () => {
       result: { content: [{ type: "text", text: "[appa] Authorized." }] },
     });
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
-      organization_id: "org",
+      organization_id: organizationId,
       session_id: "session",
       execution_mode: "tracked",
       tool_call_id: "client-remedy-1",
@@ -1225,7 +1275,7 @@ describe("remedy by offer", () => {
 
     await expect(
       executeRemedyByOffer({
-        organizationId: "org",
+        organizationId,
         sessionId: "session",
         toolCallId: "client-remedy-2",
         originalArguments: '{"offer_id":"offer"}',
@@ -1252,7 +1302,7 @@ describe("remedy by offer", () => {
 
     await expect(
       executeRemedyByOffer({
-        organizationId: "org",
+        organizationId,
         sessionId: "session",
         toolCallId: "client-remedy-malformed",
         originalArguments: '{"offer_id":"offer"}',
@@ -1268,7 +1318,7 @@ describe("remedy by offer", () => {
     expect(
       sessionFromHeaders({
         headers: { "x-appa-session-id": long },
-        organizationId: "org",
+        organizationId,
         callerId: "user:alice",
         scope: "user:alice",
       }),
@@ -1277,7 +1327,7 @@ describe("remedy by offer", () => {
     expect(
       sessionFromHeaders({
         headers: {},
-        organizationId: "org",
+        organizationId,
         fallbackSessionId: "user:alice@agent",
         scope: "user:alice",
       })?.session_id,
@@ -1287,13 +1337,13 @@ describe("remedy by offer", () => {
     expect(() =>
       sessionFromHeaders({
         headers: { "x-appa-session-id": "bad\u0007session" },
-        organizationId: "org",
+        organizationId,
       }),
     ).toThrow();
     expect(() =>
       sessionFromHeaders({
         headers: { "x-appa-session-id": "\u{1F600}".repeat(300) },
-        organizationId: "org",
+        organizationId,
       }),
     ).toThrow();
   });
@@ -1313,7 +1363,7 @@ describe("remedy by offer", () => {
     );
 
     const answer = await executeRemedyByOffer({
-      organizationId: "org",
+      organizationId,
       sessionId: "session",
       toolCallId: "client-remedy-3",
       originalArguments: '{"offer_id":"offer-9"}',
@@ -1339,7 +1389,7 @@ describe("remedy by offer", () => {
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Chat" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
         userId: "alice",
         conversationId: "conv-1",
         currentToolCallId: "remedy-4",
@@ -1371,7 +1421,7 @@ describe("remedy by offer", () => {
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Chat" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
         userId: "alice",
         conversationId: "conv-1",
         currentToolCallId: "remedy-5",
@@ -1392,7 +1442,7 @@ describe("remedy by offer", () => {
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Gateway" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
         currentToolCallId: "remedy-1",
       },
     );
@@ -1427,12 +1477,12 @@ describe("remedy by offer", () => {
           name: "Gateway",
         },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
       },
     );
     expect(result).toMatchObject({ isError: true });
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
-      organization_id: "org",
+      organization_id: organizationId,
       session_id: "conversation",
       owner_caller_id: "user:alice",
       execution_mode: "untracked",
@@ -1461,7 +1511,7 @@ describe("remedy by offer", () => {
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Gateway" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
         userId: "alice",
         currentToolCallId: "remedy-3",
       },
@@ -1470,7 +1520,7 @@ describe("remedy by offer", () => {
     // The proxy names a person as `user:<id>` when it mints the offer; the
     // gateway names the same person the same way when it spends it.
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
-      organization_id: "org",
+      organization_id: organizationId,
       session_id: "conversation",
       caller_id: "user:alice",
       owner_caller_id: "user:alice",
@@ -1483,6 +1533,57 @@ describe("remedy by offer", () => {
         supports_delegation: false,
       },
     });
+  });
+
+  // The host half of the precheck contract: the review's call comes back from
+  // the binding, and the refusal goes to it in place of a ruling. The binding
+  // half (recorded verbatim, offer left unspent) is pinned in smoke.test.cjs.
+  test("records a precheck refusal instead of asking about a reviewed call that could not run", async () => {
+    native.loadOfferReview.mockResolvedValueOnce({
+      offerId: "offer-1",
+      text: "Approve this todo?",
+      sessionId: "conversation",
+      tool: "archestra__todo_write",
+      arguments: '{"todos":[{"content":"qa-hitl","status":"pending"}]}',
+    });
+    const elicit = vi.fn();
+
+    await executeArchestraTool(
+      "archestra__execute_remedy_plan",
+      signedRemedyArgs(),
+      {
+        agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Chat" },
+        organizationId,
+        userId: "alice",
+        currentToolCallId: "remedy-6",
+        elicitation: { elicit },
+      },
+    );
+
+    expect(native.loadOfferReview).toHaveBeenCalledWith(
+      organizationId,
+      "conversation",
+      "offer-1",
+    );
+    expect(elicit).not.toHaveBeenCalled();
+    const input = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);
+    expect(input).not.toHaveProperty("ruling");
+    expect(input.precheck_refusal).toMatch(
+      /^\[appa\] Not submitted for approval: this call to archestra__todo_write could not run even if approved\.\n.*todos\[0\]\.id/,
+    );
+  });
+
+  test("fails closed with 503 when the offer review cannot be loaded", async () => {
+    native.loadOfferReview.mockRejectedValueOnce(
+      new Error("host SQL requires a leased connection"),
+    );
+    await expect(
+      loadOfferReview({
+        organizationId,
+        sessionId: "conversation",
+        offerId: "offer-1",
+      }),
+    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
   });
 
   test("keeps the informational plan out of what the runtime executes", async () => {
@@ -1514,7 +1615,7 @@ describe("remedy by offer", () => {
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Gateway" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
-        organizationId: "org",
+        organizationId,
         currentToolCallId: "remedy-2",
       },
     );
@@ -1523,7 +1624,7 @@ describe("remedy by offer", () => {
     ]);
 
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
-      organization_id: "org",
+      organization_id: organizationId,
       session_id: "conversation",
       owner_caller_id: "user:alice",
       execution_mode: "tracked",
@@ -1582,7 +1683,7 @@ describe("remedy by offer", () => {
         },
         {
           agent: { id: "agent", name: "Gateway" },
-          organizationId: "org",
+          organizationId,
           userId: "alice",
         },
       ),
@@ -1616,7 +1717,7 @@ describe("remedy by offer", () => {
       },
       {
         agent: { id: "agent", name: "Gateway" },
-        organizationId: "org",
+        organizationId,
         userId: "alice",
       },
     );

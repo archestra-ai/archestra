@@ -106,6 +106,59 @@ describe("CompactToolGroup", () => {
     expect(container).toHaveTextContent('"name": "appa-guide"');
   });
 
+  it.each([
+    {
+      ruling: "deny",
+      text: "[appa] Denied: the human reviewer refused this call to archestra__todo_write.",
+      circle: "execute remedy plan (denied by you)",
+      header: "Denied by you",
+    },
+    {
+      ruling: "approve",
+      text: "[appa] Authorized. Call the archestra__todo_write tool again with exactly these arguments: {}",
+      circle: "execute remedy plan (approved by you)",
+      header: "Approved by you",
+    },
+  ])("says the viewer's own ruling on a reviewed remedy ($ruling)", ({
+    ruling,
+    text,
+    circle,
+    header,
+  }) => {
+    const remedyToolName = "archestra__execute_remedy_plan";
+    vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "remedy-1",
+              toolName: remedyToolName,
+              part: {
+                type: `tool-${remedyToolName}`,
+                state: "output-available",
+                toolCallId: "call-remedy",
+                input: { offer_id: "offer-1", plan: "Human review" },
+                output: {
+                  content: text,
+                  _meta: { archestraHumanRuling: ruling },
+                },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: circle }));
+
+    expect(screen.getByText(header)).toBeInTheDocument();
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+  });
+
   it("renders a compact Skill marker for a load_skill activation (no path)", () => {
     mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
 

@@ -5,11 +5,13 @@
 import { randomUUID } from "node:crypto";
 import {
   extractMcpExecutedAs,
+  extractMcpHumanRuling,
   extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   LOCKED_CHAT_REDACTED_MARKER,
   MCP_EXECUTED_AS_META_KEY,
+  MCP_HUMAN_RULING_META_KEY,
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
@@ -373,10 +375,10 @@ export function buildMcpGatewayTool(params: {
             // policy never flips the session (and the divider never shows)
             // under progressive tool loading. Built-in targets auto-trust
             // inside the evaluation, so only real external data attaches one.
-            const dispatch = resolveRunToolDispatch(
-              mcpTool.name,
-              toolArguments,
-            );
+            const dispatch = resolveRunToolDispatch({
+              toolName: mcpTool.name,
+              args: toolArguments,
+            });
             if (dispatch.kind === "target") {
               toolResult = await attachDispatchUnsafeContextBoundary({
                 toolResult,
@@ -757,11 +759,16 @@ export async function buildArchestraToolOutput(params: {
 
   if (targetToolName === toolName) {
     // Not a run_tool dispatch — no UI resource to attach, but the card still
-    // names who the platform ran this for. ask_user keeps the user's recorded
-    // answer, which its card reads back after a reload.
+    // names who the platform ran this for and, on a reviewed remedy, the
+    // ruling the viewer gave. ask_user keeps the user's recorded answer,
+    // which its card reads back after a reload.
+    const humanRuling = extractMcpHumanRuling(response);
     return {
       content: text,
-      _meta: executedAsMeta,
+      _meta: {
+        ...executedAsMeta,
+        ...(humanRuling ? { [MCP_HUMAN_RULING_META_KEY]: humanRuling } : {}),
+      },
       ...(targetShortName === TOOL_ASK_USER_SHORT_NAME &&
       isRecord(response.structuredContent)
         ? { structuredContent: response.structuredContent }
@@ -886,7 +893,7 @@ function collectKbChunksForVerification(params: {
   const { ctx, toolName, toolArguments, response } = params;
   if (!ctx.kbChunksCollector || response.isError) return;
 
-  const dispatch = resolveRunToolDispatch(toolName, toolArguments);
+  const dispatch = resolveRunToolDispatch({ toolName, args: toolArguments });
   // An unresolved run_tool dispatch cannot name its target; run_tool itself
   // rejects such calls, so there is nothing to capture.
   if (dispatch.kind === "unresolved") return;
@@ -1909,7 +1916,7 @@ function resolveApprovalPolicyTarget(
   toolName: string,
   args: unknown,
 ): { toolName: string; toolInput: Record<string, unknown> } {
-  return resolveRunToolTarget(toolName, args);
+  return resolveRunToolTarget({ toolName, args });
 }
 
 function reportToolMetrics(params: {

@@ -20,6 +20,7 @@ import {
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { validateVirtualApiKey } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { removeForwardedAttestationMarkers } from "./proxy-prehandler";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -331,6 +332,7 @@ function createGeminiProxyPreHandler() {
     }
 
     await resolveGeminiVirtualQueryKey(request);
+    await removeForwardedAttestationMarkers(request);
   };
 }
 

@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import { McpElicitationCard } from "./mcp-elicitation-card";
-import type { ChatMcpElicitationRequest } from "./mcp-elicitation-fields";
+import {
+  type ChatMcpElicitationRequest,
+  isChoiceElicitationRequest,
+} from "./mcp-elicitation-fields";
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -60,6 +63,33 @@ describe("McpElicitationCard", () => {
       id: "q-1",
       action: "accept",
       content: { choice: "Accept for this session" },
+    });
+  });
+
+  it("renders an OpenAPPA review inline with formatted arguments and submits approval", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const request = openappaReview();
+
+    expect(isChoiceElicitationRequest(request)).toBe(true);
+    render(<McpElicitationCard requests={[request]} onRespond={onRespond} />);
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
+    expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
+    expect(card).not.toHaveTextContent(/\\"/);
+
+    const submit = screen.getByRole("button", { name: "Submit" });
+    expect(submit).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "approve" }));
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "review-1",
+      action: "accept",
+      content: { action: "approve" },
     });
   });
 
@@ -1014,6 +1044,40 @@ function singleChoice(params: {
         choice: { type: "string", title: "Choice", enum: params.options },
       },
       required: ["choice"],
+    },
+  };
+}
+
+function openappaReview(): ChatMcpElicitationRequest {
+  return {
+    id: "review-1",
+    conversationId: CONVERSATION_ID,
+    toolName: "archestra__execute_remedy_plan",
+    message: [
+      'APPA asks you to rule as the authority "operator".',
+      "",
+      "Tool: archestra__todo_write",
+      "Arguments:",
+      '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
+      "",
+      "What this ruling would cover:",
+      "  attention: signoff",
+    ].join("\n"),
+    mode: "form",
+    kind: "openappa_review",
+    reviewedTool: "archestra__todo_write",
+    reviewedArguments:
+      '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
+    requestedSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          title: "Action",
+          enum: ["approve", "deny"],
+        },
+      },
+      required: ["action"],
     },
   };
 }

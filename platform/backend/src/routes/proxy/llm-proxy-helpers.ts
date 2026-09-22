@@ -11,6 +11,7 @@ import {
   type BillingMode,
   type InteractionSource,
   isAlwaysExposedArchestraToolShortName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -23,6 +24,7 @@ import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
   resolveRunToolTargetName,
+  resolveUnprovenRunToolTarget,
 } from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
@@ -41,6 +43,7 @@ import type {
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
+  ToolInvocation,
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
@@ -51,7 +54,12 @@ import {
 } from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
-import type { ToolNameCanonicalizer } from "./utils/gateway-tool-names";
+import {
+  FOREIGN_TOOL_NAME_PREFIX,
+  type GatewayToolIdentity,
+  type ToolNameCanonicalizer,
+  type ToolNameResolution,
+} from "./utils/gateway-tool-names";
 import type { SessionSource } from "./utils/headers/session-id";
 
 /**
@@ -86,15 +94,20 @@ export function shouldForwardAnthropicBeta(
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
- * - Names are canonicalized (client-decorated gateway names stripped back to
- *   the platform's own names), and a `run_tool` dispatch is unwrapped to the
- *   target tool it names — policies must evaluate the tool that will actually
- *   execute, not the opaque wrapper (whose name matches no `tools` row and
- *   would fail open as "no policies found").
+ * - Names and namespaces are canonicalized to platform tool names.
+ * - `run_tool` dispatches unwrap to their target tools so policies evaluate
+ *   the executing tool rather than the wrapper.
+ *
+ * `resolution` defaults to wire names with strict dispatch matching.
+ * Wrappers recognized by compatibility scanning are also unwrapped.
  */
 export function normalizeToolCallsForPolicy(
-  toolCalls: Array<{ name: string; arguments: string | object }>,
-  canonicalizeToolName: ToolNameCanonicalizer = (name) => name,
+  toolCalls: Array<{
+    name: string;
+    arguments: string | object;
+    namespace?: string;
+  }>,
+  resolution: ToolNameResolution = SPELLED_RESOLUTION,
 ): Array<{
   toolCallName: string;
   toolCallArgs: string;
@@ -116,10 +129,15 @@ export function normalizeToolCallsForPolicy(
       argsString = JSON.stringify(tc.arguments);
     }
 
-    const canonicalName = canonicalizeToolName(tc.name);
-    const dispatch = resolveRunToolDispatch(canonicalName, args);
+    const canonicalName = resolution.canonicalize(tc.name, tc.namespace);
+    const dispatchCall = {
+      toolName: canonicalName,
+      args,
+      loose: resolution.looseRunToolDispatch,
+    };
+    const dispatch = resolveRunToolDispatch(dispatchCall);
     if (dispatch.kind === "target") {
-      const { toolInput } = resolveRunToolTarget(canonicalName, args);
+      const { toolInput } = resolveRunToolTarget(dispatchCall);
       return {
         toolCallName: dispatch.toolName,
         toolCallArgs: JSON.stringify(toolInput),
@@ -127,6 +145,66 @@ export function normalizeToolCallsForPolicy(
       };
     }
     return { toolCallName: canonicalName, toolCallArgs: argsString };
+  });
+}
+
+/**
+ * Prepares tool calls for policy evaluation.
+ * Returns normalized entries from {@link normalizeToolCallsForPolicy}
+ * and adds enforcement rules for declarations without verified attestations:
+ *
+ * - Calls using unverified `run_tool` wrappers evaluate both the wrapper
+ *   and the named target tool. If a gateway is registered under multiple labels
+ *   or uses replayed markers, evaluating the target prevents blocked actions
+ *   from running unreviewed (see {@link resolveUnprovenRunToolTarget}).
+ * - Names without persisted tool rows (such as foreign lookalikes or unattested
+ *   Codex namespace members) use the organization default policy for discovered tools.
+ */
+export function toolCallsForPolicyEvaluation(params: {
+  toolCalls: Array<{
+    name: string;
+    arguments: string | object;
+    namespace?: string;
+  }>;
+  toolIdentity: ToolNameResolution & Pick<GatewayToolIdentity, "attestationOf">;
+  /** The org's default invocation policy for a discovered tool. */
+  discoveredToolDefault: ToolInvocation.ToolInvocationPolicyAction;
+}): Array<{
+  toolCallName: string;
+  toolCallArgs: string;
+  isRunToolDispatchTarget?: boolean;
+  actionWithoutToolRow?: ToolInvocation.ToolInvocationPolicyAction;
+}> {
+  const { toolCalls, toolIdentity } = params;
+  const normalized = normalizeToolCallsForPolicy(toolCalls, toolIdentity);
+  return toolCalls.flatMap((toolCall, index) => {
+    const entry = normalized[index];
+    if (
+      entry.isRunToolDispatchTarget ||
+      toolIdentity.attestationOf(toolCall.name, toolCall.namespace)
+    ) {
+      return [entry];
+    }
+    const ruled =
+      toolCall.namespace ||
+      entry.toolCallName.startsWith(FOREIGN_TOOL_NAME_PREFIX)
+        ? { ...entry, actionWithoutToolRow: params.discoveredToolDefault }
+        : entry;
+    const target = resolveUnprovenRunToolTarget({
+      toolName: spelledName(toolCall.name, toolCall.namespace),
+      args: JSON.parse(entry.toolCallArgs),
+    });
+    if (!target) {
+      return [ruled];
+    }
+    return [
+      ruled,
+      {
+        toolCallName: target.toolName,
+        toolCallArgs: JSON.stringify(target.toolInput),
+        isRunToolDispatchTarget: true,
+      },
+    ];
   });
 }
 
@@ -167,6 +245,15 @@ export interface AccumulatedToolCall {
  * unwraps the rewritten call straight back to the same target, so it is policy-
  * evaluated exactly like a `run_tool` dispatch the model had written itself.
  *
+ * Rewritten calls target `run_tool` using the declared client spelling and namespace.
+ * `toolIdentity` defaults to wire spellings.
+ *
+ * When a model copies client prefixes onto names returned by `search_tools`
+ * (such as `mcp__<label>__<tool>`, `<label>_<tool>`, or Codex namespaces),
+ * `run_tool` expects the undecorated target name. Verified `run_tool` attestations
+ * identify the client prefix so the proxy can remove it before dispatch.
+ * Policy evaluation continues to evaluate the target tool identity.
+ *
  * Returns `null` when there is nothing to do — no dispatch pair in the tool
  * list (`full` exposure, where a missing tool really is disabled), or every
  * call already directly callable — so callers keep the untouched raw events.
@@ -177,19 +264,30 @@ export interface AccumulatedToolCall {
 export function planDispatchModeToolCallRewrites(params: {
   toolCalls: AccumulatedToolCall[];
   enabledToolNames: Set<string>;
-  canonicalizeToolName?: ToolNameCanonicalizer;
+  toolIdentity?: Pick<
+    GatewayToolIdentity,
+    "canonicalize" | "spellingOf" | "attestationOf"
+  >;
 }): AccumulatedToolCall[] | null {
   const { toolCalls, enabledToolNames } = params;
-  const canonicalizeToolName = params.canonicalizeToolName ?? ((name) => name);
+  const toolIdentity = params.toolIdentity ?? SPELLED_IDENTITY;
 
   const runToolName = findRunToolName(enabledToolNames);
-  if (!runToolName || !hasSearchToolsName(enabledToolNames)) {
+  const runTool = runToolName ? toolIdentity.spellingOf(runToolName) : null;
+  if (!runTool || !hasSearchToolsName(enabledToolNames)) {
     return null;
   }
+  const decoration = provenDecoration(
+    runTool,
+    toolIdentity.attestationOf(runTool.name, runTool.namespace),
+  );
 
   let rewroteAny = false;
   const rewritten = toolCalls.map((toolCall) => {
-    const canonicalName = canonicalizeToolName(toolCall.name);
+    const canonicalName = toolIdentity.canonicalize(
+      toolCall.name,
+      toolCall.namespace,
+    );
 
     // Already callable, or one of the built-ins that stay top-level in every
     // exposure mode (`run_tool` itself included — a genuine dispatch must not
@@ -201,13 +299,22 @@ export function planDispatchModeToolCallRewrites(params: {
       return toolCall;
     }
 
+    // Undeclared tools receive a foreign prefix only when matching built-in names.
+    // This prefix prevents lookalikes from assuming platform identities.
+    // The target name passes to `run_tool` without client decoration.
+    const targetName =
+      undecorated(toolCall, decoration) ??
+      (canonicalName.startsWith(FOREIGN_TOOL_NAME_PREFIX)
+        ? spelledName(toolCall.name, toolCall.namespace)
+        : canonicalName);
+
     // `run_tool` expands a bare Archestra short name to its built-in
     // (`read_file` -> `archestra__read_file`). A third-party tool whose
     // unprefixed name collides with one of those would therefore come out of
     // the wrapper as a DIFFERENT tool than the model asked for — and a
     // policy-bypassed built-in at that. Refusing such a call is the safe
     // outcome; silently retargeting it is not.
-    if (resolveRunToolTargetName(canonicalName) !== canonicalName) {
+    if (resolveRunToolTargetName(targetName) !== targetName) {
       return toolCall;
     }
 
@@ -232,9 +339,10 @@ export function planDispatchModeToolCallRewrites(params: {
     rewroteAny = true;
     return {
       id: toolCall.id,
-      name: runToolName,
+      name: runTool.name,
+      ...(runTool.namespace ? { namespace: runTool.namespace } : {}),
       arguments: JSON.stringify({
-        tool_name: canonicalName,
+        tool_name: targetName,
         tool_args: toolArgs,
       }),
     };
@@ -303,7 +411,7 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
  */
 export function canonicalizeCommonMessageToolNames(
   messages: CommonMessage[],
-  canonicalizeToolName: ToolNameCanonicalizer,
+  canonicalize: ToolNameCanonicalizer,
 ): CommonMessage[] {
   return messages.map((message) => {
     if (!message.toolCalls || message.toolCalls.length === 0) {
@@ -313,7 +421,7 @@ export function canonicalizeCommonMessageToolNames(
       ...message,
       toolCalls: message.toolCalls.map((toolCall) => ({
         ...toolCall,
-        name: canonicalizeToolName(toolCall.name),
+        name: canonicalize(toolCall.name, toolCall.namespace),
       })),
     };
   });
@@ -1034,4 +1142,65 @@ function estimateRequestInputTokens(params: {
   );
   const toolTokens = estimateToolTokens(params.tools, tokenizer);
   return messageTokens + toolTokens;
+}
+
+/** A name as one string: a namespaced name joins as `<namespace>__<name>`. */
+function spelledName(name: string, namespace?: string): string {
+  return namespace
+    ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
+    : name;
+}
+
+/** Names taken as spelled, with the strict `run_tool` match. */
+const SPELLED_RESOLUTION: ToolNameResolution = {
+  canonicalize: spelledName,
+  looseRunToolDispatch: false,
+};
+
+/** Names taken as spelled, each its own declared spelling, none attested. */
+const SPELLED_IDENTITY: Pick<
+  GatewayToolIdentity,
+  "canonicalize" | "spellingOf" | "attestationOf"
+> = {
+  canonicalize: spelledName,
+  spellingOf: (name) => ({ name }),
+  attestationOf: () => undefined,
+};
+
+/**
+ * How the client decorates the gateway's tools, read off an attested
+ * declaration of one of them: the namespace it sits in, and what its wire name
+ * puts in front of the name the gateway advertised (Claude Code's
+ * `mcp__<label>__`, OpenCode's `<label>_`, nothing for Codex or a bare name).
+ */
+function provenDecoration(
+  spelling: { name: string; namespace?: string },
+  attestation: { advertisedName: string } | undefined,
+): { namespace?: string; prefix: string } | undefined {
+  if (!attestation || !spelling.name.endsWith(attestation.advertisedName)) {
+    return undefined;
+  }
+  return {
+    namespace: spelling.namespace,
+    prefix: spelling.name.slice(
+      0,
+      spelling.name.length - attestation.advertisedName.length,
+    ),
+  };
+}
+
+/** A call's name less `decoration`, when the call carries exactly it. */
+function undecorated(
+  toolCall: { name: string; namespace?: string },
+  decoration: { namespace?: string; prefix: string } | undefined,
+): string | undefined {
+  if (
+    !decoration ||
+    toolCall.namespace !== decoration.namespace ||
+    !toolCall.name.startsWith(decoration.prefix) ||
+    toolCall.name.length === decoration.prefix.length
+  ) {
+    return undefined;
+  }
+  return toolCall.name.slice(decoration.prefix.length);
 }

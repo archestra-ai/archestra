@@ -67,6 +67,8 @@ export type CommonCustomToolCall = z.infer<typeof CommonCustomToolCallSchema>;
 export type CommonToolResult = {
   id: string;
   name: string;
+  /** The namespace the paired call named (Codex Responses history). */
+  namespace?: string;
   /**
    * The arguments of the paired tool call, when the source format carries
    * them. Required to resolve a `run_tool` dispatch to its target tool so

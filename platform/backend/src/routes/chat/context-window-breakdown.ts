@@ -16,6 +16,7 @@ import {
   type ContextWindowItem,
   type SupportedProvider,
 } from "@archestra/shared";
+import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import { getTokenizer, type Tokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
@@ -320,8 +321,12 @@ function serializeToolForEstimate(name: string, tool: unknown): string {
     description?: unknown;
     inputSchema?: { jsonSchema?: unknown };
   };
+  // Chat's gateway tools keep their attestation marker on the way to the LLM
+  // proxy, which strips it before the provider, so it costs no tokens there.
   const description =
-    typeof definition.description === "string" ? definition.description : "";
+    typeof definition.description === "string"
+      ? removeAttestationTokens(definition.description)
+      : "";
   const schema = definition.inputSchema?.jsonSchema ?? {};
   return `${name}\n${description}\n${safeJson(schema)}`;
 }

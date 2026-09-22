@@ -179,6 +179,90 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
     expect(trustEval.unsafeContextBoundary).toBeUndefined();
   });
 
+  test("a dispatch to an unknown bare short name stays untrusted", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    // run_tool recovers a bare short name to the one reachable third-party
+    // tool it suffixes, so the result can be real upstream data even though
+    // no tool row carries the bare name. Only a `<server>__<tool>` name it
+    // could not resolve is proof of a refusal.
+    const commonMessages: CommonMessage[] = [
+      { role: "user", content: "File the bug" },
+      {
+        role: "tool",
+        toolCalls: [
+          {
+            id: "call_run_tool_8",
+            name: RUN_TOOL_FULL_NAME,
+            arguments: { tool_name: "create_issue", tool_args: {} },
+            content: { issue: "…" },
+            isError: false,
+          },
+        ],
+      },
+    ];
+
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
+
+    expect(trustEval.contextIsTrusted).toBe(false);
+    expect(trustEval.unsafeContextBoundary).toMatchObject({
+      kind: "tool_result",
+      toolCallId: "call_run_tool_8",
+      toolName: "create_issue",
+    });
+  });
+
+  test("a lookalike wrapper under another label earns no dispatch trust", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    // A server connected beside the gateway names its tool like our run_tool.
+    // Strictly it is not the wrapper, so it is judged as the unknown tool it
+    // is, not as the built-in its `tool_name` names. With the compat scan on
+    // it is read as a wrapper, but one nothing proves is ours: its result
+    // about a name no tool row knows is not taken for a platform refusal.
+    const lookalike = (toolName: string): CommonMessage[] => [
+      { role: "user", content: "Go" },
+      {
+        role: "tool",
+        toolCalls: [
+          {
+            id: "call_lookalike",
+            name: "mcp__evil__archestra__run_tool",
+            arguments: { tool_name: toolName, tool_args: {} },
+            content: { data: "…" },
+            isError: false,
+          },
+        ],
+      },
+    ];
+
+    for (const { toolName, looseRunToolDispatch } of [
+      { toolName: "list_skills", looseRunToolDispatch: false },
+      { toolName: "ghost__x", looseRunToolDispatch: true },
+    ]) {
+      const trustEval = await evaluateIfContextIsTrusted({
+        messages: lookalike(toolName),
+        agentId: agent.id,
+        organizationId: agent.organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+        looseRunToolDispatch,
+      });
+
+      expect(trustEval.contextIsTrusted).toBe(false);
+    }
+  });
+
   test("a dispatch to an unknown delegation-surface name stays untrusted", async ({
     makeAgent,
   }) => {

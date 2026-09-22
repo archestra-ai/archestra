@@ -113,6 +113,26 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
 
 /**
+ * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+ * Session routing comes from the verified offer claims; no offer-owner lookup.
+ */
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
+
+export interface OfferReviewOutput {
+  offerId: string
+  text: string
+  sessionId: string
+  /** The reviewed call's tool, as the host proposed it. */
+  tool?: string
+  /**
+   * The reviewed call's arguments as JSON text. The ledger keeps them as
+   * JSONB, so key order and spacing can differ from the proposal; the
+   * values cannot.
+   */
+  arguments?: string
+}
+
+/**
  * Reads what a root document declares about its batteries, with the line each
  * declaration is authored on. Unknown top-level keys are the loader's concern, not
  * this reader's.

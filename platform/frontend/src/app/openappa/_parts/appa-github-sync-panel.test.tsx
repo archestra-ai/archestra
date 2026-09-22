@@ -176,3 +176,23 @@ test("connects a public repository and renders the saved source", async () => {
   expect(await screen.findByText("Waiting for the first sync")).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+test("asks before discarding a GitHub source draft", async () => {
+  state = { enabled: true, hasPolicy: false, source: null };
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Connect GitHub" }),
+  );
+  fireEvent.change(screen.getByLabelText("Repository"), {
+    target: { value: "example/policies" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(screen.getByLabelText("Repository")).toHaveValue("example/policies");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});

@@ -30,7 +30,7 @@ import {
 } from "@/test";
 import { type Agent, agentOwner } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { __test as runToolInternals } from "./run-tool";
+import { repairEnvelopedToolArgs } from "./run-tool";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -2203,17 +2203,16 @@ describe("run_tool", () => {
     });
 
     test("repairEnvelopedToolArgs reports a param-name-keyed repair as data", () => {
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: { appId: { appId: "abc-123" }, limit: 5 },
-          schema: {
-            type: "object",
-            properties: {
-              appId: { type: "string" },
-              limit: { type: "number" },
-            },
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: { appId: { appId: "abc-123" }, limit: 5 },
+        schema: {
+          type: "object",
+          properties: {
+            appId: { type: "string" },
+            limit: { type: "number" },
           },
-        });
+        },
+      });
 
       expect(repairedParams).toEqual(["appId"]);
       expect(toolArgs).toEqual({ appId: "abc-123", limit: 5 });
@@ -2221,14 +2220,13 @@ describe("run_tool", () => {
 
     test("an object-declared param with a same-named single inner key passes through by reference", () => {
       const sent = { config: { config: { nested: true } } };
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: sent,
-          schema: {
-            type: "object",
-            properties: { config: { type: "object" } },
-          },
-        });
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: sent,
+        schema: {
+          type: "object",
+          properties: { config: { type: "object" } },
+        },
+      });
 
       expect(repairedParams).toEqual([]);
       expect(toolArgs).toBe(sent);
@@ -2490,11 +2488,10 @@ describe("run_tool", () => {
         ["b", { $text: "yes" }],
       ];
       for (const [key, wrapped] of cases) {
-        const { repairedParams, toolArgs } =
-          runToolInternals.repairEnvelopedToolArgs({
-            toolArgs: { [key]: wrapped },
-            schema,
-          });
+        const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+          toolArgs: { [key]: wrapped },
+          schema,
+        });
         expect(repairedParams).toEqual([]);
         expect(toolArgs).toEqual({ [key]: wrapped });
       }
@@ -2510,16 +2507,15 @@ describe("run_tool", () => {
           note: { type: "string" },
         },
       };
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: {
-            name: { type: "text", text: "personal" },
-            count: { type: "text", text: "5" }, // string inner on a number param — stays wrapped
-            tags: { type: "text", text: ["a", "b"] },
-            note: { type: "text", text: "" },
-          },
-          schema,
-        });
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: {
+          name: { type: "text", text: "personal" },
+          count: { type: "text", text: "5" }, // string inner on a number param — stays wrapped
+          tags: { type: "text", text: ["a", "b"] },
+          note: { type: "text", text: "" },
+        },
+        schema,
+      });
 
       expect(repairedParams.sort()).toEqual(["name", "note", "tags"]);
       expect(toolArgs).toEqual({
@@ -2549,11 +2545,10 @@ describe("run_tool", () => {
         ["obj", { type: "text", text: "x" }], // object-declared param is never repairable
       ];
       for (const [key, wrapped] of cases) {
-        const { repairedParams, toolArgs } =
-          runToolInternals.repairEnvelopedToolArgs({
-            toolArgs: { [key]: wrapped },
-            schema,
-          });
+        const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+          toolArgs: { [key]: wrapped },
+          schema,
+        });
         expect(repairedParams).toEqual([]);
         expect(toolArgs).toEqual({ [key]: wrapped });
       }
@@ -2568,11 +2563,10 @@ describe("run_tool", () => {
         { allOf: [{ type: "string" }] },
       ];
       for (const p of composed) {
-        const { repairedParams, toolArgs } =
-          runToolInternals.repairEnvelopedToolArgs({
-            toolArgs: { p: wrapped },
-            schema: { type: "object", properties: { p } },
-          });
+        const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+          toolArgs: { p: wrapped },
+          schema: { type: "object", properties: { p } },
+        });
         expect(repairedParams).toEqual([]);
         expect(toolArgs).toEqual({ p: wrapped });
       }
@@ -2591,17 +2585,16 @@ describe("run_tool", () => {
       };
       // The exact shape kimi looped on: every scalar wrapped under the app-name
       // string, which no envelope allow-list would have matched.
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: {
-            name: { "standup-notes-app": "standup-notes-app" },
-            description: { "standup-notes-app": "A personal standup notepad." },
-            tools: { "standup-notes-app": [] },
-            version: { anything: 5 },
-            enabled: { whatever: true },
-          },
-          schema,
-        });
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: {
+          name: { "standup-notes-app": "standup-notes-app" },
+          description: { "standup-notes-app": "A personal standup notepad." },
+          tools: { "standup-notes-app": [] },
+          version: { anything: 5 },
+          enabled: { whatever: true },
+        },
+        schema,
+      });
 
       expect(repairedParams.sort()).toEqual([
         "description",
@@ -2631,11 +2624,10 @@ describe("run_tool", () => {
         [{ type: "image" }, "image"],
         [{ type: "tool_use" }, "tool_use"],
       ] as Array<[Record<string, unknown>, string]>) {
-        const { repairedParams, toolArgs } =
-          runToolInternals.repairEnvelopedToolArgs({
-            toolArgs: { name: wrapped },
-            schema,
-          });
+        const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+          toolArgs: { name: wrapped },
+          schema,
+        });
         expect(repairedParams).toEqual(["name"]);
         expect(toolArgs).toEqual({ name: expected });
       }
@@ -2661,17 +2653,16 @@ describe("run_tool", () => {
           count: { type: "integer", minimum: 10 },
         },
       };
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: {
-            mode: { value: "delete" }, // not in enum
-            kind: { k: "loose" }, // not the const
-            rows: { items: ["deleted"] }, // item not in enum
-            pair: { p: ["only-one"] }, // violates tuple shape
-            count: { c: 3 }, // below minimum
-          },
-          schema,
-        });
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: {
+          mode: { value: "delete" }, // not in enum
+          kind: { k: "loose" }, // not the const
+          rows: { items: ["deleted"] }, // item not in enum
+          pair: { p: ["only-one"] }, // violates tuple shape
+          count: { c: 3 }, // below minimum
+        },
+        schema,
+      });
 
       expect(repairedParams.sort()).toEqual([
         "count",

@@ -107,6 +107,9 @@ scan or save policy rules; follow these steps when handling the user's request.
   restrictions. It neither classifies their data nor raises existing trust.
 - Explicit rules still apply. Keep the catch-all unless the user wants unknown
   tools blocked. Do not quietly weaken a rule to make a blocked call succeed.
+- Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\`
+  so agents can find tools. \`archestra__run_tool\` requires no rule. The policy
+  evaluates each call using the target tool that runs.
 - The supported editor format is \`[policy]\` plus \`[externals]\`, and the
   battery declarations the host answers: \`include\`, \`[server_aliases]\` and
   \`[credentials]\`. An \`include\` entry is spelled \`batteries/<name>/appa.toml\`

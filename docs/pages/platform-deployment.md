@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.17" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.18" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -838,10 +838,9 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
   - Example: `ARCHESTRA_TRUST_PROXY=35.191.0.0/16,130.211.0.0/22`
-  - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
   - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
   - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
-  - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
+  - This setting does not affect the OAuth public origin. See [MCP Gateway OAuth Public Origin](#mcp-gateway-oauth-public-origin).
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long each HTTP server holds an idle keep-alive connection open before closing it. Applies to the API and the frontend server.
   - Default: `620000` (620 seconds)
@@ -1042,7 +1041,7 @@ On GKE, custom Sandbox controllers can produce a â€œnot backed by a controllerâ€
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.17` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.18` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -1659,6 +1658,18 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: unset (falls back to `ARCHESTRA_BETA`)
   - An explicit `false` keeps both directions off even when the master beta switch is enabled.
   - See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) and [Skills from MCP servers](/docs/platform-agent-skills#skills-from-mcp-servers).
+
+#### MCP Gateway OAuth Public Origin
+
+An MCP client discovers the gateway's authorization server through OAuth metadata. Archestra builds the URL in that metadata from a public origin. Name every public host you serve the gateway on in `ARCHESTRA_API_BASE_URL` or `ARCHESTRA_FRONTEND_URL`. `ARCHESTRA_API_BASE_URL` accepts a comma-separated list, so add the gateway host there when it differs from the UI host.
+
+Archestra advertises a configured host with the scheme you configured it under. A host you set to `https://` stays `https://` in the metadata, even when the proxy forwards the request over plain http.
+
+A host you name in neither variable falls back to the scheme of the incoming request. Behind a TLS-terminating proxy that scheme is `http`, so the metadata URL becomes `http://`. The client then fails the handshake or times out. Two settings produce this result: a public host missing from both variables, and a proxy route that drops `X-Forwarded-Proto`. A layer-4 route, such as a Gateway API `TLSRoute`, cannot set that header at all. Terminate TLS on an HTTPS listener and use an `HTTPRoute` to get it.
+
+`ARCHESTRA_TRUST_PROXY` does not change the OAuth public origin. The host check runs with it on or off.
+
+The backend logs the origin it resolved for every request, under `getPublicRequestOrigin`. It warns there when it advertises an `http` origin for an unconfigured host.
 
 ### MCP Servers
 

@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { useRouter } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -17,7 +18,9 @@ import { authQueryKeys } from "@/lib/auth/auth.query";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 vi.mock("@/components/editor");
+vi.mock("next/navigation");
 vi.mock("sonner");
+const mockRouterPush = vi.fn();
 const origin = "http://localhost:9000";
 const url = `${origin}/api/guardrails-policy`;
 const content = "[policy]\nversion = 2\n";
@@ -67,6 +70,10 @@ const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: origin });
+  vi.mocked(useRouter).mockReturnValue({
+    push: mockRouterPush,
+  } as unknown as ReturnType<typeof useRouter>);
+  mockRouterPush.mockClear();
   effectiveRequests = 0;
   server.use(
     http.get(url, () => HttpResponse.json(policy)),
@@ -99,6 +106,7 @@ function mount() {
   render(
     <QueryClientProvider client={client}>
       <GuardrailsPolicyEditor />
+      <a href="/plugins">Plugins</a>
     </QueryClientProvider>,
   );
   return client;
@@ -109,8 +117,8 @@ test("validates edits inline, saves the exact text and revision, and becomes cle
   server.use(
     http.post(`${url}/validate`, () =>
       HttpResponse.json({
-        valid: false,
-        errors: ["Unknown trust rank"],
+        valid: true,
+        errors: [],
         warnings: [],
       }),
     ),
@@ -130,7 +138,7 @@ test("validates edits inline, saves the exact text and revision, and becomes cle
   await screen.findByRole("button", { name: "Validate" });
   fireEvent.change(editor, { target: { value: `${content}# edited` } });
   fireEvent.click(screen.getByRole("button", { name: "Validate" }));
-  expect(await screen.findByText("Unknown trust rank")).toBeInTheDocument();
+  expect(await screen.findByText("Policy is valid.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
   await screen.findByText("Revision 2");
   expect(submitted).toEqual({
@@ -138,6 +146,47 @@ test("validates edits inline, saves the exact text and revision, and becomes cle
     expectedRevision: 1,
   });
   expect(screen.getByRole("button", { name: "Save & apply" })).toBeDisabled();
+});
+
+test("a failed validation blocks save until the draft changes", async () => {
+  server.use(
+    http.post(`${url}/validate`, () =>
+      HttpResponse.json({
+        valid: false,
+        errors: ["Unknown trust rank"],
+        warnings: [],
+      }),
+    ),
+  );
+  mount();
+  const editor = await screen.findByRole("textbox", {
+    name: "Organization guardrails policy",
+  });
+  fireEvent.change(editor, { target: { value: `${content}# invalid` } });
+  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+  expect(await screen.findByText("Unknown trust rank")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Save & apply" })).toBeDisabled();
+  fireEvent.change(editor, { target: { value: `${content}# changed again` } });
+  expect(screen.queryByText("Unknown trust rank")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save & apply" })).toBeEnabled();
+});
+
+test("asks before a sidebar link discards an unsaved policy", async () => {
+  mount();
+  const editor = await screen.findByRole("textbox", {
+    name: "Organization guardrails policy",
+  });
+  fireEvent.change(editor, { target: { value: `${content}# draft` } });
+  fireEvent.click(screen.getByRole("link", { name: "Plugins" }));
+  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
+  expect(mockRouterPush).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(editor).toHaveValue(`${content}# draft`);
+  fireEvent.click(screen.getByRole("link", { name: "Plugins" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  expect(mockRouterPush).toHaveBeenCalledWith("/plugins");
 });
 
 test("preserves local edits when another writer updates the policy and rejects a stale save", async () => {

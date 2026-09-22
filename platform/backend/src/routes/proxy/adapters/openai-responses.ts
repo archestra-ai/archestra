@@ -269,6 +269,7 @@ class OpenAiResponsesRequestAdapter
         {
           id: item.call_id,
           name: toolCall?.name ?? "unknown",
+          ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
           isError: false,
@@ -1305,10 +1306,7 @@ class OpenAiResponsesStreamAdapter
 
 function toCommonMessages(
   item: ResponseInputItem,
-  toolCallsByCallId: Map<
-    string,
-    { name: string; arguments?: Record<string, unknown> }
-  >,
+  toolCallsByCallId: Map<string, HistoryToolCall>,
 ): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
@@ -1343,6 +1341,7 @@ function toCommonMessages(
           {
             id: item.call_id,
             name: toolCall?.name ?? "unknown",
+            ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
             arguments: toolCall?.arguments,
             content,
             isError: false,
@@ -1480,15 +1479,33 @@ function isResponsesToolCallChunk(
   );
 }
 
+/**
+ * A call in the request history, as its output is paired with it. A Codex call
+ * to a namespaced tool names that namespace, which is part of which tool it
+ * called.
+ */
+type HistoryToolCall = {
+  name: string;
+  namespace?: string;
+  arguments?: Record<string, unknown>;
+};
+
 function getToolCallsByCallId(
   input: ResponseInputItem[],
-): Map<string, { name: string; arguments?: Record<string, unknown> }> {
+): Map<string, HistoryToolCall> {
   return new Map(
-    input.flatMap((item) => {
+    input.flatMap((item): Array<[string, HistoryToolCall]> => {
       if (isResponseInputCustomToolCall(item)) {
         return [
-          [item.call_id, { name: item.name, arguments: { input: item.input } }],
-        ] as const;
+          [
+            item.call_id,
+            {
+              name: item.name,
+              ...namespaceOf(item),
+              arguments: { input: item.input },
+            },
+          ],
+        ];
       }
       if (!isResponseInputFunctionCall(item)) {
         return [];
@@ -1499,9 +1516,10 @@ function getToolCallsByCallId(
           item.call_id,
           {
             name: item.name,
+            ...namespaceOf(item),
             arguments: extractCommonToolCallArguments(item.arguments),
           },
-        ] as const,
+        ],
       ];
     }),
   );

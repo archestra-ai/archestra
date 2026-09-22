@@ -1597,6 +1597,117 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
     });
+
+    // A name the LLM proxy never persists a row under (a foreign-marked
+    // lookalike, a Codex namespace member) carries the org's default for
+    // discovered tools, so it is ruled as that tool would be once discovered.
+    describe("a name no tool row carries", () => {
+      test("is allowed when the caller gives no default", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent();
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "foreign:archestra__read_file", toolInput: {} }],
+          mockContext,
+          false,
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("is ruled by the caller's default in its place", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+      }) => {
+        const agent = await makeAgent();
+        const known = await makeTool({ agentId: agent.id, name: "known-tool" });
+        await makeAgentTool(agent.id, known.id);
+        const call = (
+          actionWithoutToolRow:
+            | "block_when_context_is_untrusted"
+            | "block_always"
+            | "allow_when_context_is_untrusted",
+        ) => ({
+          toolCallName: "mcp__evil__exfiltrate",
+          toolInput: { data: "secret" },
+          actionWithoutToolRow,
+        });
+
+        const untrusted = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [call("block_when_context_is_untrusted")],
+          mockContext,
+          false,
+        );
+        expect(untrusted).toMatchObject({
+          isAllowed: false,
+          toolCallName: "mcp__evil__exfiltrate",
+        });
+        expect(untrusted.toolId).toBeUndefined();
+
+        const trusted = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [call("block_when_context_is_untrusted")],
+          mockContext,
+          true,
+        );
+        expect(trusted.isAllowed).toBe(true);
+
+        // Beside a known tool, and whatever the context.
+        const always = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "known-tool", toolInput: {} }, call("block_always")],
+          mockContext,
+          true,
+        );
+        expect(always).toMatchObject({
+          isAllowed: false,
+          toolCallName: "mcp__evil__exfiltrate",
+        });
+
+        const allowed = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [call("allow_when_context_is_untrusted")],
+          mockContext,
+          false,
+        );
+        expect(allowed.isAllowed).toBe(true);
+      });
+
+      test("a tool row's own policies win over the caller's default", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "row-tool" });
+        await makeAgentTool(agent.id, tool.id);
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "allow_when_context_is_untrusted",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "row-tool",
+              toolInput: {},
+              actionWithoutToolRow: "block_always",
+            },
+          ],
+          mockContext,
+          false,
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+    });
   });
 
   describe("checkApprovalRequired", () => {

@@ -259,9 +259,53 @@ describe("MRTR round trip", () => {
     const result = await getCallToolHandler(server)(callToolRequest(), {});
 
     // Asking for a capability the client never declared is forbidden, so the
-    // call fails with something the model can act on instead.
-    expect(result.resultType).toBeUndefined();
+    // call fails with something the model can act on instead — still an
+    // ordinary result, which this revision stamps like any other.
+    expect(result.resultType).toBe("complete");
     expect(result.isError).toBe(true);
+  });
+
+  test("a built-in tool result carries the complete envelope", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeMcpServer,
+    makeAgentTool,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { agent, tokenAuth } = await seed({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeMcpServer,
+      makeAgentTool,
+    } as never);
+    await seedAndAssignArchestraTools(agent.id);
+
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth,
+      mrtr: { enabled: true, clientCapabilities: {} },
+    });
+
+    // Built-ins return before the upstream path stamps its result; a
+    // 2026-07-28 client rejects any tools/call result without `resultType`.
+    const result = await getCallToolHandler(server)(
+      {
+        method: "tools/call",
+        params: { name: "archestra__whoami", arguments: {} },
+      },
+      {},
+    );
+
+    expect(result.resultType).toBe("complete");
+    expect(result.isError).toBeFalsy();
   });
 
   test("an ordinary tool result carries the complete envelope", async ({

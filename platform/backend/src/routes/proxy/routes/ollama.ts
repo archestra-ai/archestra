@@ -18,6 +18,7 @@ import {
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { removeForwardedAttestationMarkers } from "./proxy-prehandler";
 
 const ollamaEmbeddingsAdapterFactory =
   makeOpenAiCompatibleEmbeddingsAdapterFactory(
@@ -120,7 +121,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : "Ollama proxy preHandler: proxying request",
         );
 
-        next();
+        removeForwardedAttestationMarkers(request).then(() => next(), next);
       },
     });
   } else {

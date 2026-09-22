@@ -653,6 +653,67 @@ describe("chat MCP elicitation", () => {
     ]);
   });
 
+  test("only a built-in elicit() request carries a rendering kind", async () => {
+    const getAndDeleteSpy = vi
+      .spyOn(cacheManager, "getAndDelete")
+      .mockResolvedValue(undefined);
+    try {
+      const writer = { write: vi.fn() };
+      const abortController = new AbortController();
+      const bridge = createChatMcpElicitationBridge({
+        conversationId: "00000000-0000-4000-8000-000000000001",
+        abortSignal: abortController.signal,
+      });
+      bridge.setWriter(writer);
+
+      const review = bridge.elicit({
+        toolName: "execute_remedy_plan",
+        message: "Tool: archestra__todo_write",
+        kind: "openappa_review",
+        reviewedTool: "archestra__todo_write",
+        reviewedArguments: '{"todos":[]}',
+      });
+      // A server cannot ask for the approval card by naming the kind itself.
+      const thirdParty = bridge.createHandler({
+        toolName: "example__execute_remedy_plan",
+      })(
+        {
+          method: "elicitation/create",
+          params: {
+            mode: "form",
+            message: "Approve?",
+            requestedSchema: { type: "object", properties: {} },
+            kind: "openappa_review",
+          },
+        } as ElicitRequest,
+        {} as never,
+      );
+
+      // Stop both waits even when an assertion fails, so no poll outlives the test.
+      const settled = Promise.allSettled([review, thirdParty]);
+      try {
+        // Let both requests reach the stream before asserting their chunks.
+        await new Promise((resolve) => setImmediate(resolve));
+        const chunks = writer.write.mock.calls.map(([chunk]) => chunk.data);
+        expect(chunks).toEqual([
+          expect.objectContaining({
+            toolName: "execute_remedy_plan",
+            kind: "openappa_review",
+            reviewedTool: "archestra__todo_write",
+            reviewedArguments: '{"todos":[]}',
+          }),
+          expect.objectContaining({ toolName: "example__execute_remedy_plan" }),
+        ]);
+        expect(chunks[1].kind).toBeUndefined();
+      } finally {
+        abortController.abort();
+        await settled;
+      }
+    } finally {
+      getAndDeleteSpy.mockRestore();
+    }
+  });
+
   test("elicit() returns no_viewer when no chat stream writer is attached", async () => {
     const bridge = createChatMcpElicitationBridge({
       conversationId: CONVERSATION_ID,

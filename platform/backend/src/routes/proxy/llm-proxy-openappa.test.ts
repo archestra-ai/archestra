@@ -15,7 +15,9 @@ import * as trustedData from "@/guardrails/trusted-data";
 import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
+import { stageHitlReview } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { appendSessionReceipt } from "@/openappa/session-token";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
@@ -51,6 +53,7 @@ const native = vi.hoisted(() => ({
   })),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
+vi.mock("@/cache-manager");
 
 describe("OpenAPPA on the existing LLM proxy", () => {
   let app: FastifyInstance;
@@ -969,6 +972,137 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         session_id: `user:${userId}|${claudeSession}`,
       }),
     );
+  });
+
+  test.each([
+    true,
+    false,
+  ])("Claude Code presents ask_user as AskUserQuestion with the staged HITL review (stream=%s)", async (stream) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const claudeSession = "a3f81c2e-4b17-4d9a-9c08-7e2f1b6a4d90";
+    const runtimeSession = `user:${userId}|${claudeSession}`;
+    const offerId = "offer-hitl";
+    const modelCopy = "Model-authored copy must not appear.";
+    const offer = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: runtimeSession,
+        offerId,
+      }),
+      config.openappa.offerSigningSecret,
+    );
+    await stageHitlReview({
+      session: {
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: runtimeSession,
+      },
+      review: { offerId, text: "Canonical HITL review." },
+    });
+    const noticeId = "toolu_denied_weather";
+    const noticeInput = buildNoticeArguments({
+      id: noticeId,
+      tool: "get_weather",
+      arguments: { location: "SF" },
+      result: "[appa] Blocked",
+      offers: [offer],
+    });
+    const askUser = {
+      name: "archestra__ask_user",
+      input: {
+        question: modelCopy,
+        header: "Wrong",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+      },
+    };
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: askUser,
+      streamingToolUse: askUser,
+    };
+    const body = payload(stream, [
+      { role: "user", content: "Check the weather" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: noticeId,
+            name: "archestra__get_remedy_plans",
+            input: noticeInput,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: noticeId,
+            content: "rendered for the user",
+          },
+        ],
+      },
+    ]);
+    body.tools.push(
+      {
+        name: "archestra__ask_user",
+        description: "Ask the user",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "AskUserQuestion",
+        description: "Ask the user a question",
+        input_schema: { type: "object", properties: {} },
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "claude-code/2.1.258",
+        "x-claude-code-session-id": claudeSession,
+      },
+      payload: body as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const question = noticeFrom(response.body, stream);
+    // Claude Code runs its own question tool, not the gateway ask_user.
+    expect(question.name).toBe("AskUserQuestion");
+    const stamp = parseTrajectoryStamp(question.id);
+    expect(stamp?.callId).toMatch(
+      /^toolu_aq1_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{22}$/,
+    );
+    expect(question.input).toEqual({
+      questions: [
+        {
+          question: "Canonical HITL review.",
+          header: "Approval",
+          options: [
+            {
+              label: "Approve",
+              description: "Allow this exact tool call.",
+            },
+            {
+              label: "Deny",
+              description: "Keep this tool call blocked.",
+            },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+    expect(JSON.stringify(question.input)).not.toContain(modelCopy);
   });
 
   test.each([

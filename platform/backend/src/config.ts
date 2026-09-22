@@ -1308,12 +1308,29 @@ export const getAppAssetBaseOrigin = (): string => {
   return new URL("http://localhost:3000").origin;
 };
 
-export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
-  const hosts = new Set<string>();
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> =>
+  new Set(getMCPGatewayOauthPublicHostSchemes().keys());
+
+/**
+ * Map every configured public host to the scheme it was configured with.
+ *
+ * An operator names the platform's public origins in ARCHESTRA_FRONTEND_URL and
+ * ARCHESTRA_API_BASE_URL. When one of those is https, that host is reachable
+ * over https by definition, so OAuth metadata for it must never be advertised
+ * over http — even when the proxy in front strips X-Forwarded-Proto (a layer-4
+ * route cannot set that header at all). The scheme recorded here is the
+ * operator's own declaration, never caller-supplied input.
+ */
+export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> => {
+  const hosts = new Map<string, string>();
 
   const addHostFromUrl = (raw: string) => {
     try {
-      hosts.add(new URL(raw).host.toLowerCase());
+      const url = new URL(raw);
+      const host = url.host.toLowerCase();
+      const scheme = url.protocol.replace(/:$/, "");
+      // https wins when the same host is configured under both schemes.
+      if (scheme === "https" || !hosts.has(host)) hosts.set(host, scheme);
     } catch {
       // ignore malformed values
     }

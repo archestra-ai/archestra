@@ -32,6 +32,16 @@ export const ChatMcpElicitationRequestSchema = z.object({
   url: z.string().optional(),
   toolCallId: z.string().optional(),
   header: z.string().optional(),
+  /**
+   * Set by the platform for built-in requests with custom controls.
+   * `openappa_review` prompts the user to review a blocked tool call.
+   * Third-party MCP server requests never include this kind.
+   */
+  kind: z.literal("openappa_review").optional(),
+  /** Reviewed call's tool name, when the platform loaded an offer review. */
+  reviewedTool: z.string().optional(),
+  /** Reviewed call's arguments as JSON text. */
+  reviewedArguments: z.string().optional(),
 });
 
 export type ChatMcpElicitationRequest = z.infer<

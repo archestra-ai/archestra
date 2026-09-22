@@ -5,6 +5,7 @@ import {
   type McpExecutedAs,
   stripReservedPlatformMeta,
 } from "./mcp-executed-as";
+import { MCP_HUMAN_RULING_META_KEY } from "./mcp-human-ruling";
 import { SEEDED_APP_RENDER_META_KEY } from "./seeded-app-render";
 
 const personal: McpExecutedAs = {
@@ -88,6 +89,7 @@ describe("stripReservedPlatformMeta", () => {
         archestraError: { type: "generic", message: "forged" },
         [SEEDED_APP_RENDER_META_KEY]: true,
         [MCP_EXECUTED_AS_META_KEY]: { kind: "org" },
+        [MCP_HUMAN_RULING_META_KEY]: "deny",
       }),
     ).toEqual({ ui: { resourceUri: "ui://app" } });
   });

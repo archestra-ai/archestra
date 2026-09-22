@@ -18,7 +18,11 @@ describe("collectDeclaredToolNames", () => {
             { type: "text_editor_20250124", name: "str_replace_editor" },
           ],
         }),
-      ).toEqual(["github__list_issues", "bash", "str_replace_editor"]);
+      ).toEqual([
+        { name: "github__list_issues" },
+        { name: "bash" },
+        { name: "str_replace_editor" },
+      ]);
     });
 
     test("a request declaring only built-ins still names them", () => {
@@ -26,7 +30,7 @@ describe("collectDeclaredToolNames", () => {
         collectDeclaredToolNames({
           tools: [{ type: "bash_20250124", name: "bash" }],
         }),
-      ).toEqual(["bash"]);
+      ).toEqual([{ name: "bash" }]);
     });
   });
 
@@ -41,7 +45,7 @@ describe("collectDeclaredToolNames", () => {
             },
           ],
         }),
-      ).toEqual(["get_weather"]);
+      ).toEqual([{ name: "get_weather" }]);
     });
 
     // Freeform custom tools name themselves under `custom`, not `function`, so
@@ -54,7 +58,7 @@ describe("collectDeclaredToolNames", () => {
             { type: "custom", custom: { name: "run_sql" } },
           ],
         }),
-      ).toEqual(["get_weather", "run_sql"]);
+      ).toEqual([{ name: "get_weather" }, { name: "run_sql" }]);
     });
   });
 
@@ -70,7 +74,89 @@ describe("collectDeclaredToolNames", () => {
             { type: "computer_use_preview", name: "computer" },
           ],
         }),
-      ).toEqual(["Grep", "computer"]);
+      ).toEqual([{ name: "Grep" }, { name: "computer" }]);
+    });
+
+    // Codex groups an MCP server's tools under one namespace and calls each
+    // member by its own name in that namespace. The namespace itself is not
+    // a tool anyone calls.
+    test("names Codex namespace members with their namespace, never the namespace itself", () => {
+      expect(
+        collectDeclaredToolNames({
+          tools: [
+            { type: "function", name: "shell" },
+            {
+              type: "namespace",
+              name: "mcp__gw",
+              description: "Tools of the gw server.",
+              tools: [
+                { type: "function", name: "archestra__run_tool" },
+                { type: "function", name: "archestra__search_tools" },
+              ],
+            },
+          ],
+        }),
+      ).toEqual([
+        { name: "shell" },
+        { name: "archestra__run_tool", namespace: "mcp__gw" },
+        { name: "archestra__search_tools", namespace: "mcp__gw" },
+      ]);
+    });
+
+    test("reads additional_tools, top-level and as input items", () => {
+      expect(
+        collectDeclaredToolNames({
+          additional_tools: [{ type: "function", name: "top_level" }],
+          input: [
+            { role: "user", content: "hi" },
+            {
+              type: "additional_tools",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "mcp__gw",
+                  tools: [{ type: "function", name: "archestra__run_tool" }],
+                },
+              ],
+            },
+          ],
+        }),
+      ).toEqual([
+        { name: "top_level" },
+        { name: "archestra__run_tool", namespace: "mcp__gw" },
+      ]);
+    });
+
+    // A model with tool search calls the tools the search loaded, which
+    // are declared nowhere else.
+    test("reads the tools a client-run tool search loaded", () => {
+      expect(
+        collectDeclaredToolNames({
+          tools: [
+            { type: "function", name: "shell" },
+            { type: "tool_search", execution: "client", parameters: {} },
+          ],
+          input: [
+            {
+              type: "tool_search_output",
+              call_id: "ts_1",
+              execution: "client",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "mcp__gw",
+                  tools: [{ type: "function", name: "archestra__run_tool" }],
+                },
+                { type: "function", name: "lookup" },
+              ],
+            },
+          ],
+        }),
+      ).toEqual([
+        { name: "shell" },
+        { name: "archestra__run_tool", namespace: "mcp__gw" },
+        { name: "lookup" },
+      ]);
     });
   });
 
@@ -87,15 +173,21 @@ describe("collectDeclaredToolNames", () => {
             },
           ],
         }),
-      ).toEqual(["get_weather", "get_time"]);
+      ).toEqual([{ name: "get_weather" }, { name: "get_time" }]);
     });
 
-    test("Gemini accepts a lone tool object instead of an array", () => {
-      expect(
-        collectDeclaredToolNames({
-          tools: { functionDeclarations: [{ name: "get_weather" }] },
-        }),
-      ).toEqual(["get_weather"]);
+    // Reading must not change the body: a rewritten Gemini container would
+    // change every Gemini request that passes through.
+    test("Gemini accepts a lone tool object instead of an array, which stays one", () => {
+      const request = {
+        tools: { functionDeclarations: [{ name: "get_weather" }] },
+      };
+      expect(collectDeclaredToolNames(request)).toEqual([
+        { name: "get_weather" },
+      ]);
+      expect(request.tools).toEqual({
+        functionDeclarations: [{ name: "get_weather" }],
+      });
     });
 
     test("Bedrock Converse nests its tools under toolConfig", () => {
@@ -105,7 +197,7 @@ describe("collectDeclaredToolNames", () => {
             tools: [{ toolSpec: { name: "get_weather", inputSchema: {} } }],
           },
         }),
-      ).toEqual(["get_weather"]);
+      ).toEqual([{ name: "get_weather" }]);
     });
   });
 
@@ -126,7 +218,7 @@ describe("collectDeclaredToolNames", () => {
             { name: "kept", input_schema: { type: "object" } },
           ],
         }),
-      ).toEqual(["kept"]);
+      ).toEqual([{ name: "kept" }]);
     });
 
     test("is empty when no tools are declared", () => {

@@ -4,7 +4,6 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  BatteryCharging,
   ExternalLink,
   GitPullRequestArrow,
   Loader2,
@@ -16,6 +15,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -129,7 +129,7 @@ export function BatteriesPanel() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-4">
         <div className="flex min-w-0 flex-1 gap-3">
-          <BatteryCharging className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <OpenAppaIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
           <div className="space-y-1">
             <h2 className="font-semibold">Batteries</h2>
             <p className="max-w-2xl text-sm text-muted-foreground">

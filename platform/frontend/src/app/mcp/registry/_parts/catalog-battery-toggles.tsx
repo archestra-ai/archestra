@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -54,7 +55,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
   if (!data?.matches.length) return null;
   const attachNote = data.attach === "ready" ? null : ATTACH_NOTES[data.attach];
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2">
       {data.matches.map((match) => {
         const id = `battery-${match.battery}`;
         // Until the battery list answers, whether this one reads a credential
@@ -73,24 +74,27 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
         const blocked =
           data.attach === "unsynced" || (data.attach !== "ready" && !checked);
         return (
-          <div key={match.battery} className="flex items-start gap-2 text-sm">
-            <Checkbox
-              id={id}
-              className="mt-0.5"
-              checked={checked}
-              disabled={
-                canManage !== true ||
-                blocked ||
-                setEnabled.isPending ||
-                batteries.isLoading
-              }
-              onCheckedChange={(checked) =>
-                setEnabled.mutate({ match, enabled: checked === true })
-              }
-            />
-            <div>
-              <Label htmlFor={id} className="font-normal">
-                Add the {match.battery} guardrails battery (APPA)
+          <div key={match.battery} className="space-y-1 text-sm">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Checkbox
+                id={id}
+                checked={checked}
+                disabled={
+                  canManage !== true ||
+                  blocked ||
+                  setEnabled.isPending ||
+                  batteries.isLoading
+                }
+                onCheckedChange={(checked) =>
+                  setEnabled.mutate({ match, enabled: checked === true })
+                }
+              />
+              <Label
+                htmlFor={id}
+                className="flex items-center gap-1.5 font-normal"
+              >
+                <OpenAppaIcon className="size-4" aria-hidden />
+                <span>Add the {match.battery} guardrails battery</span>
               </Label>
               <p className="text-muted-foreground">
                 <span>{describe(match)} </span>
@@ -104,26 +108,23 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
                   </Link>
                 ) : null}
               </p>
-              {blocked ? (
-                <p role="note" className="text-muted-foreground">
-                  {attachNote}
-                </p>
-              ) : null}
-              {credentialIsSomeoneElses ? (
-                <p role="note" className="text-muted-foreground">
-                  <span>
-                    The box adds the battery, but its helpers stay idle until
-                    someone with the credential permission binds its credential.{" "}
-                  </span>
-                  <Link
-                    href="/openappa"
-                    className="underline underline-offset-4"
-                  >
-                    See its credentials
-                  </Link>
-                </p>
-              ) : null}
             </div>
+            {blocked ? (
+              <p role="note" className="text-muted-foreground">
+                {attachNote}
+              </p>
+            ) : null}
+            {credentialIsSomeoneElses ? (
+              <p role="note" className="text-muted-foreground">
+                <span>
+                  The box adds the battery, but its helpers stay idle until
+                  someone with the credential permission binds its credential.{" "}
+                </span>
+                <Link href="/openappa" className="underline underline-offset-4">
+                  See its credentials
+                </Link>
+              </p>
+            ) : null}
           </div>
         );
       })}
@@ -143,9 +144,9 @@ const STATUS_NOTES: Record<InstallStatus, string> = {
 };
 
 const EVIDENCE_NOTES: Record<BatteryMatch["evidence"], string> = {
-  host: "Matched by the server's host. Off until you turn it on.",
-  image: "Matched by the server's image. Off until you turn it on.",
-  name: "Matched by name only. Off until you turn it on.",
+  host: "Matched by the server's host.",
+  image: "Matched by the server's image.",
+  name: "Matched by name only.",
 };
 
 function describe(match: BatteryMatch): string {

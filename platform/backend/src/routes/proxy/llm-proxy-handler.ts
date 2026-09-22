@@ -1241,28 +1241,15 @@ export async function handleLLMProxy<
         })
       : [];
 
-    // Enforce per-team model restrictions before any upstream call. Checked on
-    // the model actually being invoked (post cost-optimization rewrite), and
-    // against the AUTHENTICATED identity only — `userTeams` above is derived
-    // from `userId`, which a caller can seed with the X-Archestra-User-Id
-    // header, so it must not decide access.
-    const authenticatedUserTeamIds = !authenticatedUserId
-      ? []
-      : authenticatedUserId === userId
-        ? userTeams.map((team) => team.id)
-        : (
-            await TeamModel.getTeamLabelInfoForUser({
-              userId: authenticatedUserId,
-              organizationId: resolvedAgent.organizationId,
-            })
-          ).map((team) => team.id);
-
+    // Enforce model permissions before any upstream call. Checked on the model
+    // actually being invoked (post cost-optimization rewrite), and against the
+    // AUTHENTICATED identity only — `userId` above can be seeded with the
+    // X-Archestra-User-Id header, so it must not decide access.
     const modelTeamAccess = await utils.checkModelTeamAccess({
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
       authenticatedUserId,
-      userTeamIds: authenticatedUserTeamIds,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(

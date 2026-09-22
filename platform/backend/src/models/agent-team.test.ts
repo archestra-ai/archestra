@@ -1,6 +1,8 @@
 // These junction-table tests exercise pre-migration compatibility. Scoped grants and revocation are covered by the migration and scoped route suites.
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import AgentTeamModel from "./agent-team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamLabelModel from "./team-label";
 
 describe("AgentTeamModel", () => {
@@ -250,26 +252,47 @@ describe("AgentTeamModel", () => {
   });
 
   describe("userHasAgentAccess", () => {
-    test("returns true for org-scoped agents", async ({
+    test("answers from the user's grant on the agent", async ({
       makeAgent,
+      makeMember,
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
-
-      const orgAgent = await makeAgent({
+      await makeMember(user.id, org.id);
+      const agent = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         scope: "org",
       });
+      const key = {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: agent.id,
+      };
+      const setGrants = async (grants: ResourcePermissionGrant[]) => {
+        const current = await ResourcePermissionPolicyModel.find(key);
+        await ResourcePermissionPolicyModel.replace({
+          ...key,
+          revision: current?.revision ?? 0,
+          grants,
+        });
+      };
+      const check = () =>
+        AgentTeamModel.userHasAgentAccess({
+          userId: user.id,
+          agentId: agent.id,
+          isAgentAdmin: false,
+        });
 
-      const hasAccess = await AgentTeamModel.userHasAgentAccess({
-        userId: user.id,
-        agentId: orgAgent.id,
-        isAgentAdmin: false,
-      });
-
-      expect(hasAccess).toBe(true);
+      // The org-wide visibility column alone no longer lets anyone in.
+      await setGrants([]);
+      expect(await check()).toBe(false);
+      await setGrants([
+        { subject: { type: "user", id: user.id }, actions: ["read"] },
+      ]);
+      expect(await check()).toBe(true);
     });
 
     test("returns false for team-scoped agent when user is not in that team", async ({
@@ -295,217 +318,6 @@ describe("AgentTeamModel", () => {
       });
 
       expect(hasAccess).toBe(false);
-    });
-
-    test("uses provided access context for personal agents", async ({
-      makeUser,
-    }) => {
-      const author = await makeUser();
-      const otherUser = await makeUser();
-
-      const authorHasAccess = await AgentTeamModel.userHasAgentAccess({
-        userId: author.id,
-        agentId: crypto.randomUUID(),
-        isAgentAdmin: false,
-        agentAccessContext: {
-          id: crypto.randomUUID(),
-          organizationId: crypto.randomUUID(),
-          scope: "personal",
-          authorId: author.id,
-        },
-      });
-      const otherUserHasAccess = await AgentTeamModel.userHasAgentAccess({
-        userId: otherUser.id,
-        agentId: crypto.randomUUID(),
-        isAgentAdmin: false,
-        agentAccessContext: {
-          id: crypto.randomUUID(),
-          organizationId: crypto.randomUUID(),
-          scope: "personal",
-          authorId: author.id,
-        },
-      });
-
-      expect(authorHasAccess).toBe(true);
-      expect(otherUserHasAccess).toBe(false);
-    });
-
-    test("uses provided access context for org-scoped agents without loading the agent", async ({
-      makeUser,
-    }) => {
-      const user = await makeUser();
-
-      const hasAccess = await AgentTeamModel.userHasAgentAccess({
-        userId: user.id,
-        agentId: crypto.randomUUID(),
-        isAgentAdmin: false,
-        agentAccessContext: {
-          id: crypto.randomUUID(),
-          organizationId: crypto.randomUUID(),
-          scope: "org",
-          authorId: null,
-        },
-      });
-
-      expect(hasAccess).toBe(true);
-    });
-  });
-
-  describe("teamHasAgentAccess", () => {
-    test("returns true for org-scoped agent with valid teamId", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "org",
-      });
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        team.id,
-      );
-
-      expect(hasAccess).toBe(true);
-    });
-
-    test("returns true for org-scoped agent with null teamId", async ({
-      makeAgent,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "org",
-      });
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
-
-      expect(hasAccess).toBe(true);
-    });
-
-    test("returns true for team-scoped agent with matching teamId", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "team",
-      });
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        team.id,
-      );
-
-      expect(hasAccess).toBe(true);
-    });
-
-    test("returns false for team-scoped agent with null teamId", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "team",
-      });
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
-
-      expect(hasAccess).toBe(false);
-    });
-
-    test("returns false for team-scoped agent with wrong teamId", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const assignedTeam = await makeTeam(org.id, user.id);
-      const otherTeam = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "team",
-      });
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [assignedTeam.id]);
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        otherTeam.id,
-      );
-
-      expect(hasAccess).toBe(false);
-    });
-
-    test("uses provided access context for org-scoped agents", async ({
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        crypto.randomUUID(),
-        team.id,
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          scope: "org",
-          authorId: null,
-        },
-      );
-
-      expect(hasAccess).toBe(true);
-    });
-
-    test("uses provided access context for team-scoped agents", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        organizationId: org.id,
-        scope: "team",
-      });
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        team.id,
-        {
-          id: agent.id,
-          organizationId: org.id,
-          scope: "team",
-          authorId: agent.authorId,
-        },
-      );
-
-      expect(hasAccess).toBe(true);
     });
   });
 

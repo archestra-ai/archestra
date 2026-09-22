@@ -210,11 +210,9 @@ export async function assertCallerMayAuthorApp(params: {
     app: {
       id: params.app.id,
       organizationId: params.organizationId,
-      scope: params.app.scope,
       authorId: params.app.authorId,
       enabled: params.app.enabled,
     },
-    isAppAdmin: false,
   });
   if (!reachableWithoutAdmin) {
     throw new ApiError(

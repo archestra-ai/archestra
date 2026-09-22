@@ -104,7 +104,6 @@ export async function assertMountedSkillsReadable(params: {
           organizationId: params.organizationId,
           userId: params.userId,
           skill,
-          isSkillAdmin: checker.isAdmin,
           action: "use",
         })));
     if (!hasAccess) {

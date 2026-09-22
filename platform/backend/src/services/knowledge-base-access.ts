@@ -19,14 +19,11 @@ export async function canAccessKnowledgeBase(params: {
       resource: "knowledgeBase" as const,
       scope: params.knowledgeBase.id,
     };
-    const policies = await ResourcePermissionPolicyModel.findApplicable(key);
-    if (policies.some((policy) => policy.legacySharingMigrated))
-      return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
-        ...key,
-        teamId: null,
-        action: "read",
-      });
-    return params.knowledgeBase.visibility === "org-wide";
+    return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
+      ...key,
+      teamId: null,
+      action: "read",
+    });
   }
   const access =
     await knowledgeSourceAccessControlService.buildAccessControlContext({

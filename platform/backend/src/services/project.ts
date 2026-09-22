@@ -12,7 +12,6 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentRunModel,
-  AgentTeamModel,
   ConversationModel,
   ConversationNotOwnedError,
   CreatedByModel,
@@ -1083,107 +1082,58 @@ class ProjectService {
       scope: agent.id,
     });
     // SPDX-SnippetEnd
-    if (policies.some((policy) => policy.legacySharingMigrated)) {
-      const grants = policies
-        .filter((policy) => policy.scope === "*" || policy.scope === agent.id)
-        .flatMap((policy) => policy.grants);
-      const covers = (teamIds: Set<string>) =>
-        ["read", "use"].every((action) =>
-          grants.some(
+    const grants = policies
+      .filter((policy) => policy.scope === "*" || policy.scope === agent.id)
+      .flatMap((policy) => policy.grants);
+    const covers = (teamIds: Set<string>) =>
+      ["read", "use"].every((action) =>
+        grants.some(
+          (grant) =>
+            (grant.subject.type === "organization" ||
+              (grant.subject.type === "team" &&
+                teamIds.has(grant.subject.id))) &&
+            grant.actions.some((candidate) => candidate === action),
+        ),
+      );
+    if (covers(new Set())) return true;
+    if (params.share.visibility === "organization") return false;
+    // The audience is read from the project's grants, so one project can
+    // reach teams and named people at once: every team and every person
+    // has to be covered.
+    if (params.share.teamIds.length > 0) {
+      const teams = await TeamModel.findByOrganization(params.organizationId);
+      const byId = new Map(teams.map((team) => [team.id, team]));
+      for (const sharedTeam of params.share.teamIds) {
+        const ids = new Set<string>();
+        let id: string | null = sharedTeam;
+        while (id && !ids.has(id)) {
+          ids.add(id);
+          id = byId.get(id)?.parentId ?? null;
+        }
+        if (!covers(ids)) return false;
+      }
+    }
+    const users = [params.ownerUserId, ...params.share.userIds];
+    const checks = await Promise.all(
+      [...new Set(users)].map(async (userId) => {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const effective = await ResourcePermissions.getEffective({
+          organizationId: params.organizationId,
+          userId,
+          resource: "agent",
+          scope: agent.id,
+        });
+        // SPDX-SnippetEnd
+        return ["read", "use"].every((action) =>
+          effective.grants.some(
             (grant) =>
-              (grant.subject.type === "organization" ||
-                (grant.subject.type === "team" &&
-                  teamIds.has(grant.subject.id))) &&
-              grant.actions.some((candidate) => candidate === action),
+              grant.action === action &&
+              (grant.scope === "*" || grant.scope === agent.id),
           ),
         );
-      if (covers(new Set())) return true;
-      if (params.share.visibility === "organization") return false;
-      // The audience is read from the project's grants, so one project can
-      // reach teams and named people at once: every team and every person
-      // has to be covered.
-      if (params.share.teamIds.length > 0) {
-        const teams = await TeamModel.findByOrganization(params.organizationId);
-        const byId = new Map(teams.map((team) => [team.id, team]));
-        for (const sharedTeam of params.share.teamIds) {
-          const ids = new Set<string>();
-          let id: string | null = sharedTeam;
-          while (id && !ids.has(id)) {
-            ids.add(id);
-            id = byId.get(id)?.parentId ?? null;
-          }
-          if (!covers(ids)) return false;
-        }
-      }
-      const users = [params.ownerUserId, ...params.share.userIds];
-      const checks = await Promise.all(
-        [...new Set(users)].map(async (userId) => {
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          const effective = await ResourcePermissions.getEffective({
-            organizationId: params.organizationId,
-            userId,
-            resource: "agent",
-            scope: agent.id,
-          });
-          // SPDX-SnippetEnd
-          return ["read", "use"].every((action) =>
-            effective.grants.some(
-              (grant) =>
-                grant.action === action &&
-                (grant.scope === "*" || grant.scope === agent.id),
-            ),
-          );
-        }),
-      );
-      return checks.every(Boolean);
-    }
-    if (agent.scope === "org") return true;
-
-    switch (params.share.visibility) {
-      // Nothing narrower than an `org` agent covers the whole organization.
-      case "organization":
-        return false;
-      case "team": {
-        if (agent.scope !== "team") return false;
-        const agentTeamIds = new Set(
-          await AgentTeamModel.getTeamsForAgent(agent.id),
-        );
-        const coversSharedTeams = params.share.teamIds.every((teamId) =>
-          agentTeamIds.has(teamId),
-        );
-        // The owner chats here too and may not belong to the teams the project
-        // is shared with. Leaving them out would accept a pin they cannot run,
-        // which unsharing would then have to take away again.
-        return (
-          coversSharedTeams &&
-          (await this.everyUserHasAgentAccess([params.ownerUserId], agent.id))
-        );
-      }
-      case "user":
-        return this.everyUserHasAgentAccess(
-          [params.ownerUserId, ...params.share.userIds],
-          agent.id,
-        );
-      // Unshared: the owner is the only person who ever starts a chat here.
-      default:
-        return this.everyUserHasAgentAccess([params.ownerUserId], agent.id);
-    }
-  }
-
-  private async everyUserHasAgentAccess(
-    userIds: string[],
-    agentId: string,
-  ): Promise<boolean> {
-    const checks = await Promise.all(
-      [...new Set(userIds)].map((userId) =>
-        AgentTeamModel.userHasAgentAccess({
-          userId: userId,
-          agentId: agentId,
-          isAgentAdmin: false,
-        }),
-      ),
+      }),
     );
     return checks.every(Boolean);
   }

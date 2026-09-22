@@ -83,7 +83,6 @@ class AgentSkillAssignmentService {
       const applicable = policies.filter(
         (policy) => policy.scope === "*" || policy.scope === id,
       );
-      if (!applicable.some((policy) => policy.legacySharingMigrated)) continue;
       result.set(
         id,
         grants.some(
@@ -126,8 +125,6 @@ class AgentSkillAssignmentService {
     organizationId: string;
     /** The caller, whose own skill read access every assigned id must satisfy. */
     userId: string;
-    /** Whether the caller holds `skill:admin`, which bypasses scope checks. */
-    isSkillAdmin: boolean;
     assignments: AgentSkillAssignments;
   }): Promise<AgentSkillAssignmentsResponse> {
     const agent = await this.requireAgent(params);
@@ -141,7 +138,6 @@ class AgentSkillAssignmentService {
       ),
       organizationId: params.organizationId,
       userId: params.userId,
-      isSkillAdmin: params.isSkillAdmin,
     });
     const environmentIdsBySkill = await SkillModel.findEnvironmentIdsBySkillIds(
       skills.map((skill) => skill.id),
@@ -156,9 +152,8 @@ class AgentSkillAssignmentService {
       const rejection = explainAssignmentRejection({
         skill,
         agent,
-        userId: params.userId,
         skillEnvironmentIds: environmentIdsBySkill.get(skill.id) ?? [],
-        canPublish: publicationPermissions.get(skill.id),
+        canPublish: publicationPermissions.get(skill.id) ?? false,
       });
       if (rejection) {
         throw new ApiError(422, rejection);
@@ -210,8 +205,6 @@ class AgentSkillAssignmentService {
     organizationId: string;
     /** The caller, whose own skill read access every excluded id must satisfy. */
     userId: string;
-    /** Whether the caller holds `skill:admin`, which bypasses scope checks. */
-    isSkillAdmin: boolean;
     excludedSkillIds: string[];
   }): Promise<AgentSkillExclusionsResponse> {
     await this.requireAgent(params);
@@ -232,7 +225,6 @@ class AgentSkillAssignmentService {
       ),
       organizationId: params.organizationId,
       userId: params.userId,
-      isSkillAdmin: params.isSkillAdmin,
     });
 
     try {
@@ -302,7 +294,6 @@ class AgentSkillAssignmentService {
     skillIds: string[];
     organizationId: string;
     userId: string;
-    isSkillAdmin: boolean;
   }) {
     const uniqueIds = [...new Set(params.skillIds)];
     if (uniqueIds.length === 0) return [];
@@ -325,7 +316,6 @@ class AgentSkillAssignmentService {
           organizationId: params.organizationId,
           userId: params.userId,
           skill,
-          isSkillAdmin: params.isSkillAdmin,
         }),
       ),
     );

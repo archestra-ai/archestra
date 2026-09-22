@@ -2427,7 +2427,6 @@ async function authorizeSkillModify(params: {
       organizationId,
       userId,
       skill,
-      isSkillAdmin: checker.isAdmin,
     });
     if (
       !visible &&

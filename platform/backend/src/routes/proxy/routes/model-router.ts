@@ -818,25 +818,15 @@ async function listModels(params: { auth: ModelRouterAuth }) {
       );
     });
 
-  // Hide team-restricted models the caller cannot invoke: user-attributed auth
-  // is filtered by the user's team memberships (mirroring the proxy-time
-  // guard); auth without a user identity cannot satisfy a team restriction,
-  // so restricted models are omitted entirely.
+  // Hide models the caller cannot invoke, mirroring the proxy-time check: a
+  // user-attributed credential needs a `use` grant; auth without a user
+  // identity may exercise only an organization-wide grant.
   const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
     modelIds: candidateModels.map((model) => model.id),
-    ...(params.auth.authMethod === "oauth_user"
-      ? {
-          grantContext: {
-            organizationId: params.auth.organizationId,
-            userId: params.auth.userId,
-            action: "use" as const,
-          },
-        }
-      : {}),
-    principalTeamIds:
-      params.auth.authMethod === "oauth_user"
-        ? await TeamModel.getUserTeamIds(params.auth.userId)
-        : [],
+    organizationId: params.auth.organizationId,
+    userId:
+      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
+    action: "use",
   });
 
   const chatModels = sortRoutableModels(

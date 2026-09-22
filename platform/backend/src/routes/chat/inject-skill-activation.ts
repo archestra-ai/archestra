@@ -111,7 +111,6 @@ export async function injectSkillActivation({
     organizationId,
     userId,
     skill,
-    isSkillAdmin: checker.isAdmin,
   });
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

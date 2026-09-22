@@ -106,10 +106,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // If profileId is provided, annotate each token with whether it can
-      // actually authenticate against that agent — mirroring
-      // AgentTeamModel.teamHasAgentAccess: org-scoped agents accept any
-      // team token, team-scoped agents only their assigned teams' tokens,
-      // personal agents none. Org tokens always pass. Tokens stay listed
+      // actually authenticate against that agent, by the pre-grant team-token
+      // rules: org-scoped agents accept any team token, team-scoped agents
+      // only their assigned teams' tokens, personal agents none. Org tokens always pass. Tokens stay listed
       // either way so the UI can show them greyed out with the reason.
       let worksWithProfile: ((token: TeamTokenWithTeam) => boolean) | null =
         null;

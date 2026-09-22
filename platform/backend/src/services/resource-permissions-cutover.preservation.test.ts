@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
+import { eq } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
 import AgentTeamModel from "@/models/agent-team";
@@ -8,6 +11,7 @@ import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import OrganizationModel from "@/models/organization";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
+import TeamModel from "@/models/team";
 import {
   assertCanAssignEnvironment,
   createEnvironment,
@@ -20,10 +24,14 @@ import { runScopedResourcePermissionCutover } from "./resource-permissions-cutov
  * What the upgrade owes: nobody loses access, and nobody gains any beyond the
  * one deliberate widening named below.
  *
- * The conversion is judged the only way that means anything — by asking the
- * real authorization paths, for every principal against every resource, once
- * while the deployment still answers from visibility fields and again after
- * the conversion has run. The two answers have to match exactly, save for
+ * The conversion is judged by asking, for every principal against every
+ * resource, once what the visibility fields answered before the upgrade and
+ * again what the real authorization paths answer after it. The runtime no
+ * longer reads visibility fields for single-object checks, so the "before"
+ * answer comes from `legacyVisible`, a frozen copy of the rules those checks
+ * applied: a role `admin` action saw everything, an org-scoped object was
+ * everyone's, a personal one its author's and the people it was shared with
+ * by name, and a team-scoped one belonged to members of its assigned teams. The two answers have to match exactly, save for
  * that widening. Any other differing cell is a person who woke up able to
  * read something they could not read yesterday, or locked out of something
  * they own.
@@ -249,12 +257,30 @@ describe("upgrade access preservation", () => {
           for (const action of ["read", "use"] as const) {
             rows[`agent:${what}:${who}:${action}`] = await reachable(
               "agent",
-              await AgentTeamModel.userHasAgentAccess({
-                userId: principal.id,
-                agentId: agent.id,
-                isAgentAdmin: await isAdminFor("agent"),
-                action,
-              }),
+              converted
+                ? await AgentTeamModel.userHasAgentAccess({
+                    userId: principal.id,
+                    agentId: agent.id,
+                    isAgentAdmin: false,
+                    action,
+                  })
+                : await legacyVisible({
+                    isAdmin: await isAdminFor("agent"),
+                    object: agent,
+                    userId: principal.id,
+                    teamIds: await junctionIds(
+                      schema.agentTeamsTable,
+                      "agentId",
+                      "teamId",
+                      agent.id,
+                    ),
+                    userIds: await junctionIds(
+                      schema.agentUsersTable,
+                      "agentId",
+                      "userId",
+                      agent.id,
+                    ),
+                  }),
               // Finding an agent went through a route that asked for the read
               // action. Working with one did not: chatting asked for chat
               // permissions, so a role built for chat and nothing else could
@@ -266,38 +292,74 @@ describe("upgrade access preservation", () => {
         for (const [what, skill] of Object.entries(skills)) {
           rows[`skill:${what}:${who}`] = await reachable(
             "skill",
-            await SkillTeamModel.userHasSkillAccess({
-              organizationId: org.id,
-              userId: principal.id,
-              skill,
-              isSkillAdmin: await isAdminFor("skill"),
-            }),
+            converted
+              ? await SkillTeamModel.userHasSkillAccess({
+                  organizationId: org.id,
+                  userId: principal.id,
+                  skill,
+                })
+              : await legacyVisible({
+                  isAdmin: await isAdminFor("skill"),
+                  object: skill,
+                  userId: principal.id,
+                  teamIds: await junctionIds(
+                    schema.skillTeamsTable,
+                    "skillId",
+                    "teamId",
+                    skill.id,
+                  ),
+                  userIds: await junctionIds(
+                    schema.skillUsersTable,
+                    "skillId",
+                    "userId",
+                    skill.id,
+                  ),
+                }),
           );
         }
         for (const [what, catalog] of Object.entries(catalogs)) {
           rows[`catalog:${what}:${who}`] = await reachable(
             "mcpRegistry",
-            await McpCatalogTeamModel.userHasCatalogAccess({
-              userId: principal.id,
-              catalogId: catalog.id,
-              isAdmin: await userHasPermission(
-                principal.id,
-                org.id,
-                "mcpServerInstallation",
-                "admin",
-              ),
-              organizationId: org.id,
-            }),
+            converted
+              ? await McpCatalogTeamModel.userHasCatalogAccess({
+                  userId: principal.id,
+                  catalogId: catalog.id,
+                  organizationId: org.id,
+                })
+              : await legacyVisible({
+                  isAdmin: await userHasPermission(
+                    principal.id,
+                    org.id,
+                    "mcpServerInstallation",
+                    "admin",
+                  ),
+                  object: catalog,
+                  userId: principal.id,
+                  teamIds: await junctionIds(
+                    schema.mcpCatalogTeamsTable,
+                    "catalogId",
+                    "teamId",
+                    catalog.id,
+                  ),
+                  userIds: [],
+                }),
           );
         }
         rows[`app:${who}`] = await reachable(
           "app",
-          await AppAccessModel.userHasAppAccess({
-            organizationId: org.id,
-            userId: principal.id,
-            app,
-            isAppAdmin: await isAdminFor("app"),
-          }),
+          converted
+            ? await AppAccessModel.userHasAppAccess({
+                organizationId: org.id,
+                userId: principal.id,
+                app,
+              })
+            : await legacyVisible({
+                isAdmin: await isAdminFor("app"),
+                object: app,
+                userId: principal.id,
+                teamIds: [],
+                userIds: [],
+              }),
         );
         for (const [what, account] of Object.entries(serviceAccounts)) {
           for (const action of ["read", "update", "delete"] as const) {
@@ -516,4 +578,56 @@ async function readPolicies() {
       schema.resourcePermissionPoliciesTable.scope,
     );
   return rows.map(({ updatedAt: _updatedAt, ...policy }) => policy);
+}
+
+/**
+ * The single-object visibility rules the runtime applied before the upgrade,
+ * frozen here so the "before" pass does not depend on code the upgrade
+ * removed.
+ */
+async function legacyVisible(params: {
+  isAdmin: boolean;
+  object: { scope: string; authorId: string | null };
+  userId: string;
+  teamIds: string[];
+  userIds: string[];
+}): Promise<boolean> {
+  if (params.isAdmin) return true;
+  switch (params.object.scope) {
+    case "org":
+      return true;
+    case "personal":
+      return (
+        params.object.authorId === params.userId ||
+        params.userIds.includes(params.userId)
+      );
+    case "team": {
+      const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+      return params.teamIds.some((teamId) => userTeamIds.includes(teamId));
+    }
+    default:
+      return false;
+  }
+}
+
+/** One side of a junction table, for the object on the other side. */
+async function junctionIds<
+  T extends
+    | typeof schema.agentTeamsTable
+    | typeof schema.agentUsersTable
+    | typeof schema.skillTeamsTable
+    | typeof schema.skillUsersTable
+    | typeof schema.mcpCatalogTeamsTable,
+>(
+  table: T,
+  objectColumn: string,
+  valueColumn: string,
+  objectId: string,
+): Promise<string[]> {
+  const columns = table as unknown as Record<string, AnyPgColumn>;
+  const rows = await db
+    .select({ value: columns[valueColumn] })
+    .from(table as unknown as typeof schema.agentTeamsTable)
+    .where(eq(columns[objectColumn], objectId));
+  return rows.map((row) => String(row.value));
 }

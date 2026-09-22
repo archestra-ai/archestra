@@ -35,18 +35,11 @@ class AgentTeamModel {
       resource,
       scope: params.agentId,
     } as const;
-    const policies = await ResourcePermissionPolicyModel.findApplicable(key);
-    if (policies.some((policy) => policy.legacySharingMigrated)) {
-      return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
-        ...key,
-        teamId: params.teamId,
-        action: "use",
-      });
-    }
-    return (
-      params.teamId === null ||
-      AgentTeamModel.teamHasAgentAccess(params.agentId, params.teamId)
-    );
+    return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
+      ...key,
+      teamId: params.teamId,
+      action: "use",
+    });
   }
 
   /**
@@ -142,15 +135,10 @@ class AgentTeamModel {
       )
       .limit(1);
     if (granted) return true;
-    const agentType = await AgentModel.getAgentType(agentId);
-    if (agentType !== "llm_proxy") {
-      const policies = await ResourcePermissionPolicyModel.findApplicable({
-        organizationId: agent.organizationId,
-        resource: agentType === "mcp_gateway" ? "mcpGateway" : "agent",
-        scope: agentId,
-      });
-      if (policies.some((policy) => policy.legacySharingMigrated)) return false;
-    }
+    // Agents and MCP gateways are reached through grants alone. An LLM proxy
+    // has no grant namespace of its own, so it still answers from its
+    // visibility, author and team assignments below.
+    if ((await AgentModel.getAgentType(agentId)) !== "llm_proxy") return false;
     if (isAgentAdmin) return true;
 
     // 2. scope = 'org' → true
@@ -382,68 +370,6 @@ class AgentTeamModel {
       "AgentTeamModel.removeTeamFromAgent: completed",
     );
     return removed;
-  }
-
-  /**
-   * Check if a team token can access an agent.
-   * Access rules:
-   * 1. scope = 'org' → true
-   * 2. scope = 'team' AND agent assigned to the given team → true
-   * 3. Otherwise → false (personal agents NOT accessible via team tokens)
-   */
-  static async teamHasAgentAccess(
-    agentId: string,
-    teamId: string | null,
-    agentAccessContext?: AgentAccessContext | null,
-  ): Promise<boolean> {
-    logger.debug(
-      { agentId, teamId },
-      "AgentTeamModel.teamHasAgentAccess: checking access",
-    );
-
-    const agent =
-      agentAccessContext ?? (await findAgentAccessContextById(agentId));
-
-    if (!agent) {
-      return false;
-    }
-
-    // 1. scope = 'org' → true
-    if (agent.scope === "org") {
-      logger.debug(
-        { agentId, teamId },
-        "AgentTeamModel.teamHasAgentAccess: org-scoped agent, granting access",
-      );
-      return true;
-    }
-
-    // 2. scope = 'team' AND agent assigned to the given team
-    if (agent.scope === "team" && teamId) {
-      const match = await db
-        .select({ teamId: schema.agentTeamsTable.teamId })
-        .from(schema.agentTeamsTable)
-        .where(
-          and(
-            eq(schema.agentTeamsTable.agentId, agentId),
-            eq(schema.agentTeamsTable.teamId, teamId),
-          ),
-        )
-        .limit(1);
-
-      const hasAccess = match.length > 0;
-      logger.debug(
-        { agentId, teamId, hasAccess },
-        "AgentTeamModel.teamHasAgentAccess: team check completed",
-      );
-      return hasAccess;
-    }
-
-    // 3. Personal agents or no teamId → false
-    logger.debug(
-      { agentId, teamId },
-      "AgentTeamModel.teamHasAgentAccess: denying access",
-    );
-    return false;
   }
 
   /**

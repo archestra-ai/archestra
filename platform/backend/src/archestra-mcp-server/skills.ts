@@ -10,7 +10,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -967,15 +966,6 @@ async function findAccessibleSkill(
   }
   if (candidates.length === 0) return null;
 
-  const isSkillAdmin =
-    ctx.userId !== undefined &&
-    (
-      await getSkillPermissionChecker({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      })
-    ).isAdmin;
-
   const accessible: Skill[] = [];
   for (const skill of candidates) {
     // SPDX-SnippetBegin
@@ -995,7 +985,6 @@ async function findAccessibleSkill(
       : await SkillTeamModel.userHasSkillAccess({
           organizationId: ctx.organizationId,
           skill,
-          isSkillAdmin,
         });
     // SPDX-SnippetEnd
     if (hasAccess) accessible.push(skill);

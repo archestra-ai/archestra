@@ -308,7 +308,7 @@ describe("AppAccessModel accessibility", () => {
     expect(adminIds).not.toContain(deletedApp.id);
   });
 
-  test("userHasAppAccess honors grants and ignores legacy admin hints", async ({
+  test("userHasAppAccess honors grants", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -330,7 +330,6 @@ describe("AppAccessModel accessibility", () => {
         organizationId: org.id,
         userId: author.id,
         app: personalApp,
-        isAppAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -338,15 +337,6 @@ describe("AppAccessModel accessibility", () => {
         organizationId: org.id,
         userId: other.id,
         app: personalApp,
-        isAppAdmin: false,
-      }),
-    ).toBe(false);
-    expect(
-      await AppAccessModel.userHasAppAccess({
-        organizationId: org.id,
-        userId: other.id,
-        app: personalApp,
-        isAppAdmin: true,
       }),
     ).toBe(false);
   });

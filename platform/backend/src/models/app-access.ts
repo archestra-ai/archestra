@@ -2,7 +2,6 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import type { ResourceVisibilityScope } from "@/types/visibility";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 
@@ -138,12 +137,8 @@ class AppAccessModel {
   }
 
   /**
-   * Whether a user may view a specific app, by its backing catalog's scope. Org
-   * apps are visible org-wide; personal to the author; team to members of a team
-   * the backing catalog is assigned to. App admins bypass scope.
-   *
-   * A disabled app is author-only regardless of scope, and this overrides the
-   * admin bypass — no one but the author may view a disabled app.
+   * Whether a user may view a specific app: a grant on the app (or at `*`)
+   * decides. A disabled app is author-only regardless of grants.
    */
   static async userHasAppAccess(params: {
     organizationId: string;
@@ -151,87 +146,32 @@ class AppAccessModel {
     app: {
       id: string;
       organizationId: string;
-      scope: ResourceVisibilityScope;
       authorId: string | null;
       enabled: boolean;
     };
-    isAppAdmin: boolean;
     action?: "read" | "use";
   }): Promise<boolean> {
     const { app, organizationId, userId } = params;
     if (app.organizationId !== organizationId) return false;
     if (!app.enabled && app.authorId !== userId) return false;
-    if (userId) {
-      const [grant] = await db
-        .select({ id: schema.appsTable.id })
-        .from(schema.appsTable)
-        .where(
-          and(
-            eq(schema.appsTable.id, app.id),
-            ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
-              resource: "app",
-              scopeColumn: schema.appsTable.id,
-              action: params.action ?? "read",
-            }),
-          ),
-        )
-        .limit(1);
-      if (grant) return true;
-    }
-
-    const policies = await ResourcePermissionPolicyModel.findApplicable({
-      organizationId,
-      resource: "app",
-      scope: app.id,
-    });
-    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
-    if (params.isAppAdmin) return true;
-
-    switch (app.scope) {
-      case "org":
-        return true;
-      case "personal": {
-        if (userId === undefined) return false;
-        if (app.authorId === userId) return true;
-        // Shared with this person by name. Deliberately additive to the
-        // personal scope rather than a scope of its own: every other
-        // catalog-backed resource would then carry a visibility value it has
-        // no way to honour.
-        return AppAccessModel.userHasIndividualGrant({ appId: app.id, userId });
-      }
-      case "team": {
-        if (userId === undefined) return false;
-        const [match] = await db
-          .select({ teamId: schema.mcpCatalogTeamsTable.teamId })
-          .from(schema.appsTable)
-          .innerJoin(
-            schema.mcpServersTable,
-            eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-          )
-          .innerJoin(
-            schema.mcpCatalogTeamsTable,
-            eq(
-              schema.mcpServersTable.catalogId,
-              schema.mcpCatalogTeamsTable.catalogId,
-            ),
-          )
-          .where(
-            and(
-              eq(schema.appsTable.id, app.id),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.mcpCatalogTeamsTable.teamId,
-              }),
-            ),
-          )
-          .limit(1);
-        return match !== undefined;
-      }
-      default:
-        return false;
-    }
+    if (!userId) return false;
+    const [grant] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.id, app.id),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId,
+            userId,
+            resource: "app",
+            scopeColumn: schema.appsTable.id,
+            action: params.action ?? "read",
+          }),
+        ),
+      )
+      .limit(1);
+    return grant !== undefined;
   }
 
   /** Team IDs assigned to one app (via its backing catalog). */
@@ -337,40 +277,6 @@ class AppAccessModel {
       map.get(appId)?.push({ id: teamId, name: teamName });
     }
     return map;
-  }
-
-  /**
-   * Whether this app has been shared with the user by name, through the
-   * `mcp_catalog_user` grants on its backing catalog. Resolves the same
-   * `apps → mcp_server → internal_mcp_catalog` chain every other check here
-   * uses, so a grant is read from exactly one place.
-   */
-  private static async userHasIndividualGrant(params: {
-    appId: string;
-    userId: string;
-  }): Promise<boolean> {
-    const [match] = await db
-      .select({ userId: schema.mcpCatalogUsersTable.userId })
-      .from(schema.appsTable)
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .innerJoin(
-        schema.mcpCatalogUsersTable,
-        eq(
-          schema.mcpServersTable.catalogId,
-          schema.mcpCatalogUsersTable.catalogId,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.appsTable.id, params.appId),
-          eq(schema.mcpCatalogUsersTable.userId, params.userId),
-        ),
-      )
-      .limit(1);
-    return match !== undefined;
   }
 }
 

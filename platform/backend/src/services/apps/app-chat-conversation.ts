@@ -117,7 +117,6 @@ export async function createSeededAppConversation(params: {
     organizationId,
     userId,
     app,
-    isAppAdmin: false,
   }));
 
   return seedConversationWithRender({

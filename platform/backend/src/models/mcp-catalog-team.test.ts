@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import { test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 test("getUserAccessibleCatalogIds returns org-scoped items for any user", async ({
   makeUser,
@@ -219,7 +220,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: otherUser.id,
       catalogId: orgCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
     }),
   ).toBe(true);
@@ -229,7 +229,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: author.id,
       catalogId: personalCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
     }),
   ).toBe(true);
@@ -237,7 +236,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: otherUser.id,
       catalogId: personalCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
     }),
   ).toBe(false);
@@ -247,7 +245,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: teamMember.id,
       catalogId: teamCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
     }),
   ).toBe(true);
@@ -255,7 +252,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: otherUser.id,
       catalogId: teamCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
     }),
   ).toBe(false);
@@ -265,7 +261,6 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     await McpCatalogTeamModel.userHasCatalogAccess({
       userId: otherUser.id,
       catalogId: personalCatalog.id,
-      isAdmin: true,
       organizationId: org.id,
     }),
   ).toBe(true);
@@ -288,32 +283,41 @@ test("userHasCatalogAccess denies org-scoped catalog items from other organizati
     McpCatalogTeamModel.userHasCatalogAccess({
       userId: user.id,
       catalogId: otherOrgCatalog.id,
-      isAdmin: true,
       organizationId: org.id,
     }),
   ).resolves.toBe(false);
 });
 
-test("userHasCatalogAccess allows global org-scoped catalog items", async ({
+test("userHasCatalogAccess treats global catalog items by their grants", async ({
   makeUser,
+  makeMember,
   makeOrganization,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization({ legacyPermissions: true });
+  const org = await makeOrganization();
+  await makeMember(user.id, org.id);
   const globalCatalog = await InternalMcpCatalogModel.create({
     name: "global-access-catalog",
     serverType: "builtin",
     scope: "org",
   });
-
-  await expect(
+  const check = () =>
     McpCatalogTeamModel.userHasCatalogAccess({
       userId: user.id,
       catalogId: globalCatalog.id,
-      isAdmin: false,
       organizationId: org.id,
-    }),
-  ).resolves.toBe(true);
+    });
+
+  // Being global and org-scoped no longer lets anyone in by itself.
+  await expect(check()).resolves.toBe(false);
+  await ResourcePermissionPolicyModel.replace({
+    organizationId: org.id,
+    resource: "mcpRegistry",
+    scope: globalCatalog.id,
+    revision: 0,
+    grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+  });
+  await expect(check()).resolves.toBe(true);
 });
 
 test("syncCatalogTeams replaces team assignments", async ({

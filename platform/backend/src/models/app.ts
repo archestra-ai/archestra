@@ -533,7 +533,6 @@ class AppModel {
       organizationId: params.organizationId,
       userId: params.userId,
       app,
-      isAppAdmin: params.isAppAdmin,
       action: params.action,
     });
     return allowed ? app : null;

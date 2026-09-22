@@ -71,20 +71,18 @@ class McpCatalogTeamModel {
   }
 
   /**
-   * Check if a user has access to a specific catalog item.
+   * Check if a user has access to a specific catalog item: a grant on the item
+   * (or at `*`) decides. The action asked for, or `read` alongside it.
    */
   static async userHasCatalogAccess(params: {
     userId: string;
     catalogId: string;
-    isAdmin: boolean;
     organizationId: string;
     action?: ResourcePermissionAction;
   }): Promise<boolean> {
-    const { userId, catalogId, isAdmin, organizationId } = params;
+    const { userId, catalogId, organizationId } = params;
     const [catalog] = await db
       .select({
-        scope: schema.internalMcpCatalogTable.scope,
-        authorId: schema.internalMcpCatalogTable.authorId,
         organizationId: schema.internalMcpCatalogTable.organizationId,
       })
       .from(schema.internalMcpCatalogTable)
@@ -126,40 +124,7 @@ class McpCatalogTeamModel {
         ),
       )
       .limit(1);
-    if (grant) return true;
-    const policies = await ResourcePermissionPolicyModel.findApplicable({
-      organizationId,
-      resource: "mcpRegistry",
-      scope: catalogId,
-    });
-    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
-    if (isAdmin) return true;
-
-    if (catalog.scope === "org") return true;
-
-    if (catalog.scope === "personal") {
-      return catalog.authorId === userId;
-    }
-
-    if (catalog.scope === "team") {
-      const teamIds = await TeamModel.getUserTeamIds(userId);
-      if (teamIds.length === 0) return false;
-
-      const catalogTeam = await db
-        .select()
-        .from(schema.mcpCatalogTeamsTable)
-        .where(
-          and(
-            eq(schema.mcpCatalogTeamsTable.catalogId, catalogId),
-            inArray(schema.mcpCatalogTeamsTable.teamId, teamIds),
-          ),
-        )
-        .limit(1);
-
-      return catalogTeam.length > 0;
-    }
-
-    return false;
+    return grant !== undefined;
   }
 
   /**

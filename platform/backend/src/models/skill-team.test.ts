@@ -291,7 +291,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: user.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
   });
@@ -318,7 +317,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: author.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -326,16 +324,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: other.id,
         skill,
-        isSkillAdmin: false,
-      }),
-    ).toBe(false);
-    // A legacy admin hint cannot bypass the authoritative policy.
-    expect(
-      await SkillTeamModel.userHasSkillAccess({
-        organizationId: org.id,
-        userId: other.id,
-        skill,
-        isSkillAdmin: true,
       }),
     ).toBe(false);
   });
@@ -367,7 +355,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: member.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -375,7 +362,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: outsider.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
   });
@@ -402,7 +388,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: orgB.id,
         userId: user.id,
         skill: orgSkillA,
-        isSkillAdmin: true,
       }),
     ).toBe(false);
   });
@@ -440,21 +425,18 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: orgSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: personalSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: teamSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
   });

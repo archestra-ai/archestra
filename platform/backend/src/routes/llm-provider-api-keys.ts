@@ -42,7 +42,6 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SecretModel from "@/models/secret";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
@@ -978,7 +977,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ params, body, organizationId, user, headers }, reply) => {
+    async ({ params, body, organizationId, user }, reply) => {
       const apiKeyFromDB = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKeyFromDB || apiKeyFromDB.organizationId !== organizationId) {
@@ -990,7 +989,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKey: apiKeyFromDB,
         userId: user.id,
         organizationId,
-        headers,
       });
 
       // A key for a provider the admins switched off is frozen: it can be
@@ -1494,7 +1492,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKey,
             userId: user.id,
             organizationId,
-            headers: request.headers,
           });
           await assertApiKeyCanBeDeleted({
             apiKey,
@@ -1574,7 +1571,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKey,
         userId: user.id,
         organizationId,
-        headers,
       });
 
       const [organization, userTeamIds] = await Promise.all([
@@ -1699,86 +1695,25 @@ function assertPerUserCredentialScope(params: {
 }
 
 /**
- * Helper to check if a user is authorized to modify an API key based on scope
+ * Authorize modifying an API key: the caller needs the action on the key
+ * through a grant (on the key itself or at `*`).
  */
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function authorizeApiKeyAccess(params: {
   action?: "update" | "delete";
-  apiKey: {
-    id: string;
-    scope: string;
-    userId: string | null;
-    teamId: string | null;
-  };
+  apiKey: { id: string };
   userId: string;
   organizationId: string;
-  headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { apiKey, userId, organizationId, headers } = params;
-
-  const context = {
-    organizationId,
-    userId,
-    resource: "llmProviderApiKey" as const,
-    scope: apiKey.id,
-  };
-  const [policy, allPolicy] = await Promise.all([
-    ResourcePermissionPolicyModel.find(context),
-    ResourcePermissionPolicyModel.find({ ...context, scope: "*" }),
-  ]);
-  if (policy?.legacySharingMigrated || allPolicy?.legacySharingMigrated) {
-    await ResourcePermissions.require({
-      ...context,
-      action: params.action ?? "update",
-    });
-    return;
-  }
-
-  // Personal keys: only owner can modify
-  if (apiKey.scope === "personal") {
-    if (apiKey.userId !== userId) {
-      throw new ApiError(403, "You can only modify your own personal API keys");
-    }
-    return;
-  }
-
-  // Team keys: require team membership or organization-level team management
-  if (apiKey.scope === "team") {
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
-      headers,
-    );
-
-    if (!canManageAllTeams && apiKey.teamId) {
-      const isUserInTeam = await TeamModel.isUserInTeam(apiKey.teamId, userId);
-      if (!isUserInTeam) {
-        throw new ApiError(
-          403,
-          "You can only modify team API keys for teams you are a member of",
-        );
-      }
-    }
-    return;
-  }
-
-  // Org-wide keys: require the dedicated API-key admin permission
-  if (apiKey.scope === "org") {
-    const isLlmProviderApiKeyAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "llmProviderApiKey",
-      "admin",
-    );
-    if (!isLlmProviderApiKeyAdmin) {
-      throw new ApiError(
-        403,
-        "Only llmProviderApiKey admins can modify organization-wide API keys",
-      );
-    }
-    return;
-  }
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "llmProviderApiKey",
+    scope: params.apiKey.id,
+    action: params.action ?? "update",
+  });
 }
 // SPDX-SnippetEnd
 
@@ -1877,7 +1812,6 @@ async function deleteProviderApiKeyAtomically(params: {
             apiKey,
             userId: params.userId,
             organizationId: params.organizationId,
-            headers: params.headers,
           });
           await assertApiKeyCanBeDeleted({
             apiKey,
@@ -1926,7 +1860,6 @@ async function deleteProviderApiKeyInPglite(params: {
     apiKey,
     userId: params.userId,
     organizationId: params.organizationId,
-    headers: params.headers,
   });
   await assertApiKeyCanBeDeleted({
     apiKey,

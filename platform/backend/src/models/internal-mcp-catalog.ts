@@ -485,7 +485,6 @@ class InternalMcpCatalogModel {
       const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess({
         userId: userId,
         catalogId: id,
-        isAdmin: !!isAdmin,
         organizationId: organizationId,
         action: options?.accessAction,
       });

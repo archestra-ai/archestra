@@ -55,7 +55,6 @@ describe("per-user skill sharing", () => {
         skill,
         userId: grantee.id,
         organizationId: ctx.organizationId,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
   });

@@ -120,7 +120,6 @@ describe("resource sharing grant backfill", () => {
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill,
-        isSkillAdmin: false,
         action: "use",
       }),
     ).toBe(true);
@@ -137,7 +136,6 @@ describe("resource sharing grant backfill", () => {
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill,
-        isSkillAdmin: false,
         action: "use",
       }),
     ).toBe(false);
@@ -426,7 +424,6 @@ describe("resource sharing grant backfill", () => {
     const context = {
       organizationId: org.id,
       authenticatedUserId: user.id,
-      userTeamIds: [],
       modelId: data.modelId,
       provider: data.provider,
     };
@@ -701,7 +698,6 @@ describe("resource sharing grant backfill", () => {
       await McpCatalogTeamModel.userHasCatalogAccess({
         ...context,
         catalogId: catalog.id,
-        isAdmin: false,
       }),
     ).toBe(false);
     expect(
@@ -711,7 +707,6 @@ describe("resource sharing grant backfill", () => {
       await SkillTeamModel.userHasSkillAccess({
         ...context,
         skill,
-        isSkillAdmin: false,
         action: "use",
       }),
     ).toBe(false);
@@ -720,7 +715,6 @@ describe("resource sharing grant backfill", () => {
       await AppAccessModel.userHasAppAccess({
         ...context,
         app,
-        isAppAdmin: false,
         action: "use",
       }),
     ).toBe(false);
@@ -873,13 +867,9 @@ describe("resource sharing grant backfill", () => {
     expect(
       await ModelTeamModel.filterAllowedModelIds({
         modelIds: [model.id],
-        principalTeamIds: [team.id],
+        organizationId: organization.id,
         userId: user.id,
-        grantContext: {
-          organizationId: organization.id,
-          userId: user.id,
-          action: "use",
-        },
+        action: "use",
       }),
     ).toEqual(new Set());
     expect(
@@ -888,7 +878,6 @@ describe("resource sharing grant backfill", () => {
         modelId: model.modelId,
         organizationId: organization.id,
         authenticatedUserId: user.id,
-        userTeamIds: [team.id],
       }),
     ).toMatchObject({ allowed: false });
   });
@@ -941,7 +930,6 @@ describe("resource sharing grant backfill", () => {
         modelId: model.modelId,
         organizationId: org.id,
         authenticatedUserId: user.id,
-        userTeamIds: [],
       }),
     ).toEqual({ allowed: true });
     // The organization's `use` grant is widened to the `use` preset

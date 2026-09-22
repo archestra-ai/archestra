@@ -47,7 +47,6 @@ describe("catalog grant filtering", () => {
       await McpCatalogTeamModel.userHasCatalogAccess({
         userId: user.id,
         catalogId: catalog.id,
-        isAdmin: false,
         organizationId: org.id,
       }),
     ).toBe(true);
@@ -60,7 +59,6 @@ describe("catalog grant filtering", () => {
       await McpCatalogTeamModel.userHasCatalogAccess({
         userId: user.id,
         catalogId: catalog.id,
-        isAdmin: false,
         organizationId: org.id,
       }),
     ).toBe(false);

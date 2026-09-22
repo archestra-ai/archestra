@@ -42,7 +42,6 @@ describe("SkillUserModel", () => {
         skill,
         userId,
         organizationId: org.id,
-        isSkillAdmin: false,
       });
 
     expect(await check(colleague.id)).toBe(false);
@@ -74,7 +73,6 @@ describe("SkillUserModel", () => {
         skill,
         userId: colleague.id,
         organizationId: org.id,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
   });
@@ -121,7 +119,6 @@ describe("SkillUserModel", () => {
         skill,
         userId: colleague.id,
         organizationId: otherOrg.id,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
     expect(

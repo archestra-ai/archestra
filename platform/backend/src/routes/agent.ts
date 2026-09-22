@@ -1755,7 +1755,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+      await requireAgentSkillWriteAccess({
         id,
         user,
         organizationId,
@@ -1765,7 +1765,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: id,
           organizationId,
           userId: user.id,
-          isSkillAdmin,
           assignments: body,
         }),
       );
@@ -1808,7 +1807,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+      await requireAgentSkillWriteAccess({
         id,
         user,
         organizationId,
@@ -1818,7 +1817,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: id,
           organizationId,
           userId: user.id,
-          isSkillAdmin,
           excludedSkillIds: body.excludedSkillIds,
         }),
       );
@@ -2924,16 +2922,14 @@ async function requireAgentUpdateAccess(params: {
  * The skill half is in two places, and both are load-bearing. The capability
  * — `skill:read` — is enforced by the middleware from
  * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
- * skill resource cannot reach these routes at all. The per-skill visibility
- * check is enforced by the assignment service, and this function only resolves
- * the `skill:admin` flag that service needs: publishing or excluding a skill
- * requires that the caller could already read it (org-scoped, their own,
- * shared with them, or assigned to one of their teams), with `skill:admin`
- * bypassing that as it does everywhere else. Neither half implies the other —
- * visibility is a property of the skill, the capability a property of the
- * role. Gateway permission alone is not sufficient for either, because
- * `mcpGateway:update` is a default member permission and publishing hands the
- * skill's full body to every holder of the gateway's token.
+ * skill resource cannot reach these routes at all. The per-skill check is
+ * enforced by the assignment service: publishing or excluding a skill
+ * requires that a grant already lets the caller read it. Neither half implies
+ * the other — visibility is a property of the skill, the capability a
+ * property of the role. Gateway permission alone is not sufficient for
+ * either, because `mcpGateway:update` is a default member permission and
+ * publishing hands the skill's full body to every holder of the gateway's
+ * token.
  *
  * Deliberately NOT re-checked at serve time: revoking a user's team membership
  * (or narrowing a skill's team assignments) does not retroactively un-publish
@@ -2944,18 +2940,8 @@ async function requireAgentSkillWriteAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<{ isSkillAdmin: boolean }> {
-  const { user, organizationId } = params;
-
+}): Promise<void> {
   await requireAgentUpdateAccess(params);
-
-  // Skill permissions are a separate resource from the agent's: an mcpGateway
-  // admin is not automatically a skill admin.
-  const skillChecker = await getSkillPermissionChecker({
-    userId: user.id,
-    organizationId,
-  });
-  return { isSkillAdmin: skillChecker.isAdmin };
 }
 
 /**

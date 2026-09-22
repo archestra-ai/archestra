@@ -291,8 +291,9 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!isModelCatalogAdmin) {
         const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
           modelIds: models.map((model) => model.dbId),
-          principalTeamIds: userTeamIds,
-          grantContext: { organizationId, userId: user.id, action: "read" },
+          organizationId,
+          userId: user.id,
+          action: "read",
         });
         visibleModels = models.filter((model) =>
           allowedModelIds.has(model.dbId),

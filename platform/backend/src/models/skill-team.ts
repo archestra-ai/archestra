@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { ResourceVisibilityScope } from "@/types/visibility";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import SkillUserModel from "./skill-user";
 import TeamModel from "./team";
 
 /**
@@ -95,10 +93,9 @@ class SkillTeamModel {
 
   /**
    * Whether a user can access a specific skill within an organization. A skill
-   * from another organization is never accessible. Admins always can; otherwise
-   * org → all, personal → author only, team → member of an assigned team.
-   * Without a `userId` (org/team-token sessions) only org-scoped skills are
-   * accessible.
+   * from another organization is never accessible. A user needs a grant on the
+   * skill (or at `*`); without a `userId` (org/team-token sessions) only an
+   * organization-wide grant counts.
    *
    * Takes the already-loaded skill row — every caller resolves the skill
    * before checking access, so there is no need to re-fetch it here.
@@ -106,17 +103,12 @@ class SkillTeamModel {
   static async userHasSkillAccess(params: {
     organizationId: string;
     userId?: string;
-    skill: {
-      id: string;
-      organizationId: string;
-      scope: ResourceVisibilityScope;
-      authorId: string | null;
-    };
-    isSkillAdmin: boolean;
+    skill: { id: string; organizationId: string };
     action?: "read" | "use";
   }): Promise<boolean> {
     const { skill, organizationId, userId } = params;
     if (skill.organizationId !== organizationId) return false;
+    const action = params.action ?? "read";
     if (userId !== undefined) {
       const [granted] = await db
         .select({ id: schema.skillsTable.id })
@@ -128,13 +120,13 @@ class SkillTeamModel {
               organizationId,
               userId,
               resource: "skill",
-              action: params.action ?? "read",
+              action,
               scopeColumn: schema.skillsTable.id,
             }),
           ),
         )
         .limit(1);
-      if (granted) return true;
+      return granted !== undefined;
     }
 
     const policies = await ResourcePermissionPolicyModel.findApplicable({
@@ -142,50 +134,13 @@ class SkillTeamModel {
       resource: "skill",
       scope: skill.id,
     });
-    if (
-      userId === undefined &&
-      policies.some(
-        (policy) =>
-          (policy.scope === "*" || policy.scope === skill.id) &&
-          ResourcePermissionPolicyModel.isOrganizationWide({
-            policy,
-            scope: skill.id,
-            action: params.action ?? "read",
-          }),
-      )
-    )
-      return true;
-    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
-    if (params.isSkillAdmin) return true;
-
-    switch (skill.scope) {
-      case "org":
-        return true;
-      case "personal": {
-        if (userId === undefined) return false;
-        if (skill.authorId === userId) return true;
-        return SkillUserModel.userHasGrant(skill.id, userId);
-      }
-      case "team": {
-        if (userId === undefined) return false;
-        const [match] = await db
-          .select({ teamId: schema.skillTeamsTable.teamId })
-          .from(schema.skillTeamsTable)
-          .where(
-            and(
-              eq(schema.skillTeamsTable.skillId, skill.id),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.skillTeamsTable.teamId,
-              }),
-            ),
-          )
-          .limit(1);
-        return match !== undefined;
-      }
-      default:
-        return false;
-    }
+    return policies.some((policy) =>
+      ResourcePermissionPolicyModel.isOrganizationWide({
+        policy,
+        scope: skill.id,
+        action,
+      }),
+    );
   }
 
   /** Team IDs assigned to a skill. */

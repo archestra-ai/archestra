@@ -21,7 +21,6 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
@@ -389,7 +388,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             virtualKey: key,
             userId: user.id,
             organizationId,
-            userTeamIds,
           });
         },
         applyEach: async (_key, id) => {
@@ -582,15 +580,10 @@ async function updateVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
-  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-    TeamModel.getUserTeamIds(user.id),
-    userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-  ]);
   await requireVirtualKeyModifyPermission({
     virtualKey: accessContext,
     userId: user.id,
     organizationId,
-    userTeamIds,
   });
 
   // The key type is fixed at creation; only its own configuration is editable.
@@ -698,13 +691,11 @@ async function deleteVirtualApiKey(params: {
     throw new ApiError(404, "Virtual API key not found");
   }
 
-  const userTeamIds = await TeamModel.getUserTeamIds(user.id);
   await requireVirtualKeyModifyPermission({
     action: "delete",
     virtualKey: accessContext,
     userId: user.id,
     organizationId,
-    userTeamIds,
   });
 
   await VirtualApiKeyModel.delete(id);
@@ -896,78 +887,25 @@ async function validateProviderApiKeys(params: {
   }
 }
 
+/**
+ * Authorize modifying a virtual key: the caller needs the action on the key
+ * through a grant (on the key itself or at `*`).
+ */
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function requireVirtualKeyModifyPermission(params: {
   action?: "update" | "delete";
-  virtualKey: {
-    id: string;
-    scope: ResourceVisibilityScope;
-    authorId: string | null;
-    teamIds: string[];
-  };
+  virtualKey: { id: string };
   userId: string;
   organizationId: string;
-  userTeamIds: string[];
 }): Promise<void> {
-  const { virtualKey, userId, organizationId, userTeamIds } = params;
-
-  const context = {
-    organizationId,
-    userId,
-    resource: "llmVirtualKey" as const,
-    scope: virtualKey.id,
-  };
-  const [policy, allPolicy] = await Promise.all([
-    ResourcePermissionPolicyModel.find(context),
-    ResourcePermissionPolicyModel.find({ ...context, scope: "*" }),
-  ]);
-  if (policy?.legacySharingMigrated || allPolicy?.legacySharingMigrated) {
-    await ResourcePermissions.require({
-      ...context,
-      action: params.action ?? "update",
-    });
-    return;
-  }
-
-  const isAdmin = await userHasPermission(
-    userId,
-    organizationId,
-    "llmVirtualKey",
-    "admin",
-  );
-  if (isAdmin) {
-    return;
-  }
-
-  switch (virtualKey.scope) {
-    case "org":
-      throw new ApiError(
-        403,
-        "Only llmVirtualKey:admin users can manage org-scoped virtual keys",
-      );
-    case "team": {
-      const userTeamIdSet = new Set(userTeamIds);
-      const isMemberOfAnyTeam = virtualKey.teamIds.some((teamId) =>
-        userTeamIdSet.has(teamId),
-      );
-      if (!isMemberOfAnyTeam) {
-        throw new ApiError(
-          403,
-          "You can only manage virtual keys in teams you are a member of",
-        );
-      }
-      return;
-    }
-    case "personal":
-      if (virtualKey.authorId !== userId) {
-        throw new ApiError(
-          403,
-          "You can only manage your own personal virtual keys",
-        );
-      }
-      return;
-  }
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "llmVirtualKey",
+    scope: params.virtualKey.id,
+    action: params.action ?? "update",
+  });
 }
 // SPDX-SnippetEnd

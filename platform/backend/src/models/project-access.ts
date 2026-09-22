@@ -38,19 +38,14 @@ class ProjectAccessModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const policyAccess = await ResourcePermissionAccessModel.canRead({
+    return ResourcePermissionAccessModel.canRead({
       ...params,
       resource: "project",
       scope: project.id,
       // Project-wide oversight does not reveal private session contents.
       includeWildcard: !params.sessionAccess,
     });
-    if (policyAccess !== null) return policyAccess;
     // SPDX-SnippetEnd
-    // Every project is created with a policy and the upgrade gave one to every
-    // older project, so this is only reached for a row neither wrote. Such a
-    // project is its owner's.
-    return project.userId === params.userId;
   }
 
   /** Every active project the user's grants reach, own-first then newest. */

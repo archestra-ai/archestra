@@ -490,11 +490,8 @@ test("a non-gateway agent publishes nothing in Auto mode either", async ({
 test("assignment rejection explains each unpublishable case", async ({
   makeOrganization,
   makeAgent,
-  makeUser,
 }) => {
   const org = await makeOrganization();
-  const caller = await makeUser({ email: "caller@test.com" });
-  const other = await makeUser({ email: "other@test.com" });
   const sharedGateway = await makeAgent({ organizationId: org.id });
 
   const templated = await makeSkill(org.id, {
@@ -504,19 +501,6 @@ test("assignment rejection explains each unpublishable case", async ({
   const delegated = await makeSkill(org.id, {
     name: "delegated-skill",
     agentName: "refund-processor",
-  });
-  // Reachable in practice only via `skill:admin` or a per-user grant — the
-  // access check upstream 404s everyone else — but publishability must still
-  // say no: reading someone's personal skill never implies publishing it.
-  const someoneElsesPersonal = await makeSkill(org.id, {
-    name: "personal-skill",
-    scope: "personal",
-    authorId: other.id,
-  });
-  const ownPersonal = await makeSkill(org.id, {
-    name: "own-personal-skill",
-    scope: "personal",
-    authorId: caller.id,
   });
   const badName = await makeSkill(org.id, { name: "Bad Name" });
   const longDescription = await makeSkill(org.id, {
@@ -538,18 +522,23 @@ test("assignment rejection explains each unpublishable case", async ({
     [elsewhere.id],
   );
 
-  const reject = (skill: Skill, skillEnvironmentIds: string[] = []) =>
+  const reject = (
+    skill: Skill,
+    skillEnvironmentIds: string[] = [],
+    canPublish = true,
+  ) =>
     explainAssignmentRejection({
       skill,
       agent: sharedGateway as Agent,
-      userId: caller.id,
+      canPublish,
       skillEnvironmentIds,
     });
 
   expect(reject(templated)).toMatch(/templated/i);
   expect(reject(delegated)).toMatch(/refund-processor/);
-  expect(reject(someoneElsesPersonal)).toMatch(/personal/i);
-  expect(reject(ownPersonal)).toBeNull();
+  // Publishing is decided by the caller's grant on the skill alone; the
+  // author-only rule for personal skills applied only before conversion.
+  expect(reject(ordinary, [], false)).toMatch(/manage permissions/i);
   expect(reject(badName)).toMatch(/Agent Skills/);
   expect(reject(longDescription)).toMatch(/description/i);
   expect(reject(longCompatibility)).toMatch(/compatibility/i);

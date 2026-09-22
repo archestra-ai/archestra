@@ -1872,11 +1872,9 @@ async function resolveViewerRole(params: {
     app: {
       id: params.app.id,
       organizationId: params.app.organizationId,
-      scope: params.app.scope,
       authorId: params.app.authorId,
       enabled: params.app.enabled,
     },
-    isAppAdmin: false,
   });
   return reachableWithoutAdmin ? "shared" : "admin";
 }

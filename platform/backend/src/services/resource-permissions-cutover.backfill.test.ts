@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { sql } from "drizzle-orm";
-import db from "@/database";
+import { eq, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import AgentUserModel from "@/models/agent-user";
@@ -14,6 +14,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillTeamModel from "@/models/skill-team";
+import SkillUserModel from "@/models/skill-user";
 import TeamModel from "@/models/team";
 import { checkModelTeamAccess } from "@/routes/proxy/utils/model-team-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -930,6 +931,162 @@ describe("resource sharing grant backfill", () => {
         action: "read",
       }),
     ).toBe(false);
+  });
+  test("an app whose backing MCP server row is gone never receives a policy", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const app = await makeApp({
+      organizationId: org.id,
+      authorId: owner.id,
+      scope: "personal",
+      enabled: true,
+    });
+    const intact = await makeApp({
+      organizationId: org.id,
+      authorId: owner.id,
+      scope: "personal",
+      enabled: true,
+    });
+    const [row] = await db
+      .select({ mcpServerId: schema.appsTable.mcpServerId })
+      .from(schema.appsTable)
+      .where(eq(schema.appsTable.id, app.id));
+    if (!row.mcpServerId) throw new Error("App fixture has no backing server");
+    // `ON DELETE set null` on the app, so the app row survives the removal.
+    await db
+      .delete(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, row.mcpServerId));
+
+    await expect(runMigration()).resolves.toBeUndefined();
+
+    const key = {
+      organizationId: org.id,
+      resource: "app" as const,
+      scope: app.id,
+    };
+    // DEFECT: the app candidate joins `mcp_server` and `internal_mcp_catalog`
+    // with inner joins (cutover.ts:82-85), so an app that has lost its backing
+    // server is dropped from the conversion entirely. It gets no policy and no
+    // migrated marker, which means it is re-considered on every single boot
+    // and never becomes governed by grants.
+    expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
+    expect(
+      await ResourcePermissionPolicyModel.find({ ...key, scope: intact.id }),
+    ).not.toBeNull();
+    await expect(runMigration()).resolves.toBeUndefined();
+    expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
+  });
+
+  test("a team-scoped agent drops the individuals it was also shared with", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const owner = await makeUser();
+    const named = await makeUser();
+    for (const user of [owner, named]) await makeMember(user.id, org.id);
+    const team = await makeTeam(org.id, owner.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "team",
+      teams: [team.id],
+    });
+    await AgentUserModel.syncAgentUsers(agent.id, [
+      { id: named.id, level: "write" },
+    ]);
+
+    await runMigration();
+
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "agent",
+      scope: agent.id,
+    });
+    // DEFECT: the named-user branch is gated on `visibility = 'personal'`
+    // (cutover.ts:193) while the team branch is gated on `'team'`
+    // (cutover.ts:171), so an object carrying both kinds of sharing keeps only
+    // the half its scope column names. The named individual loses the agent.
+    expect(policy?.grants).toEqual([
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ]);
+    expect(
+      await ResourcePermissions.allows({
+        organizationId: org.id,
+        userId: named.id,
+        resource: "agent",
+        scope: agent.id,
+        action: "read",
+      }),
+    ).toBe(false);
+  });
+
+  test("a skill shared with a named writer converts to read, update and use", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const owner = await makeUser();
+    const writer = await makeUser();
+    for (const user of [owner, writer]) await makeMember(user.id, org.id);
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        authorId: owner.id,
+        name: `named-writer-${crypto.randomUUID().slice(0, 8)}`,
+        description: "Named write sharing",
+        content: "# Instructions",
+        metadata: {},
+        sourceType: "manual",
+        scope: "personal",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("Skill fixture creation failed");
+    await SkillUserModel.syncSkillUsers(skill.id, [
+      { id: writer.id, level: "write" },
+    ]);
+
+    await runMigration();
+
+    const key = {
+      organizationId: org.id,
+      resource: "skill" as const,
+      scope: skill.id,
+    };
+    expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual(
+      expect.arrayContaining([
+        {
+          subject: { type: "user", id: writer.id },
+          actions: ["read", "update", "use"],
+        },
+      ]),
+    );
+    await expect(
+      ResourcePermissions.require({
+        ...key,
+        userId: writer.id,
+        action: "update",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      ResourcePermissions.require({
+        ...key,
+        userId: writer.id,
+        action: "delete",
+      }),
+    ).rejects.toThrow("permission");
   });
 });
 

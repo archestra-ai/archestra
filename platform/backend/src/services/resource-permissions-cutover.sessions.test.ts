@@ -408,3 +408,162 @@ test("project wildcard access cannot reveal private chats, while explicit recipi
     }),
   ).toBe(true);
 });
+
+test("a chat share naming somebody outside the organization still converts to a grant", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  enterpriseTier.setUserCountForTesting(0);
+  const org = await makeOrganization({ legacyPermissions: true });
+  const owner = await makeUser();
+  await makeMember(owner.id, org.id);
+  // Never joined this organization, and never joined any other one either.
+  const stranger = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const chat = await ConversationModel.create({
+    userId: owner.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  await ConversationShareModel.upsert({
+    organizationId: org.id,
+    conversationId: chat.id,
+    createdByUserId: owner.id,
+    visibility: "user",
+    teamIds: [],
+    userIds: [stranger.id],
+  });
+
+  await runScopedResourcePermissionCutover();
+
+  const key = {
+    organizationId: org.id,
+    resource: "conversation" as const,
+    scope: chat.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  // DEFECT: the named-user branch of the session conversion has no `member`
+  // join, unlike every peer branch (cutover.ts:876-878 vs 226, 236, 892), so a
+  // recipient who is not a member of the organization is imported anyway.
+  expect(policy?.grants).toEqual(
+    expect.arrayContaining([
+      { subject: { type: "user", id: stranger.id }, actions: ["read"] },
+    ]),
+  );
+  // The blast radius stops short of actual access: the resolver answers from
+  // the caller's membership, so the imported grant is an unreachable row on
+  // the chat's Permissions tab rather than a hole. It still has to be revoked
+  // by hand, and it is written on a path the peers all refuse.
+  expect(
+    await ResourcePermissions.allows({
+      ...key,
+      userId: stranger.id,
+      action: "read",
+    }),
+  ).toBe(false);
+});
+
+test("a locked chat keeps its owner alone even when an organization share exists", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  enterpriseTier.setUserCountForTesting(0);
+  const org = await makeOrganization({ legacyPermissions: true });
+  const owner = await makeUser();
+  const outsider = await makeUser();
+  for (const user of [owner, outsider]) await makeMember(user.id, org.id);
+  const agent = await makeAgent({ organizationId: org.id });
+  const locked = await ConversationModel.create({
+    userId: owner.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    lockedChat: true,
+  });
+  await ConversationShareModel.upsert({
+    organizationId: org.id,
+    conversationId: locked.id,
+    createdByUserId: owner.id,
+    visibility: "organization",
+    teamIds: [],
+    userIds: [],
+  });
+
+  await runScopedResourcePermissionCutover();
+
+  const key = {
+    organizationId: org.id,
+    resource: "conversation" as const,
+    scope: locked.id,
+  };
+  // The conversion's `NOT t.locked` guard holds: a chat whose contents the
+  // server cannot read must not be published by an upgrade.
+  expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual([
+    {
+      subject: { type: "user", id: owner.id },
+      actions: ["manage-permissions", "read"],
+    },
+  ]);
+  expect(
+    await ResourcePermissions.allows({
+      ...key,
+      userId: outsider.id,
+      action: "read",
+    }),
+  ).toBe(false);
+});
+
+test("an agent run with no human actor converts to an empty policy rather than failing", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  enterpriseTier.setUserCountForTesting(0);
+  const org = await makeOrganization({ legacyPermissions: true });
+  const operator = await makeUser();
+  await makeMember(operator.id, org.id);
+  const agent = await makeAgent({ organizationId: org.id });
+  const context = await A2AContextModel.create({
+    actorKind: "system",
+    actorId: "automation",
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  await AgentRunModel.create({
+    organizationId: org.id,
+    taskId: task.id,
+    agentId: agent.id,
+    actorKind: "system",
+    actorId: "automation",
+    actorUserId: null,
+    workloadName: `test-${task.id}`,
+    backend: "kubernetes",
+    runtimeScope: "test",
+  });
+
+  await runScopedResourcePermissionCutover();
+
+  const key = {
+    organizationId: org.id,
+    resource: "agentRun" as const,
+    scope: task.id,
+  };
+  expect(await ResourcePermissionPolicyModel.find(key)).toMatchObject({
+    grants: [],
+    legacySharingMigrated: true,
+  });
+  expect(
+    await ResourcePermissions.allows({
+      ...key,
+      userId: operator.id,
+      action: "read",
+    }),
+  ).toBe(false);
+});

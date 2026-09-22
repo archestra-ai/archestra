@@ -520,9 +520,16 @@ async function syncToolsForServer(
     catalogId: catalogItem.id,
     mcpServerId: server.id,
   });
-  trackBackgroundWork(
-    openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
-  );
+  // Alias targets follow the catalog's tool names; a sync that moved none of
+  // them leaves every battery composing exactly what it composed before.
+  if (
+    syncResult.created.length > 0 ||
+    syncResult.updated.length > 0 ||
+    syncResult.deleted.length > 0
+  )
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
 
   logger.info(
     {

@@ -315,11 +315,27 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         expect(body.jwks_uri).toBe("https://gateway.example.com/api/auth/jwks");
       });
 
-      test("falls back to http:// when X-Forwarded-Proto is not set", async () => {
+      // A layer-4 proxy route cannot set X-Forwarded-Proto, so the scheme has
+      // to come from the operator's own ARCHESTRA_API_BASE_URL entry for this
+      // host. Advertising http here breaks the client's OAuth handshake.
+      test("keeps https:// for a configured https host when X-Forwarded-Proto is not set", async () => {
         const response = await proxyApp.inject({
           method: "GET",
           url: "/.well-known/oauth-authorization-server",
           headers: { host: "archestra.example.com" },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.token_endpoint).toMatch(/^https:\/\//);
+      });
+
+      test("falls back to http:// for a host in no configured public URL", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-authorization-server",
+          headers: { host: "unconfigured.example.com" },
         });
 
         expect(response.statusCode).toBe(200);

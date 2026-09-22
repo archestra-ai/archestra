@@ -136,6 +136,9 @@ describe("guardrails policy authoring", () => {
       `include = ["/secret"]\n${content}`,
       // The host keeps its helper-bridge bearer to itself.
       `${content}[externals.authorities.review]\nurl = "http://127.0.0.1:9000/api/openappa/helpers/x/y"\ntoken_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"\n`,
+      // A glob over one server's tools composes as text but the runtime
+      // refuses to open it; once enabled, every proxied request would fail.
+      `${content}[[policy.tool]]\nname = "grain__*"\ndelta = {}\n`,
     ]) {
       const validation = await app.inject({
         method: "POST",

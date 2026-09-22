@@ -112,6 +112,26 @@ describe("createFastifyInstance", () => {
       expect(response.headers["retry-after"]).toBe("13");
     });
 
+    test("tells SDK clients not to retry a failure that repeats on every request", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-refused", async () => {
+        const error = new ApiError(500, "Policy refused");
+        error.shouldRetry = false;
+        throw error;
+      });
+      app.get("/test-plain-500", async () => {
+        throw new ApiError(500, "Unexpected");
+      });
+
+      const refused = await app.inject({ method: "GET", url: "/test-refused" });
+      const plain = await app.inject({ method: "GET", url: "/test-plain-500" });
+
+      expect(refused.statusCode).toBe(500);
+      expect(refused.headers["x-should-retry"]).toBe("false");
+      // Without guidance the header is absent and clients keep their own rules.
+      expect(plain.headers["x-should-retry"]).toBeUndefined();
+    });
+
     test("omits Retry-After when the error does not say when it clears", async () => {
       const app = createFastifyInstance();
       app.get("/test-plain-429", async () => {

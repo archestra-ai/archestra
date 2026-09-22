@@ -41,7 +41,9 @@ You can register the MCP gateway under any name. Connect each client to only one
 
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
 
-Tool rules name tools exactly, or cover every unnamed tool with `*`. Partial patterns such as `grain__*` match nothing.
+Tool rules name tools exactly, or cover every unnamed tool with `*`. OpenAPPA refuses partial patterns such as `grain__*`. To cover every tool of one server, attach its battery.
+
+The **Enable Guardrails v2** switch turns on only while every organization's policy opens. If a policy does not open, the switch stays off and names the error. When APPA cannot evaluate a request, the proxy answers with the reason and a trace reference. A refused policy returns HTTP 500 and tells clients not to retry — fix the policy on the OpenAPPA page. An unavailable policy runtime returns HTTP 503, and clients can retry.
 
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 

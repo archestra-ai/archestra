@@ -30,9 +30,11 @@ checks. Edits compile without executing external services. The next dispatch
 loads the latest saved revision under the native runtime lock. New conversations
 use it; existing conversations retain their recorded policy.
 
-The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. File
-includes, local commands, and runtime-owned settings are rejected. Tokens are
-referenced through `token_env`; policy documents must not contain credentials.
+The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. The
+only `include` entries admitted are battery declarations (see Batteries); any
+other include, local command, or runtime-owned setting is rejected with the line
+that carries it. Tokens are referenced through `token_env`; policy documents
+must not contain credentials.
 Existing file-based deployments must copy their policy into the editor. An
 unconfigured organization starts with only a catch-all annotator. It returns
 empty changes and requirements, leaving trust and audience unchanged. Explicit
@@ -75,11 +77,30 @@ create an organization policy revision and record source metadata. Unchanged
 bytes create no additional revision. Failed pulls preserve the active policy;
 a source edit or disconnect prevents an in-flight stale pull from publishing.
 
-While connected, the policy editor is read only and manual API/agent updates are
-rejected. **Stop syncing** keeps the current policy and enables local editing.
-GitHub sync only pulls changes; it does not push editor changes to the repository.
-New conversations use the accepted revision; existing conversations retain theirs.
-Migration `0477_appa_github_sync` adds source storage, task deduplication, and the deployment switch.
+While connected, the policy editor and the Batteries panel are read only and
+manual API/agent updates are rejected. **Stop syncing** keeps the current policy
+and enables local editing. GitHub sync only pulls changes; it does not push
+editor changes to the repository. New conversations use the accepted revision;
+existing conversations retain theirs.
+
+A pull is *held* rather than published when the repository text would drop a
+battery this deployment declared (only while `declarations_pending_publish` is
+set, i.e. until the deployment's own declarations have been published once) or
+would add or rekey a `[credentials]` grant. The sync row stores the held content,
+its hash, the source commit and the reasons (`drops_batteries`,
+`changes_credentials`); the declarations endpoint reports them and the panel
+shows them. `POST /api/openappa/github-sync/accept-held` publishes the held text
+under the accepting user's permissions: `toolPolicy:update` and
+`organization:update`, plus `credential:update` when the reasons include
+`changes_credentials`. The audit record of the acceptance lists the dropped
+batteries and changed variables. While the repository owns the text, alias
+targets do not follow a catalog rename; the battery reads `server_missing` with
+the stale target until the repository text changes.
+
+Migration `0477_appa_github_sync` adds source storage, task deduplication, and
+the deployment switch; `0485_fine_silver_surfer` adds the held-pull columns and
+`declarations_pending_publish`, and makes `repo`/`path` nullable so a sync row
+can carry the declaration flags alone.
 
 ## Batteries
 
@@ -89,36 +110,100 @@ helper scripts the policy consults over the externals protocol, and the
 `APPA_PROVIDER_*` credential each helper reads. The addon exposes the batteries
 bundled with the pinned OpenAPPA commit that govern MCP tools, the only tools
 Archestra serves, and validates uploaded packages with the same marketplace
-checks. An organization can upload its own package under a bundled name to
-replace it. The Archestra adapter, which maps a spelled tool name onto its
-canonical identity and back, lives in the addon (`openappa-rs/src/adapter.rs`);
-OpenAPPA knows only that a host embeds it.
+checks (`openappa-rs/src/batteries.rs`): a `command` external is admitted and
+rewritten to the helper bridge below, a `url` external is refused. The Archestra
+adapter, which maps a spelled tool name onto its canonical identity and back,
+lives in the addon (`openappa-rs/src/adapter.rs`); OpenAPPA knows only that a
+host embeds it.
+
+### Declarations
+
+The organization's policy text is the source of truth for batteries
+(`backend/src/openappa/declarations.ts`). A battery is included by an `include`
+entry, spelled `batteries/<name>/appa.toml` for a bundled battery or
+`batteries/<name>@sha256-<64 hex>/appa.toml` for an uploaded package; the
+`[server_aliases]` table maps each battery namespace to the catalogs' tool
+prefixes; one `[credentials]` table per organization maps `APPA_PROVIDER_*`
+variables to runtime credential keys. Resolution is exact: a bundled spelling
+always resolves to the bundled battery and an upload never shadows it. A name may
+be included once; a second include of the same name is refused with 409 at write
+time, and a stored duplicate resolves to nothing.
+
+Install rows (`openappa_battery_install`) are a read model derived from the
+text: every recompose plans the rows from the declarations and replaces them
+wholesale, preserving ids. `enabled` is `true` for every declared battery; a
+battery is off by being absent from the text. Every write path edits the text
+through the addon's `editOpenappaPolicy` and saves a revision: the batteries
+routes (attach, detach, rebind, upload), the wizard checkbox, the editor, the MCP
+guardrails tools, and GitHub sync. Attaching through the routes requires
+`toolPolicy:update` and `organization:update`; nothing attaches a battery on
+catalog install, and the bundled match list
+(`backend/src/openappa/battery-match.ts`) is advisory only, served by
+`GET /api/openappa/battery-matches` for the wizard checkbox. The policy-save
+grant gate (`backend/src/services/guardrails-policy.ts`) requires
+`credential:update` whenever the resulting text adds or rekeys a
+`[credentials]` grant, whatever the path. A variable may be read by several
+included batteries; each battery's declarations carry its `readers`, and a
+rebind that would unset a variable another included battery reads is skipped
+by the backend and refused by the panel.
+
+An include entry that stopped resolving is a validation error only when it is
+new or changed against the previous revision; an unchanged one is a warning and
+composes as an empty stub, so a stale entry never takes the document down. A
+battery the host holds back (unresolved, missing a credential, without a
+server, in a naming conflict) composes as the same stub, so the runtime never
+consults a helper the host cannot serve.
+
+`GET /api/openappa/policy-declarations` returns what the text declares, per
+entry: name, source, package hash, line, status, helpers, servers and credential
+rows with readers, plus unused aliases, the root revision, the composition error,
+whether GitHub owns the text, and the held pull. The panel and the editor's
+annotations read it; the MCP guardrails tools return the same composition view
+as `effective.batteries`.
+
+### Statuses
+
+Each derived row carries one status, evaluated in this precedence
+(`backend/src/openappa/batteries.ts`, `batteryStatus`):
+
+- `unavailable`: the entry resolves to no battery, or the name is included twice;
+- `missing_credentials`: a declared variable has no key, or its key has no organization-level value;
+- `naming_conflict`: a catalog's tool prefix contains `__` (the adapter splits at the last `__`), or one alias target is carried by more than one catalog;
+- `server_missing`: the battery's namespace has no alias target, or the target names no catalog;
+- `active`: otherwise.
+
+A composition the runtime refuses overrides all of them: every row of the
+organization is marked `refused` with the error, and the stored document is the
+last composition that opened (`accepted ?? previousContent ?? root`), so a
+refused revision is not retried on every call and the last enforceable document
+remains visible as such. A battery may govern any number of catalogs; every row
+of one battery carries the same status. The helper owner is the earliest row
+(by `createdAt`, then id): its install id is the one the composed helper URLs
+point at.
+
+### Composition
 
 The runtime opens the composed *effective policy* rather than the root policy
-alone. A battery install binds a battery to one MCP catalog entry. The composer
-reads the organization's latest root revision, every enabled install, and the tool
-names synced for each installed catalog. Each battery namespace becomes a
-`server_aliases` entry whose targets are the catalog's tool prefixes, so a rule for
-`mcp/github/get_file_contents` judges the platform tool `github_prod__get_file_contents`
-and feedback to the model spells the platform name. The runtime is opened under the
-Archestra adapter, which splits a tool name at its last `__`; a catalog whose tool
-prefix contains `__` cannot be aliased and its install is marked `naming_conflict`.
-The composed document is stored per organization with the root revision and a
-fingerprint of the install inputs. A composition the runtime refuses stores the root
-alone with the refusal, so a refused revision is not retried on every call.
+alone. The composer reads the latest root revision, its declarations, and the
+tool names synced for each aliased catalog; each battery namespace becomes a
+`server_aliases` entry whose targets are the catalog's tool prefixes, so a rule
+for `mcp/github/get_file_contents` judges the platform tool
+`github_prod__get_file_contents` and feedback to the model spells the platform
+name. The composed document is stored per organization with the root revision
+and a fingerprint of the compose inputs, including the `[credentials]` table.
 
-Composition runs after each root save, GitHub import, install change, package upload,
-catalog rename, catalog delete, and tool sync, and hourly for every organization as a
-backstop. Before each dispatch the runtime compares the stored root revision to the
-latest one and recomposes on a mismatch. Installing an MCP server whose catalog
-matches a bundled battery attaches the battery automatically: enabled on a server
-URL host or container image match, disabled on a name-only match. The host or image
-is the catalog entry's own claim, so the permission to register MCP servers
-(`mcpRegistry`) is what lets a user attach a bundled battery. A battery without
-helpers activates at once; a battery with helpers stays `missing_credentials` until
-every declared credential is bound to an organization-level runtime credential, and
-only one install of such a battery is active per organization. A battery's externals
-must be `command` helpers; a `url` external is refused at upload and composition.
+Composition runs after each root save, GitHub import or held-pull acceptance,
+battery route write, package upload, runtime credential change, catalog rename,
+delete or restore, and tool sync, and hourly for every organization as a
+backstop. Before each dispatch the runtime compares the stored root revision to
+the latest one and recomposes on a mismatch; a declarations read also recomposes
+when the fingerprint moved. Overlapping recomposes of one organization coalesce;
+contention beyond three jittered attempts answers 503 rather than failing the
+caller's write. A composition whose grants exceed the previous one's (after a
+bundled-battery pin bump, say, with no user write) logs
+`OpenAPPA composition grants credentials the previous composition did not`.
+
+### Helpers
 
 Helper scripts never run on the API host. The composer rewrites every `command`
 binding into a URL binding on the loopback helper bridge,
@@ -127,23 +212,43 @@ per-process bearer the backend mints at boot and exports as
 `APPA_ARCHESTRA_BRIDGE_TOKEN`. Neither a root policy nor a battery may name an
 `APPA_ARCHESTRA_` variable in a `token_env` of its own (validation, upload and
 composition all refuse it), so no author can send the runtime, bearer in hand, to
-another install's helper or to an outside URL. The bridge refuses non-loopback sockets and any other
-bearer, resolves the install's credentials at organization scope, mounts the battery
-files into a fresh sandbox container under `/skills/<battery>`, passes the consult
-envelope on stdin and the credential as a Dagger secret, and returns the helper's
-stdout as the answer. The bridge needs the sandbox runtime
-(`ARCHESTRA_DAGGER_RUNTIME_ENABLED`). Its budget is 4.5 seconds including
-container start; a slow, failed, or unavailable helper answers 5xx, which the
-runtime treats as no answer, never as a denial. A dispatch holds its pooled
-PostgreSQL connection across its consults, so slow helpers keep those connections
-busy and dispatches waiting for one fail closed once the wait runs out; the
-addon's global state lock is not involved, as it covers initialization, policy
-reload and the start hook only.
+another install's helper or to an outside URL. The bridge refuses non-loopback
+sockets and any other bearer, resolves the install's credentials at organization
+scope, mounts the battery files into a fresh sandbox container under
+`/skills/<battery>`, passes the consult envelope on stdin and the credential as a
+sandbox secret, and returns the helper's stdout as the answer. The bridge needs
+the code execution sandbox (`ARCHESTRA_CODE_RUNTIME_ENABLED` with a Dagger runner
+or orchestrator kubeconfig; `daggerRuntimeEnabled` follows
+`skillsSandboxEnabled` in `backend/src/config.ts`). Its budget is 4.5 seconds
+including container start, and helpers may hold at most half the sandbox pool;
+a slow, failed, unavailable or over-cap helper answers 5xx, which the runtime
+treats as no answer, never as a denial. A dispatch holds its pooled PostgreSQL
+connection across its consults, so slow helpers keep those connections busy and
+dispatches waiting for one fail closed once the wait runs out; the addon's
+global state lock is not involved, as it covers initialization, policy reload
+and the start hook only.
 
-A battery with helpers can be enabled for one catalog entry per organization at a
-time. Uploaded packages cannot be deleted while an install references their name.
-Migration `0483_openappa_batteries` adds the package, install, and effective policy
-tables.
+### Packages and persistence
+
+Uploaded packages are content-addressed: `(organization, content_hash)` is
+unique and insert-only, several versions of a name may coexist, and an upload
+that repeats stored bytes returns the stored row. A package name matches
+`^[a-z0-9][a-z0-9-]*$`, carries at most 64 files, and its manifest name must
+equal the uploaded name. Uploading a package that declares credentials or
+externals requires `credential:update`. An upload rewrites an existing include of
+that name to the new hashed entry. Deleting a package is refused while the latest
+policy revision or a held pull spells its hash.
+
+Migration `0483_openappa_batteries` adds the package, install and effective
+policy tables; `0485_fine_silver_surfer` adds install `status`, `package_hash`
+and `last_error`, moves package uniqueness from name to content hash, and adds
+the GitHub-sync held-pull columns. `declareExistingInstalls()`
+(`backend/src/openappa/declare-installs.ts`) runs at startup, idempotently, and
+as `pnpm db:openappa-declare-installs`: it authors declarations for install rows
+that predate them, dropping (with a structured log) a disabled row, a row
+whose battery resolves to neither an upload nor the bundle, a non-owner row's
+bindings, and a variable two owners bind to different keys (left unbound, so
+those batteries read `missing_credentials` until an operator binds one key).
 
 ## Tool calls and results
 

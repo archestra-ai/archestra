@@ -15,8 +15,8 @@ import {
 
 /**
  * "Add to APPA" checkboxes for the guardrails batteries a catalog entry stands
- * for. A server matched by host or image is on by default; one matched by name
- * alone is off until someone turns it on.
+ * for. Every box is off until someone turns it on, whatever the match's
+ * evidence; turning it on is what includes the battery in the policy.
  */
 export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
   const openappaEnabled = useFeature("openappaEnabled") === true;

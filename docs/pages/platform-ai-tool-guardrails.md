@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,11 +45,46 @@ The assistant can read, validate, and update the same policy through its policy 
 
 ### Batteries
 
-A battery is a ready-made policy package for one provider, such as GitHub. Batteries bundled with OpenAPPA attach to a matching MCP server when you install it: a match on the server's URL or image is enabled at once, a match on its name alone is attached disabled for you to confirm. The Tools & Guardrails step of the setup wizard shows an "Add to APPA" checkbox for each matched battery, so you can change that choice while installing. The battery's rules then apply to that server's tools alongside your organization policy.
+A battery is a ready-made policy package for one provider, such as GitHub. Your organization policy includes it with one line — `include = ["batteries/github/appa.toml"]` — and names the MCP server it governs in the `[server_aliases]` table. The battery's rules then apply to that server's tools alongside your own rules.
 
-A battery that consults the provider needs a credential. Bind each credential the battery names to an organization-level runtime credential in the Batteries panel of the OpenAPPA page; until then the battery stays inactive. The same panel turns an install on or off, removes it, and uploads packages. Binding needs permission to manage credentials, the same permission that sets an organization credential's value, as well as to manage the organization, because the helper receives the credential's value. Helper scripts run in the code execution sandbox, so the sandbox runtime must be enabled.
+![The Batteries panel with an included battery, its server and its credential](/docs/automated_screenshots/platform-ai-tool-guardrails_batteries-panel.webp)
 
-You can upload your own battery package to replace a bundled one under the same name. Uploading a battery with helper scripts needs the credential permission too, since those scripts run with whatever credential gets bound to them. Removing a bound credential's organization value, or deleting the credential, deactivates the install until it is bound again.
+Nothing includes a battery on its own. You add one in three places:
+
+- the **Add the … battery** checkbox in the MCP server setup wizard, which is off until you turn it on;
+- **Attach to server** in the Batteries panel of the OpenAPPA page;
+- the policy editor, where you write the include line yourself.
+
+![The setup wizard offering the matching battery](/docs/automated_screenshots/platform-ai-tool-guardrails_wizard-battery.webp)
+
+Each included battery shows a status:
+
+| Status | Meaning |
+| --- | --- |
+| Active | The battery governs its server. |
+| Needs a credential | A credential the battery reads is not bound, or its organization value is missing. |
+| No server bound | The alias names no installed server. |
+| Tool name conflict | Two servers share the tool prefix, or the prefix contains `__`. |
+| Package missing | The include line names no known battery, so it governs nothing. |
+| Not enforced | The policy failed to compose. No battery is enforced until it composes again. |
+
+A battery that consults the provider reads a credential. Bind each variable it names to an organization-level runtime credential in the Batteries panel. The organization has one credential table, so batteries that read the same variable share one key — the panel lists them, and you cannot unbind a variable while another battery reads it. Binding, on any path, needs permission to manage credentials on top of the organization and tool policy permissions, because the helper receives the credential's value. Removing the credential's organization value, or deleting the credential, sets the battery back to "Needs a credential".
+
+Helper scripts run in the [code execution sandbox](./platform-code-sandbox), so the sandbox runtime must be enabled.
+
+You can upload your own battery package. The policy includes an upload by its content hash — `batteries/acme@sha256-…/appa.toml` — and a bundled battery keeps its own spelling, so an upload never replaces one silently. A package cannot be deleted while the policy includes it. Uploading a package with helpers or credentials needs the credential permission too.
+
+While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that would drop a battery or change a credential binding is held instead of published. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
+
+The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. When the current text fails to compose, the tab shows the last document that opened and says so.
+
+![The policy editor with a status mark on the include line](/docs/automated_screenshots/platform-ai-tool-guardrails_policy-annotations.webp)
+
+#### Use Case: Guarding a GitHub Server
+
+Lumen Cartography installs the GitHub MCP server for its agents. The setup wizard recognizes the server's image and offers the `github` battery. An administrator turns the checkbox on, and the policy gains an include line and an alias for the new server. The battery shows "Needs a credential" until the administrator binds `APPA_PROVIDER_GITHUB_TOKEN` to the organization's GitHub token in the Batteries panel. From then on the battery consults GitHub before an agent writes to a repository.
+
+Later the team moves the policy into a GitHub repository. A pull request removes the include line by mistake. The next pull is held with the reason "drops batteries" instead of turning the battery off. The administrator reads the held pull in the panel, restores the line in the repository, and the next pull publishes cleanly.
 
 ## The Lethal Trifecta
 

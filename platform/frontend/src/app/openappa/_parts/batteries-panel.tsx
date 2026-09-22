@@ -1,18 +1,21 @@
 "use client";
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  BatteryCharging,
   ExternalLink,
   GitPullRequestArrow,
+  Loader2,
   LockKeyhole,
+  RefreshCw,
   Trash2,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -32,15 +36,23 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  useMcpServers,
+  useReloadMcpServerTools,
+} from "@/lib/mcp/mcp-server.query";
+import {
+  ATTACH_NOTES,
   type BatterySummary,
+  batteryMatchesQueryKey,
   type PolicyBattery,
   type PolicyDeclarations,
   useAcceptHeldPull,
   useBatteries,
+  useBatteryMatches,
   useCreateBatteryInstall,
   useDeleteBatteryInstall,
   useDeleteBatteryPackage,
   usePolicyDeclarations,
+  useRemoveBatteryInclude,
   useUpdateBatteryInstall,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
@@ -117,7 +129,7 @@ export function BatteriesPanel() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-4">
         <div className="flex min-w-0 flex-1 gap-3">
-          <BatteryCharging className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <OpenAppaIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
           <div className="space-y-1">
             <h2 className="font-semibold">Batteries</h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
@@ -159,14 +171,9 @@ export function BatteriesPanel() {
           />
         )}
         {included.length === 0 ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              The policy includes no battery yet. Attach one to a server below.
-            </p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/mcp/registry">Browse MCP servers</Link>
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            The policy includes no battery yet.
+          </p>
         ) : (
           <ul className="divide-y">
             {included.map((battery) => (
@@ -185,14 +192,11 @@ export function BatteriesPanel() {
         {writable && (
           <div className="space-y-2 border-t pt-3">
             <h3 className="text-sm font-medium">Attach a battery</h3>
-            {batteries.data.map((battery) => (
-              <AttachRow
-                key={battery.name}
-                battery={battery}
-                included={included.find((entry) => entry.name === battery.name)}
-                catalog={catalog.data ?? []}
-              />
-            ))}
+            <AttachForm
+              batteries={batteries.data}
+              included={included}
+              catalog={catalog.data ?? []}
+            />
           </div>
         )}
         {declarations.data.unusedAliases.length > 0 && (
@@ -298,7 +302,7 @@ function IncludedBattery({
   writable: boolean;
   bindable: boolean;
 }) {
-  const remove = useDeleteBatteryInstall();
+  const remove = useRemoveBatteryInclude();
   const [removing, setRemoving] = useState(false);
   const status = enforced ? battery.status : "refused";
   const source =
@@ -313,7 +317,7 @@ function IncludedBattery({
         <Badge variant={BATTERY_STATUS_BADGES[status].variant}>
           {BATTERY_STATUS_BADGES[status].label}
         </Badge>
-        {writable && installs.length > 0 && (
+        {writable && (
           <Button
             variant="ghost"
             size="icon"
@@ -324,48 +328,49 @@ function IncludedBattery({
             <Trash2 className="size-4" />
           </Button>
         )}
-        {writable && installs.length === 0 && (
-          // An include with no install row is removed by editing the text:
-          // every panel write goes through an install.
-          <span className="ml-auto text-xs text-muted-foreground">
-            Remove its include line in the policy editor.
-          </span>
-        )}
       </div>
-      {battery.servers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No alias points this battery at a server.
-        </p>
-      ) : (
-        battery.servers.map((server) => (
-          <ServerRow
-            key={server.target}
-            batteryName={battery.name}
-            target={server.target}
-            name={
-              server.catalogId === null
-                ? "Removed server"
-                : catalogName(server.catalogId)
-            }
-            install={
-              installs.find(
-                ({ catalogId }) => catalogId === server.catalogId,
-              ) ?? null
-            }
-            writable={writable}
-          />
-        ))
-      )}
-      {battery.credentials.map((credential) => (
-        <CredentialRow
-          key={credential.variable}
-          batteryName={battery.name}
-          credential={credential}
-          bindings={bindingsOf(battery)}
-          install={installs[0] ?? null}
-          bindable={bindable}
-        />
-      ))}
+      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+        <Section title="Governs">
+          {battery.servers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No alias points this battery at a server.
+            </p>
+          ) : (
+            battery.servers.map((server) => (
+              <ServerRow
+                key={server.target}
+                batteryName={battery.name}
+                target={server.target}
+                name={
+                  server.catalogId === null
+                    ? "Removed server"
+                    : catalogName(server.catalogId)
+                }
+                install={
+                  installs.find(
+                    ({ catalogId }) => catalogId === server.catalogId,
+                  ) ?? null
+                }
+                writable={writable}
+              />
+            ))
+          )}
+        </Section>
+        {battery.credentials.length > 0 ? (
+          <Section title="Credentials">
+            {battery.credentials.map((credential) => (
+              <CredentialRow
+                key={credential.variable}
+                batteryName={battery.name}
+                credential={credential}
+                bindings={bindingsOf(battery)}
+                install={installs[0] ?? null}
+                bindable={bindable}
+              />
+            ))}
+          </Section>
+        ) : null}
+      </div>
       <DeleteConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
@@ -375,12 +380,10 @@ function IncludedBattery({
         pendingLabel="Removing…"
         isPending={remove.isPending}
         onConfirm={async () => {
-          // Independent rows go together; whatever failed, the refetch shows
-          // what is left and the dialog never outlives the attempt.
+          // Whatever failed, the refetch shows what is left and the dialog
+          // never outlives the attempt.
           try {
-            await Promise.all(
-              installs.map((install) => remove.mutateAsync(install.id)),
-            );
+            await remove.mutateAsync(battery.name);
           } finally {
             setRemoving(false);
           }
@@ -390,6 +393,18 @@ function IncludedBattery({
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/** One server the battery governs: the entry's name, then the tool prefix its alias points at. */
 function ServerRow({
   batteryName,
   target,
@@ -406,8 +421,10 @@ function ServerRow({
   const remove = useDeleteBatteryInstall();
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="font-mono text-xs">{target}</span>
-      <span className="text-muted-foreground">{name}</span>
+      <span>{name}</span>
+      <span className="font-mono text-xs text-muted-foreground">
+        {target}__*
+      </span>
       {writable && install !== null && (
         <Button
           variant="ghost"
@@ -440,8 +457,9 @@ function CredentialRow({
   const [kept, setKept] = useState(false);
   const credentials = useRuntimeCredentials(bindable);
   const others = credential.readers.filter((reader) => reader !== batteryName);
-  const options =
-    credentials.data?.filter((entry) => entry.allowOrganization) ?? [];
+  // The helper runs for the whole organization, so a personal-only
+  // credential cannot be bound; it is listed as such rather than hidden.
+  const options = credentials.data ?? [];
   // The policy can name a key the list does not offer — deleted, closed to
   // the organization, or a list this reader never loads — and the binding
   // still has to read as what it is.
@@ -490,10 +508,16 @@ function CredentialRow({
               </SelectItem>
             )}
             {options.map((entry) => (
-              <SelectItem key={entry.key} value={entry.key}>
-                {entry.organizationConfigured
-                  ? entry.name
-                  : `${entry.name} (no organization value)`}
+              <SelectItem
+                key={entry.key}
+                value={entry.key}
+                disabled={!entry.allowOrganization}
+              >
+                {!entry.allowOrganization
+                  ? `${entry.name} (personal only)`
+                  : entry.organizationConfigured
+                    ? entry.name
+                    : `${entry.name} (no organization value)`}
               </SelectItem>
             ))}
           </SelectContent>
@@ -517,50 +541,189 @@ function CredentialRow({
   );
 }
 
-function AttachRow({
-  battery,
+function AttachForm({
+  batteries,
   included,
   catalog,
 }: {
-  battery: BatterySummary;
-  included: PolicyBattery | undefined;
+  batteries: BatterySummary[];
+  included: PolicyBattery[];
   catalog: { id: string; name: string }[];
 }) {
   const create = useCreateBatteryInstall();
+  const installs = useMcpServers();
+  const [batteryName, setBatteryName] = useState("");
+  const [catalogId, setCatalogId] = useState("");
+  // Whether the chosen server has a tool prefix an alias can point at; the
+  // server refuses the attach otherwise, so the form says so first.
+  const readiness = useBatteryMatches(catalogId, catalogId !== "");
+  const attach = readiness.data?.attach ?? null;
+  const chosen = batteries.find((battery) => battery.name === batteryName);
   const attached = new Set(
-    included?.servers
-      .map((server) => server.catalogId)
-      .filter((catalogId): catalogId is string => catalogId !== null) ?? [],
+    included
+      .find((entry) => entry.name === batteryName)
+      ?.servers.map((server) => server.catalogId) ?? [],
   );
-  const options = catalog.filter((entry) => !attached.has(entry.id));
+  // A battery attaches to the tools an install discovered, so an entry nobody
+  // installed has nothing to attach to; the wizard offers the battery on
+  // install. Whoever cannot list installs is offered every entry.
+  const installed = installs.data
+    ? new Set(installs.data.map((install) => install.catalogId))
+    : null;
+  const installable = catalog.filter(
+    (entry) => installed === null || installed.has(entry.id),
+  );
+  const servers = installable.filter((entry) => !attached.has(entry.id));
+  if (installable.length === 0)
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          There is no installed MCP server to attach a battery to yet.
+        </p>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/mcp/registry">Browse MCP servers</Link>
+        </Button>
+      </div>
+    );
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="font-medium">{battery.name}</span>
-      <span className="text-muted-foreground">{battery.description}</span>
-      <Select
-        // Attaching is an action, not a state: the row goes back to its
-        // prompt and the choice shows up in the included list above.
-        value=""
-        disabled={create.isPending || options.length === 0}
-        onValueChange={(catalogId) =>
-          create.mutate({ batteryName: battery.name, catalogId })
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="min-w-48 flex-1 space-y-1">
+        <Label htmlFor="attach-battery">Battery</Label>
+        <Select
+          value={batteryName}
+          disabled={create.isPending}
+          onValueChange={(name) => {
+            setBatteryName(name);
+            setCatalogId("");
+          }}
+        >
+          <SelectTrigger id="attach-battery" className="w-full">
+            <SelectValue placeholder="Pick a battery" />
+          </SelectTrigger>
+          <SelectContent>
+            {batteries.map((battery) => (
+              <SelectItem key={battery.name} value={battery.name}>
+                {battery.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="min-w-48 flex-1 space-y-1">
+        <Label htmlFor="attach-server">Server</Label>
+        <Select
+          value={catalogId}
+          disabled={create.isPending || batteryName === ""}
+          onValueChange={setCatalogId}
+        >
+          <SelectTrigger id="attach-server" className="w-full">
+            <SelectValue placeholder="Pick a server" />
+          </SelectTrigger>
+          <SelectContent>
+            {servers.map((entry) => (
+              <SelectItem key={entry.id} value={entry.id}>
+                {entry.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button
+        disabled={batteryName === "" || attach !== "ready" || create.isPending}
+        onClick={() =>
+          create.mutate(
+            { batteryName, catalogId },
+            {
+              onSuccess: () => {
+                setBatteryName("");
+                setCatalogId("");
+              },
+            },
+          )
         }
       >
-        <SelectTrigger
-          className="ml-auto w-64"
-          aria-label={`Attach the ${battery.name} battery to a server`}
+        <span>Attach</span>
+      </Button>
+      {chosen ? (
+        <p className="basis-full text-sm text-muted-foreground">
+          {chosen.description}
+        </p>
+      ) : null}
+      {attach !== null && attach !== "ready" ? (
+        <p
+          role="note"
+          className="flex basis-full flex-wrap items-center gap-2 text-sm text-muted-foreground"
         >
-          <SelectValue placeholder="Attach to server…" />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((entry) => (
-            <SelectItem key={entry.id} value={entry.id}>
-              {entry.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <span>{ATTACH_NOTES[attach]}</span>
+          {attach === "unsynced" ? (
+            <SyncToolsButton catalogId={catalogId} />
+          ) : null}
+        </p>
+      ) : null}
+      {readiness.isError ? (
+        <p role="alert" className="basis-full text-sm text-destructive">
+          <span>Could not check whether this server can take a battery. </span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0"
+            onClick={() => readiness.refetch()}
+          >
+            Retry
+          </Button>
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Re-discover the tools of the picked server, which is what gives an alias a
+ * target. The reload endpoint takes an install, not the catalog entry: the
+ * newest install of the entry stands for it, and without one there is
+ * nothing to sync from.
+ */
+function SyncToolsButton({ catalogId }: { catalogId: string }) {
+  const client = useQueryClient();
+  const servers = useMcpServers();
+  const reload = useReloadMcpServerTools();
+  const target = (servers.data ?? [])
+    .filter((server) => server.catalogId === catalogId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )[0];
+  return (
+    <PermissionButton
+      permissions={{ mcpServerInstallation: ["create"] }}
+      variant="outline"
+      size="sm"
+      disabled={reload.isPending || target === undefined}
+      tooltip={
+        target === undefined
+          ? "Connect this server first: syncing tools needs a live connection"
+          : undefined
+      }
+      onClick={() =>
+        target &&
+        reload.mutate(
+          { id: target.id, name: target.name, catalogId },
+          {
+            onSuccess: () =>
+              client.invalidateQueries({
+                queryKey: batteryMatchesQueryKey(catalogId),
+              }),
+          },
+        )
+      }
+    >
+      {reload.isPending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <RefreshCw className="size-4" />
+      )}
+      <span>Sync tools</span>
+    </PermissionButton>
   );
 }
 
@@ -576,13 +739,18 @@ function PackageRow({
   const remove = useDeleteBatteryPackage();
   const [removing, setRemoving] = useState(false);
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <li className="flex items-center gap-3 py-2 text-sm">
+      <div className="min-w-0 flex-1">
         <span className="font-medium">{battery.name}</span>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="ml-2 font-mono text-xs text-muted-foreground">
           {battery.contentHash?.slice(0, 12) ?? ""}
         </span>
-        <span className="text-muted-foreground">{battery.description}</span>
+        <p
+          className="truncate text-muted-foreground"
+          title={battery.description}
+        >
+          {battery.description}
+        </p>
       </div>
       {canManage && (
         <Button

@@ -72,13 +72,22 @@ export function GuardrailsPolicyEditor() {
         <TabsTrigger value="policy">Policy</TabsTrigger>
         <TabsTrigger value="effective">Effective policy</TabsTrigger>
       </TabsList>
-      <TabsContent value="policy" forceMount>
+      {/* A force-mounted panel is never hidden by Radix, so the inactive one is hidden here. */}
+      <TabsContent
+        value="policy"
+        forceMount
+        className="data-[state=inactive]:hidden"
+      >
         <PolicyForm
           policy={policy.data}
           synced={!!sync.data?.source?.interval}
         />
       </TabsContent>
-      <TabsContent value="effective" forceMount>
+      <TabsContent
+        value="effective"
+        forceMount
+        className="data-[state=inactive]:hidden"
+      >
         <EffectivePolicyView enabled={tab === "effective"} />
       </TabsContent>
     </Tabs>

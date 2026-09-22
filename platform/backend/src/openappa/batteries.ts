@@ -26,11 +26,12 @@ import {
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
+  AttachReadiness,
   BatteryCredentialBindings,
   BatteryInstall,
   BatteryInstallRow,
   BatteryInstallStatus,
-  BatteryMatch,
+  BatteryMatches,
   BatteryPackageFile,
   BatterySummary,
   CreateBatteryInstall,
@@ -99,20 +100,29 @@ class OpenAppaBatteriesService {
   async matchesForCatalog(params: {
     organizationId: string;
     catalogId: string;
-  }): Promise<BatteryMatch[]> {
+  }): Promise<BatteryMatches> {
     const { organizationId, catalogId } = params;
     const catalog = await this.requireCatalog(params);
     const { installs } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
-    return matchBatteries(catalog, new Set(available.keys())).map((match) => ({
-      ...match,
-      install:
-        installs.find(
-          (install) =>
-            install.catalogId === catalogId &&
-            install.batteryName === match.battery,
-        ) ?? null,
-    }));
+    const { readiness } = await this.attachTargets({
+      organizationId,
+      catalogId,
+    });
+    return {
+      attach: readiness,
+      matches: matchBatteries(catalog, new Set(available.keys())).map(
+        (match) => ({
+          ...match,
+          install:
+            installs.find(
+              (install) =>
+                install.catalogId === catalogId &&
+                install.batteryName === match.battery,
+            ) ?? null,
+        }),
+      ),
+    };
   }
 
   /** What the root declares, what came of each declaration, and what holds it back. */
@@ -307,11 +317,11 @@ class OpenAppaBatteriesService {
             409,
             `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
           );
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [catalog.id],
+        const { targets, readiness } = await this.attachTargets({
+          organizationId,
+          catalogId: catalog.id,
         });
-        const targets = prefixes.byCatalog.get(catalog.id) ?? new Set<string>();
+        assertAttachable({ catalog: catalog.name, readiness });
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -341,6 +351,10 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog = await this.requireCatalog({
+      organizationId,
+      catalogId: existing.catalogId,
+    });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -355,24 +369,34 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
+        const { targets, readiness } = await this.attachTargets({
+          organizationId,
+          catalogId: existing.catalogId,
         });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const edits: PolicyEditInput[] = [];
-        if (changes.enabled !== undefined)
-          edits.push(
-            ...(changes.enabled
-              ? bindEdits({ resolution, namespaces, targets })
-              : unbindEdits({
-                  resolution,
-                  namespaces,
-                  targets,
-                  keep: otherNamespaces(resolution, existing.batteryName),
-                })),
-          );
+        switch (changes.enabled) {
+          case true:
+            assertAttachable({ catalog: catalog.name, readiness });
+            edits.push(...bindEdits({ resolution, namespaces, targets }));
+            break;
+          case false: {
+            const unbind = unbindEdits({
+              resolution,
+              namespaces,
+              targets,
+              keep: otherNamespaces(resolution, existing.batteryName),
+            });
+            assertDetaches({
+              edits: unbind,
+              battery: existing.batteryName,
+              catalog: catalog.name,
+            });
+            edits.push(...unbind);
+            break;
+          }
+          case undefined:
+            break;
+        }
         for (const [variable, key] of Object.entries(
           changes.credentialBindings ?? {},
         ))
@@ -416,6 +440,10 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog = await this.requireCatalog({
+      organizationId,
+      catalogId: existing.catalogId,
+    });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -434,24 +462,79 @@ class OpenAppaBatteriesService {
         );
         if (!included) return [];
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
+        const { targets } = await this.attachTargets({
+          organizationId,
+          catalogId: existing.catalogId,
         });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const remaining = namespaces.some(
           (namespace) =>
             remainingTargets({ resolution, namespace, targets }).length > 0,
         );
         const keep = otherNamespaces(resolution, existing.batteryName);
-        return [
+        const edits: PolicyEditInput[] = [
           // With no target left anywhere the battery governs nothing, so the
           // entry that declares it goes with its last catalog.
           ...(remaining
             ? []
             : [{ kind: "removeInclude" as const, entry: included.entry }]),
           ...unbindEdits({ resolution, namespaces, targets, keep }),
+        ];
+        assertDetaches({
+          edits,
+          battery: existing.batteryName,
+          catalog: catalog.name,
+        });
+        return edits;
+      },
+    });
+    await this.recompile(organizationId);
+  }
+
+  /**
+   * Take a battery out of the policy: its include entry and every alias its
+   * namespaces bind, whether or not a catalog still answers to them. An alias
+   * another included battery declares stays that battery's.
+   */
+  async removeInclude(params: {
+    userId: string;
+    organizationId: string;
+    name: string;
+  }): Promise<void> {
+    const { userId, organizationId, name } = params;
+    await this.editRoot({
+      organizationId,
+      userId,
+      edits: async (latest) => {
+        const resolution = await openappaDeclarations.resolve({
+          organizationId,
+          content: latest.content,
+        });
+        // A stored text may spell one battery twice; the battery goes as a whole.
+        const included = resolution.entries.filter(
+          (entry) => entry.name === name,
+        );
+        if (included.length === 0)
+          throw new ApiError(404, `The policy includes no ${name} battery`);
+        const namespaces = [
+          ...new Set(
+            included.flatMap((entry) => entry.battery?.namespaces ?? []),
+          ),
+        ];
+        const targets = new Set(
+          namespaces.flatMap((namespace) =>
+            boundTargets({ resolution, namespace }),
+          ),
+        );
+        return [
+          ...included.map(
+            (entry) => ({ kind: "removeInclude", entry: entry.entry }) as const,
+          ),
+          ...unbindEdits({
+            resolution,
+            namespaces,
+            targets,
+            keep: otherNamespaces(resolution, name),
+          }),
         ];
       },
     });
@@ -1134,6 +1217,25 @@ class OpenAppaBatteriesService {
     );
   }
 
+  /** The alias targets an attach to one catalog binds: its synced tool prefixes. */
+  private async attachTargets(params: {
+    organizationId: string;
+    catalogId: string;
+  }): Promise<{ targets: ReadonlySet<string>; readiness: AttachReadiness }> {
+    const { organizationId, catalogId } = params;
+    const prefixes = await catalogToolPrefixes(organizationId, {
+      targets: [],
+      catalogIds: [catalogId],
+    });
+    const targets = prefixes.byCatalog.get(catalogId) ?? new Set<string>();
+    const readiness: AttachReadiness = prefixes.conflicting.has(catalogId)
+      ? "conflicting"
+      : targets.size === 0
+        ? "unsynced"
+        : "ready";
+    return { targets, readiness };
+  }
+
   private async requireCatalog(params: {
     organizationId: string;
     catalogId: string;
@@ -1338,6 +1440,50 @@ function helperOwner(
           a.createdAt.getTime() - b.createdAt.getTime() ||
           a.id.localeCompare(b.id),
       )[0] ?? null
+  );
+}
+
+/**
+ * An include with no alias would compose as a stub governing nothing, so a
+ * catalog with no prefix an alias can point at takes no battery.
+ */
+function assertAttachable(params: {
+  catalog: string;
+  readiness: AttachReadiness;
+}): void {
+  const { catalog, readiness } = params;
+  switch (readiness) {
+    case "conflicting":
+      throw new ApiError(
+        409,
+        `The tools of ${catalog} carry a prefix holding "__", which a composed alias cannot target.`,
+      );
+    case "unsynced":
+      throw new ApiError(
+        409,
+        `${catalog} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+      );
+    case "ready":
+      return;
+  }
+}
+
+/**
+ * A derived row outlives the prefixes it was derived from until the next
+ * recompose, so a detach can find nothing to edit: the aliases it would drop
+ * are stale, or another included battery's. Answering success would leave the
+ * text as it is, so the caller is sent to the removal that drops them.
+ */
+function assertDetaches(params: {
+  edits: readonly PolicyEditInput[];
+  battery: string;
+  catalog: string;
+}): void {
+  const { edits, battery, catalog } = params;
+  if (edits.length > 0) return;
+  throw new ApiError(
+    409,
+    `Detaching ${catalog} leaves the policy as it is: the aliases ${battery} binds are stale or another battery's. Remove the ${battery} include to drop them.`,
   );
 }
 

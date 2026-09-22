@@ -781,9 +781,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
   [RouteId.DeleteAgentRun]: {},
-  [RouteId.GetAgentRunShare]: {},
-  [RouteId.ShareAgentRun]: {},
-  [RouteId.UnshareAgentRun]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -1309,21 +1306,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteConversationEnabledTools]: {
     chat: ["update"],
-  },
-  [RouteId.ShareConversation]: {
-    chat: ["update"],
-  },
-  [RouteId.UnshareConversation]: {
-    chat: ["update"],
-  },
-  [RouteId.GetConversationShare]: {
-    chat: ["read"],
-  },
-  [RouteId.GetSharedConversation]: {
-    chat: ["read"],
-  },
-  [RouteId.ForkSharedConversation]: {
-    chat: ["create"],
   },
   [RouteId.GetLlmProviderApiKeys]: {},
   [RouteId.GetLlmProviderApiKeyLabelKeys]: { llmProviderApiKey: ["read"] },
@@ -2001,8 +1983,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetProjectLabelValues]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },
-  [RouteId.SetProjectShare]: { project: ["update"] },
-  [RouteId.BulkUpdateProjects]: { project: ["update"] },
   [RouteId.BulkDeleteProjects]: { project: ["delete"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   // Restore is the inverse of delete and, like the deleted-projects view, an

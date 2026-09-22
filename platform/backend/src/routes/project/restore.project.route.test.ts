@@ -1,11 +1,8 @@
-import {
-  ProjectModel,
-  ProjectShareModel,
-  ScheduleTriggerModel,
-} from "@/models";
+import { ProjectModel, ScheduleTriggerModel } from "@/models";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 
 describe("projectService.restore (admin oversight)", () => {
   test("a project admin restores a soft-deleted project, un-hiding its retained files", async ({
@@ -403,10 +400,10 @@ describe("projectService.restore (admin oversight)", () => {
       name: "org-wide",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

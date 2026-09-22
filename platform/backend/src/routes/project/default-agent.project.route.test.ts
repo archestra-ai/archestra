@@ -1,10 +1,11 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { AgentModel, ProjectModel, ProjectShareModel } from "@/models";
+import { AgentModel, ProjectModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("project default agent", () => {
@@ -191,10 +192,10 @@ describe("project default agent", () => {
         scope: "personal",
         authorId: owner.id,
       });
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility: "organization",
         teamIds: [],
       });
@@ -207,7 +208,7 @@ describe("project default agent", () => {
       expect(res.statusCode).toBe(400);
     });
 
-    test("sharing a project drops a pin only its owner could use", async ({
+    test("sharing a project hides a pin only its owner could use", async ({
       makeInternalAgent,
       makeTeam,
       makeTeamMember,
@@ -228,16 +229,22 @@ describe("project default agent", () => {
       });
 
       // The rest of the team cannot reach the owner's personal agent, so the
-      // pin cannot survive the share.
-      const shared = await app.inject({
-        method: "PUT",
-        url: `/api/projects/${project.id}/share`,
-        payload: { visibility: "team", teamIds: [team.id], userIds: [] },
+      // pin stops being offered once the project is shared with them. Sharing
+      // is a permission edit that never touches the project row, so the read
+      // path is what hides the pin.
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
+        organizationId,
+        visibility: "team",
+        teamIds: [team.id],
       });
-      expect(shared.statusCode).toBe(200);
-      expect(
-        (await ProjectModel.findById(project.id))?.defaultAgentId,
-      ).toBeNull();
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/projects/${project.id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().defaultAgent).toBeNull();
     });
 
     test("a team agent must cover every team the project is shared with", async ({
@@ -261,10 +268,10 @@ describe("project default agent", () => {
       });
 
       const project = await seedProject("team-shared");
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility: "team",
         teamIds: [teamA.id, teamB.id],
       });
@@ -307,10 +314,10 @@ describe("project default agent", () => {
       });
 
       const project = await seedProject("owner-outside-team");
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility: "team",
         teamIds: [team.id],
       });
@@ -340,10 +347,10 @@ describe("project default agent", () => {
       });
 
       const project = await seedProject("user-shared");
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility: "user",
         teamIds: [],
         userIds: [colleague.id],
@@ -357,10 +364,10 @@ describe("project default agent", () => {
       expect(accepted.statusCode).toBe(200);
 
       // Adding someone the agent was never shared with outgrows the pin.
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility: "user",
         teamIds: [],
         userIds: [colleague.id, stranger.id],

@@ -9,8 +9,8 @@ import logger from "@/logging";
 import {
   FileModel,
   FileNameExistsError,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -914,7 +914,7 @@ class FileStore {
     if (!project || project.organizationId !== caller.organizationId) {
       return false;
     }
-    return ProjectShareModel.userCanAccessProject({
+    return ProjectAccessModel.userCanAccessProject({
       project,
       userId: caller.userId,
       organizationId: caller.organizationId,
@@ -938,7 +938,7 @@ class FileStore {
     if (file.projectId) {
       const project = await ProjectModel.findById(file.projectId);
       if (!project) return null;
-      const canAccess = await ProjectShareModel.userCanAccessProject({
+      const canAccess = await ProjectAccessModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,

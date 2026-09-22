@@ -165,52 +165,14 @@ export default class ResourcePermissionTargetModel {
           ),
         );
       if (!target) return null;
-      const shares = conversation
-        ? schema.conversationSharesTable
-        : schema.agentRunSharesTable;
-      const [share] = await db
-        .select()
-        .from(shares)
-        .where(
-          and(
-            eq(
-              conversation
-                ? schema.conversationSharesTable.conversationId
-                : schema.agentRunSharesTable.taskId,
-              params.id,
-            ),
-            eq(shares.organizationId, params.organizationId),
-          ),
-        );
-      const teamTable = conversation
-        ? schema.conversationShareTeamsTable
-        : schema.agentRunShareTeamsTable;
-      const userTable = conversation
-        ? schema.conversationShareUsersTable
-        : schema.agentRunShareUsersTable;
-      const [teams, users] = share
-        ? await Promise.all([
-            db
-              .select({ id: teamTable.teamId })
-              .from(teamTable)
-              .where(eq(teamTable.shareId, share.id)),
-            db
-              .select({ id: userTable.userId })
-              .from(userTable)
-              .where(eq(userTable.shareId, share.id)),
-          ])
-        : [[], []];
+      // Sharing lives on the session's permission policy alone. Without one,
+      // the session is its author's.
       return {
         ...target,
         name: target.name ?? "Chat",
-        scope:
-          share?.visibility === "organization"
-            ? "org"
-            : share?.visibility === "team"
-              ? "team"
-              : "personal",
-        teams: share?.visibility === "team" ? teams : [],
-        users: share?.visibility === "user" ? users : [],
+        scope: "personal",
+        teams: [],
+        users: [],
       };
     }
     if (params.resource === "project") {
@@ -226,37 +188,9 @@ export default class ResourcePermissionTargetModel {
           ),
         );
       if (!target) return null;
-      // A project's audience hangs off its share row, not the project.
-      const [share] = await db
-        .select({
-          id: schema.projectSharesTable.id,
-          visibility: schema.projectSharesTable.visibility,
-        })
-        .from(schema.projectSharesTable)
-        .where(eq(schema.projectSharesTable.projectId, params.id));
-      const [teams, users] = share
-        ? await Promise.all([
-            db
-              .select({ id: schema.projectShareTeamsTable.teamId })
-              .from(schema.projectShareTeamsTable)
-              .where(eq(schema.projectShareTeamsTable.shareId, share.id)),
-            db
-              .select({ id: schema.projectShareUsersTable.userId })
-              .from(schema.projectShareUsersTable)
-              .where(eq(schema.projectShareUsersTable.shareId, share.id)),
-          ])
-        : [[], []];
-      return {
-        ...target,
-        scope:
-          share?.visibility === "organization"
-            ? "org"
-            : share?.visibility === "team"
-              ? "team"
-              : "personal",
-        teams,
-        users,
-      };
+      // Sharing lives on the project's permission policy alone. Without one,
+      // the project is its owner's.
+      return { ...target, scope: "personal", teams: [], users: [] };
     }
     if (params.resource === "plugin") {
       const table = schema.pluginsTable;

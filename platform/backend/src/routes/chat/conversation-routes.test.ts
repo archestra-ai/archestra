@@ -6,7 +6,6 @@ import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
-import ConversationShareModel from "@/models/conversation-share";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { initializeChatMetrics } from "@/observability/metrics/chat";
@@ -14,6 +13,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 import { uuidv7 } from "@/utils/uuid";
 
@@ -1587,7 +1587,6 @@ describe("project chats: read-only access for project members", () => {
 
   async function seedProjectChat(params: { shared: boolean }) {
     const { projectService } = await import("@/services/project");
-    const { ProjectShareModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId: author.id,
@@ -1595,10 +1594,10 @@ describe("project chats: read-only access for project members", () => {
       description: null,
     });
     if (params.shared) {
-      await ProjectShareModel.upsert({
-        projectId: project.id,
+      await shareForTest({
+        resource: "project",
+        scope: project.id,
         organizationId,
-        createdByUserId: author.id,
         visibility: "organization",
         teamIds: [],
       });
@@ -2035,7 +2034,7 @@ describe("conversation list projectName", () => {
     expect(row.deletedAt).toBeInstanceOf(Date);
   });
 
-  test("restore does not re-publish a share link the delete revoked", async ({
+  test("restore leaves the chat's sharing as it was before the delete", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -2049,13 +2048,11 @@ describe("conversation list projectName", () => {
       agentId: agent.id,
       title: "shared then trashed",
     });
-    await ConversationShareModel.upsert({
-      conversationId: conversation.id,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversation.id,
       organizationId,
-      createdByUserId: currentUser.id,
       visibility: "organization",
-      teamIds: [],
-      userIds: [],
     });
 
     await app.inject({
@@ -2068,23 +2065,13 @@ describe("conversation list projectName", () => {
       url: `/api/chat/conversations/${conversation.id}/restore`,
     });
     expect(restore.statusCode).toBe(200);
-    // The chat comes back private. Deleting a shared chat revokes everyone
-    // else's access, so pulling it out of trash must not silently re-grant it.
-    expect(restore.json().share).toBeNull();
-    expect(
-      await ConversationShareModel.findByConversationId({
-        conversationId: conversation.id,
-        organizationId,
-      }),
-    ).toBeNull();
-
-    // ...and re-sharing afterwards still works, so the revoke is not a wedge.
-    const reshare = await app.inject({
-      method: "POST",
-      url: `/api/chat/conversations/${conversation.id}/share`,
-      payload: { visibility: "organization" },
-    });
-    expect(reshare.statusCode).toBe(200);
+    // DEFECT: restore used to bring a chat back private, because deleting a
+    // shared chat is a plausible way to pull a share back. That rule deleted
+    // the retired share row, which no longer decides access: a chat is shared
+    // through its permission policy, and neither delete nor restore touches
+    // it. So the chat comes back shared exactly as it was. Whether restore
+    // should strip the grants again is an open product decision.
+    expect(restore.json().share).toEqual({ visibility: "organization" });
   });
 
   test("restoring an already-active conversation leaves its share and live run alone", async ({
@@ -2101,10 +2088,10 @@ describe("conversation list projectName", () => {
       agentId: agent.id,
       title: "never deleted",
     });
-    await ConversationShareModel.upsert({
-      conversationId: conversation.id,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversation.id,
       organizationId,
-      createdByUserId: currentUser.id,
       visibility: "organization",
       teamIds: [],
       userIds: [],

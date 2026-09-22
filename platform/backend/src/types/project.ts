@@ -5,17 +5,13 @@ import { schema } from "@/database";
 import { ConversationOriginSchema } from "./conversation";
 import { LabelWithDetailsSchema } from "./label";
 
-/** Who a shared project is visible to (no share row = owner only). */
-// `user` shares with named individuals listed in `project_share_user`, the
-// same option conversations have carried from the start.
-export const ProjectShareVisibilitySchema = z.enum([
-  "organization",
-  "team",
-  "user",
-]);
-export type ProjectShareVisibility = z.infer<
-  typeof ProjectShareVisibilitySchema
->;
+/**
+ * Who a project is shared with, derived from its permission policy: the
+ * broadest audience holding read besides the owner. A grant to everyone or to
+ * a role is `organization`, then teams, then named people. Null = owner only.
+ */
+export const ProjectVisibilitySchema = z.enum(["organization", "team", "user"]);
+export type ProjectVisibility = z.infer<typeof ProjectVisibilitySchema>;
 
 /**
  * The caller's relationship to a project, derived from their real access path:
@@ -62,12 +58,6 @@ export const InsertProjectSchema = createInsertSchema(
 export type Project = z.infer<typeof SelectProjectSchema>;
 export type InsertProject = z.infer<typeof InsertProjectSchema>;
 
-export const SelectProjectShareSchema = createSelectSchema(
-  schema.projectSharesTable,
-  { visibility: ProjectShareVisibilitySchema },
-);
-export type ProjectShare = z.infer<typeof SelectProjectShareSchema>;
-
 /** One row of the projects list as the UI renders it. */
 export const ProjectListItemSchema = z.object({
   id: z.string().uuid(),
@@ -88,7 +78,7 @@ export const ProjectListItemSchema = z.object({
   labels: z.array(LabelWithDetailsSchema),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
-  visibility: ProjectShareVisibilitySchema.nullable(),
+  visibility: ProjectVisibilitySchema.nullable(),
   /**
    * Names of the teams a `team`-shared project is shared with, for the
    * visibility badge. Present (possibly empty) when the caller owns the

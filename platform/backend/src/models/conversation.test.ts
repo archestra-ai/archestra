@@ -2,13 +2,12 @@ import { ChatErrorCode } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
-import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
 import ModelModel from "./model";
 import ProjectModel from "./project";
-import ProjectShareModel from "./project-share";
 
 describe("ConversationModel", () => {
   test("can create a conversation", async ({
@@ -779,10 +778,10 @@ describe("ConversationModel", () => {
       },
     });
 
-    await ConversationShareModel.upsert({
-      conversationId: conversation.id,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversation.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
       userIds: [],
@@ -827,10 +826,10 @@ describe("ConversationModel", () => {
       title: "Private Shared Conversation",
     });
 
-    await ConversationShareModel.upsert({
-      conversationId: conversation.id,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversation.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "user",
       teamIds: [],
       userIds: [invitedUser.id],
@@ -868,10 +867,10 @@ describe("ConversationModel", () => {
       title: "Org Scoped Conversation",
     });
 
-    await ConversationShareModel.upsert({
-      conversationId: conversation.id,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversation.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
       userIds: [],
@@ -903,10 +902,10 @@ describe("ConversationModel", () => {
       name: "Shared Project",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -955,10 +954,10 @@ describe("ConversationModel", () => {
       name: "Owner's Project",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

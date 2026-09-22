@@ -232,7 +232,8 @@ export const AUDIT_DECISIONS = {
   },
   conversationSharesTable: {
     audited: false,
-    reason: "chat share metadata; surfaced via /llm/logs",
+    reason:
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   // Soft-deleted rather than removed, and restorable org-wide by a project
   // admin — so delete and restore are cross-user administrative actions on
@@ -244,7 +245,8 @@ export const AUDIT_DECISIONS = {
   },
   projectSharesTable: {
     audited: false,
-    reason: "project share metadata; parent (project) audited",
+    reason:
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   projectShareTeamsTable: {
     audited: false,
@@ -720,7 +722,7 @@ export const AUDIT_DECISIONS = {
   agentRunSharesTable: {
     audited: false,
     reason:
-      "agent run share metadata; share and unshare are audited at the route level (agentRun.shared/unshared)",
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   agentRunShareTeamsTable: {
     audited: false,

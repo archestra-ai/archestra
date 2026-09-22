@@ -21,13 +21,13 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
-  AgentRunShareModel,
   AgentWorkspaceModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import websocketService from "@/websocket";
 
 interface WebSocketClientContext {
@@ -399,10 +399,10 @@ describe("websocket Agent run authorization and cleanup", () => {
       logs: "checked repository\nopened pull request\n",
     });
     // The owner shares the run organization-wide.
-    await AgentRunShareModel.upsert({
-      taskId: task.id,
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
       organizationId: organization.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
       userIds: [],
@@ -470,10 +470,10 @@ describe("websocket Agent run authorization and cleanup", () => {
       name: "Shared execution project",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: organization.id,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -1056,10 +1056,10 @@ describe("websocket Agent run authorization and cleanup", () => {
 
     const viewer = await makeUser();
     await makeMember(viewer.id, organization.id, { role: "admin" });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: organization.id,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

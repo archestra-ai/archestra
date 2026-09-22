@@ -25,12 +25,10 @@ import {
   ProjectLifecycleSchema,
   ProjectListItemSchema,
   ProjectListScopeSchema,
-  ProjectShareVisibilitySchema,
   SandboxFileListItemSchema,
 } from "@/types";
 import {
   BulkDeleteBodySchema,
-  BulkIdsSchema,
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
@@ -375,109 +373,6 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         labels: body.labels,
       });
       return { ok: true as const };
-    },
-  );
-
-  fastify.put(
-    "/api/projects/:id/share",
-    {
-      schema: {
-        operationId: RouteId.SetProjectShare,
-        description:
-          "Set who can see the project (owner or a project admin): the whole " +
-          'organization, specific teams, or nobody (visibility "none" unshares).',
-        tags: ["Projects"],
-        params: z.object({ id: z.string().uuid() }),
-        body: z.object({
-          // "none" unshares — expressed as a value (not null) because the
-          // generated client cannot represent a nullable enum.
-          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
-          teamIds: z.array(z.string()).default([]),
-          // People a `user` share names; ignored for other visibilities.
-          userIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
-      },
-    },
-    async ({ params: { id }, body, organizationId, user }) => {
-      await projectService.setShare({
-        id,
-        organizationId,
-        userId: user.id,
-        visibility: body.visibility === "none" ? null : body.visibility,
-        teamIds: body.teamIds,
-        userIds: body.userIds,
-      });
-      return { ok: true as const };
-    },
-  );
-
-  fastify.patch(
-    "/api/projects/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateProjects,
-        description:
-          "Update several projects in one request. Today the only " +
-          "bulk-editable surface is who can see them — the whole " +
-          'organization, named teams, named people, or nobody ("none" ' +
-          "unshares) — and every project in the batch is moved to the same " +
-          "one. Per-project problems, such as an id the caller neither owns " +
-          "nor administers, are reported in `failed` and leave the rest of " +
-          "the batch applied.",
-        tags: ["Projects"],
-        body: z.object({
-          ids: BulkIdsSchema,
-          // "none" unshares — a value rather than null, because the generated
-          // client cannot represent a nullable enum.
-          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
-          teamIds: z.array(z.string()).default([]),
-          userIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { organizationId, user, body } = request;
-      const visibility = body.visibility === "none" ? null : body.visibility;
-
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "projects bulk update",
-        notFoundMessage: "Project not found",
-        unexpectedMessage: "Could not update this project",
-        load: async (ids) =>
-          new Map(
-            (await ProjectModel.findForBulk({ ids, organizationId })).map(
-              (project) => [project.id, project],
-            ),
-          ),
-        describe: (project) => project.name,
-        // The service owns the authorization (owner or project admin) and
-        // throws exactly as the single-project route would, so a batch refuses
-        // what one request refuses — per project, not for the whole batch.
-        applyEach: async (_project, id) => {
-          await projectService.setShare({
-            id,
-            organizationId,
-            userId: user.id,
-            visibility,
-            teamIds: body.teamIds,
-            userIds: body.userIds,
-          });
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            projects: await ProjectModel.findVisibilityForBulkAudit({
-              ids,
-              organizationId,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 

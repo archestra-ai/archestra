@@ -1,8 +1,8 @@
-import { ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 /**
@@ -63,10 +63,10 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
       description: null,
     });
     // Share the project with the whole org so actingUser can access it.
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

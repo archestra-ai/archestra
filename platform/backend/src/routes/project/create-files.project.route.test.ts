@@ -3,12 +3,12 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
-import { ProjectShareModel } from "@/models";
 import FileModel from "@/models/file";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("POST /api/projects/:id/files", () => {
@@ -257,10 +257,10 @@ describe("POST /api/projects/:id/files", () => {
 
   test("a shared member can upload", async ({ makeUser, makeMember }) => {
     const project = await seedProject("shared");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

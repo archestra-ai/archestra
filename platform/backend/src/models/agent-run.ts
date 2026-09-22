@@ -24,6 +24,7 @@ import type {
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import A2AMessageModel from "./a2a/message";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * The Agent run carrying one A2A task. Holds no lifecycle state of its own — the
@@ -257,6 +258,12 @@ class AgentRunModel {
       activeDeadlineSeconds: _activeDeadlineSeconds,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
+    const runAudience = {
+      organizationId: schema.agentRunsTable.organizationId,
+      resource: "agentRun" as const,
+      scopeColumn: schema.agentRunsTable.taskId,
+      ownerColumn: schema.agentRunsTable.actorUserId,
+    };
     return db
       .select({
         ...runColumns,
@@ -266,23 +273,20 @@ class AgentRunModel {
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
         initiatorName: schema.usersTable.name,
-        shareVisibility: schema.agentRunSharesTable.visibility,
-        shareTeamNames: sql<string[]>`coalesce(array(
-          select ${schema.teamsTable.name}
-          from ${schema.agentRunShareTeamsTable}
-          inner join ${schema.teamsTable}
-            on ${schema.teamsTable.id} = ${schema.agentRunShareTeamsTable.teamId}
-          where ${schema.agentRunShareTeamsTable.shareId} = ${schema.agentRunSharesTable.id}
-          order by ${schema.teamsTable.name}
-        ), array[]::text[])`,
-        shareUserNames: sql<string[]>`coalesce(array(
-          select ${schema.usersTable.name}
-          from ${schema.agentRunShareUsersTable}
-          inner join ${schema.usersTable}
-            on ${schema.usersTable.id} = ${schema.agentRunShareUsersTable.userId}
-          where ${schema.agentRunShareUsersTable.shareId} = ${schema.agentRunSharesTable.id}
-          order by ${schema.usersTable.name}
-        ), array[]::text[])`,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        shareVisibility:
+          ResourcePermissionPolicyModel.sharedAudience(runAudience),
+        shareTeamNames: ResourcePermissionPolicyModel.sharedRecipientNames({
+          ...runAudience,
+          subject: "team",
+        }),
+        shareUserNames: ResourcePermissionPolicyModel.sharedRecipientNames({
+          ...runAudience,
+          subject: "user",
+        }),
+        // SPDX-SnippetEnd
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -296,10 +300,6 @@ class AgentRunModel {
       .leftJoin(
         schema.usersTable,
         eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
-      )
-      .leftJoin(
-        schema.agentRunSharesTable,
-        eq(schema.agentRunsTable.taskId, schema.agentRunSharesTable.taskId),
       )
       .where(
         and(
@@ -445,7 +445,7 @@ class AgentRunModel {
   /**
    * A single run session by task, scoped only to the organization — not
    * to the actor who started it. Used to serve shared (read-only) viewers, whose
-   * access is authorized separately via {@link AgentRunShareModel}. Callers must
+   * access is authorized separately by the run's permission policy. Callers must
    * verify share access before exposing the result.
    */
   static async findSessionByTaskId(params: {

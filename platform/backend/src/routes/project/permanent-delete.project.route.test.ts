@@ -12,13 +12,13 @@ import {
   FileModel,
   ProjectModel,
   ProjectPinModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
 } from "@/models";
 import { projectService } from "@/services/project";
 import { FilesystemObjectStore } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import { ApiError } from "@/types";
 
 // Asserting on the orphan warning below needs the mock: the real `@/logging`
@@ -94,10 +94,10 @@ describe("projectService.purge", () => {
     // needs `project:share-org` even to soft-delete, which is a different rule
     // than the one under test here.
     const colleague = await makeUser({ email: "colleague@test.com" });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "user",
       teamIds: [],
       userIds: [colleague.id],
@@ -134,9 +134,8 @@ describe("projectService.purge", () => {
       .where(eq(schema.projectsTable.id, project.id));
     expect(rows).toHaveLength(0);
 
-    // Cascade: files, pins, share config, scheduled tasks.
+    // Cascade: files, pins, scheduled tasks.
     expect(await FileModel.findById(file.id)).toBeNull();
-    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
     expect(await ScheduleTriggerModel.findById(trigger.id)).toBeNull();
     const pins = await db
       .select({ projectId: schema.projectPinsTable.projectId })

@@ -11,6 +11,7 @@ import FileModel, { FileNameExistsError } from "@/models/file";
 import { projectService } from "@/services/project";
 import { describe, expect, test } from "@/test";
 import { FakeS3Client } from "@/test/fake-s3-client";
+import { shareForTest } from "@/test/sharing";
 import { __setS3ClientForTests } from "./file-storage";
 import { FileNotDeletableError, fileStore } from "./file-store";
 
@@ -375,10 +376,10 @@ describe("fileStore.get access", () => {
       name: "shared",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -932,10 +933,10 @@ describe("fileStore disk overlay (filesystem provider)", () => {
       name: "DiskProj",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

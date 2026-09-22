@@ -13,8 +13,8 @@ import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
@@ -749,12 +749,12 @@ async function findAccessibleTriggerOrThrow(params: {
   }
 
   // Project members may READ the schedules of a project they can access (and
-  // their runs). Reuses the same ProjectShareModel.userCanAccessProject check
+  // their runs). Reuses the same ProjectAccessModel.userCanAccessProject check
   // that backs GET /api/projects/:id (via projectService.requireViewable).
   // Deliberately read-only — see ScheduleTriggerAccess.
   if (params.access === "read" && project) {
     if (
-      await ProjectShareModel.userCanAccessProject({
+      await ProjectAccessModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,

@@ -3,15 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  useForkConversation,
-  useForkSharedConversation,
-} from "./chat-share.query";
+import { useForkConversation } from "./chat-share.query";
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     forkChatConversation: vi.fn(),
-    forkSharedConversation: vi.fn(),
   },
 }));
 
@@ -50,17 +46,17 @@ describe("fork project-list invalidation", () => {
     );
   });
 
-  it("useForkSharedConversation leaves project queries untouched for a non-project fork", async () => {
-    vi.mocked(archestraApiSdk.forkSharedConversation).mockResolvedValue({
+  it("useForkConversation leaves project queries untouched for a non-project fork", async () => {
+    vi.mocked(archestraApiSdk.forkChatConversation).mockResolvedValue({
       data: { id: "forked", projectId: null },
       error: undefined,
-    } as Awaited<ReturnType<typeof archestraApiSdk.forkSharedConversation>>);
+    } as Awaited<ReturnType<typeof archestraApiSdk.forkChatConversation>>);
 
     const { invalidateSpy, result } = renderWithClient(() =>
-      useForkSharedConversation(),
+      useForkConversation(),
     );
 
-    await result.current.mutateAsync({ shareId: "s1", agentId: "a1" });
+    await result.current.mutateAsync({ conversationId: "c1", agentId: "a1" });
 
     const touchedProjects = invalidateSpy.mock.calls.some(
       ([arg]) => Array.isArray(arg?.queryKey) && arg.queryKey[0] === "projects",

@@ -3,7 +3,8 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ProjectShareVisibility, User } from "@/types";
+import { shareForTest } from "@/test/sharing";
+import type { ProjectVisibility, User } from "@/types";
 
 /** Names of the projects returned by GET /api/projects, in response order. */
 function names(json: string): string[] {
@@ -53,15 +54,15 @@ describe("GET /api/projects (scope + search)", () => {
       description,
     });
   const share = (
-    owner: User,
+    _owner: User,
     id: string,
-    visibility: ProjectShareVisibility,
+    visibility: ProjectVisibility,
     teamIds: string[] = [],
   ) =>
-    projectService.setShare({
-      id,
+    shareForTest({
+      resource: "project",
+      scope: id,
       organizationId,
-      userId: owner.id,
       visibility,
       teamIds,
     });

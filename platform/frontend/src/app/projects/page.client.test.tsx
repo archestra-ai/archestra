@@ -11,7 +11,6 @@ const mockCreateMutateAsync = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
 const mockBulkDeleteMutate = vi.fn();
-const mockBulkUpdateVisibilityMutateAsync = vi.fn();
 /** The detail the edit dialog loads; tests override the pin and sharing. */
 let mockEditingProject: Record<string, unknown> = {};
 const mockPinMutate = vi.fn();
@@ -272,10 +271,6 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutate: mockBulkDeleteMutate,
     isPending: false,
   }),
-  useBulkUpdateProjectVisibility: () => ({
-    mutateAsync: mockBulkUpdateVisibilityMutateAsync,
-    isPending: false,
-  }),
   useUpdateProject: () => ({
     mutateAsync: mockUpdateMutateAsync,
     isPending: false,
@@ -335,10 +330,6 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
-    mockBulkUpdateVisibilityMutateAsync.mockResolvedValue({
-      succeeded: ["Project"],
-      failed: [],
-    });
     mockEditingProject = {
       id: "owner",
       name: "Owner project",

@@ -4,6 +4,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { Agent, User } from "@/types";
 
 type RunItem = {
@@ -123,10 +124,10 @@ describe("GET /api/projects/:id/runs (project:read-all)", () => {
       name: "Shared run project",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

@@ -3,8 +3,8 @@ import db, { schema } from "@/database";
 import { softDelete } from "@/database/soft-delete";
 import { ProjectModel } from "@/models";
 import ConversationModel from "@/models/conversation";
-import { projectService } from "@/services/project";
 import { expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import { resolveProjectFileScope } from "./project-file-scope";
 import { SkillSandboxError } from "./types";
 
@@ -107,10 +107,10 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
     name: "shared-project",
     description: null,
   });
-  await projectService.setShare({
-    id: project.id,
+  await shareForTest({
+    resource: "project",
+    scope: project.id,
     organizationId: org.id,
-    userId: owner.id,
     visibility: "organization",
     teamIds: [],
   });

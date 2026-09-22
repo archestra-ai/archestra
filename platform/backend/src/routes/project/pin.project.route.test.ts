@@ -1,8 +1,9 @@
-import { ProjectPinModel, ProjectShareModel } from "@/models";
+import { ProjectPinModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("PUT/DELETE /api/projects/:id/pin", () => {
@@ -66,10 +67,10 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
     makeMember,
   }) => {
     const project = await seedProject("shared");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -121,10 +122,10 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
     makeMember,
   }) => {
     const project = await seedProject("transient");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -135,7 +136,12 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
     await app.inject({ method: "PUT", url: `/api/projects/${project.id}/pin` });
 
     // owner unshares
-    await ProjectShareModel.remove(project.id);
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
+      visibility: null,
+    });
 
     // member can still unpin even though the project now 404s for reads
     actingUser = member;

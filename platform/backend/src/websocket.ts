@@ -21,12 +21,12 @@ import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   AgentRunModel,
-  AgentRunShareModel,
   McpServerModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import {
@@ -1023,7 +1023,7 @@ class WebSocketService {
 
   /**
    * Who may stream a run's logs read-only: anyone who could control it, plus
-   * anyone an execution share or project grants access to. Interactive attach stays owner-only (see
+   * anyone the run's permission policy or project grants access to. Interactive attach stays owner-only (see
    * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
    * live credentials, only a view of the output.
    */
@@ -1036,18 +1036,23 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
     if (await this.mayControlSession(session, clientContext)) return true;
-    const share = await AgentRunShareModel.findAccessibleByTaskId({
-      taskId: session.taskId,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const shared = await ResourcePermissionAccessModel.canRead({
       organizationId: clientContext.organizationId,
       userId: clientContext.userId,
+      resource: "agentRun",
+      scope: session.taskId,
     });
-    if (share) return true;
+    // SPDX-SnippetEnd
+    if (shared) return true;
     if (!session.projectId) return false;
 
     const project = await ProjectModel.findById(session.projectId);
     if (
       !project ||
-      !(await ProjectShareModel.userCanAccessProject({
+      !(await ProjectAccessModel.userCanAccessProject({
         sessionAccess: true,
         project,
         userId: clientContext.userId,

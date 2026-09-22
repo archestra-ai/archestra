@@ -3,14 +3,14 @@ import { enterpriseTier } from "@/enterprise-tier";
 import A2AContextModel from "@/models/a2a/context";
 import A2ATaskModel from "@/models/a2a/task";
 import AgentRunModel from "@/models/agent-run";
-import AgentRunShareModel from "@/models/agent-run-share";
 import ConversationModel from "@/models/conversation";
-import ConversationShareModel from "@/models/conversation-share";
 import ProjectModel from "@/models/project";
-import ProjectShareModel from "@/models/project-share";
+import ProjectAccessModel from "@/models/project-access";
+import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { expect, test } from "@/test";
+import { seedLegacyShareForTest } from "@/test/sharing";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 for (const resource of ["conversation", "agentRun"] as const) {
@@ -65,21 +65,24 @@ for (const resource of ["conversation", "agentRun"] as const) {
       });
       const scope = resource === "conversation" ? chat.id : task.id;
       const key = { organizationId: org.id, resource, scope };
-      if (visibility !== "private") {
-        const share = {
-          organizationId: org.id,
+      if (visibility !== "private")
+        await seedLegacyShareForTest({
+          ...key,
           createdByUserId: owner.id,
           visibility,
           teamIds: visibility === "team" ? [team.id] : [],
           userIds: visibility === "user" ? [recipient.id] : [],
-        };
-        if (resource === "conversation")
-          await ConversationShareModel.upsert({
-            ...share,
-            conversationId: scope,
-          });
-        else await AgentRunShareModel.upsert({ ...share, taskId: scope });
-      }
+        });
+      // The read path a recipient actually takes: opening the chat, or the run.
+      const canOpen = async (userId: string) =>
+        resource === "conversation"
+          ? !!(await ConversationModel.findAccessibleById({
+              id: scope,
+              organizationId: org.id,
+              userId,
+              canReadOthersViaProject: async () => false,
+            }))
+          : !!(await ResourcePermissionAccessModel.canRead({ ...key, userId }));
       const before = await ResourcePermissions.getPolicy({
         ...key,
         userId: owner.id,
@@ -107,19 +110,7 @@ for (const resource of ["conversation", "agentRun"] as const) {
             action: "use",
           }),
         ).toBe(false);
-        const readable =
-          resource === "conversation"
-            ? await ConversationShareModel.findAccessibleByConversationId({
-                organizationId: org.id,
-                userId: user.id,
-                conversationId: scope,
-              })
-            : await AgentRunShareModel.findAccessibleByTaskId({
-                organizationId: org.id,
-                userId: user.id,
-                taskId: scope,
-              });
-        expect(!!readable).toBe(expected);
+        expect(await canOpen(user.id)).toBe(expected);
       }
       await ResourcePermissions.updatePolicy({
         ...key,
@@ -142,24 +133,12 @@ for (const resource of ["conversation", "agentRun"] as const) {
           action: "read",
         }),
       ).toBe(false);
-      const stillReadable =
-        resource === "conversation"
-          ? await ConversationShareModel.findAccessibleByConversationId({
-              organizationId: org.id,
-              userId: recipient.id,
-              conversationId: scope,
-            })
-          : await AgentRunShareModel.findAccessibleByTaskId({
-              organizationId: org.id,
-              userId: recipient.id,
-              taskId: scope,
-            });
-      expect(!!stillReadable).toBe(false);
+      expect(await canOpen(recipient.id)).toBe(false);
     });
   }
 }
 
-test("new chat grants support mixed principals without creating a legacy share and cannot expose locked chats", async ({
+test("new chat grants support mixed principals and cannot expose locked chats", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -203,12 +182,6 @@ test("new chat grants support mixed principals without creating a legacy share a
     revision: 0,
     grants,
   });
-  expect(
-    await ConversationShareModel.findByConversationId({
-      organizationId: org.id,
-      conversationId: chat.id,
-    }),
-  ).toBeNull();
   expect(
     await ConversationModel.findAccessibleById({
       id: chat.id,
@@ -279,12 +252,12 @@ test("project permission revocation removes inherited session reads and project 
     userId: owner.id,
     name: "Session review",
   });
-  await ProjectShareModel.upsert({
+  await seedLegacyShareForTest({
     organizationId: org.id,
-    projectId: project.id,
+    resource: "project",
+    scope: project.id,
     createdByUserId: owner.id,
     visibility: "organization",
-    teamIds: [],
   });
   const chat = await ConversationModel.create({
     organizationId: org.id,
@@ -303,7 +276,7 @@ test("project permission revocation removes inherited session reads and project 
     });
   expect(await readChat()).not.toBeNull();
   expect(
-    await ProjectShareModel.listAccessibleProjects({
+    await ProjectAccessModel.listAccessibleProjects({
       organizationId: org.id,
       userId: reader.id,
     }),
@@ -331,7 +304,7 @@ test("project permission revocation removes inherited session reads and project 
   });
   expect(await readChat()).toBeNull();
   expect(
-    await ProjectShareModel.listAccessibleProjects({
+    await ProjectAccessModel.listAccessibleProjects({
       organizationId: org.id,
       userId: reader.id,
     }),
@@ -381,7 +354,7 @@ test("project wildcard access cannot reveal private chats, while explicit recipi
       canReadOthersViaProject: async () => true,
     });
   expect(
-    await ProjectShareModel.userCanAccessProject({
+    await ProjectAccessModel.userCanAccessProject({
       project,
       organizationId: org.id,
       userId: reader.id,
@@ -403,7 +376,7 @@ test("project wildcard access cannot reveal private chats, while explicit recipi
   });
   expect(await readChat()).toBeNull();
   expect(
-    await ProjectShareModel.userCanAccessProject({
+    await ProjectAccessModel.userCanAccessProject({
       project,
       organizationId: org.id,
       userId: reader.id,
@@ -429,12 +402,12 @@ test("a chat share naming somebody outside the organization still converts to a 
     organizationId: org.id,
     agentId: agent.id,
   });
-  await ConversationShareModel.upsert({
+  await seedLegacyShareForTest({
     organizationId: org.id,
-    conversationId: chat.id,
+    resource: "conversation",
+    scope: chat.id,
     createdByUserId: owner.id,
     visibility: "user",
-    teamIds: [],
     userIds: [stranger.id],
   });
 
@@ -485,13 +458,12 @@ test("a locked chat keeps its owner alone even when an organization share exists
     agentId: agent.id,
     lockedChat: true,
   });
-  await ConversationShareModel.upsert({
+  await seedLegacyShareForTest({
     organizationId: org.id,
-    conversationId: locked.id,
+    resource: "conversation",
+    scope: locked.id,
     createdByUserId: owner.id,
     visibility: "organization",
-    teamIds: [],
-    userIds: [],
   });
 
   await runScopedResourcePermissionCutover();

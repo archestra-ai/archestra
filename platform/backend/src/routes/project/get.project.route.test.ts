@@ -1,10 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("GET /api/projects + GET /api/projects/:id", () => {
@@ -43,10 +43,10 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
       name: "alpha",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: user.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -145,10 +145,10 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
       name: "shared-org-wide",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: otherOwner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -284,10 +284,10 @@ describe("GET /api/projects/:id/files", () => {
       name: "filed",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -342,7 +342,12 @@ describe("GET /api/projects/:id/files", () => {
       projectName: "filed",
     });
 
-    await ProjectShareModel.remove(project.id);
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
+      visibility: null,
+    });
     const denied = await app.inject({
       method: "GET",
       url: `/api/projects/${project.id}/files`,

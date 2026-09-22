@@ -1,11 +1,12 @@
 import {
   ConversationModel,
+  ProjectAccessModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
-  ProjectShareModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 
 async function makeProject(params: {
   organizationId: string;
@@ -159,10 +160,10 @@ describe("ProjectModel", () => {
       userId: user.id,
       name: "recoverable",
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      createdByUserId: user.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -187,13 +188,13 @@ describe("ProjectModel", () => {
 
     expect((await ProjectModel.findById(project.id))?.name).toBe("recoverable");
     expect(
-      (await ProjectShareModel.listAllOrgProjects({ organizationId: org.id }))
+      (await ProjectAccessModel.listAllOrgProjects({ organizationId: org.id }))
         .map((p) => p.id)
         .includes(project.id),
     ).toBe(true);
-    expect(
-      (await ProjectShareModel.findByProjectId(project.id))?.visibility,
-    ).toBe("organization");
+    expect((await ProjectAccessModel.findAudience(project)).visibility).toBe(
+      "organization",
+    );
     const pins = await ProjectPinModel.getPinnedAtForProjects({
       userId: user.id,
       projectIds: [project.id],
@@ -342,7 +343,7 @@ describe("ProjectModel", () => {
   });
 });
 
-describe("ProjectShareModel", () => {
+describe("ProjectAccessModel", () => {
   test("access matrix: owner / org share / team share / outsider / cross-org", async ({
     makeUser,
     makeOrganization,
@@ -354,6 +355,8 @@ describe("ProjectShareModel", () => {
     const owner = await makeUser();
     const teammate = await makeUser({ email: "share-teammate@test.com" });
     const orgMember = await makeUser({ email: "share-orgmember@test.com" });
+    // Access is read from grants, which only ever reach members.
+    await makeMember(owner.id, org.id, {});
     await makeMember(teammate.id, org.id, {});
     await makeMember(orgMember.id, org.id, {});
     const team = await makeTeam(org.id, owner.id, { name: "Sharers" });
@@ -367,7 +370,7 @@ describe("ProjectShareModel", () => {
     });
 
     const can = (userId: string, organizationId = org.id) =>
-      ProjectShareModel.userCanAccessProject({
+      ProjectAccessModel.userCanAccessProject({
         project,
         userId,
         organizationId,
@@ -378,21 +381,21 @@ describe("ProjectShareModel", () => {
     expect(await can(teammate.id)).toBe(false);
 
     // team share
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "team",
       teamIds: [team.id],
     });
     expect(await can(teammate.id)).toBe(true);
     expect(await can(orgMember.id)).toBe(false);
 
-    // org share (upsert replaces)
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    // org share (replaces the team grant)
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -401,7 +404,12 @@ describe("ProjectShareModel", () => {
     expect(await can(orgMember.id, otherOrg.id)).toBe(false);
 
     // unshare
-    await ProjectShareModel.remove(project.id);
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId: org.id,
+      visibility: null,
+    });
     expect(await can(orgMember.id)).toBe(false);
   });
 
@@ -429,10 +437,10 @@ describe("ProjectShareModel", () => {
       userId: owner.id,
       name: "team-shared",
     });
-    await ProjectShareModel.upsert({
-      projectId: sharedToTeam.id,
+    await shareForTest({
+      resource: "project",
+      scope: sharedToTeam.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "team",
       teamIds: [team.id],
     });
@@ -441,10 +449,10 @@ describe("ProjectShareModel", () => {
       userId: owner.id,
       name: "org-shared",
     });
-    await ProjectShareModel.upsert({
-      projectId: orgShared.id,
+    await shareForTest({
+      resource: "project",
+      scope: orgShared.id,
       organizationId: org.id,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -454,7 +462,7 @@ describe("ProjectShareModel", () => {
       name: "private",
     });
 
-    const listed = await ProjectShareModel.listAccessibleProjects({
+    const listed = await ProjectAccessModel.listAccessibleProjects({
       userId: viewer.id,
       organizationId: org.id,
     });
@@ -472,7 +480,7 @@ describe("ProjectShareModel", () => {
     // soft-deleted projects vanish from every list surface, including the
     // admin oversight base set: the retained row is invisible to the API.
     await ProjectModel.delete(orgShared.id);
-    const afterDelete = await ProjectShareModel.listAccessibleProjects({
+    const afterDelete = await ProjectAccessModel.listAccessibleProjects({
       userId: viewer.id,
       organizationId: org.id,
     });
@@ -480,9 +488,57 @@ describe("ProjectShareModel", () => {
       "mine",
       "team-shared",
     ]);
-    const allOrg = await ProjectShareModel.listAllOrgProjects({
+    const allOrg = await ProjectAccessModel.listAllOrgProjects({
       organizationId: org.id,
     });
     expect(allOrg.map((p) => p.id)).not.toContain(orgShared.id);
+  });
+  test("a project shared by name reaches exactly the people named, and lists for them", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const named = await makeUser();
+    const other = await makeUser();
+    for (const user of [owner, named, other])
+      await makeMember(user.id, org.id, {});
+    const project = await makeProject({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "named",
+    });
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId: org.id,
+      visibility: "user",
+      userIds: [named.id],
+    });
+
+    const can = (userId: string) =>
+      ProjectAccessModel.userCanAccessProject({
+        project,
+        userId,
+        organizationId: org.id,
+      });
+    expect(await can(named.id)).toBe(true);
+    expect(await can(other.id)).toBe(false);
+    const listed = await ProjectAccessModel.listAccessibleProjects({
+      userId: named.id,
+      organizationId: org.id,
+    });
+    expect(listed.find((p) => p.id === project.id)?.visibility).toBe("user");
+    const audience = await ProjectAccessModel.findAudience(project);
+    expect(audience.users.map((user) => user.id)).toEqual([named.id]);
+
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId: org.id,
+      visibility: null,
+    });
+    expect(await can(named.id)).toBe(false);
   });
 });

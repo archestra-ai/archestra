@@ -11,7 +11,6 @@ import {
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
-  AgentRunShareModel,
   AgentWorkspaceModel,
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
@@ -32,6 +31,7 @@ import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { shareForTest } from "@/test/sharing";
 import type { Agent, User } from "@/types";
 
 vi.mock("@/observability");
@@ -360,10 +360,10 @@ describe("Agent Runtime routes", () => {
     const visibleTeam = await makeTeam(organizationId, user.id, {
       name: "Runtime reviewers",
     });
-    await AgentRunShareModel.upsert({
-      taskId: selectedTask.id,
+    await shareForTest({
+      resource: "agentRun",
+      scope: selectedTask.id,
       organizationId,
-      createdByUserId: user.id,
       visibility: "team",
       teamIds: [visibleTeam.id],
       userIds: [],
@@ -486,15 +486,13 @@ describe("Agent Runtime routes", () => {
     });
     user = owner;
     for (const visibility of ["user", "organization"] as const) {
-      const response = await app.inject({
-        method: "PUT",
-        url: `/api/agent-runs/${task.id}/share`,
-        payload: {
-          visibility,
-          ...(visibility === "user" ? { userIds: [recipient.id] } : {}),
-        },
+      await shareForTest({
+        resource: "agentRun",
+        scope: task.id,
+        organizationId,
+        visibility: visibility,
+        userIds: visibility === "user" ? [recipient.id] : [],
       });
-      expect(response.statusCode).toBe(200);
       expect(await readRun()).toMatchObject({
         shareUserNames: visibility === "user" ? [recipient.name] : [],
         shareTeamNames: [],
@@ -508,11 +506,12 @@ describe("Agent Runtime routes", () => {
       });
       user = owner;
     }
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/api/agent-runs/${task.id}/share`,
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: null,
     });
-    expect(response.statusCode).toBe(200);
     user = creator;
     expect(await readRun()).toMatchObject({
       initiatorName: owner.name,
@@ -542,10 +541,10 @@ describe("Agent Runtime routes", () => {
     await createRun({ taskId: task.id, actorUserId: owner.id });
 
     for (const visibility of ["user", "team"] as const) {
-      await AgentRunShareModel.upsert({
-        taskId: task.id,
+      await shareForTest({
+        resource: "agentRun",
+        scope: task.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility,
         teamIds: visibility === "team" ? [team.id] : [],
         userIds: visibility === "user" ? [recipient.id] : [],
@@ -577,11 +576,6 @@ describe("Agent Runtime routes", () => {
                 : null,
           }),
         ]);
-        const settings = await app.inject({
-          method: "GET",
-          url: `/api/agent-runs/${task.id}/share`,
-        });
-        expect(settings.statusCode).toBe(viewer === owner ? 200 : 404);
         const details = await app.inject({
           method: "GET",
           url: `/api/agent-runs/${task.id}`,
@@ -1439,16 +1433,12 @@ describe("Agent Runtime routes", () => {
     expect(beforeShare.statusCode).toBe(404);
 
     // The owner shares it organization-wide.
-    user = owner;
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "organization",
     });
-    expect(shared.statusCode).toBe(200);
-    expect(shared.json()).toEqual(
-      expect.objectContaining({ taskId: task.id, visibility: "organization" }),
-    );
 
     // The colleague now gets a read-only view flagged as shared.
     user = colleague;
@@ -1460,27 +1450,6 @@ describe("Agent Runtime routes", () => {
     expect(afterShare.json()).toEqual(
       expect.objectContaining({ taskId: task.id, viewerRole: "shared" }),
     );
-
-    const [audit] = await db
-      .select({
-        action: schema.auditLogsTable.action,
-        resourceId: schema.auditLogsTable.resourceId,
-        before: schema.auditLogsTable.before,
-        after: schema.auditLogsTable.after,
-      })
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.action, "agentRun.shared"),
-          eq(schema.auditLogsTable.resourceId, task.id),
-        ),
-      );
-    expect(audit).toMatchObject({
-      action: "agentRun.shared",
-      resourceId: task.id,
-      before: null,
-      after: expect.objectContaining({ visibility: "organization" }),
-    });
   });
 
   test("limits a team share to members of the shared team", async ({
@@ -1500,15 +1469,13 @@ describe("Agent Runtime routes", () => {
     const outsider = await makeAdmin();
     await makeMember(outsider.id, organizationId, { role: "member" });
 
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "team", teamIds: [team.id] },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "team",
+      teamIds: [team.id],
     });
-    expect(shared.statusCode).toBe(200);
-    expect(shared.json()).toEqual(
-      expect.objectContaining({ visibility: "team", teamIds: [team.id] }),
-    );
 
     user = teamMember;
     const memberView = await app.inject({
@@ -1540,12 +1507,13 @@ describe("Agent Runtime routes", () => {
     const uninvited = await makeAdmin();
     await makeMember(uninvited.id, organizationId, { role: "member" });
 
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "user", userIds: [invited.id] },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "user",
+      userIds: [invited.id],
     });
-    expect(shared.statusCode).toBe(200);
 
     user = invited;
     const invitedView = await app.inject({
@@ -1613,15 +1581,6 @@ describe("Agent Runtime routes", () => {
       ).statusCode,
     ).toBe(404);
     user = owner;
-    expect(
-      (
-        await app.inject({
-          method: "PUT",
-          url: `/api/agent-runs/${task.id}/share`,
-          payload: { visibility: "organization" },
-        })
-      ).statusCode,
-    ).toBe(400);
     await ResourcePermissions.updatePolicy({
       organizationId,
       userId: owner.id,
@@ -1642,73 +1601,38 @@ describe("Agent Runtime routes", () => {
     ).toBe(404);
   });
 
-  test("revokes sharing and keeps share management owner-only", async ({
+  test("revoking a share takes a colleague's access away again", async ({
     makeAdmin,
     makeMember,
   }) => {
     const task = await createTask(agent.id);
     await createRun({ taskId: task.id, actorUserId: user.id });
-    const owner = user;
-
-    await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "organization",
     });
-
-    // A non-owner can neither read nor change the share settings.
     const colleague = await makeAdmin();
     await makeMember(colleague.id, organizationId, { role: "member" });
     user = colleague;
-    const readShare = await app.inject({
+    const shared = await app.inject({
       method: "GET",
-      url: `/api/agent-runs/${task.id}/share`,
+      url: `/api/agent-runs/${task.id}`,
     });
-    expect(readShare.statusCode).toBe(404);
-    const forbiddenShare = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
-    });
-    expect(forbiddenShare.statusCode).toBe(404);
+    expect(shared.statusCode).toBe(200);
 
-    // The owner revokes the share.
-    user = owner;
-    const unshared = await app.inject({
-      method: "DELETE",
-      url: `/api/agent-runs/${task.id}/share`,
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: null,
     });
-    expect(unshared.statusCode).toBe(200);
-    expect(unshared.json()).toEqual({ success: true });
-
-    // The colleague loses access again.
-    user = colleague;
     const afterRevoke = await app.inject({
       method: "GET",
       url: `/api/agent-runs/${task.id}`,
     });
     expect(afterRevoke.statusCode).toBe(404);
-
-    const [audit] = await db
-      .select({
-        action: schema.auditLogsTable.action,
-        resourceId: schema.auditLogsTable.resourceId,
-        before: schema.auditLogsTable.before,
-        after: schema.auditLogsTable.after,
-      })
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.action, "agentRun.unshared"),
-          eq(schema.auditLogsTable.resourceId, task.id),
-        ),
-      );
-    expect(audit).toMatchObject({
-      action: "agentRun.unshared",
-      resourceId: task.id,
-      before: expect.objectContaining({ visibility: "organization" }),
-      after: { success: true },
-    });
   });
 
   test("continues only an owned retained workspace and audits the new turn", async ({

@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { A2ATaskStateSchema } from "./a2a-task";
-import { AgentRunShareVisibilitySchema } from "./agent-run-share";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -291,7 +290,11 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
   initiatorName: z.string().nullable(),
-  shareVisibility: z.union([AgentRunShareVisibilitySchema, z.null()]),
+  /** Who the run is shared with, derived from its permission policy. */
+  shareVisibility: z.union([
+    z.enum(["organization", "team", "user"]),
+    z.null(),
+  ]),
   shareTeamNames: z
     .array(z.string())
     .nullable()

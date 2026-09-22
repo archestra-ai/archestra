@@ -146,10 +146,7 @@ import {
   setReviewContext,
   subscribeReviewContext,
 } from "@/lib/chat/chat-review-context";
-import {
-  useForkConversation,
-  useForkSharedConversation,
-} from "@/lib/chat/chat-share.query";
+import { useForkConversation } from "@/lib/chat/chat-share.query";
 import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 import {
   applyFeedbackToMessages,
@@ -343,7 +340,6 @@ export function ChatPageContent({
     message: string;
   } | null>(null);
   const forkConversationMutation = useForkConversation();
-  const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
   const { data: canCreateAgent } = useHasPermissions({
@@ -2679,28 +2675,18 @@ export function ChatPageContent({
       return;
     }
 
-    const result = conversation?.share?.id
-      ? await forkSharedConversationMutation.mutateAsync({
-          shareId: conversation.share.id,
-          agentId: effectiveForkAgentId,
-        })
-      : await forkConversationMutation.mutateAsync({
-          conversationId,
-          agentId: effectiveForkAgentId,
-        });
+    // A shared chat forks through the same route as an owned one: the server
+    // lets anyone its permissions let read the chat start a copy.
+    const result = await forkConversationMutation.mutateAsync({
+      conversationId,
+      agentId: effectiveForkAgentId,
+    });
 
     if (result) {
       setIsForkDialogOpen(false);
       router.push(`/chat/${result.id}`);
     }
-  }, [
-    conversationId,
-    conversation?.share?.id,
-    effectiveForkAgentId,
-    forkConversationMutation,
-    forkSharedConversationMutation,
-    router,
-  ]);
+  }, [conversationId, effectiveForkAgentId, forkConversationMutation, router]);
 
   const handleExportMarkdown = useCallback(() => {
     if (!conversationId || messages.length === 0) return;
@@ -3930,13 +3916,10 @@ export function ChatPageContent({
               <Button
                 onClick={handleForkConversation}
                 disabled={
-                  !effectiveForkAgentId ||
-                  forkConversationMutation.isPending ||
-                  forkSharedConversationMutation.isPending
+                  !effectiveForkAgentId || forkConversationMutation.isPending
                 }
               >
-                {forkConversationMutation.isPending ||
-                forkSharedConversationMutation.isPending
+                {forkConversationMutation.isPending
                   ? "Creating..."
                   : "Start Chat"}
               </Button>

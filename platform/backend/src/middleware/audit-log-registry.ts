@@ -303,16 +303,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentRun",
     resourceIdParam: "taskId",
   },
-  // Registered explicitly so the DELETE (unshare) is not mislabeled as
-  // `agentRun.deleted` by the walk-up to `/api/agent-runs/:taskId`.
-  "/api/agent-runs/:taskId/share": {
-    resourceType: "agentRun",
-    resourceIdParam: "taskId",
-    actionByMethod: {
-      PUT: "agentRun.shared",
-      DELETE: "agentRun.unshared",
-    },
-  },
   "/api/agents/:id/restore": {
     resourceType: "agent",
     action: "agent.restored",
@@ -746,12 +736,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "project",
     action: "project.purged",
     fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
-  },
-  // Visibility lives in `project_shares`, captured by the project snapshot.
-  "/api/projects/:id/share": {
-    resourceType: "project",
-    action: "project.updated",
-    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
 
   // Skills
@@ -1349,10 +1333,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/projects/bulk": {
     resourceType: "project",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "project.bulk_updated",
-      DELETE: "project.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "project.bulk_deleted" },
   },
   "/api/api-keys/bulk": {
     resourceType: "apiKey",

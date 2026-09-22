@@ -25,7 +25,6 @@ export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentPinModel } from "./agent-pin";
 export { default as AgentRunModel } from "./agent-run";
 export { default as AgentRunInputModel } from "./agent-run-input";
-export { default as AgentRunShareModel } from "./agent-run-share";
 export { default as AgentRunTranscriptModel } from "./agent-run-transcript";
 export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
@@ -55,7 +54,6 @@ export { default as ConversationAttachmentModel } from "./conversation-attachmen
 export { default as ConversationChatErrorModel } from "./conversation-chat-error";
 export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
-export { default as ConversationShareModel } from "./conversation-share";
 export { default as CreatedByModel, lookupCreator } from "./created-by";
 export {
   EnvironmentLabelModel,
@@ -135,8 +133,8 @@ export {
   ProjectAlreadyAssignedError,
   ProjectNameExistsError,
 } from "./project";
+export { default as ProjectAccessModel } from "./project-access";
 export { default as ProjectPinModel } from "./project-pin";
-export { default as ProjectShareModel } from "./project-share";
 export { default as RuntimeCredentialConnectionModel } from "./runtime-credential-connection";
 export { default as RuntimeCredentialDefinitionModel } from "./runtime-credential-definition";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";

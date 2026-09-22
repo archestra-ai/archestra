@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
-import { ProjectShareModel } from "@/models";
+import { ProjectAccessModel } from "@/models";
 import { SkillSandboxError } from "./types";
 
 /** The PFS scope a project imposes on every file tool used in its chats. */
@@ -55,7 +55,7 @@ export async function resolveProjectFileScope(params: {
     );
   }
 
-  const canAccess = await ProjectShareModel.userCanAccessProject({
+  const canAccess = await ProjectAccessModel.userCanAccessProject({
     project,
     userId,
     organizationId,
@@ -108,7 +108,7 @@ export async function resolveExplicitProjectFileScope(params: {
   )
     throw denied;
 
-  const canAccess = await ProjectShareModel.userCanAccessProject({
+  const canAccess = await ProjectAccessModel.userCanAccessProject({
     project,
     userId,
     organizationId,

@@ -16395,7 +16395,6 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body: {
         organizationId?: string;
-        scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
         isPersonalProxy?: boolean;
@@ -16470,8 +16469,6 @@ export type UpdateAgentData = {
             name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
-        teams?: Array<string>;
-        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -17208,14 +17205,6 @@ export type CloneAgentData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
-        /**
-         * Visibility of the clone. Defaults to the source agent's scope.
-         */
-        scope?: 'personal' | 'team' | 'org';
-        /**
-         * Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.
-         */
-        teams?: Array<string>;
     } | null;
     path: {
         id: string;
@@ -22319,279 +22308,6 @@ export type CancelAgentRunResponses = {
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
 
-export type UnshareAgentRunData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type UnshareAgentRunErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UnshareAgentRunError = UnshareAgentRunErrors[keyof UnshareAgentRunErrors];
-
-export type UnshareAgentRunResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type UnshareAgentRunResponse = UnshareAgentRunResponses[keyof UnshareAgentRunResponses];
-
-export type GetAgentRunShareData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type GetAgentRunShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentRunShareError = GetAgentRunShareErrors[keyof GetAgentRunShareErrors];
-
-export type GetAgentRunShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    } | null;
-};
-
-export type GetAgentRunShareResponse = GetAgentRunShareResponses[keyof GetAgentRunShareResponses];
-
-export type ShareAgentRunData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type ShareAgentRunErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ShareAgentRunError = ShareAgentRunErrors[keyof ShareAgentRunErrors];
-
-export type ShareAgentRunResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    };
-};
-
-export type ShareAgentRunResponse = ShareAgentRunResponses[keyof ShareAgentRunResponses];
-
 export type StartAgentWorkspaceTransferData = {
     body: {
         direction: 'download';
@@ -27041,7 +26757,6 @@ export type UpdateAppData = {
         name?: string;
         slug?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         html?: string;
         uiPermissions?: {
             camera?: {
@@ -27066,8 +26781,6 @@ export type UpdateAppData = {
             valueId?: string;
         }>;
         openInFullscreen?: boolean;
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
     };
     path: {
         appId: string;
@@ -35667,7 +35380,6 @@ export type GetChatConversationsResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -35844,7 +35556,6 @@ export type CreateChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36006,7 +35717,6 @@ export type GetDeletedChatConversationsResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36255,7 +35965,6 @@ export type GetChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36428,7 +36137,6 @@ export type UpdateChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37032,7 +36740,6 @@ export type ForkChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37285,7 +36992,6 @@ export type RestoreChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37549,7 +37255,6 @@ export type CompactChatConversationResponses = {
                 llmApiKeyId: string | null;
             } | null;
             share: {
-                id: string;
                 visibility: 'organization' | 'team' | 'user';
             } | null;
             projectName?: string | null;
@@ -37599,610 +37304,6 @@ export type CompactChatConversationResponses = {
 };
 
 export type CompactChatConversationResponse = CompactChatConversationResponses[keyof CompactChatConversationResponses];
-
-export type UnshareConversationData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type UnshareConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UnshareConversationError = UnshareConversationErrors[keyof UnshareConversationErrors];
-
-export type UnshareConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type UnshareConversationResponse = UnshareConversationResponses[keyof UnshareConversationResponses];
-
-export type GetConversationShareData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type GetConversationShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetConversationShareError = GetConversationShareErrors[keyof GetConversationShareErrors];
-
-export type GetConversationShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        conversationId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    } | null;
-};
-
-export type GetConversationShareResponse = GetConversationShareResponses[keyof GetConversationShareResponses];
-
-export type ShareConversationData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type ShareConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ShareConversationError = ShareConversationErrors[keyof ShareConversationErrors];
-
-export type ShareConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        conversationId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    };
-};
-
-export type ShareConversationResponse = ShareConversationResponses[keyof ShareConversationResponses];
-
-export type GetSharedConversationData = {
-    body?: never;
-    path: {
-        shareId: string;
-    };
-    query?: never;
-    url: '/api/chat/shared/{shareId}';
-};
-
-export type GetSharedConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetSharedConversationError = GetSharedConversationErrors[keyof GetSharedConversationErrors];
-
-export type GetSharedConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        modelId: string | null;
-        thinkingEffort: 'low' | 'medium' | 'high';
-        hasCustomToolSelection: boolean;
-        hooksDebugEnabled: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
-        titleIsPlaceholder: boolean;
-        lockedChat: boolean;
-        pinnedAt: string | null;
-        lastMessageAt: string;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        contentLocked?: boolean;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt?: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            toolExposureMode: 'full' | 'search_and_run_only';
-            llmApiKeyId: string | null;
-        } | null;
-        share: {
-            id: string;
-            visibility: 'organization' | 'team' | 'user';
-        } | null;
-        projectName?: string | null;
-        projectIcon?: string | null;
-        unread?: boolean;
-        messages: Array<unknown>;
-        chatErrors: Array<{
-            id: string;
-            conversationId: string;
-            error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
-                message: string;
-                isRetryable: boolean;
-                sessionId?: string;
-                traceId?: string;
-                spanId?: string;
-                usageLimitExceeded?: boolean;
-                usageLimitEntityType?: string;
-                authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    providerLabel: string;
-                };
-                originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    status?: number;
-                    message?: string;
-                    type?: string;
-                    raw?: unknown;
-                };
-            };
-            createdAt: string;
-        }>;
-        compactions: Array<{
-            id: string;
-            conversationId: string;
-            summary: string;
-            compactedThroughMessageId: string | null;
-            trigger: 'auto' | 'manual';
-            provider: string;
-            model: string;
-            originalTokenEstimate: number;
-            compactedTokenEstimate: number;
-            createdAt: string;
-        }>;
-        sharedByUserId: string;
-    };
-};
-
-export type GetSharedConversationResponse = GetSharedConversationResponses[keyof GetSharedConversationResponses];
-
-export type ForkSharedConversationData = {
-    body: {
-        agentId: string;
-    };
-    path: {
-        shareId: string;
-    };
-    query?: never;
-    url: '/api/chat/shared/{shareId}/fork';
-};
-
-export type ForkSharedConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ForkSharedConversationError = ForkSharedConversationErrors[keyof ForkSharedConversationErrors];
-
-export type ForkSharedConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        modelId: string | null;
-        thinkingEffort: 'low' | 'medium' | 'high';
-        hasCustomToolSelection: boolean;
-        hooksDebugEnabled: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
-        titleIsPlaceholder: boolean;
-        lockedChat: boolean;
-        pinnedAt: string | null;
-        lastMessageAt: string;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        contentLocked?: boolean;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt?: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            toolExposureMode: 'full' | 'search_and_run_only';
-            llmApiKeyId: string | null;
-        } | null;
-        share: {
-            id: string;
-            visibility: 'organization' | 'team' | 'user';
-        } | null;
-        projectName?: string | null;
-        projectIcon?: string | null;
-        unread?: boolean;
-        messages: Array<unknown>;
-        chatErrors: Array<{
-            id: string;
-            conversationId: string;
-            error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
-                message: string;
-                isRetryable: boolean;
-                sessionId?: string;
-                traceId?: string;
-                spanId?: string;
-                usageLimitExceeded?: boolean;
-                usageLimitEntityType?: string;
-                authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    providerLabel: string;
-                };
-                originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    status?: number;
-                    message?: string;
-                    type?: string;
-                    raw?: unknown;
-                };
-            };
-            createdAt: string;
-        }>;
-        compactions: Array<{
-            id: string;
-            conversationId: string;
-            summary: string;
-            compactedThroughMessageId: string | null;
-            trigger: 'auto' | 'manual';
-            provider: string;
-            model: string;
-            originalTokenEstimate: number;
-            compactedTokenEstimate: number;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
 
 export type GenerateChatConversationTitleData = {
     body: {
@@ -38323,7 +37424,6 @@ export type GenerateChatConversationTitleResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -38492,7 +37592,6 @@ export type UpdateChatMessageResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -63245,17 +62344,12 @@ export type UpdateInternalMcpCatalogItemData = {
             cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         hibernationMode?: 'inherit' | 'enabled' | 'disabled';
         labels?: Array<{
             key: string;
             value: string;
-        }>;
-        teams?: Array<string | {
-            id: string;
-            level?: 'use' | 'write';
         }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
@@ -74544,8 +73638,6 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -76354,8 +75446,6 @@ export type UpdateLlmProviderApiKeyData = {
         extraHeaders?: {
             [key: string]: string;
         } | null;
-        scope?: 'personal' | 'team' | 'org';
-        teamId?: string | null;
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
@@ -94856,95 +93946,6 @@ export type UpdateProjectResponses = {
 
 export type UpdateProjectResponse = UpdateProjectResponses[keyof UpdateProjectResponses];
 
-export type SetProjectShareData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user' | 'none';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/projects/{id}/share';
-};
-
-export type SetProjectShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SetProjectShareError = SetProjectShareErrors[keyof SetProjectShareErrors];
-
-export type SetProjectShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        ok: true;
-    };
-};
-
-export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
-
 export type BulkDeleteProjectsData = {
     body: {
         /**
@@ -95041,106 +94042,6 @@ export type BulkDeleteProjectsResponses = {
 };
 
 export type BulkDeleteProjectsResponse = BulkDeleteProjectsResponses[keyof BulkDeleteProjectsResponses];
-
-export type BulkUpdateProjectsData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        visibility: 'organization' | 'team' | 'user' | 'none';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/projects/bulk';
-};
-
-export type BulkUpdateProjectsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateProjectsError = BulkUpdateProjectsErrors[keyof BulkUpdateProjectsErrors];
-
-export type BulkUpdateProjectsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateProjectsResponse = BulkUpdateProjectsResponses[keyof BulkUpdateProjectsResponses];
 
 export type RestoreProjectData = {
     body: {
@@ -98291,7 +97192,6 @@ export type CreateScheduleTriggerRunConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -101359,9 +100259,6 @@ export type UpdateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */

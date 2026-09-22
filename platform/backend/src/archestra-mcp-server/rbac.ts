@@ -158,10 +158,6 @@ export const TOOL_PERMISSIONS: Record<
   todo_write: null,
   ask_user: null,
   create_project_from_conversation: { resource: "project", action: "create" },
-  // Coarse gate matching the SetProjectShare route; the service additionally
-  // restricts to the owner/project-admin and gates org-wide visibility behind
-  // project:share-org.
-  set_project_share: { resource: "project", action: "update" },
   // Reads mirror the GetProjects/GetProject routes. The permission is only the
   // floor: both handlers narrow to what the caller can actually reach (owner or
   // shared-with), so `project:read` never widens visibility past their own set.

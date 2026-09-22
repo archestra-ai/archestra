@@ -478,6 +478,69 @@ export default class ResourcePermissionPolicyModel {
         )
     )`;
   }
+
+  /**
+   * The broadest audience an object's own policy grants read to, besides its
+   * owner, for the "shared with ..." badge on lists. A grant to everyone or to
+   * a role reads as `organization`, then team grants as `team`, then named
+   * people or service accounts as `user`. Null means only the owner reads it.
+   * Inherited `*` grants are not the object's sharing, so they are left out.
+   */
+  static sharedAudience(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+  }) {
+    return sql<"organization" | "team" | "user" | null>`(
+      SELECT CASE
+        WHEN bool_or(audience_entry->'subject'->>'type' IN ('organization', 'role')) THEN 'organization'
+        WHEN bool_or(audience_entry->'subject'->>'type' = 'team') THEN 'team'
+        WHEN bool_or(audience_entry->'subject'->>'type' = 'serviceAccount'
+          OR (audience_entry->'subject'->>'type' = 'user'
+            AND audience_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)) THEN 'user'
+      END
+      FROM resource_permission_policies audience_policy,
+        jsonb_array_elements(audience_policy.grants) audience_entry
+      WHERE audience_policy.organization_id = ${params.organizationId}
+        AND audience_policy.resource = ${params.resource}
+        AND audience_policy.scope = ${params.scopeColumn}::text
+        AND (audience_entry->'actions') ? 'read'
+    )`;
+  }
+
+  /**
+   * Names of the teams, or of the people other than the owner, that an
+   * object's own policy grants read to, sorted. Backs the recipient list next
+   * to {@link sharedAudience}.
+   */
+  static sharedRecipientNames(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+    subject: "team" | "user";
+  }) {
+    const [table, alias] =
+      params.subject === "team"
+        ? [sql`team`, sql`recipient_team`]
+        : [sql`"user"`, sql`recipient_user`];
+    return sql<string[]>`coalesce(array(
+      SELECT ${alias}.name
+      FROM resource_permission_policies recipient_policy,
+        jsonb_array_elements(recipient_policy.grants) recipient_entry,
+        ${table} ${alias}
+      WHERE recipient_policy.organization_id = ${params.organizationId}
+        AND recipient_policy.resource = ${params.resource}
+        AND recipient_policy.scope = ${params.scopeColumn}::text
+        AND (recipient_entry->'actions') ? 'read'
+        AND recipient_entry->'subject'->>'type' = ${params.subject}
+        AND recipient_entry->'subject'->>'id' = ${alias}.id
+        AND recipient_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text
+      ORDER BY ${alias}.name
+    ), array[]::text[])`;
+  }
+
   static async findByIdForAudit(
     scope: string,
     organizationId: string,

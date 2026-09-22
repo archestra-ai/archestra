@@ -13,6 +13,7 @@ import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 const PNG_HEADER = Buffer.from([
@@ -573,7 +574,6 @@ describe("project file cross-user access", () => {
     makeUser,
     makeMember,
   }) => {
-    const { ProjectShareModel } = await import("@/models");
     await makeMember(user.id, organizationId, {});
     const owner = await makeUser({ email: "share-owner@test.com" });
     const { project, file } = await seedProjectFile({
@@ -583,10 +583,10 @@ describe("project file cross-user access", () => {
       content: "shared",
       filename: "shared.txt",
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -612,7 +612,6 @@ describe("project file cross-user access", () => {
     makeUser,
     makeMember,
   }) => {
-    const { ProjectShareModel } = await import("@/models");
     await makeMember(user.id, organizationId, {});
     const owner = await makeUser({ email: "unshare-owner@test.com" });
     const { project, file } = await seedProjectFile({
@@ -622,10 +621,10 @@ describe("project file cross-user access", () => {
       content: "bytes",
       filename: "doc.txt",
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -639,7 +638,12 @@ describe("project file cross-user access", () => {
       ).statusCode,
     ).toBe(200);
 
-    await ProjectShareModel.remove(project.id);
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
+      visibility: null,
+    });
 
     // revoked: the bytes are no longer reachable
     const denied = await app.inject({
@@ -1027,7 +1031,6 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
     makeUser,
     makeMember,
   }) => {
-    const { ProjectShareModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId: owner.id,
@@ -1044,10 +1047,10 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
       path: "/sandbox/shared.md",
       projectId: project.id,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -1187,17 +1190,16 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
     makeUser,
     makeMember,
   }) => {
-    const { ProjectShareModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId: owner.id,
       name: "instructions-guard",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

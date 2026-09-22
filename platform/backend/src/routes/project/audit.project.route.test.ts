@@ -135,22 +135,6 @@ describe("project routes — audit trail", () => {
     expect(rows[0].after).toMatchObject({ deletedAt: null });
   });
 
-  test("a visibility change diffs, though it writes no column on the project row", async () => {
-    const project = await makeProject("audited-share");
-
-    const response = await app.inject({
-      method: "PUT",
-      url: `/api/projects/${project.id}/share`,
-      payload: { visibility: "organization", teamIds: [], userIds: [] },
-    });
-    expect(response.statusCode).toBe(200);
-
-    const rows = await auditRowsFor(project.id, "project.updated");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].before).toMatchObject({ visibility: null });
-    expect(rows[0].after).toMatchObject({ visibility: "organization" });
-  });
-
   test("pinning the default agent is recorded on project.updated", async ({
     makeInternalAgent,
   }) => {

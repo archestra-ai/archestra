@@ -2,11 +2,12 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import { ProjectLabelModel, ProjectModel, ProjectShareModel } from "@/models";
+import { ProjectLabelModel, ProjectModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
@@ -43,13 +44,8 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     });
   }
 
-  test("owner can update description, share, unshare, and delete", async ({
-    makeTeam,
-    makeTeamMember,
-  }) => {
+  test("owner can update description and delete", async () => {
     const project = await seedProject();
-    const team = await makeTeam(organizationId, owner.id, { name: "T" });
-    await makeTeamMember(team.id, owner.id);
 
     const patch = await app.inject({
       method: "PATCH",
@@ -61,24 +57,6 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     expect(afterPatch?.description).toBe("updated");
     expect(afterPatch?.name).toBe("renamed");
     expect(afterPatch?.icon).toBe("🚀");
-
-    const share = await app.inject({
-      method: "PUT",
-      url: `/api/projects/${project.id}/share`,
-      payload: { visibility: "team", teamIds: [team.id] },
-    });
-    expect(share.statusCode).toBe(200);
-    expect(
-      (await ProjectShareModel.findByProjectId(project.id))?.teamIds,
-    ).toEqual([team.id]);
-
-    const unshare = await app.inject({
-      method: "PUT",
-      url: `/api/projects/${project.id}/share`,
-      payload: { visibility: "none", teamIds: [] },
-    });
-    expect(unshare.statusCode).toBe(200);
-    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
 
     const del = await app.inject({
       method: "DELETE",
@@ -180,10 +158,10 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     makeMember,
   }) => {
     const project = await seedProject("guarded");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

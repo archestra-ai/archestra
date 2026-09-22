@@ -21,12 +21,12 @@ import {
 } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import { ProjectLabelModel } from "./entity-labels";
-import ProjectShareModel from "./project-share";
+import ProjectAccessModel from "./project-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
- * CRUD for `projects`. Share/visibility queries live in
- * {@link ProjectShareModel} (models/project-share.ts).
+ * CRUD for `projects`. Access and visibility queries live in
+ * {@link ProjectAccessModel} (models/project-access.ts).
  *
  * {@link ProjectModel.delete} soft-deletes: the row is stamped `deleted_at`
  * and every read here excludes it, so the project is gone from the API. Its
@@ -502,16 +502,6 @@ class ProjectModel {
   }
 
   /**
-   * Audit snapshot: the project row plus its share configuration, org-scoped.
-   *
-   * Deliberately NOT filtered by `deleted_at` — delete and restore are the two
-   * lifecycle events that most need an audit trail, and both would diff against
-   * an empty snapshot on one side if soft-deleted rows were excluded. The share
-   * config rides along so a visibility change (which writes `project_shares`,
-   * not `projects`) still produces a non-empty diff; its id lists are sorted so
-   * an unchanged audience never reads as a change.
-   */
-  /**
    * The projects a bulk route was asked to act on, fenced to one organization
    * and read in one query. Ids arrive straight from a request body, so the
    * fence is what stops a foreign id being answered as anything but "not
@@ -567,6 +557,8 @@ class ProjectModel {
       .select({
         id: schema.projectsTable.id,
         name: schema.projectsTable.name,
+        organizationId: schema.projectsTable.organizationId,
+        userId: schema.projectsTable.userId,
         deletedAt: schema.projectsTable.deletedAt,
       })
       .from(schema.projectsTable)
@@ -579,16 +571,24 @@ class ProjectModel {
       // Sorted so an unchanged batch snapshots identically on both sides.
       .orderBy(schema.projectsTable.id);
 
-    return await Promise.all(
-      rows.map(async ({ deletedAt, ...row }) => ({
-        ...row,
-        visibility:
-          (await ProjectShareModel.findByProjectId(row.id))?.visibility ?? null,
-        deleted: deletedAt !== null,
-      })),
-    );
+    const audiences = await ProjectAccessModel.getAudiences(rows);
+    return rows.map(({ id, name, deletedAt }) => ({
+      id,
+      name,
+      visibility: audiences.get(id)?.visibility ?? null,
+      deleted: deletedAt !== null,
+    }));
   }
 
+  /**
+   * Audit snapshot: the project row plus who it is shared with, org-scoped.
+   *
+   * Deliberately NOT filtered by `deleted_at` — delete and restore are the two
+   * lifecycle events that most need an audit trail, and both would diff against
+   * an empty snapshot on one side if soft-deleted rows were excluded. The
+   * audience is read from the project's permission policy; its id lists are
+   * sorted so an unchanged audience never reads as a change.
+   */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -605,15 +605,15 @@ class ProjectModel {
       .limit(1);
     if (!row) return null;
 
-    const [share, labels] = await Promise.all([
-      ProjectShareModel.findByProjectId(id),
+    const [audience, labels] = await Promise.all([
+      ProjectAccessModel.findAudience(row),
       ProjectLabelModel.getLabelsFor(id),
     ]);
     return {
       ...row,
-      visibility: share?.visibility ?? null,
-      shareTeamIds: [...(share?.teamIds ?? [])].sort(),
-      shareUserIds: [...(share?.userIds ?? [])].sort(),
+      visibility: audience.visibility,
+      shareTeamIds: audience.teams.map((team) => team.id).sort(),
+      shareUserIds: audience.users.map((user) => user.id).sort(),
       labels: labels.map(({ key, value }) => `${key}:${value}`).sort(),
     };
   }

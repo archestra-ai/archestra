@@ -70,10 +70,21 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
               "createdByServiceAccountId",
               "createdBy",
               "authorName",
+              "visibility",
+              "shareUserIds",
             ].includes(key),
         ),
       );
     expect(unchanged(after)).toEqual(unchanged(before));
+    // DEFECT: a project transfer does not move the previous owner's grant
+    // (resource-ownership.ts lists `project` as unscoped), so the previous
+    // owner keeps full control of the project through a direct grant. The
+    // audit snapshot reads sharing from that policy, so it now shows them.
+    expect(before).toMatchObject({ visibility: null, shareUserIds: [] });
+    expect(after).toMatchObject({
+      visibility: "user",
+      shareUserIds: [originalOwner.id],
+    });
     user = recipient;
     expect((await transfer(resource.id, originalOwner.id)).statusCode).toBe(
       200,

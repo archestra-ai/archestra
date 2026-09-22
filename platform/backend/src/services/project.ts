@@ -18,12 +18,12 @@ import {
   CreatedByModel,
   FileNameExistsError,
   lookupCreator,
+  ProjectAccessModel,
   ProjectAlreadyAssignedError,
   ProjectLabelModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
-  ProjectShareModel,
   TeamModel,
   UserModel,
 } from "@/models";
@@ -41,8 +41,8 @@ import type {
   ProjectLifecycle,
   ProjectListItem,
   ProjectListScope,
-  ProjectShareVisibility,
   ProjectViewerRole,
+  ProjectVisibility,
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -53,7 +53,7 @@ import {
 
 /** Who a project reaches, which is what its default agent must cover. */
 type ProjectShareAudience = {
-  visibility: ProjectShareVisibility | null;
+  visibility: ProjectVisibility | null;
   teamIds: string[];
   userIds: string[];
 };
@@ -61,7 +61,7 @@ type ProjectShareAudience = {
 /**
  * Projects: named collections of chats and run sessions that own a set of result files
  * (`files.project_id`). Mutations are owner-only; access to the project (and so
- * its files) is governed by the project share (see ProjectShareModel).
+ * its files) is governed by its permission policy (see ProjectAccessModel).
  */
 class ProjectService {
   async create(params: {
@@ -232,7 +232,7 @@ class ProjectService {
 
     // What the caller can actually reach (owner ∪ org/team-shared-to-them): the
     // non-admin base, and how admins tell "shared" from "oversight" access.
-    const accessible = await ProjectShareModel.listAccessibleProjects({
+    const accessible = await ProjectAccessModel.listAccessibleProjects({
       userId,
       organizationId,
     });
@@ -240,7 +240,7 @@ class ProjectService {
 
     // A project:admin oversees every project; everyone else sees only theirs.
     const base = params.isProjectAdmin
-      ? await ProjectShareModel.listAllOrgProjects({ organizationId })
+      ? await ProjectAccessModel.listAllOrgProjects({ organizationId })
       : accessible;
 
     let candidates = base.map((project) => ({
@@ -299,23 +299,17 @@ class ProjectService {
       );
     }
 
-    // Team memberships for team-shared projects — backs both the `teamIds`
-    // filter and the owner's team-name visibility badge. Fetched once, only when
-    // team data is actually relevant.
-    const needTeams =
-      !!params.teamIds?.length ||
-      candidates.some((c) => c.project.visibility === "team");
-    const shareTeams = needTeams
-      ? await ProjectShareModel.getShareTeamsForProjects(
-          candidates.map((c) => c.project.id),
-        )
-      : new Map<string, { id: string; name: string }[]>();
+    // Who each project reaches — backs both the `teamIds` filter and the
+    // recipient names on the visibility badge.
+    const audiences = await ProjectAccessModel.getAudiences(
+      candidates.map((c) => c.project),
+    );
 
     // teamIds narrows scope=team to projects shared with any chosen team.
     if (params.teamIds?.length) {
       const want = new Set(params.teamIds);
       candidates = candidates.filter((c) =>
-        (shareTeams.get(c.project.id) ?? []).some((t) => want.has(t.id)),
+        (audiences.get(c.project.id)?.teams ?? []).some((t) => want.has(t.id)),
       );
     }
 
@@ -329,7 +323,7 @@ class ProjectService {
 
     const projectIds = candidates.map((c) => c.project.id);
     const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
-    const [counts, pins, ownerNames, creators, shareUsers, labelsByProject] =
+    const [counts, pins, ownerNames, creators, labelsByProject] =
       await Promise.all([
         ProjectModel.countConversations(projectIds),
         ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
@@ -337,7 +331,6 @@ class ProjectService {
         // A project's owner is its creator: `projects.user_id` is NOT NULL and
         // stamped from the acting user, and ownership does not transfer.
         CreatedByModel.resolve(ownerIds),
-        ProjectShareModel.getShareUsersForProjects(projectIds),
         ProjectLabelModel.getLabelsForMany(projectIds),
       ]);
     return candidates.map(({ project, viewerRole }) => ({
@@ -358,14 +351,14 @@ class ProjectService {
       shareTeamNames:
         (viewerRole === "owner" || viewerRole === "admin") &&
         project.visibility === "team"
-          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
           : null,
       // Same gate as shareTeamNames: without these a project shared with named
       // people renders as private, which is the opposite of what happened.
       shareUserNames:
         (viewerRole === "owner" || viewerRole === "admin") &&
         project.visibility === "user"
-          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
+          ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
@@ -388,32 +381,24 @@ class ProjectService {
     isProjectAdmin?: boolean;
   }): Promise<ProjectListItem[]> {
     if (!params.isProjectAdmin) return [];
-    const deleted = await ProjectShareModel.listAllOrgProjects({
+    const deleted = await ProjectAccessModel.listAllOrgProjects({
       organizationId: params.organizationId,
       lifecycle: "deleted",
     });
     const projectIds = deleted.map((p) => p.id);
     const ownerIds = [...new Set(deleted.map((p) => p.userId))];
-    const [
-      counts,
-      pins,
-      ownerNames,
-      creators,
-      shareTeams,
-      shareUsers,
-      labelsByProject,
-    ] = await Promise.all([
-      ProjectModel.countConversations(projectIds),
-      ProjectPinModel.getPinnedAtForProjects({
-        userId: params.userId,
-        projectIds,
-      }),
-      UserModel.getNamesByIds(ownerIds),
-      CreatedByModel.resolve(ownerIds),
-      ProjectShareModel.getShareTeamsForProjects(projectIds),
-      ProjectShareModel.getShareUsersForProjects(projectIds),
-      ProjectLabelModel.getLabelsForMany(projectIds),
-    ]);
+    const [counts, pins, ownerNames, creators, audiences, labelsByProject] =
+      await Promise.all([
+        ProjectModel.countConversations(projectIds),
+        ProjectPinModel.getPinnedAtForProjects({
+          userId: params.userId,
+          projectIds,
+        }),
+        UserModel.getNamesByIds(ownerIds),
+        CreatedByModel.resolve(ownerIds),
+        ProjectAccessModel.getAudiences(deleted),
+        ProjectLabelModel.getLabelsForMany(projectIds),
+      ]);
     return deleted.map((project) => ({
       id: project.id,
       name: project.name,
@@ -427,11 +412,11 @@ class ProjectService {
       visibility: project.visibility,
       shareTeamNames:
         project.visibility === "team"
-          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
           : null,
       shareUserNames:
         project.visibility === "user"
-          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
+          ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
@@ -446,35 +431,24 @@ class ProjectService {
     allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
     const { project, viewerRole } = await this.requireViewable(params);
-    const [
-      share,
-      counts,
-      pins,
-      ownerNames,
-      creators,
-      shareTeams,
-      shareUsers,
-      defaultAgent,
-      labels,
-    ] = await Promise.all([
-      ProjectShareModel.findByProjectId(project.id),
-      ProjectModel.countConversations([project.id]),
-      ProjectPinModel.getPinnedAtForProjects({
-        userId: params.userId,
-        projectIds: [project.id],
-      }),
-      UserModel.getNamesByIds([project.userId]),
-      CreatedByModel.resolve([project.userId]),
-      ProjectShareModel.getShareTeamsForProjects([project.id]),
-      ProjectShareModel.getShareUsersForProjects([project.id]),
-      project.defaultAgentId
-        ? AgentModel.findPinnableProjectDefault({
-            id: project.defaultAgentId,
-            organizationId: project.organizationId,
-          })
-        : null,
-      ProjectLabelModel.getLabelsFor(project.id),
-    ]);
+    const [audience, counts, pins, ownerNames, creators, defaultAgent, labels] =
+      await Promise.all([
+        ProjectAccessModel.findAudience(project),
+        ProjectModel.countConversations([project.id]),
+        ProjectPinModel.getPinnedAtForProjects({
+          userId: params.userId,
+          projectIds: [project.id],
+        }),
+        UserModel.getNamesByIds([project.userId]),
+        CreatedByModel.resolve([project.userId]),
+        project.defaultAgentId
+          ? AgentModel.findPinnableProjectDefault({
+              id: project.defaultAgentId,
+              organizationId: project.organizationId,
+            })
+          : null,
+        ProjectLabelModel.getLabelsFor(project.id),
+      ]);
     // Re-checked rather than returned raw: a pin can outlive its eligibility —
     // the agent soft-deleted, rescoped, or the project shared more widely than
     // the agent reaches — and reporting a stale one would preselect an agent
@@ -485,11 +459,7 @@ class ProjectService {
         agent: defaultAgent,
         organizationId: project.organizationId,
         ownerUserId: project.userId,
-        share: {
-          visibility: share?.visibility ?? null,
-          teamIds: share?.teamIds ?? [],
-          userIds: share?.userIds ?? [],
-        },
+        share: audienceForPin(audience),
       }))
         ? { id: defaultAgent.id, name: defaultAgent.name }
         : null;
@@ -516,16 +486,16 @@ class ProjectService {
       createdBy: lookupCreator(creators, project.userId),
       labels,
       conversationCount: counts.get(project.id) ?? 0,
-      visibility: share?.visibility ?? null,
-      shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
-      shareUserIds: canManage ? (share?.userIds ?? []) : null,
+      visibility: audience.visibility,
+      shareTeamIds: canManage ? audience.teams.map((t) => t.id) : null,
+      shareUserIds: canManage ? audience.users.map((u) => u.id) : null,
       shareTeamNames:
-        viewerRole === "owner" && share?.visibility === "team"
-          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+        viewerRole === "owner" && audience.visibility === "team"
+          ? audience.teams.map((t) => t.name)
           : null,
       shareUserNames:
-        canManage && share?.visibility === "user"
-          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
+        canManage && audience.visibility === "user"
+          ? audience.users.map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       defaultAgent: reachableDefaultAgent,
@@ -572,7 +542,7 @@ class ProjectService {
           agentId: params.defaultAgentId,
           organizationId: params.organizationId,
           ownerUserId: project.userId,
-          share: await this.loadShareAudience(params.id),
+          share: await this.loadShareAudience(project),
         });
       }
       fields.defaultAgentId = params.defaultAgentId;
@@ -585,7 +555,7 @@ class ProjectService {
         agentId: project.defaultAgentId,
         organizationId: params.organizationId,
         ownerUserId: project.userId,
-        share: await this.loadShareAudience(params.id),
+        share: await this.loadShareAudience(project),
       });
       if (!stillReachable) fields.defaultAgentId = null;
     }
@@ -652,81 +622,6 @@ class ProjectService {
     });
   }
 
-  /** Upsert (or remove, when visibility is null) the project's share. */
-  async setShare(params: {
-    id: string;
-    organizationId: string;
-    userId: string;
-    visibility: ProjectShareVisibility | null;
-    teamIds: string[];
-    userIds?: string[];
-  }): Promise<void> {
-    const project = await this.requireManageable(params);
-    // Org-wide visibility is a broadcast to the whole organization, so both
-    // entering and leaving it are gated behind `project:share-org` — otherwise
-    // any owner could publish to (or silently withdraw from) everyone.
-    const share = await ProjectShareModel.findByProjectId(params.id);
-    if (
-      (params.visibility === "organization" ||
-        share?.visibility === "organization") &&
-      !(await this.callerCanShareOrg(params))
-    ) {
-      throw new ApiError(
-        403,
-        "You don't have permission to manage organization-wide project sharing",
-      );
-    }
-    if (params.visibility === null) {
-      await ProjectShareModel.remove(params.id);
-      // Unsharing only ever narrows the audience, so a pin that was reachable
-      // before still is.
-      return;
-    }
-    if (params.visibility === "team") {
-      await this.assertShareTeams(params);
-    }
-    await ProjectShareModel.upsert({
-      projectId: params.id,
-      organizationId: params.organizationId,
-      createdByUserId: params.userId,
-      visibility: params.visibility,
-      teamIds: params.teamIds,
-      userIds: params.userIds ?? [],
-    });
-    await this.clearDefaultAgentBeyondAudience({
-      project,
-      share: {
-        visibility: params.visibility,
-        teamIds: params.teamIds,
-        userIds: params.userIds ?? [],
-      },
-    });
-  }
-
-  /**
-   * Widening a project's sharing can outgrow its pinned agent. Drop the pin
-   * rather than leave a row pointing at an agent the new audience cannot run —
-   * the read path would hide it anyway, and a stale row resurfaces if the
-   * project is later narrowed again.
-   */
-  private async clearDefaultAgentBeyondAudience(params: {
-    project: Project;
-    share: ProjectShareAudience;
-  }): Promise<void> {
-    if (!params.project.defaultAgentId) return;
-    const stillReachable = await this.agentReachesProjectAudience({
-      agentId: params.project.defaultAgentId,
-      organizationId: params.project.organizationId,
-      ownerUserId: params.project.userId,
-      share: params.share,
-    });
-    if (stillReachable) return;
-    await ProjectModel.update({
-      id: params.project.id,
-      fields: { defaultAgentId: null },
-    });
-  }
-
   /**
    * Soft delete via {@link ProjectModel.delete}: the project row is stamped
    * `deleted_at` and its files + scheduled tasks are RETAINED but hidden, so a
@@ -740,14 +635,12 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<void> {
-    await this.requireManageable(params);
+    const project = await this.requireManageable(params);
     // An org-wide project is a shared resource: deleting it takes it away from
-    // the whole organization, so it is gated behind `project:share-org` just
-    // like changing the org share (which also blocks the unshare-then-delete
-    // workaround).
-    const share = await ProjectShareModel.findByProjectId(params.id);
+    // the whole organization, so it is gated behind `project:share-org`.
     if (
-      share?.visibility === "organization" &&
+      (await ProjectAccessModel.findAudience(project)).visibility ===
+        "organization" &&
       !(await this.callerCanShareOrg(params))
     ) {
       throw new ApiError(
@@ -795,9 +688,9 @@ class ProjectService {
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
-    const share = await ProjectShareModel.findByProjectId(params.id);
     if (
-      share?.visibility === "organization" &&
+      (await ProjectAccessModel.findAudience(project)).visibility ===
+        "organization" &&
       !(await this.callerCanShareOrg(params))
     ) {
       throw new ApiError(
@@ -1206,7 +1099,10 @@ class ProjectService {
         );
       if (covers(new Set())) return true;
       if (params.share.visibility === "organization") return false;
-      if (params.share.visibility === "team") {
+      // The audience is read from the project's grants, so one project can
+      // reach teams and named people at once: every team and every person
+      // has to be covered.
+      if (params.share.teamIds.length > 0) {
         const teams = await TeamModel.findByOrganization(params.organizationId);
         const byId = new Map(teams.map((team) => [team.id, team]));
         for (const sharedTeam of params.share.teamIds) {
@@ -1219,10 +1115,7 @@ class ProjectService {
           if (!covers(ids)) return false;
         }
       }
-      const users =
-        params.share.visibility === "user"
-          ? [params.ownerUserId, ...params.share.userIds]
-          : [params.ownerUserId];
+      const users = [params.ownerUserId, ...params.share.userIds];
       const checks = await Promise.all(
         [...new Set(users)].map(async (userId) => {
           // SPDX-SnippetBegin
@@ -1297,14 +1190,9 @@ class ProjectService {
 
   /** The project's current sharing, as the pin-eligibility rule reads it. */
   private async loadShareAudience(
-    projectId: string,
+    project: Project,
   ): Promise<ProjectShareAudience> {
-    const share = await ProjectShareModel.findByProjectId(projectId);
-    return {
-      visibility: share?.visibility ?? null,
-      teamIds: share?.teamIds ?? [],
-      userIds: share?.userIds ?? [],
-    };
+    return audienceForPin(await ProjectAccessModel.findAudience(project));
   }
 
   /** Project the caller may read, by id; "no access" reads as 404. */
@@ -1316,7 +1204,7 @@ class ProjectService {
     const project = await ProjectModel.findById(params.id);
     if (
       !project ||
-      !(await ProjectShareModel.userCanAccessProject({
+      !(await ProjectAccessModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,
@@ -1345,7 +1233,7 @@ class ProjectService {
         return { project, viewerRole: "owner" };
       }
       if (
-        await ProjectShareModel.userCanAccessProject({
+        await ProjectAccessModel.userCanAccessProject({
           project,
           userId: params.userId,
           organizationId: params.organizationId,
@@ -1389,50 +1277,6 @@ class ProjectService {
     throw new ApiError(404, "Project not found");
   }
 
-  /**
-   * Validate the teams a project is being shared with. A team share needs at
-   * least one team (otherwise it reaches nobody), every team must exist within
-   * the caller's organization — a stale, bogus, or foreign-org id fails with a
-   * clean 400 instead of an FK violation mid-write — and a caller without
-   * `project:admin` may only share with teams they belong to. A `project:admin`
-   * may share with any team in the organization, which is how a project is set
-   * up on a team's behalf. Mirrors the agent, skill, and catalog write paths.
-   */
-  private async assertShareTeams(params: {
-    teamIds: string[];
-    organizationId: string;
-    userId: string;
-  }): Promise<void> {
-    if (params.teamIds.length === 0) {
-      throw new ApiError(
-        400,
-        "A team-shared project must be shared with at least one team",
-      );
-    }
-
-    const teams = await TeamModel.findByIds(params.teamIds);
-    const validIds = new Set(
-      teams
-        .filter((team) => team.organizationId === params.organizationId)
-        .map((team) => team.id),
-    );
-    const missing = params.teamIds.filter((id) => !validIds.has(id));
-    if (missing.length > 0) {
-      throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
-    }
-
-    if (await this.callerIsProjectAdmin(params)) return;
-
-    const userTeamIds = new Set(await TeamModel.getUserTeamIds(params.userId));
-    const invalid = params.teamIds.filter((id) => !userTeamIds.has(id));
-    if (invalid.length > 0) {
-      throw new ApiError(
-        403,
-        "You can only share projects with teams you are a member of",
-      );
-    }
-  }
-
   private async callerIsProjectAdmin(params: {
     organizationId: string;
     userId: string;
@@ -1466,7 +1310,7 @@ class ProjectService {
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     if (
-      !(await ProjectShareModel.userCanAccessProject({
+      !(await ProjectAccessModel.userCanAccessProject({
         ...params,
         sessionAccess: true,
       }))
@@ -1522,4 +1366,16 @@ function decodeUploadBase64(input: string): Buffer {
     throw new ApiError(400, "File is empty");
   }
   return data;
+}
+
+function audienceForPin(audience: {
+  visibility: ProjectVisibility | null;
+  teams: { id: string }[];
+  users: { id: string }[];
+}): ProjectShareAudience {
+  return {
+    visibility: audience.visibility,
+    teamIds: audience.teams.map((team) => team.id),
+    userIds: audience.users.map((user) => user.id),
+  };
 }

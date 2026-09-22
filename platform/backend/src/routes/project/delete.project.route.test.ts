@@ -1,13 +1,13 @@
 import {
   FileModel,
   ProjectModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 
 describe("projectService.delete (files retained + hidden)", () => {
   test("deleting a project retains its file rows and bytes but hides them", async ({
@@ -149,10 +149,10 @@ describe("projectService.delete (org-wide share gate)", () => {
       name: "org-wide",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -185,10 +185,10 @@ describe("projectService.delete (org-wide share gate)", () => {
       name: "org-wide-deletable",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

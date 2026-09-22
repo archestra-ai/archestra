@@ -4,6 +4,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 /** A project chat row as returned by GET /api/projects/:id/conversations. */
@@ -69,10 +70,10 @@ describe("GET /api/projects/:id/conversations (project:read-all)", () => {
       name: "Shared Project",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

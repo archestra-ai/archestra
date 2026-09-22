@@ -264,10 +264,6 @@ export default function ApiKeysPage() {
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.apiKey !== "";
 
-    // Detect scope/team changes
-    const scopeChanged = values.scope !== editingApiKey.scope;
-    const teamIdChanged = values.teamId !== (editingApiKey.teamId ?? "");
-
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     const sigV4Provided = Boolean(
@@ -286,13 +282,8 @@ export default function ApiKeysPage() {
           baseUrl: values.baseUrl || null,
           inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
-          scope: scopeChanged ? values.scope : undefined,
-          teamId:
-            scopeChanged || teamIdChanged
-              ? values.scope === "team"
-                ? values.teamId
-                : null
-              : undefined,
+          // The update route no longer accepts the retired `scope`/`teamId`
+          // fields; sharing is edited on the key's Permissions tab.
           isPrimary: values.isPrimary,
           vaultSecretPath:
             !isBedrockSigV4 && byosEnabled && values.vaultSecretPath

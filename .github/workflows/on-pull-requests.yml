@@ -251,30 +251,24 @@ jobs:
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
   # or on-demand via the "run-e2e" PR label.
   #
-  # bot-pr-guard: the expensive jobs below skip on automated bot PRs.
+  # bot-pr-guard: the expensive jobs below skip on release-please PRs.
   # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
-  # merge to main — re-running the full suite dozens of times a day — and the
-  # contributor-onboarding bot (archestra-contributor-pr-bot[bot]) opens
-  # one-line docs PRs that auto-merge in seconds. Neither can surface real
-  # failures, and the merge queue re-runs all required checks for real on
-  # merge_group anyway. A job that skips under its own name still satisfies
-  # its required status check (see the required-check note in
-  # platform-e2e-tests.yml), so no placeholder twins are needed — a
+  # merge to main — re-running the full suite dozens of times a day. It
+  # cannot surface real failures, and the merge queue re-runs all required
+  # checks for real on merge_group anyway. A job that skips under its own
+  # name still satisfies its required status check (see the required-check
+  # note in platform-e2e-tests.yml), so no placeholder twins are needed — a
   # same-named twin would mask real failures on merge_group. The guard only
   # bites on pull_request events: on merge_group, github.event.pull_request
   # is null and the first clause short-circuits, so queue validation runs
   # unchanged. Backport PRs from the same App run normal checks.
   #
-  # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
-  # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
-  # the release branch ("chore: update docs/openapi.json version for
-  # release"). Without that commit the merge_group codegen check fails and
-  # the release cannot merge, so that job only skips the contributor bot.
+  # EXCEPTION: platform-lint-and-unit-tests always runs. It auto-commits the
+  # regenerated docs/openapi.json version bump onto the release branch
+  # ("chore: update docs/openapi.json version for release"). Without that
+  # commit the merge_group codegen check fails and the release cannot merge.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    # bot-pr-guard (see above): contributor bot only — release-please PRs
-    # need this job's codegen auto-commit.
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     # Back on a 16-vcpu Blacksmith runner: this job is the PR workflow's
     # wall-clock and its work is embarrassingly parallel — turbo fans out six
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
@@ -546,7 +540,7 @@ jobs:
   platform-rust-checks:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -619,7 +613,7 @@ jobs:
   openappa-native-tests:
     name: OpenAPPA Native Tests
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
@@ -696,7 +690,7 @@ jobs:
     name: AI Labs Rust Checks
     needs: supply-chain-policy
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
@@ -760,7 +754,7 @@ jobs:
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
@@ -874,7 +868,7 @@ jobs:
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
     # gate must skip too — with plain always() it would run and fail on the
     # shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -891,7 +885,7 @@ jobs:
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -1046,7 +1040,7 @@ jobs:
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     needs: [frontend-integration-tests]
     permissions: {}
     steps:

@@ -22,8 +22,8 @@ env:
   # Author associations that count as maintainers. Everything else is external.
   MAINTAINER_ASSOCIATIONS: '["OWNER","MEMBER","COLLABORATOR"]'
   # Bots that open PRs as part of automated processes (release-please, dependabot,
-  # backports, task envs, contributor onboarding) are never closed by this workflow.
-  EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","dependabot[bot]","archestra-task-envs[bot]","archestra-contributor-pr-bot[bot]"]'
+  # backports, task envs) are never closed by this workflow.
+  EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
   CLOSE_MARKER: "<!-- archestra-close-external-prs -->"
   CLOSE_COMMENT: |
     We take contributions as human-written text, not code — see https://www.archestra.ai/docs/contributing.

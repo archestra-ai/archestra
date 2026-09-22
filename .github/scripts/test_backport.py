@@ -269,7 +269,6 @@ for (const condition of conditions) {
     ['archestra-ci[bot]', 'backport/release-1.3/pr-42', true],
     ['archestra-ci[bot]', 'release-please--branches--main', false],
     ['contributor', 'fix/example', true],
-    ['archestra-contributor-pr-bot[bot]', 'docs/example', false],
   ]) {
     const context = {github: {event_name: 'pull_request', event: {pull_request: {user: {login}, head: {ref}}}},
       startsWith: (value, prefix) => value.startsWith(prefix), always: () => true};

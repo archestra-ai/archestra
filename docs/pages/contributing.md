@@ -24,8 +24,6 @@ You can find the entire development team in our [Slack Community](https://arches
 
 Our engineers will join the conversation, greet you, and share the context you need to get started.
 
-Before you can comment or open issues, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
-
 ## Pull Requests
 
 We take contributions as human-written text, not code. Pull requests from non-maintainers are closed automatically by CI.

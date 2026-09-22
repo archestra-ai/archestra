@@ -358,6 +358,13 @@ export function CreateVirtualKeyDialog({
                 />
               )}
 
+              <ExpirationDateTimeField
+                value={expiresAt}
+                onChange={setExpiresAt}
+                noExpirationText="Key will never expire"
+                formatExpiration={formatExpiration}
+              />
+
               {/* SPDX-SnippetBegin
                   SPDX-SnippetCopyrightText: 2026 Archestra Inc.
                   SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
@@ -374,12 +381,6 @@ export function CreateVirtualKeyDialog({
                 />
               )}
               {/* SPDX-SnippetEnd */}
-              <ExpirationDateTimeField
-                value={expiresAt}
-                onChange={setExpiresAt}
-                noExpirationText="Key will never expire"
-                formatExpiration={formatExpiration}
-              />
 
               <AdvancedLabelsSection
                 ref={labelsRef}

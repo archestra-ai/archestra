@@ -23,6 +23,7 @@ import {
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -58,6 +59,22 @@ import {
   useUpdateResourcePermissions,
 } from "@/lib/resource-permissions.query";
 
+/**
+ * The permissions block is a list of people and rules, not another field. It
+ * sits between ordinary inputs on most forms, so it takes the same rule the
+ * other sections use to separate itself from the fields above and below.
+ */
+export function PermissionsPanel({
+  children,
+  embedded,
+}: {
+  children: ReactNode;
+  embedded: boolean;
+}) {
+  if (!embedded) return <>{children}</>;
+  return <section className="space-y-3 border-t pt-4">{children}</section>;
+}
+
 export function ResourcePermissions({
   resource,
   scope,
@@ -66,14 +83,21 @@ export function ResourcePermissions({
   title,
   description,
   showInherited = true,
+  registerSave,
 }: {
   resource: ScopedResource;
   scope: string;
   onDirtyChange?: (dirty: boolean) => void;
   embedded?: boolean;
-  title?: string;
+  title?: string | null;
   description?: ReactNode;
   showInherited?: boolean;
+  /**
+   * Hands the host form a function that saves this policy. Providing it also
+   * hides this section's own Save and Discard, because the host's footer
+   * becomes the only place the edits are committed.
+   */
+  registerSave?: (save: (() => Promise<void>) | null) => void;
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -114,6 +138,7 @@ export function ResourcePermissions({
       title={title}
       description={description}
       showInherited={showInherited}
+      registerSave={registerSave}
     />
   );
 }
@@ -139,6 +164,8 @@ export function ResourcePermissionsDialog({
   const [isDirty, setIsDirty] = useState(false);
   const [footerContainer, setFooterContainer] =
     useState<HTMLFieldSetElement | null>(null);
+  const [headerContainer, setHeaderContainer] =
+    useState<HTMLDivElement | null>(null);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -170,6 +197,10 @@ export function ResourcePermissionsDialog({
       }
       isDirty={isDirty || accessDirty}
       className="sm:max-w-3xl"
+      // The list starts with its own column header, which reads as a heading
+      // already. A full body inset above it just pushes the table down.
+      bodyClassName={accessOpen ? undefined : "pt-2"}
+      headerAction={!accessOpen && <div ref={setHeaderContainer} />}
       footer={
         <fieldset
           ref={setFooterContainer}
@@ -183,13 +214,21 @@ export function ResourcePermissionsDialog({
       }
     >
       <ResourcePermissionsDialogContext.Provider
-        value={{ footerContainer, setAccessOpen, setAccessDirty }}
+        value={{
+          footerContainer,
+          headerContainer,
+          setAccessOpen,
+          setAccessDirty,
+        }}
       >
         {open && (
+          // The dialog's own title and description already say whose access
+          // this is, so the editor contributes only the list.
           <ResourcePermissions
             resource={resource}
             scope={scope}
             embedded
+            title={null}
             description={null}
             onDirtyChange={setIsDirty}
           />
@@ -209,15 +248,17 @@ function PermissionsEditor({
   title,
   description,
   showInherited,
+  registerSave,
 }: {
   policy: Policy;
   refreshFailed: boolean;
   onRetry: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   embedded?: boolean;
-  title?: string;
+  title?: string | null;
   description?: ReactNode;
   showInherited: boolean;
+  registerSave?: (save: (() => Promise<void>) | null) => void;
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -238,6 +279,7 @@ function PermissionsEditor({
   });
   const dialog = useContext(ResourcePermissionsDialogContext);
   const footerContainer = dialog?.footerContainer;
+  const headerContainer = dialog?.headerContainer;
   const [addOpen, setAddOpen] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const wasAdding = useRef(false);
@@ -271,6 +313,25 @@ function PermissionsEditor({
       },
     );
   });
+  // A host form that submits this section along with its own fields needs to
+  // flush the policy in its submit handler. Without it the section's edits
+  // live only in this form and the host's save would drop them silently.
+  const saveIfDirty = useCallback(async () => {
+    if (!form.formState.isDirty) return;
+    const values = form.getValues();
+    const saved = await mutation.mutateAsync({
+      revision: values.revision,
+      grants: values.grants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
+    });
+    form.reset({ revision: saved.revision, grants: saved.grants });
+  }, [form, mutation]);
+  useEffect(() => {
+    registerSave?.(saveIfDirty);
+    return () => registerSave?.(null);
+  }, [registerSave, saveIfDirty]);
   // Direct grants are editable here; everything below them is explanation of
   // access that exists anyway. One list, ordered by who can change what, reads
   // as a single answer to "who has access" instead of three parallel boxes.
@@ -303,8 +364,24 @@ function PermissionsEditor({
         ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
         : `Choose who can access this ${noun} and what they can do.`
       : description;
+  const addAccessButton = canManage ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="shrink-0"
+      disabled={mutation.isPending || !policy.effectiveActions.includes("read")}
+      ref={addButton}
+      onClick={() => setAccessOpen(true)}
+    >
+      <Plus className="size-4" />
+      <span>Add access</span>
+    </Button>
+  ) : null;
+  // With a host form driving the save, this section contributes no actions of
+  // its own. The host's footer already says there are unsaved changes.
   const actions =
-    canManage && dirty && !(dialog && addOpen) ? (
+    canManage && dirty && !registerSave && !(dialog && addOpen) ? (
       <div
         className={`flex w-full items-center justify-between gap-3 ${footerContainer === undefined ? "border-t pt-3" : ""}`}
       >
@@ -344,36 +421,30 @@ function PermissionsEditor({
       <Container
         hidden={!!dialog && addOpen}
         onSubmit={embedded ? undefined : submit}
-        className="space-y-3"
+        className={embedded ? undefined : "space-y-3"}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 space-y-1">
-            <h2 className="text-sm font-semibold">
-              {title ?? "Who has access"}
-            </h2>
-            {explanation && (
-              <p className="max-w-prose text-sm text-muted-foreground">
-                {explanation}
-              </p>
-            )}
+       <PermissionsPanel embedded={embedded && !dialog}>
+        {/* In a dialog the action takes the close button's corner, so it
+            costs no vertical space above the table. */}
+        {title === null &&
+          addAccessButton &&
+          headerContainer &&
+          createPortal(addAccessButton, headerContainer)}
+        {title !== null && (
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-sm font-semibold">
+                {title ?? "Who has access"}
+              </h2>
+              {explanation && (
+                <p className="max-w-prose text-xs text-muted-foreground">
+                  {explanation}
+                </p>
+              )}
+            </div>
+            {addAccessButton}
           </div>
-          {canManage && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={
-                mutation.isPending || !policy.effectiveActions.includes("read")
-              }
-              ref={addButton}
-              onClick={() => setAccessOpen(true)}
-            >
-              <Plus className="size-4" />
-              <span>Add access</span>
-            </Button>
-          )}
-        </div>
+        )}
         {refreshFailed && (
           <InlineNotice variant="error">
             <AlertCircle />
@@ -449,8 +520,9 @@ function PermissionsEditor({
               >
                 <SelectTrigger
                   size="sm"
-                  className="h-auto min-h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal"
+                  className="h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
                   aria-label={`Permission for ${grant.name}`}
+                  title={actionDetail(grant.actions, policy.resource)}
                 >
                   <SelectValue>
                     {actionSummary(grant.actions, policy.resource)}
@@ -538,7 +610,10 @@ function PermissionsEditor({
                   </PopoverContent>
                 </Popover>
               </div>
-              <p className="w-36 shrink-0 border border-transparent px-3 text-sm text-foreground">
+              <p
+                className="w-36 shrink-0 truncate border border-transparent px-3 text-sm text-foreground"
+                title={actionDetail(grant.actions, policy.resource)}
+              >
                 {actionSummary(grant.actions, policy.resource)}
               </p>
               <span className="size-8 shrink-0" />
@@ -556,6 +631,7 @@ function PermissionsEditor({
             onOpenChange={setAllPermissionsOpen}
           />
         )}
+       </PermissionsPanel>
       </Container>
       {canManage && addOpen && (
         <AccessPicker
@@ -589,7 +665,7 @@ function PermissionsEditor({
   );
 }
 
-function SubjectIcon({ type }: { type: PermissionSubject["type"] }) {
+export function SubjectIcon({ type }: { type: PermissionSubject["type"] }) {
   const Icon = {
     user: User,
     team: Users,
@@ -626,7 +702,7 @@ export function presetFor(
  * A row states its access once: the picker carries it for a direct grant, this
  * carries it for a grant that is only being explained.
  */
-function actionSummary(
+export function actionSummary(
   actions: ResourcePermissionAction[],
   resource: ScopedResource,
 ) {
@@ -635,6 +711,17 @@ function actionSummary(
     ([key]) => key === preset,
   )?.[1];
   if (choice) return choice.label;
+  // A set that matches no preset gets one short word. Spelling out every
+  // action here wrapped to three lines and pushed the row apart.
+  return "Custom";
+}
+
+/** The full action list, for a tooltip beside the short "Custom" label. */
+export function actionDetail(
+  actions: ResourcePermissionAction[],
+  resource: ScopedResource,
+) {
+  if (presetFor(actions, resource) !== "custom") return undefined;
   return actions.map((action) => actionLabels[action]).join(", ");
 }
 
@@ -676,7 +763,7 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
 /** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
-const scopedResourceNouns: Record<ScopedResource, string> = {
+export const scopedResourceNouns: Record<ScopedResource, string> = {
   conversation: "chat session",
   agentRun: "runtime session",
   agent: "agent",
@@ -748,6 +835,7 @@ const resourcePluralNames: Record<ScopedResource, string> = {
 
 const ResourcePermissionsDialogContext = createContext<{
   footerContainer: HTMLElement | null;
+  headerContainer: HTMLElement | null;
   setAccessOpen: (open: boolean) => void;
   setAccessDirty: (dirty: boolean) => void;
 } | null>(null);

@@ -48,6 +48,18 @@ export function EditVirtualKeyDialog({
   );
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it has to commit them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  // Permission edits live outside this dialog's own snapshot, so the unsaved
+  // guard and the Save button need to hear about them separately.
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   useEffect(() => {
     if (!virtualKey) return;
@@ -76,6 +88,7 @@ export function EditVirtualKeyDialog({
   const handleUpdate = useCallback(async () => {
     if (!virtualKey || !name.trim()) return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     const result = await updateMutation.mutateAsync({
       id: virtualKey.id,
       data: isPassthrough
@@ -112,13 +125,14 @@ export function EditVirtualKeyDialog({
     (isPassthrough || standardReady) &&
     !updateMutation.isPending;
   const isDirty =
-    initialSnapshotRef.current !== null &&
-    hasUnsavedChanges(initialSnapshotRef.current, {
-      name,
-      expiresAt,
-      providerApiKeyIds,
-      labels,
-    });
+    permissionsDirty ||
+    (initialSnapshotRef.current !== null &&
+      hasUnsavedChanges(initialSnapshotRef.current, {
+        name,
+        expiresAt,
+        providerApiKeyIds,
+        labels,
+      }));
 
   return (
     <FormDialog
@@ -166,10 +180,6 @@ export function EditVirtualKeyDialog({
             />
           ) : (
             <>
-              <ResourceAccessSection
-                resource="llmVirtualKey"
-                id={virtualKey.id}
-              />
               <ExpirationDateTimeField
                 value={expiresAt}
                 onChange={setExpiresAt}
@@ -180,6 +190,12 @@ export function EditVirtualKeyDialog({
                 providerApiKeyIds={providerApiKeyIds}
                 onProviderApiKeyIdsChange={setProviderApiKeyIds}
                 providerApiKeys={providerApiKeys}
+              />
+              <ResourceAccessSection
+                resource="llmVirtualKey"
+                id={virtualKey.id}
+                registerSave={registerPermissionsSave}
+                onDirtyChange={setPermissionsDirty}
               />
             </>
           )}

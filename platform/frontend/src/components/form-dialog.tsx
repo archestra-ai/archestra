@@ -27,6 +27,12 @@ export type FormDialogProps = {
   onOpenChange: (open: boolean) => void;
   title: string | React.ReactNode;
   description?: string | React.ReactNode;
+  /**
+   * An action for the dialog as a whole. It takes the close button's corner,
+   * so a dialog that sets one must be closable another way (a footer button
+   * and outside-click both still work).
+   */
+  headerAction?: React.ReactNode;
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
@@ -59,6 +65,7 @@ export function FormDialog({
   onOpenChange,
   title,
   description,
+  headerAction,
   size = "medium",
   children,
   preventCloseOnInteractOutside,
@@ -106,6 +113,7 @@ export function FormDialog({
       <Dialog open={open} onOpenChange={guard.handleOpenChange}>
         <DialogContent
           className={cn(sizeClasses[size], className)}
+          showCloseButton={!headerAction}
           onClick={onClick}
           onInteractOutside={
             preventCloseOnInteractOutside
@@ -125,7 +133,14 @@ export function FormDialog({
           }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>
-            <DialogHeader className={headerClassName}>
+            {/* Takes the close button's corner, so the title and description
+                keep the full width instead of wrapping around it. */}
+            {headerAction && (
+              <div className="absolute top-3 right-3 z-10">{headerAction}</div>
+            )}
+            <DialogHeader
+              className={cn(headerAction && "pr-36", headerClassName)}
+            >
               {/* The DialogTitle/DialogDescription elements persist across
                   wizard steps, so a title that switches between a string and
                   an element would delete a bare text node in place — which

@@ -26,6 +26,7 @@ export function ResourceAccessSection({
   grants,
   onGrantsChange,
   onDirtyChange,
+  registerSave,
 }: {
   resource: ScopedResource;
   /** Omitted while the object is still being created. */
@@ -33,6 +34,12 @@ export function ResourceAccessSection({
   grants?: InitialPermissionGrant[];
   onGrantsChange?: (grants: InitialPermissionGrant[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * Pass this from a form that has its own Save. The section then hides its
+   * own Save and Discard, and the form commits the policy by calling the
+   * function it receives here. Without it the section saves itself.
+   */
+  registerSave?: (save: (() => Promise<void>) | null) => void;
 }) {
   if (!id)
     return (
@@ -42,15 +49,16 @@ export function ResourceAccessSection({
         onChange={onGrantsChange ?? (() => {})}
       />
     );
+  // The panel carries the one heading. A second "Who has access" above the
+  // same list said nothing the list did not already show.
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium">Permissions</h3>
-      <ResourcePermissions
-        resource={resource}
-        scope={id}
-        onDirtyChange={onDirtyChange}
-        embedded
-      />
-    </div>
+    <ResourcePermissions
+      resource={resource}
+      scope={id}
+      onDirtyChange={onDirtyChange}
+      registerSave={registerSave}
+      title="Permissions"
+      embedded
+    />
   );
 }

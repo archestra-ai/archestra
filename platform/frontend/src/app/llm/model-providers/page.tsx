@@ -45,6 +45,7 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -361,6 +362,7 @@ export default function ApiKeysPage() {
         <Plus className="h-4 w-4" />
         <span>Add API Key</span>
       </Button>
+      <ResourceListActions resource="llmProviderApiKey" />
     </div>
   );
 

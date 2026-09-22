@@ -20,28 +20,6 @@ const permission = (
 });
 
 describe("scoped permission composition", () => {
-  test("delegating a recipient-relative scope requires wildcard authority because recipients have different teams", () => {
-    const requested = permission({ scope: "teams:*", action: "update" });
-    const manage = permission({
-      scope: "teams:*",
-      action: "manage-permissions",
-    });
-    expect(
-      canDelegateScopedPermissions({
-        grants: [requested, manage],
-        requested: [requested],
-      }),
-    ).toBe(false);
-    expect(
-      canDelegateScopedPermissions({
-        grants: [
-          { ...requested, scope: "*" },
-          { ...manage, scope: "*" },
-        ],
-        requested: [requested],
-      }),
-    ).toBe(true);
-  });
   test("combining read and update on different objects does not cross scopes", () => {
     const grants = [
       permission({ action: "update" }),
@@ -128,7 +106,7 @@ describe("scoped permission composition", () => {
   });
 
   test("rejects empty scopes and partial wildcard expressions", () => {
-    for (const scope of ["", "agents:*", "00000000-*", "all"]) {
+    for (const scope of ["", "teams:*", "agents:*", "00000000-*", "all"]) {
       expect(ResourcePermissionScopeSchema.safeParse(scope).success).toBe(
         false,
       );

@@ -34,6 +34,7 @@ import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
@@ -177,7 +178,11 @@ function ProjectsList() {
   // failure, so a failed background refetch keeps the cached state instead.
   if (!isApiKeyLoading && isApiKeyLoadError) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+      <PageLayout
+        title="Projects"
+        description={PROJECTS_DESCRIPTION}
+        actionButton={<ResourceListActions resource="project" />}
+      >
         <ApiKeyLoadError onRetry={refetchApiKeys} />
       </PageLayout>
     );
@@ -187,7 +192,11 @@ function ProjectsList() {
   // project on, so prompt to add one instead of offering project creation.
   if (!isApiKeyLoading && !hasAnyApiKey) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+      <PageLayout
+        title="Projects"
+        description={PROJECTS_DESCRIPTION}
+        actionButton={<ResourceListActions resource="project" />}
+      >
         <NoApiKeySetup description="Connect an LLM provider to start a project" />
       </PageLayout>
     );
@@ -197,7 +206,11 @@ function ProjectsList() {
   // failed fetch isn't misread as "No projects yet".
   if (isProjectsLoadError) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+      <PageLayout
+        title="Projects"
+        description={PROJECTS_DESCRIPTION}
+        actionButton={<ResourceListActions resource="project" />}
+      >
         <QueryLoadError
           title="Couldn't load your projects"
           onRetry={() => refetchProjects()}
@@ -211,12 +224,15 @@ function ProjectsList() {
       title="Projects"
       description={PROJECTS_DESCRIPTION}
       actionButton={
-        hasAnyApiKey ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New project
-          </Button>
-        ) : undefined
+        <div className="flex items-center gap-2">
+          {hasAnyApiKey && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New project
+            </Button>
+          )}
+          <ResourceListActions resource="project" />
+        </div>
       }
     >
       <TableCardView storageKey="archestra-projects-view">

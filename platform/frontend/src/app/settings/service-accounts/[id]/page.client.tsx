@@ -780,7 +780,7 @@ export default function ServiceAccountDetailPage({
 
               <SettingsBlock
                 title="Account settings"
-                description="Roles set allowed actions for requests made with this account's keys. Resource permissions determine which objects it can reach; the Permissions section below controls access to this service account."
+                description="Roles set allowed actions for requests made with this account's keys. Permissions determine which resources it can reach; the Permissions section below controls access to this service account."
               >
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">

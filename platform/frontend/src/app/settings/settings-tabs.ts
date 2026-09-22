@@ -8,7 +8,6 @@ import {
   Cable,
   Fingerprint,
   KeyRound,
-  KeySquare,
   Library,
   Lock,
   MessageSquare,
@@ -96,15 +95,6 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles", Icon: UserCog }]
-      : []),
-    ...(permissionMap?.["/settings/permissions"]
-      ? [
-          {
-            label: "Permissions",
-            href: "/settings/permissions",
-            Icon: KeySquare,
-          },
-        ]
       : []),
     ...(permissionMap?.["/settings/credentials"]
       ? [

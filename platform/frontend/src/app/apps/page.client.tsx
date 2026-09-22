@@ -23,6 +23,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -170,13 +171,16 @@ export default function AppsPage() {
       title="Apps"
       description="Custom, sandboxed UIs over your data and connected MCPs — describe what you want and build it in chat, no engineering required."
       actionButton={
-        <PermissionButton
-          permissions={{ app: ["create"] }}
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Create
-        </PermissionButton>
+        <div className="flex items-center gap-2">
+          <PermissionButton
+            permissions={{ app: ["create"] }}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Create
+          </PermissionButton>
+          <ResourceListActions resource="app" />
+        </div>
       }
     >
       <TableCardView storageKey="archestra-apps-view">

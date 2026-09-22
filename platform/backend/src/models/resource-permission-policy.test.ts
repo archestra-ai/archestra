@@ -325,7 +325,7 @@ describe("resource permission policy persistence", () => {
     expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual([]);
   });
 
-  test("applicable policies include the object, wildcard, and relative team scope within the organization", async ({
+  test("applicable policies include only the object and wildcard within the organization", async ({
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
@@ -338,6 +338,7 @@ describe("resource permission policy persistence", () => {
     for (const policy of [
       key,
       { ...key, scope: "*" as const },
+      { ...key, scope: "teams:*" },
       { ...key, organizationId: foreignOrganization.id },
       { ...key, resource: "skill" as const },
       { ...key, scope: "00000000-0000-4000-8000-000000000002" },
@@ -350,7 +351,7 @@ describe("resource permission policy persistence", () => {
     }
     const policies = await ResourcePermissionPolicyModel.findApplicable(key);
     expect(policies.map((policy) => policy.scope).sort()).toEqual(
-      ["*", "teams:*", key.scope].sort(),
+      ["*", key.scope].sort(),
     );
     expect(
       policies.every(

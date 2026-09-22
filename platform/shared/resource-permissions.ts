@@ -54,13 +54,9 @@ export const ResourcePermissionActionSchema = z.enum([
   "manage-permissions",
 ]);
 
-/** Matches resources with a direct grant to one of the acting user's teams. */
-export const TEAM_RESOURCE_SCOPE = "teams:*";
-
 /** Every selector is local to one resource type and one organization. */
 export const ResourcePermissionScopeSchema = z.union([
   z.literal("*"),
-  z.literal(TEAM_RESOURCE_SCOPE),
   z.string().uuid(),
 ]);
 
@@ -116,12 +112,7 @@ export function canDelegateScopedPermissions(params: {
   requested: readonly ScopedPermission[];
 }): boolean {
   return params.requested.every((requested) => {
-    // A recipient's teams may reach objects outside the grantor's teams.
-    // Only resource-wide authority can delegate a recipient-relative scope.
-    const required =
-      requested.scope === TEAM_RESOURCE_SCOPE
-        ? { ...requested, scope: "*" }
-        : requested;
+    const required = requested;
     return (
       hasScopedPermission({ grants: params.grants, required }) &&
       hasScopedPermission({

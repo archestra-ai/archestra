@@ -107,8 +107,6 @@ export function useAppAccessContext(): AppAccessContext {
     },
     "*",
   );
-  const { data: isTeamAdmin, isPending: isTeamAdminPending } =
-    useHasPermissions({ app: ["update"] }, "teams:*");
   const { data: canUpdate, isPending: isUpdatePending } = useHasPermissions({
     app: ["update"],
   });
@@ -127,7 +125,7 @@ export function useAppAccessContext(): AppAccessContext {
     () => ({
       scopedGrants: capabilities.data ?? [],
       isAdmin: !!isAdmin,
-      isTeamAdmin: !!isTeamAdmin,
+      isTeamAdmin: false,
       canUpdate: !!canUpdate,
       canDelete: !!canDelete,
       currentUserId: session?.user?.id,
@@ -135,7 +133,6 @@ export function useAppAccessContext(): AppAccessContext {
       isPending:
         capabilities.isPending ||
         isAdminPending ||
-        isTeamAdminPending ||
         isUpdatePending ||
         isDeletePending ||
         isTeamsPermissionPending ||
@@ -149,8 +146,6 @@ export function useAppAccessContext(): AppAccessContext {
       isAdmin,
       isAdminPending,
       isDeletePending,
-      isTeamAdmin,
-      isTeamAdminPending,
       isTeamsLoading,
       isTeamsPermissionPending,
       isUpdatePending,

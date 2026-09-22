@@ -69,13 +69,7 @@ export async function getSkillPermissionChecker(params: {
           grant.scope === "*" &&
           grant.action === "update",
       ) || skill.includes("admin"),
-    isTeamAdmin:
-      grants.some(
-        (grant) =>
-          grant.resource === "skill" &&
-          grant.scope === "teams:*" &&
-          grant.action === "update",
-      ) || skill.includes("team-admin"),
+    isTeamAdmin: !policy?.legacySharingMigrated && skill.includes("team-admin"),
   };
 }
 

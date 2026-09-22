@@ -111668,6 +111668,7 @@ export type SearchInitialPermissionSubjectsResponses = {
             id: '*';
         };
         name: string;
+        email?: string;
     }>;
 };
 
@@ -111752,7 +111753,7 @@ export type GetScopedCapabilitiesResponses = {
     200: Array<{
         organizationId: string;
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
     }>;
 };
@@ -111763,7 +111764,7 @@ export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
     };
     query?: {
         query?: string;
@@ -111858,6 +111859,7 @@ export type SearchResourcePermissionSubjectsResponses = {
             id: '*';
         };
         name: string;
+        email?: string;
     }>;
 };
 
@@ -111867,7 +111869,7 @@ export type GetResourcePermissionsData = {
     body?: never;
     path: {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
     };
     query?: never;
     url: '/api/resource-permissions/{resource}/{scope}';
@@ -111944,7 +111946,7 @@ export type GetResourcePermissionsResponses = {
      */
     200: {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
         name: string;
         revision: number;
         grants: Array<{
@@ -111986,7 +111988,7 @@ export type GetResourcePermissionsResponses = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
             name: string;
-            sourceScope?: '*' | 'teams:*' | string;
+            sourceScope?: '*' | string;
         }>;
         legacyAccess: Array<{
             subject: {
@@ -112039,7 +112041,7 @@ export type UpdateResourcePermissionsData = {
     };
     path: {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
     };
     query?: never;
     url: '/api/resource-permissions/{resource}/{scope}';
@@ -112116,7 +112118,7 @@ export type UpdateResourcePermissionsResponses = {
      */
     200: {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
-        scope: '*' | 'teams:*' | string;
+        scope: '*' | string;
         name: string;
         revision: number;
         grants: Array<{
@@ -112158,7 +112160,7 @@ export type UpdateResourcePermissionsResponses = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
             name: string;
-            sourceScope?: '*' | 'teams:*' | string;
+            sourceScope?: '*' | string;
         }>;
         legacyAccess: Array<{
             subject: {

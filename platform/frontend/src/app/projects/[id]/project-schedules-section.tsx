@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
@@ -34,7 +35,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ScheduleTrigger,
@@ -70,13 +75,29 @@ export function ProjectSchedulesSection({
   canCreate?: boolean;
   defaultAgentId?: string | null;
 }) {
-  // Without scheduledTask:read the schedules query can only 403 (and it polls,
-  // so it would toast the permission error forever). Hide the section and
-  // never mount the query for roles that can't see schedules.
+  // The schedule query requires the role action and polls, so never mount it
+  // for a caller with only a scoped wildcard grant. That grant still reaches
+  // the organization-level permissions editor through the section header.
   const { data: canReadSchedules } = useHasPermissions({
     scheduledTask: ["read"],
   });
-  if (canReadSchedules !== true) return null;
+  const { data: capabilities } = useScopedCapabilities();
+  const canReadAllPermissions = capabilities?.some(
+    (grant) =>
+      grant.resource === "scheduledTask" &&
+      grant.scope === "*" &&
+      grant.action === "read",
+  );
+  if (canReadSchedules !== true) {
+    return canReadAllPermissions ? (
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Schedules</h2>
+          <ResourceListActions resource="scheduledTask" />
+        </div>
+      </section>
+    ) : null;
+  }
 
   return (
     <ProjectSchedulesSectionContent
@@ -134,17 +155,20 @@ function ProjectSchedulesSectionContent({
             </span>
           )}
         </div>
-        {canCreate && canCreateSchedules === true && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 text-xs has-[>svg]:px-2"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="size-3.5" />
-            <span>New schedule</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {canCreate && canCreateSchedules === true && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-xs has-[>svg]:px-2"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="size-3.5" />
+              <span>New schedule</span>
+            </Button>
+          )}
+          <ResourceListActions resource="scheduledTask" />
+        </div>
       </div>
 
       {createOpen && (

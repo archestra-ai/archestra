@@ -40,6 +40,7 @@ import {
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
@@ -389,10 +390,6 @@ function SkillsList() {
   // Resolved once for the whole table, then applied per row: the scope check
   // is a pure function precisely so a table cell does not have to call hooks.
   const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
-  const { data: isSkillTeamAdmin } = useHasPermissions(
-    { skill: ["update"] },
-    "teams:*",
-  );
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
@@ -581,7 +578,7 @@ function SkillsList() {
       scopedGrants: scopedCapabilities.data ?? [],
       skill,
       isAdmin: !!isSkillAdmin,
-      isTeamAdmin: !!isSkillTeamAdmin,
+      isTeamAdmin: false,
       currentUserId,
       userTeamIds: userTeamIdSet,
     });
@@ -848,15 +845,17 @@ function SkillsList() {
         title="Skills"
         description={SKILLS_DESCRIPTION}
         actionButton={
-          !showEmptyState &&
-          !isInitialSkillsLoad && (
-            <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/skills/new">
-                <Plus className="h-4 w-4" />
-                Add new skill
-              </Link>
-            </PermissionButton>
-          )
+          <div className="flex items-center gap-2">
+            {!showEmptyState && !isInitialSkillsLoad && (
+              <PermissionButton permissions={{ skill: ["create"] }} asChild>
+                <Link href="/skills/new">
+                  <Plus className="h-4 w-4" />
+                  Add new skill
+                </Link>
+              </PermissionButton>
+            )}
+            <ResourceListActions resource="skill" />
+          </div>
         }
       >
         <TableCardView storageKey="archestra-skills-view" defaultMode="table">

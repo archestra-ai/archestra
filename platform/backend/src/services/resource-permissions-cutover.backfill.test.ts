@@ -533,7 +533,7 @@ describe("resource sharing grant backfill", () => {
       app.id,
     );
   });
-  test("composed role scopes do not mix, and team-scoped editing ends when membership is removed", async ({
+  test("legacy team-admin authority becomes a direct user grant without mixing role scopes", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -603,7 +603,7 @@ describe("resource sharing grant backfill", () => {
         scope: shared.id,
         action: "update",
       }),
-    ).rejects.toThrow("permission");
+    ).resolves.toBeUndefined();
     await expect(
       ResourcePermissions.require({
         ...context,

@@ -32,6 +32,7 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -418,6 +419,7 @@ function ConnectorsList() {
       title="Connectors"
       description="Connectors sync documents from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from them."
       createLabel="Create Connector"
+      trailingActions={<ResourceListActions resource="knowledgeConnector" />}
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >

@@ -1,26 +1,5 @@
-"use client";
-
-import dynamic from "next/dynamic";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+import { redirect } from "next/navigation";
 
 export default function PermissionsSettingsPage() {
-  const enterpriseCoreActive = useEnterpriseFeature("core");
-  return (
-    <ErrorBoundary>
-      <SmallTeamTierBanner featureName="Resource permissions" />
-      <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
-        <OrganizationPermissions />
-      </DisabledEnterpriseSection>
-    </ErrorBoundary>
-  );
+  redirect("/agents?permissions=all");
 }
-
-const OrganizationPermissions = dynamic(() =>
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
-  import("@/components/permissions/organization-permissions.ee").then((m) => ({
-    default: m.OrganizationPermissions,
-  })),
-);

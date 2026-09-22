@@ -121,7 +121,7 @@ it("refreshes a clean editor without reporting a conflicting draft", async () =>
   ).not.toBeInTheDocument();
 });
 
-it("explains separate wildcard and team-relative inheritance for the same recipient", async () => {
+it("explains organization-wide access without making inherited permissions editable", async () => {
   policy.inheritedGrants = [
     {
       subject: { type: "role", id: "editor" },
@@ -129,22 +129,31 @@ it("explains separate wildcard and team-relative inheritance for the same recipi
       actions: ["read"],
       sourceScope: "*",
     },
-    {
-      subject: { type: "role", id: "editor" },
-      name: "Editor",
-      actions: ["update"],
-      sourceScope: "teams:*",
-    },
   ];
+  const user = userEvent.setup();
   renderEditor();
-  // The same role reaches this object two ways. Both are shown, and each says
-  // which one it is, because they are revoked in different places.
+  const allSource = await screen.findByRole("button", {
+    name: "Why Editor has access: Every MCP registry entry",
+  });
+  await user.click(allSource);
   expect(
-    await screen.findByText(/From organization settings/),
+    await screen.findByRole("dialog", { name: "Access source for Editor" }),
+  ).toHaveTextContent("every MCP registry entry, including new ones");
+  expect(
+    screen.getByRole("button", {
+      name: "permissions for all MCP registry entries",
+    }),
   ).toBeInTheDocument();
-  expect(screen.getByText(/From team access settings/)).toBeInTheDocument();
-  expect(screen.getAllByText("Editor")).toHaveLength(2);
-  // Neither is editable here: an inherited grant has no picker and no remove
+  await user.keyboard("{Escape}");
+  expect(allSource).toHaveFocus();
+  allSource.focus();
+  await user.keyboard("{Enter}");
+  expect(
+    await screen.findByRole("dialog", { name: "Access source for Editor" }),
+  ).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  expect(screen.getAllByText("Editor")).toHaveLength(1);
+  // Inherited access is not editable here: it has no picker and no remove
   // button, which is what "change it at its source" means in the markup.
   expect(
     screen.queryByRole("combobox", { name: "Permission for Editor" }),
@@ -152,6 +161,50 @@ it("explains separate wildcard and team-relative inheritance for the same recipi
   expect(
     screen.queryByRole("button", { name: /Remove direct access for Editor/ }),
   ).not.toBeInTheDocument();
+});
+
+it("opens the shared all-resource editor from an inherited permission source", async () => {
+  server.use(
+    http.get(
+      `${origin}/api/resource-permissions/mcpRegistry/:scope`,
+      ({ request }) => {
+        if (!decodeURIComponent(new URL(request.url).pathname).endsWith("/*"))
+          return HttpResponse.json(policy);
+        return HttpResponse.json({
+          ...policy,
+          scope: "*",
+          inheritedGrants: [],
+          grants: [
+            {
+              subject: { type: "role", id: "editor" },
+              name: "Editor",
+              actions: ["read"],
+            },
+          ],
+        });
+      },
+    ),
+  );
+  renderEditor();
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Why Engineering has access: Every MCP registry entry",
+    }),
+  );
+  await user.click(
+    screen.getByRole("button", {
+      name: "permissions for all MCP registry entries",
+    }),
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: "Permissions for all MCP registry entries",
+    }),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByRole("combobox", { name: "Permission for Editor" }),
+  ).toBeEnabled();
 });
 
 it("revokes a service account's direct grant without removing inherited team access", async () => {

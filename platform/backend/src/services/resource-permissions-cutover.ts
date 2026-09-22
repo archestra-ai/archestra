@@ -43,7 +43,8 @@ export async function runScopedResourcePermissionCutover(
  * The conversion in two halves, in the order they must run.
  *
  * The first rewrites sharing as grants; the second gives each role the grants
- * its retired `admin`/`team-admin` flags stood for and then removes the flags.
+ * its retired `admin` flags stood for and then removes obsolete role flags.
+ * Existing team-relative authority is captured as individual object grants.
  * The halves are exported so a test can exercise one without the other; the
  * routine above always runs both, in this order.
  *
@@ -292,6 +293,137 @@ SET grants = EXCLUDED.grants, legacy_sharing_migrated = true,
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
+  // materializeTeamRelativeAuthority
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- The retired selector was an intersection: a matching role/user/team grant
+-- AND a direct share with one of that user's effective teams. Snapshot that
+-- intersection as individual grants, never as a team/role grant or wildcard.
+-- Service accounts have no team subjects in the old resolver, so none qualify.
+WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
+  SELECT m.organization_id, m.user_id, t.id
+  FROM member m JOIN team_member tm ON tm.user_id = m.user_id
+  JOIN team t ON t.id = tm.team_id AND t.organization_id = m.organization_id
+  UNION
+  SELECT et.organization_id, et.user_id, parent.id
+  FROM effective_teams et JOIN team child ON child.id = et.team_id
+  JOIN team parent ON parent.id = child.parent_team_id AND parent.organization_id = et.organization_id
+), role_identifiers AS (
+  SELECT m.organization_id, m.user_id, trim(identifier) AS identifier
+  FROM member m CROSS JOIN LATERAL unnest(string_to_array(m.role, ',')) identifier
+  UNION
+  SELECT et.organization_id, et.user_id, identifier
+  FROM effective_teams et JOIN team t ON t.id = et.team_id
+  CROSS JOIN LATERAL unnest(t.roles) identifier
+), subjects AS (
+  SELECT organization_id, user_id, 'user' AS subject_type, user_id AS subject_id FROM member
+  UNION
+  SELECT organization_id, user_id, 'organization', '*' FROM member
+  UNION
+  SELECT organization_id, user_id, 'team', team_id FROM effective_teams
+  UNION
+  SELECT organization_id, user_id, 'role', identifier FROM role_identifiers
+  WHERE identifier IN ('admin', 'platform_admin', 'editor', 'member')
+  UNION
+  SELECT r.organization_id, r.user_id, 'role', custom.id
+  FROM role_identifiers r JOIN organization_role custom
+    ON custom.organization_id = r.organization_id AND custom.role = r.identifier
+), legacy_resources AS (
+  SELECT o.id AS organization_id, r.resource
+  FROM organization o CROSS JOIN (VALUES ('agent'), ('mcpGateway'), ('skill'), ('app')) r(resource)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = r.resource
+      AND p.scope = 'teams:*' AND p.legacy_sharing_migrated
+  ) AND (
+    EXISTS (SELECT 1 FROM resource_permission_policies p
+      WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = 'teams:*')
+    OR NOT EXISTS (SELECT 1 FROM resource_permission_policies p
+      WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = '*' AND p.legacy_sharing_migrated)
+  )
+), relative_entries AS (
+  SELECT p.organization_id, p.resource, g->'subject'->>'type' AS subject_type,
+    g->'subject'->>'id' AS subject_id, action
+  FROM resource_permission_policies p CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.scope = 'teams:*'
+  UNION
+  SELECT r.organization_id, r.resource, 'role', 'editor', action
+  FROM legacy_resources r
+  CROSS JOIN unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) action
+  UNION
+  SELECT r.organization_id, r.resource, 'role', custom.id, action
+  FROM legacy_resources r JOIN organization_role custom ON custom.organization_id = r.organization_id
+  CROSS JOIN LATERAL (
+    SELECT action FROM jsonb_array_elements_text(COALESCE(custom.permission::jsonb->r.resource, '[]'::jsonb)) action
+    WHERE action IN ('read', 'update', 'delete')
+    UNION SELECT 'use' WHERE COALESCE(custom.permission::jsonb->r.resource, '[]'::jsonb) ? 'read'
+    UNION SELECT 'manage-permissions' WHERE COALESCE(custom.permission::jsonb->r.resource, '[]'::jsonb) ? 'update'
+  ) actions
+  WHERE COALESCE(custom.permission::jsonb->r.resource, '[]'::jsonb) ? 'team-admin'
+    AND NOT COALESCE(custom.permission::jsonb->r.resource, '[]'::jsonb) ? 'admin'
+), objects AS (
+  -- Validate policy scopes against retained object rows. Deleted rows retain
+  -- their policy for restoration; orphaned/foreign policy documents do not
+  -- manufacture grants. Global models/catalog entries remain org-local here.
+  SELECT organization_id, CASE WHEN agent_type = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END AS resource, id::text AS scope
+  FROM agents WHERE agent_type IN ('agent', 'profile', 'mcp_gateway')
+  UNION SELECT organization_id, 'skill', id::text FROM skills
+  UNION SELECT o.id, 'mcpRegistry', c.id::text FROM internal_mcp_catalog c
+    JOIN organization o ON c.organization_id = o.id OR c.organization_id IS NULL
+    WHERE c.id NOT IN ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')
+      AND c.server_type <> 'app' AND c.parent_catalog_item_id IS NULL
+  UNION SELECT a.organization_id, 'app', a.id::text FROM apps a
+    JOIN mcp_server s ON s.id = a.mcp_server_id JOIN internal_mcp_catalog c ON c.id = s.catalog_id
+    WHERE c.organization_id = a.organization_id OR c.organization_id IS NULL
+  UNION SELECT o.id, 'llmModel', m.id::text FROM models m CROSS JOIN organization o
+  UNION SELECT organization_id, 'project', id::text FROM projects
+  UNION SELECT organization_id, 'plugin', id::text FROM plugins
+  UNION SELECT organization_id, 'llmVirtualKey', id::text FROM virtual_api_keys
+  UNION SELECT organization_id, 'llmProviderApiKey', id::text FROM chat_api_keys
+  UNION SELECT organization_id, 'knowledgeBase', id::text FROM knowledge_bases
+  UNION SELECT organization_id, 'knowledgeConnector', id::text FROM knowledge_base_connectors
+  UNION SELECT organization_id, 'knowledgeFile', id::text FROM kb_files
+  UNION SELECT organization_id, 'environment', id::text FROM environments
+  UNION SELECT organization_id, 'serviceAccount', id::text FROM service_accounts
+), anchored AS (
+  SELECT DISTINCT p.organization_id, p.resource, p.scope, et.user_id
+  FROM resource_permission_policies p JOIN objects o USING (organization_id, resource, scope)
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  JOIN effective_teams et ON et.organization_id = p.organization_id
+    AND g->'subject'->>'type' = 'team' AND et.team_id = g->'subject'->>'id'
+), materialized AS (
+  SELECT DISTINCT a.organization_id, a.resource, a.scope, a.user_id, r.action
+  FROM anchored a JOIN subjects s ON s.organization_id = a.organization_id AND s.user_id = a.user_id
+  JOIN relative_entries r ON r.organization_id = a.organization_id AND r.resource = a.resource
+    AND r.subject_type = s.subject_type AND r.subject_id = s.subject_id
+), affected AS (
+  SELECT DISTINCT organization_id, resource, scope FROM materialized
+), entries AS (
+  SELECT organization_id, resource, scope, 'user' AS subject_type, user_id AS subject_id, action FROM materialized
+  UNION ALL
+  SELECT p.organization_id, p.resource, p.scope, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p JOIN affected USING (organization_id, resource, scope)
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+), merged_subjects AS (
+  SELECT organization_id, resource, scope, subject_type, subject_id, jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, resource, scope, subject_type, subject_id
+), merged AS (
+  SELECT organization_id, resource, scope,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM merged_subjects GROUP BY organization_id, resource, scope
+)
+UPDATE resource_permission_policies p SET grants = merged.grants,
+  revision = p.revision + 1, updated_at = now()
+FROM merged WHERE p.organization_id = merged.organization_id AND p.resource = merged.resource
+  AND p.scope = merged.scope AND p.grants IS DISTINCT FROM merged.grants;
+`),
+  // Consuming the source policy and the wildcard migration marker make this
+  // snapshot one-time. A later revocation cannot be restored at startup.
+  sql`DELETE FROM resource_permission_policies WHERE scope = 'teams:*'`,
+  // ---------------------------------------------------------------------
   // convertOrganizationWideAuthority
   // ---------------------------------------------------------------------
   sql.raw(`
@@ -366,64 +498,6 @@ WITH resources(resource) AS (
 )
 INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
 SELECT organization_id, resource, '*', grants, true FROM policies
-ON CONFLICT (organization_id, resource, scope) DO UPDATE
-SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
-WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
-`),
-  // ---------------------------------------------------------------------
-  // convertTeamRelativeAuthority
-  // ---------------------------------------------------------------------
-  sql.raw(`
--- A resource-level team-admin flag becomes a relative scope, not a team
--- membership role. It applies only while the actor belongs to a team with a
--- direct grant to the object; removing that membership removes the access.
-WITH resources(resource) AS (
-  VALUES ('agent'), ('mcpGateway'), ('skill'), ('app')
-), role_actions AS (
-  SELECT o.id AS organization_id, r.resource, 'editor' AS subject_id,
-    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
-  FROM organization o CROSS JOIN resources r
-  WHERE NOT EXISTS (
-    SELECT 1 FROM resource_permission_policies p
-    WHERE p.organization_id = o.id AND p.resource = r.resource
-      AND p.scope = 'teams:*' AND p.legacy_sharing_migrated
-  )
-  UNION ALL
-  SELECT roles.organization_id, r.resource, roles.id, expanded.action
-  FROM organization_role roles CROSS JOIN resources r
-  CROSS JOIN LATERAL (
-    SELECT action FROM jsonb_array_elements_text(COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb)) action
-    WHERE action IN ('read', 'update', 'delete')
-    UNION
-    SELECT 'use' WHERE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'read'
-    UNION
-    SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'update'
-  ) expanded
-  WHERE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'team-admin'
-    AND NOT COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'admin'
-    AND NOT EXISTS (
-      SELECT 1 FROM resource_permission_policies p
-      WHERE p.organization_id = roles.organization_id AND p.resource = r.resource
-        AND p.scope = 'teams:*' AND p.legacy_sharing_migrated
-    )
-), entries AS (
-  SELECT organization_id, resource, 'role' AS subject_type, subject_id, action FROM role_actions
-  UNION ALL
-  SELECT p.organization_id, p.resource, g->'subject'->>'type', g->'subject'->>'id', action
-  FROM resource_permission_policies p CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
-  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
-  WHERE p.scope = 'teams:*' AND p.resource IN (SELECT resource FROM resources)
-), subjects AS (
-  SELECT organization_id, resource, subject_type, subject_id, jsonb_agg(DISTINCT action ORDER BY action) AS actions
-  FROM entries GROUP BY organization_id, resource, subject_type, subject_id
-), policies AS (
-  SELECT organization_id, resource,
-    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
-      ORDER BY subject_type, subject_id) AS grants
-  FROM subjects GROUP BY organization_id, resource
-)
-INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
-SELECT organization_id, resource, 'teams:*', grants, true FROM policies
 ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
@@ -634,6 +708,16 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
 WHERE NOT resource_permission_policies.legacy_sharing_migrated
   OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
+  // Only the untouched, revision-one seed from the earlier cutover is
+  // recognizable as an omission rather than a revocation. Customized or
+  // subsequently edited policies are deliberately outside this repair.
+  sql.raw(`
+UPDATE resource_permission_policies SET
+  grants = '[{"subject":{"type":"role","id":"admin"},"actions":["delete","manage-permissions","read","update","use"]},{"subject":{"type":"role","id":"editor"},"actions":["read","use"]},{"subject":{"type":"role","id":"platform_admin"},"actions":["delete","manage-permissions","read","update","use"]}]'::jsonb,
+  revision = revision + 1, updated_at = now()
+WHERE resource = 'environment' AND scope = '*' AND legacy_sharing_migrated AND revision = 1
+  AND grants = '[{"subject":{"type":"role","id":"admin"},"actions":["read","use"]},{"subject":{"type":"role","id":"editor"},"actions":["read","use"]},{"subject":{"type":"role","id":"platform_admin"},"actions":["read","use"]}]'::jsonb;
+`),
   // ---------------------------------------------------------------------
   // convertDeployToRestrictedToEnvironmentGrants
   // ---------------------------------------------------------------------
@@ -691,7 +775,9 @@ WITH holders AS (
   -- start, and an unconditional write would raise the revision the permissions
   -- editor holds while somebody is editing.
   SELECT organization_id, 'role' AS subject_type, role_id AS subject_id,
-    unnest(ARRAY['read', 'use']) AS action
+    unnest(CASE WHEN role_id IN ('admin', 'platform_admin')
+      THEN ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']
+      ELSE ARRAY['read', 'use'] END) AS action
   FROM holders
   UNION ALL
   SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
@@ -728,9 +814,9 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
   // retireConvertedRoleActions
   // ---------------------------------------------------------------------
   sql.raw(`
--- Earlier statements in this transaction captured these flags as scoped
--- grants. Retire the obsolete actions without changing unrelated permissions
--- or role IDs.
+-- Earlier statements captured admin and deployment authority as scoped
+-- grants. Team-admin authority was captured as individual object grants before
+-- these flags retire. Preserve unrelated permissions and role IDs.
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE

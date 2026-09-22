@@ -30,6 +30,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   useScopeFilterParams,
@@ -492,18 +493,20 @@ function PluginsList() {
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
         actionButton={
-          !showEmptyState &&
-          !isInitialPluginsLoad && (
-            <PermissionButton
-              permissions={{ plugin: ["create", "admin"] }}
-              asChild
-            >
-              <Link href="/plugins/new">
-                <Plus className="h-4 w-4" />
-                Add new plugin
-              </Link>
-            </PermissionButton>
-          )
+          <div className="flex items-center gap-2">
+            {!showEmptyState && !isInitialPluginsLoad && (
+              <PermissionButton
+                permissions={{ plugin: ["create", "admin"] }}
+                asChild
+              >
+                <Link href="/plugins/new">
+                  <Plus className="h-4 w-4" />
+                  Add new plugin
+                </Link>
+              </PermissionButton>
+            )}
+            <ResourceListActions resource="plugin" />
+          </div>
         }
       >
         <TableCardView storageKey="archestra-plugins-view" defaultMode="table">

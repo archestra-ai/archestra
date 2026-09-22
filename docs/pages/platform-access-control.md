@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-22
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -348,7 +348,7 @@ The following table lists all available permissions that can be assigned to cust
 Service accounts use their assigned role for these APIs. A service account has no personal usage or caller-attributed log rows. Grant `llmCost:read` for organization-wide cost exports. Grant both `log:read` and `log:admin` for organization-wide log exports. Add `member:read` to include per-user cost statistics.
 
 
-## Resource Permission Grants
+## Granular Access Control
 
 Agents, MCP gateways, MCP registry entries, skills, apps, models, and service accounts support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
 
@@ -359,11 +359,11 @@ Agents, MCP gateways, MCP registry entries, skills, apps, models, and service ac
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
 | Service account detail page | Open **Permissions** |
-| All objects of a resource type | Open **Settings > Permissions** and select the resource type |
+| All objects of a resource type | Open the resource list’s **More actions** menu beside **Create** or **Add**, then choose **Permissions** |
 
-Initial grants are validated before creation and persisted with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional `initialGrants` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
+Permissions selected during creation are saved with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional `initialGrants` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
 
-Resource grants are an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
+Granular access control is an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
 
 Roles and grants answer different questions. A role says what a principal may do with a type of resource, and the pages that assign roles ask nothing about individual objects. A grant says which objects those actions reach. Assigning a role therefore gives a principal whatever the organization's own grants give that role, and nothing more.
 
@@ -373,15 +373,13 @@ Recipients can be users, teams, service accounts, roles, or everyone in the orga
 
 ### Actions And Scopes
 
-Each permission is evaluated as one complete action-and-scope pair. The scope identifies one resource, all resources, or resources shared with the recipient’s teams. A wildcard for agents does not grant access to MCP servers, and a wildcard never crosses the organization boundary.
+Each permission is evaluated as one complete action-and-scope pair. The scope identifies one resource or every resource of the same type. A wildcard for agents does not grant access to MCP servers, and a wildcard never crosses the organization boundary.
 
 | Scope | Applies To |
 | --- | --- |
 | Resource ID | One resource |
 | `*` | Every current and future resource of that type in the organization |
-| `teams:*` | Resources with a direct grant to one of the recipient's current teams |
 
-Team-relative scopes follow current membership, including ancestor teams. They do not depend on team membership roles. Service accounts have no team membership, so team-relative grants do not apply to them.
 
 | Action | Allows |
 | --- | --- |
@@ -395,7 +393,7 @@ Viewing a resource does not by itself grant execution. Uncatalogued model IDs re
 
 For example, a service account can have `read` on all MCP registry entries and `update` on one entry. Those grants allow it to view every entry and edit only that one. The evaluator does not combine the wildcard from the first grant with the update action from the second.
 
-The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Inspect the action list below each recipient before saving.
+The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Each recipient can have a different permission level.
 
 Public marketplace link management remains organization-wide. Creating, listing, rotating, or revoking skill marketplace links requires skill `read`, `use`, and `manage-permissions` on `*`. Editing a skill alone does not authorize public distribution. A link contains the skills selected when it is created; it does not automatically include future skills.
 
@@ -403,7 +401,7 @@ Public marketplace link management remains organization-wide. Creating, listing,
 
 A recipient receives the union of its applicable grants: direct user or service-account grants, team grants, grants to its effective roles, and organization-wide grants. Team grants follow the team hierarchy described below. Grants to roles follow role composition.
 
-The Permissions editor shows direct grants and inherited grants with their source scopes. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
+The Permissions editor shows direct permissions and access inherited from organization-wide policies. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
 
 ### Conversion Of Existing Sharing
 
@@ -411,7 +409,7 @@ The conversion runs at the first start after the upgrade. It turns existing shar
 
 Organization-wide sharing becomes a grant to each role that holds that resource's read permission. Access after the conversion is therefore the same as access before it. A member whose role withholds the read permission did not see the resource, and does not see it afterwards. To reach everyone, add the **Everyone in the organization** recipient yourself.
 
-Resource-level `:admin` permissions become `*` grants with their associated actions. Resource-level `:team-admin` permissions become `teams:*` grants. The conversion then removes both from the roles that held them. These permissions are distinct from the team's membership admin role.
+Resource-level `:admin` permissions become `*` grants with their associated actions. The conversion removes obsolete `:admin` and `:team-admin` flags from roles. Team membership does not add permissions beyond those explicitly assigned to the team. Existing team-relative access is converted to explicit permissions for each person and resource it applies to at upgrade time. This preserves their current actions without giving those actions to other team members or to future resources. Team membership administration remains separate from resource permissions.
 
 Existing explicit grants, including service-account grants, survive migration. Migrated policies replace legacy sharing checks. Revoking a grant cannot restore access through an old ownership or visibility setting. Other applicable grants can still provide access.
 

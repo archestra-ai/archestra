@@ -19,10 +19,12 @@ import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
  */
 export function LogsSectionLayout({
   listPath,
+  actionButton,
   children,
 }: {
   /** The list route this segment's header belongs to, e.g. `/llm/logs`. */
   listPath: string;
+  actionButton?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -30,5 +32,9 @@ export function LogsSectionLayout({
 
   if (pathname !== listPath) return <>{children}</>;
 
-  return <PageLayout {...config}>{children}</PageLayout>;
+  return (
+    <PageLayout {...config} actionButton={actionButton}>
+      {children}
+    </PageLayout>
+  );
 }

@@ -10,10 +10,10 @@ import {
   ResourcePermissionActionSchema,
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
+  ResourcePermissionScopeSchema,
   roleDisplayNames,
   type ScopedPermission,
   type ScopedResource,
-  TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
 import {
@@ -96,7 +96,7 @@ export class ResourcePermissions {
     if (params.grants.length && !enterpriseTier.isCoreActive()) {
       throw new ApiError(
         403,
-        "Resource permission grants require an active Enterprise entitlement or the small-team allowance.",
+        "Granular access control requires an active Enterprise entitlement or the small-team allowance.",
       );
     }
     // Creation assigns the creator full access to this new object. Sharing
@@ -314,8 +314,10 @@ export class ResourcePermissions {
   }
 
   static async getEffective(params: PermissionContext) {
+    if (!ResourcePermissionScopeSchema.safeParse(params.scope).success)
+      throw new ApiError(400, "Invalid permission scope");
     if (
-      params.scope === TEAM_RESOURCE_SCOPE &&
+      params.scope !== "*" &&
       ORGANIZATION_WIDE_RESOURCES.has(params.resource)
     )
       throw new ApiError(
@@ -323,13 +325,13 @@ export class ResourcePermissions {
         "This resource only supports organization-wide permissions",
       );
     const target =
-      params.scope === "*" || params.scope === TEAM_RESOURCE_SCOPE
+      params.scope === "*"
         ? null
         : await ResourcePermissionTargetModel.find({
             ...params,
             id: params.scope,
           });
-    if (params.scope !== "*" && params.scope !== TEAM_RESOURCE_SCOPE && !target)
+    if (params.scope !== "*" && !target)
       throw new ApiError(404, "Resource not found");
     if (
       params.resource === "app" &&
@@ -388,16 +390,11 @@ export class ResourcePermissions {
     const inherited = inheritedPolicyGrants({
       policies: applicable,
       scope: params.scope,
-      directGrants: policy?.grants ?? [],
     });
     return {
       resource: params.resource,
       scope: params.scope,
-      name:
-        effective.target?.name ??
-        (params.scope === TEAM_RESOURCE_SCOPE
-          ? "Resources shared with your teams"
-          : "All resources"),
+      name: effective.target?.name ?? "All resources",
       revision: policy?.revision ?? 0,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -435,11 +432,7 @@ export class ResourcePermissions {
     return {
       resource: params.resource,
       scope: params.scope,
-      name:
-        effective.target?.name ??
-        (params.scope === TEAM_RESOURCE_SCOPE
-          ? "Resources shared with your teams"
-          : "All resources"),
+      name: effective.target?.name ?? "All resources",
       revision: policy.revision,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -450,7 +443,6 @@ export class ResourcePermissions {
         grants: inheritedPolicyGrants({
           policies: await ResourcePermissionPolicyModel.findApplicable(params),
           scope: params.scope,
-          directGrants: policy.grants,
         }),
       }),
       legacyAccess: policy?.legacySharingMigrated
@@ -499,14 +491,6 @@ export class ResourcePermissions {
     scope?: ResourcePermissionScope;
   }): Promise<void> {
     const subjects = params.grants.map((grant) => grant.subject);
-    if (
-      params.scope === TEAM_RESOURCE_SCOPE &&
-      subjects.some((subject) => subject.type === "serviceAccount")
-    )
-      throw new ApiError(
-        400,
-        "Service accounts do not belong to teams; grant access to specific resources or all resources instead",
-      );
     if (new Set(subjects.map(subjectKey)).size !== subjects.length)
       throw new ApiError(400, "Each recipient can have only one direct grant");
     const existing = await ResourcePermissionSubjectModel.findExisting({
@@ -558,42 +542,12 @@ export class ResourcePermissions {
           action,
         })),
     );
-    // Adding a resource to a team's reach can activate that team's members'
-    // existing relative grants. Authorize those actions as part of sharing.
-    const addsTeam = params.grants.some(
-      (grant) =>
-        grant.subject.type === "team" &&
-        !current?.grants.some(
-          (existing) =>
-            subjectKey(existing.subject) === subjectKey(grant.subject),
-        ),
-    );
-    if (
-      addsTeam &&
-      params.scope !== "*" &&
-      params.scope !== TEAM_RESOURCE_SCOPE
-    ) {
-      const teamPolicy = await ResourcePermissionPolicyModel.find({
-        ...params,
-        scope: TEAM_RESOURCE_SCOPE,
-      });
-      for (const action of new Set(
-        teamPolicy?.grants.flatMap((grant) => grant.actions) ?? [],
-      )) {
-        requested.push({
-          organizationId: params.organizationId,
-          resource: params.resource,
-          scope: params.scope,
-          action,
-        });
-      }
-    }
     if (
       !hasScopedPermission({
         grants: params.authority,
         required: {
           ...params,
-          scope: params.scope === TEAM_RESOURCE_SCOPE ? "*" : params.scope,
+          scope: params.scope,
           action: "manage-permissions",
         },
       }) ||
@@ -618,7 +572,7 @@ export class ResourcePermissions {
       if (expandsAccess)
         throw new ApiError(
           403,
-          "Resource permission grants require an active Enterprise entitlement or the small-team allowance.",
+          "Granular access control requires an active Enterprise entitlement or the small-team allowance.",
         );
     }
     await ResourcePermissions.validateRecipients(params);
@@ -651,12 +605,7 @@ export class ResourcePermissions {
       .filter((recipient) =>
         recipient.name.toLowerCase().includes(params.query.toLowerCase()),
       )
-      .concat(recipients)
-      .filter(
-        (recipient) =>
-          params.scope !== TEAM_RESOURCE_SCOPE ||
-          recipient.subject.type !== "serviceAccount",
-      );
+      .concat(recipients);
   }
   private static async describeLegacyAccess(
     params: PermissionContext & {
@@ -831,45 +780,27 @@ function subjectForUserId(userId: string): PermissionSubject {
     : { type: "user", id: userId };
 }
 
-/** Expand a relative team selector only onto objects actually shared with a current team. */
+/** Resolve only explicit resource and organization-wide policies. */
 function expandScopedGrants(params: {
   policies: Awaited<
     ReturnType<typeof ResourcePermissionPolicyModel.findForSubjects>
   >;
   subjectKeys: Set<string>;
 }): ScopedPermission[] {
-  const teamScopes = new Map<ScopedResource, Set<string>>();
-  for (const policy of params.policies) {
-    if (policy.scope === "*" || policy.scope === TEAM_RESOURCE_SCOPE) continue;
-    if (
-      policy.grants.some(
-        (grant) =>
-          grant.subject.type === "team" &&
-          params.subjectKeys.has(subjectKey(grant.subject)),
-      )
-    ) {
-      const scopes = teamScopes.get(policy.resource) ?? new Set<string>();
-      scopes.add(policy.scope);
-      teamScopes.set(policy.resource, scopes);
-    }
-  }
-  return params.policies.flatMap((policy) =>
-    policy.grants.flatMap((grant) => {
-      if (!params.subjectKeys.has(subjectKey(grant.subject))) return [];
-      const scopes =
-        policy.scope === TEAM_RESOURCE_SCOPE
-          ? [TEAM_RESOURCE_SCOPE, ...(teamScopes.get(policy.resource) ?? [])]
-          : [policy.scope];
-      return scopes.flatMap((scope) =>
-        grant.actions.map((action) => ({
-          organizationId: policy.organizationId,
-          resource: policy.resource,
-          scope,
-          action,
-        })),
-      );
-    }),
-  );
+  return params.policies.flatMap((policy) => {
+    if (!ResourcePermissionScopeSchema.safeParse(policy.scope).success)
+      return [];
+    return policy.grants.flatMap((grant) =>
+      params.subjectKeys.has(subjectKey(grant.subject))
+        ? grant.actions.map((action) => ({
+            organizationId: policy.organizationId,
+            resource: policy.resource,
+            scope: policy.scope,
+            action,
+          }))
+        : [],
+    );
+  });
 }
 
 function inheritedPolicyGrants(params: {
@@ -877,18 +808,9 @@ function inheritedPolicyGrants(params: {
     ReturnType<typeof ResourcePermissionPolicyModel.findApplicable>
   >;
   scope: string;
-  directGrants: ResourcePermissionGrant[];
 }) {
-  const sharedWithTeams =
-    params.scope !== "*" &&
-    params.scope !== TEAM_RESOURCE_SCOPE &&
-    params.directGrants.some((grant) => grant.subject.type === "team");
   return params.policies
-    .filter(
-      (policy) =>
-        policy.scope !== params.scope &&
-        (policy.scope !== TEAM_RESOURCE_SCOPE || sharedWithTeams),
-    )
+    .filter((policy) => policy.scope === "*" && policy.scope !== params.scope)
     .flatMap((policy) =>
       policy.grants.map((grant) => ({ ...grant, sourceScope: policy.scope })),
     );
@@ -903,11 +825,7 @@ function effectiveActionsForPolicy(
       required: {
         ...params,
         action,
-        scope:
-          action === "manage-permissions" &&
-          params.scope === TEAM_RESOURCE_SCOPE
-            ? "*"
-            : params.scope,
+        scope: params.scope,
       },
     }),
   );

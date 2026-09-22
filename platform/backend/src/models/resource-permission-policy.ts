@@ -7,7 +7,6 @@ import {
   resourcePermissionPresets,
   type ScopedResource,
   ScopedResourceSchema,
-  TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
@@ -161,20 +160,6 @@ export default class ResourcePermissionPolicyModel {
               : []),
           ],
         })),
-        ...(["agent", "mcpGateway", "skill", "app"] as const).map(
-          (resource) => ({
-            organizationId: params.organizationId,
-            resource,
-            scope: TEAM_RESOURCE_SCOPE,
-            legacySharingMigrated: true,
-            grants: [
-              {
-                subject: { type: "role" as const, id: "editor" },
-                actions: resourcePermissionPresets.manage.actions,
-              },
-            ],
-          }),
-        ),
       ])
       .onConflictDoNothing();
     const models = await params.tx
@@ -433,6 +418,7 @@ export default class ResourcePermissionPolicyModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          sql`(${table.scope} = '*' OR ${table.scope} ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')`,
           or(
             ...params.subjects.map(
               (subject) =>
@@ -460,15 +446,6 @@ export default class ResourcePermissionPolicyModel {
       userId: params.userId,
       teamIdColumn: sql`grant_entry->'subject'->>'id'`,
     });
-    const sharedWithTeam = sql`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_shared_policy,
-        jsonb_array_elements(team_shared_policy.grants) shared_team_entry
-      WHERE team_shared_policy.organization_id = ${params.organizationId}
-        AND team_shared_policy.resource = ${params.resource}
-        AND team_shared_policy.scope = ${params.scopeColumn}::text
-        AND shared_team_entry->'subject'->>'type' = 'team'
-        AND ${serviceAccountId ? sql`false` : TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: sql`shared_team_entry->'subject'->>'id'` })}
-    )`;
     const inheritedRole = sql`EXISTS (SELECT 1 FROM team grant_team WHERE grant_team.organization_id = ${params.organizationId} AND ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: sql`grant_team.id` })} AND grant_role.identifier = ANY(grant_team.roles))`;
     const role = sql`EXISTS (
       SELECT 1 FROM (
@@ -483,8 +460,7 @@ export default class ResourcePermissionPolicyModel {
         jsonb_array_elements(grant_policy.grants) grant_entry
       WHERE grant_policy.organization_id = ${params.organizationId}
         AND grant_policy.resource = ${params.resource}
-        AND (grant_policy.scope = '*' OR grant_policy.scope = ${params.scopeColumn}::text
-          OR (grant_policy.scope = ${TEAM_RESOURCE_SCOPE} AND ${sharedWithTeam}))
+        AND (grant_policy.scope = '*' OR grant_policy.scope = ${params.scopeColumn}::text)
         AND (grant_entry->'actions') ? ${params.action}
         AND (
           (grant_entry->'subject'->>'type' = 'organization' AND grant_entry->'subject'->>'id' = '*')
@@ -543,7 +519,7 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, [...params.scopes, "*", TEAM_RESOURCE_SCOPE]),
+          inArray(table.scope, [...params.scopes, "*"]),
         ),
       );
   }

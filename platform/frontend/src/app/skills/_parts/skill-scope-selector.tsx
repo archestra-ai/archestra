@@ -17,9 +17,8 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 /**
  * Scope picker for the skill editor: personal / team / org. Mirrors the agent
- * access-level selector — `org` needs `skill:admin`, `team` needs
- * `skill:team-admin` (or admin), and team assignments are limited to teams the
- * server will accept.
+ * access-level selector. Organization-wide changes require authority over all
+ * skills, and team assignments are limited to teams the server will accept.
  */
 /**
  * What this control offers. Wider than the stored scope: a skill shared with
@@ -51,14 +50,10 @@ export function SkillScopeSelector({
   subject?: string;
 }) {
   const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
-  const { data: isSkillTeamAdmin } = useHasPermissions(
-    { skill: ["update"] },
-    "teams:*",
-  );
   const { data: teams } = useAssignableTeams({
     isResourceAdmin: !!isSkillAdmin,
   });
-  const canShareTeams = isSkillAdmin || isSkillTeamAdmin;
+  const canShareTeams = isSkillAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
 
   // A skill shared with named people is stored as `personal` plus grants, so
@@ -95,7 +90,7 @@ export function SkillScopeSelector({
           ? "No teams available"
           : undefined,
       disabledReason: !canShareTeams
-        ? "You need skill:team-admin permission to share with teams"
+        ? "You need permission to manage access to these skills"
         : hasNoTeams
           ? "There are no teams to share with yet. Create one from Settings → Teams."
           : undefined,

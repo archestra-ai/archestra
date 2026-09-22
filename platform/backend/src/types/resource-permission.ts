@@ -49,4 +49,5 @@ export const ResourcePermissionsResponseSchema = z.object({
 export const PermissionSubjectOptionSchema = z.object({
   subject: PermissionSubjectSchema,
   name: z.string(),
+  email: z.string().optional(),
 });

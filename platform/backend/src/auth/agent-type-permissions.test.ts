@@ -597,7 +597,7 @@ describe("scoped agent authority", () => {
     expect(await hasAnyAgentTypeAdminPermission(context)).toBe(false);
   });
 
-  test("the built-in Editor gets relative team scopes without wildcard authority", async ({
+  test("the built-in Editor has no implicit team-wide or wildcard authority", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -609,8 +609,8 @@ describe("scoped agent authority", () => {
       organizationId: org.id,
       userId: user.id,
     });
-    expect(checker.isTeamAdmin("agent")).toBe(true);
-    expect(checker.isTeamAdmin("mcp_gateway")).toBe(true);
+    expect(checker.isTeamAdmin("agent")).toBe(false);
+    expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
     expect(checker.isAdmin("agent")).toBe(false);
     expect(checker.hasAnyAdminPermission()).toBe(false);
   });

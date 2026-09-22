@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { PermissionSubject } from "@archestra/shared";
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 export default class ResourcePermissionSubjectModel {
@@ -60,7 +60,11 @@ export default class ResourcePermissionSubjectModel {
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
     const [users, teams, accounts, roles] = await Promise.all([
       db
-        .select({ id: schema.usersTable.id, name: schema.usersTable.name })
+        .select({
+          id: schema.usersTable.id,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+        })
         .from(schema.usersTable)
         .innerJoin(
           schema.membersTable,
@@ -69,7 +73,10 @@ export default class ResourcePermissionSubjectModel {
         .where(
           and(
             eq(schema.membersTable.organizationId, params.organizationId),
-            ilike(schema.usersTable.name, pattern),
+            or(
+              ilike(schema.usersTable.name, pattern),
+              ilike(schema.usersTable.email, pattern),
+            ),
           ),
         )
         .orderBy(schema.usersTable.name)
@@ -125,6 +132,7 @@ export default class ResourcePermissionSubjectModel {
       ...users.map((user) => ({
         subject: { type: "user" as const, id: user.id },
         name: user.name,
+        email: user.email,
       })),
       ...teams.map((team) => ({
         subject: { type: "team" as const, id: team.id },

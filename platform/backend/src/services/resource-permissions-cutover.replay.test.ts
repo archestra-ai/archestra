@@ -69,13 +69,12 @@ test("model wildcard revocation survives despite a retained custom role update a
   ).toBe(false);
 });
 
-test("built-in relative and deployment grants stay revoked after restart", async ({
+test("built-in deployment grants stay revoked after restart", async ({
   makeOrganization,
 }) => {
   const org = await makeOrganization({ legacyPermissions: true });
   await runScopedResourcePermissionCutover();
   for (const key of [
-    { organizationId: org.id, resource: "agent" as const, scope: "teams:*" },
     { organizationId: org.id, resource: "environment" as const, scope: "*" },
   ]) {
     const converted = await ResourcePermissionPolicyModel.find(key);
@@ -92,7 +91,6 @@ test("built-in relative and deployment grants stay revoked after restart", async
   }
   await runScopedResourcePermissionCutover();
   for (const key of [
-    { organizationId: org.id, resource: "agent" as const, scope: "teams:*" },
     { organizationId: org.id, resource: "environment" as const, scope: "*" },
   ]) {
     expect(

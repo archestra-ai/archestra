@@ -31,6 +31,7 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -458,6 +459,7 @@ export default function KnowledgeFilesPage() {
       title="Files"
       description="Documents uploaded directly — no connector needed. Add them to a knowledge base to make them retrievable by your agents."
       createLabel="Upload"
+      trailingActions={<ResourceListActions resource="knowledgeFile" />}
       onCreateClick={() => setUploadOpen(true)}
       // Only at the top level: directories are flat, so inside one there is no
       // sub-directory to create — the button would silently make a sibling you

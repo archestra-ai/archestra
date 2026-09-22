@@ -2,17 +2,18 @@
 "use client";
 
 import {
+  ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   type ResourcePermissionAction,
   resourcePermissionPresets,
   type ScopedResource,
-  TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
 import {
   AlertCircle,
   AlertTriangle,
   Bot,
   Globe,
+  Info,
   Plus,
   Shield,
   Trash2,
@@ -23,8 +24,14 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -33,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
   type ResourcePermissions as Policy,
   useResourcePermissions,
@@ -99,6 +107,46 @@ export function ResourcePermissions({
   );
 }
 
+/** Shared by resource lists and the explanation of inherited access. */
+export function ResourcePermissionsDialog({
+  resource,
+  open,
+  onOpenChange,
+}: {
+  resource: ScopedResource;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [isDirty, setIsDirty] = useState(false);
+  const noun = scopedResourceNouns[resource];
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Permissions for all ${resourcePluralNames[resource]}`}
+      description={
+        `Give access to every ${noun} in the organization, including ones created later.` +
+        (ORGANIZATION_WIDE_RESOURCES.has(resource)
+          ? ""
+          : " Permissions on individual resources can add access, but cannot reduce access given here.")
+      }
+      isDirty={isDirty}
+      className="sm:max-w-3xl"
+      footer={<DialogCancelButton>Done</DialogCancelButton>}
+    >
+      {open && (
+        <ResourcePermissions
+          resource={resource}
+          scope="*"
+          embedded
+          description={null}
+          onDirtyChange={setIsDirty}
+        />
+      )}
+    </StandardDialog>
+  );
+}
+
 function PermissionsEditor({
   policy,
   refreshFailed,
@@ -136,6 +184,7 @@ function PermissionsEditor({
     name: "grants",
   });
   const [addOpen, setAddOpen] = useState(false);
+  const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
   const canManage = policy.effectiveActions.includes("manage-permissions");
   const presets = presetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
@@ -166,27 +215,28 @@ function PermissionsEditor({
       name: grant.name,
       type: grant.subject.type,
       actions: grant.actions,
-      via:
-        grant.sourceScope === TEAM_RESOURCE_SCOPE
-          ? "From team access settings"
-          : "From organization settings",
+      source: "all" as const,
+      via: `Every ${scopedResourceNouns[policy.resource]}`,
+      explanation: `Applies to every ${scopedResourceNouns[policy.resource]}, including new ones.`,
     })),
     ...policy.legacyAccess.map((grant) => ({
       key: `legacy:${subjectKey(grant.subject)}`,
       name: grant.name,
       type: grant.subject.type,
       actions: grant.actions,
-      via: "From existing access settings",
+      source: "legacy" as const,
+      via: "Existing access",
+      explanation:
+        "This access comes from existing roles and sharing settings. It cannot be changed in this list.",
     })),
   ];
   const Container = embedded ? "div" : "form";
+  const noun = scopedResourceNouns[policy.resource];
   const explanation =
     description === undefined
       ? policy.scope === "*"
         ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
-        : policy.scope === TEAM_RESOURCE_SCOPE
-          ? "Applies only to resources shared with a recipient’s teams."
-          : null
+        : `Choose who can access this ${noun} and what they can do.`
       : description;
   return (
     <Container onSubmit={embedded ? undefined : submit} className="space-y-3">
@@ -265,9 +315,7 @@ function PermissionsEditor({
         )}
         {fields.length === 0 && indirect.length === 0 && (
           <p className="py-3 text-sm text-muted-foreground">
-            {policy.scope === TEAM_RESOURCE_SCOPE
-              ? "No additional access through teams."
-              : "Nobody has access yet."}
+            Nobody has access yet.
           </p>
         )}
         {fields.map((grant, index) => (
@@ -340,11 +388,46 @@ function PermissionsEditor({
             className="flex items-center gap-3 py-1.5 text-muted-foreground"
           >
             <SubjectIcon type={grant.type} />
-            <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
               <p className="break-words text-sm font-medium">{grant.name}</p>
-              <p className="text-xs">
-                {`${subjectLabels[grant.type]} · ${grant.via}`}
-              </p>
+              <span className="text-xs">{subjectLabels[grant.type]}</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                    aria-label={`Why ${grant.name} has access: ${grant.via}`}
+                  >
+                    <span>{grant.via}</span>
+                    <Info className="size-3" aria-hidden="true" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
+                  aria-label={`Access source for ${grant.name}`}
+                >
+                  <p>
+                    <span>{grant.explanation}</span>
+                    {grant.source !== "legacy" && (
+                      <span>
+                        {" Edit in "}
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto p-0 text-xs underline underline-offset-2"
+                          onClick={() => setAllPermissionsOpen(true)}
+                        >
+                          permissions for all{" "}
+                          {resourcePluralNames[policy.resource]}
+                        </Button>
+                        .
+                      </span>
+                    )}
+                  </p>
+                </PopoverContent>
+              </Popover>
             </div>
             <p className="w-36 shrink-0 border border-transparent px-3 text-sm text-foreground">
               {actionSummary(grant.actions, policy.resource)}
@@ -379,6 +462,13 @@ function PermissionsEditor({
             </Button>
           </div>
         </div>
+      )}
+      {allPermissionsOpen && (
+        <ResourcePermissionsDialog
+          resource={policy.resource}
+          open={allPermissionsOpen}
+          onOpenChange={setAllPermissionsOpen}
+        />
       )}
       {canManage && (
         <AddResourceAccessDialog
@@ -471,7 +561,7 @@ function presetsFor(
   return resourcePermissionPresets;
 }
 
-function presetDescription(preset: string, resource: ScopedResource) {
+export function presetDescription(preset: string, resource: ScopedResource) {
   return preset === "manage" && (resource === "log" || resource === "auditLog")
     ? "View logs and manage who can access them"
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
@@ -520,4 +610,25 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   update: "Edit",
   delete: "Delete",
   "manage-permissions": "Manage permissions",
+};
+
+const resourcePluralNames: Record<ScopedResource, string> = {
+  agent: "agents",
+  skill: "skills",
+  app: "apps",
+  llmModel: "models",
+  mcpGateway: "MCP gateways",
+  mcpRegistry: "MCP registry entries",
+  project: "projects",
+  plugin: "plugins",
+  knowledgeBase: "knowledge bases",
+  knowledgeConnector: "connectors",
+  knowledgeFile: "files",
+  llmVirtualKey: "virtual keys",
+  llmProviderApiKey: "provider keys",
+  environment: "environments",
+  scheduledTask: "scheduled tasks",
+  log: "LLM and MCP logs",
+  auditLog: "audit logs",
+  serviceAccount: "service accounts",
 };

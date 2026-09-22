@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import AgentModel from "@/models/agent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
@@ -6,55 +7,99 @@ import { describe, expect, test } from "@/test";
 import { ResourcePermissions } from "./resource-permissions";
 
 describe("resource permissions", () => {
-  test("sharing with a team cannot activate relative edit authority the grantor does not hold", async ({
+  test("retired team-relative policies cannot upgrade direct team access or leak into capabilities", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeTeam,
+    makeAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    await makeMember(user.id, org.id);
+    await makeMember(user.id, org.id, { role: "editor" });
     const team = await makeTeam(org.id, user.id);
+    await TeamModel.addMember(team.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "personal",
+    });
     const context = {
       organizationId: org.id,
       userId: user.id,
       resource: "agent" as const,
-      scope: "733dfe40-c090-490c-ab19-b9935c3c4bf2",
+      scope: agent.id,
     };
     await replacePolicy({
       ...context,
       scope: "teams:*",
       revision: 0,
       grants: [
-        { subject: { type: "role", id: "editor" }, actions: ["update"] },
+        {
+          subject: { type: "role", id: "editor" },
+          actions: ["use", "update", "manage-permissions"],
+        },
       ],
     });
-    const request = {
+    const grants = [
+      {
+        subject: { type: "team" as const, id: team.id },
+        actions: ["read" as const],
+      },
+    ];
+    // Sharing view access requires only view + permission-management authority,
+    // regardless of obsolete rules still present during an upgrade.
+    const policy = await ResourcePermissionPolicyModel.find(context);
+    await ResourcePermissions.replace({
+      ...context,
+      revision: policy?.revision ?? 0,
+      grants,
+      authority: [
+        { ...context, action: "read" },
+        { ...context, action: "manage-permissions" },
+      ],
+    });
+    expect((await ResourcePermissionPolicyModel.find(context))?.grants).toEqual(
+      grants,
+    );
+    expect(
+      await ResourcePermissions.allows({ ...context, action: "read" }),
+    ).toBe(true);
+    expect(
+      await ResourcePermissions.allows({ ...context, action: "update" }),
+    ).toBe(false);
+    const capabilities = await ResourcePermissions.resolveAll(context);
+    expect(capabilities.some((grant) => grant.scope === "teams:*")).toBe(false);
+    expect(
+      capabilities.some(
+        (grant) => grant.resource === "agent" && grant.action === "update",
+      ),
+    ).toBe(false);
+    expect(await AgentModel.findUsableChatopsAgents(context)).toEqual([]);
+    const display = await ResourcePermissions.getPolicy(context);
+    expect(
+      display.inheritedGrants.every((grant) => grant.sourceScope === "*"),
+    ).toBe(true);
+    await replacePolicy({
       ...context,
       revision: 0,
       grants: [
-        {
-          subject: { type: "team" as const, id: team.id },
-          actions: ["read" as const],
-        },
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
       ],
-      authority: [
-        { ...context, action: "read" as const },
-        { ...context, action: "manage-permissions" as const },
-      ],
-    };
-    await expect(ResourcePermissions.replace(request)).rejects.toThrow(
-      "only grant permissions you hold",
-    );
-    expect(await ResourcePermissionPolicyModel.find(context)).toBeNull();
-    await ResourcePermissions.replace({
-      ...request,
-      authority: [...request.authority, { ...context, action: "update" }],
     });
-    expect((await ResourcePermissionPolicyModel.find(context))?.grants).toEqual(
-      request.grants,
-    );
+    expect(await AgentModel.findUsableChatopsAgents(context)).toEqual([
+      { id: agent.id, name: agent.name },
+    ]);
+    const subjects = [{ type: "role" as const, id: "editor" }];
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findForSubjects({
+          ...context,
+          subjects,
+        })
+      ).some((policy) => policy.scope === "teams:*"),
+    ).toBe(false);
   });
   test("service accounts receive exact and wildcard grants, and disabled or foreign accounts cannot use them", async ({
     makeOrganization,

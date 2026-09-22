@@ -70,6 +70,7 @@ import {
   ProviderKeyFilterSelect,
 } from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
@@ -90,6 +91,7 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
@@ -317,10 +319,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
 
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["update"] }, "*");
-  const { data: isAgentTeamAdmin } = useHasPermissions(
-    { agent: ["update"] },
-    "teams:*",
-  );
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
   const { data: environmentList } = useEnvironments();
@@ -645,7 +643,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       scopedGrants: scopedCapabilities.data ?? [],
       agent,
       isAdmin: !!isAgentAdmin,
-      isTeamAdmin: !!isAgentTeamAdmin,
+      isTeamAdmin: false,
       currentUserId,
       userTeamIds: userTeamIdSet,
     });
@@ -1114,15 +1112,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </p>
       }
       actionButton={
-        <div className="flex gap-2">
-          <PermissionButton
-            variant="outline"
-            permissions={{ agent: ["create"] }}
-            onClick={() => setIsImportDialogOpen(true)}
-          >
-            <Upload className="h-4 w-4" />
-            Import Agent
-          </PermissionButton>
+        <div className="flex items-center gap-2">
           {(canCreateAgent || canManageExternalAgents) && (
             <Button
               onClick={() => router.push(agentNewHref("agent"))}
@@ -1132,6 +1122,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               Add Agent
             </Button>
           )}
+          <ResourceListActions resource="agent">
+            {canCreateAgent && (
+              <DropdownMenuItem onSelect={() => setIsImportDialogOpen(true)}>
+                <Upload className="h-4 w-4" />
+                <span>Import Agent</span>
+              </DropdownMenuItem>
+            )}
+          </ResourceListActions>
         </div>
       }
     >

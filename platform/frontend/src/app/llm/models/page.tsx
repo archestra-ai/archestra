@@ -45,6 +45,7 @@ import {
 } from "@/components/model-badges";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
@@ -267,17 +268,20 @@ export default function ModelsPage() {
     );
 
   const refreshModelsButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleRefresh}
-      disabled={isRefreshingModels}
-    >
-      <RefreshCw
-        className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
-      />
-      {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshingModels}
+      >
+        <RefreshCw
+          className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
+        />
+        {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
+      </Button>
+      <ResourceListActions resource="llmModel" />
+    </div>
   );
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(

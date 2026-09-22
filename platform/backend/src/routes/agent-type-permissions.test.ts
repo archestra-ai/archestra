@@ -486,7 +486,7 @@ describe("agent type permission isolation (routes)", () => {
       const childAgent = await createAgent("child-agent", child.id);
       const siblingAgent = await createAgent("sibling-agent", sibling.id);
 
-      const hierarchy_editor = await makeCustomRole(organizationId, {
+      await makeCustomRole(organizationId, {
         role: "hierarchy_editor",
         permission: {
           agent: ["read", "update", "team-admin"],
@@ -498,16 +498,19 @@ describe("agent type permission isolation (routes)", () => {
       const grantKey = {
         organizationId,
         resource: "agent" as const,
-        scope: "teams:*" as const,
+        scope: parentAgent.id,
       };
       const grantPolicy = await ResourcePermissionPolicyModel.find(grantKey);
       await ResourcePermissionPolicyModel.replace({
         ...grantKey,
         revision: grantPolicy?.revision ?? 0,
         grants: [
-          ...(grantPolicy?.grants ?? []),
+          ...(grantPolicy?.grants.filter(
+            (grant) =>
+              grant.subject.type !== "team" || grant.subject.id !== parent.id,
+          ) ?? []),
           {
-            subject: { type: "role", id: hierarchy_editor.id },
+            subject: { type: "team", id: parent.id },
             actions: ["read", "update"],
           },
         ],

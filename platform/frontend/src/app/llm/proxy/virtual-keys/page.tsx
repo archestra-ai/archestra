@@ -37,6 +37,7 @@ import {
 } from "@/components/provider-key-filter-select";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -146,43 +147,46 @@ function VirtualKeysTable() {
   // passthrough keys are created through the same dialog in different modes.
   useEffect(() => {
     setActionButton(
-      canCreate ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4" />
-              <span>Create Virtual Key</span>
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-w-72">
-            <DropdownMenuItem
-              className="flex-col items-start gap-0.5"
-              onSelect={() => setCreateKeyType("standard")}
-            >
-              <span className="font-medium">Standard virtual key</span>
-              <span className="text-xs text-muted-foreground">
-                Authenticates your app through your provider keys
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="flex-col items-start gap-0.5"
-              onSelect={() => setCreateKeyType("passthrough")}
-            >
-              <span className="font-medium">Passthrough virtual key</span>
-              <span className="text-xs text-muted-foreground">
-                Grants no access; attributes bring-your-own-key requests to a
-                user
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <PermissionButton permissions={{ llmVirtualKey: ["create"] }}>
-          <Plus className="h-4 w-4" />
-          <span>Create Virtual Key</span>
-        </PermissionButton>
-      ),
+      <div className="flex items-center gap-2">
+        {canCreate ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" />
+                <span>Create Virtual Key</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-w-72">
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onSelect={() => setCreateKeyType("standard")}
+              >
+                <span className="font-medium">Standard virtual key</span>
+                <span className="text-xs text-muted-foreground">
+                  Authenticates your app through your provider keys
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onSelect={() => setCreateKeyType("passthrough")}
+              >
+                <span className="font-medium">Passthrough virtual key</span>
+                <span className="text-xs text-muted-foreground">
+                  Grants no access; attributes bring-your-own-key requests to a
+                  user
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <PermissionButton permissions={{ llmVirtualKey: ["create"] }}>
+            <Plus className="h-4 w-4" />
+            <span>Create Virtual Key</span>
+          </PermissionButton>
+        )}
+        <ResourceListActions resource="llmVirtualKey" />
+      </div>,
     );
     return () => setActionButton(null);
   }, [canCreate, setActionButton]);

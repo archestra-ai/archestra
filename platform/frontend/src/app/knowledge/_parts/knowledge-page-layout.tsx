@@ -17,6 +17,7 @@ export function KnowledgePageLayout({
   createPermissions = { knowledgeSource: ["create"] },
   isPending,
   extraActions,
+  trailingActions,
   children,
 }: {
   title: string;
@@ -27,6 +28,8 @@ export function KnowledgePageLayout({
   isPending: boolean;
   /** Rendered to the left of the create button (e.g. admin page settings). */
   extraActions?: React.ReactNode;
+  /** Rendered immediately after the primary create action. */
+  trailingActions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const isKnowledgeBaseConfigured = useIsKnowledgeBaseConfigured();
@@ -53,6 +56,7 @@ export function KnowledgePageLayout({
               <Plus className="h-4 w-4" />
               <span>{createLabel}</span>
             </PermissionButton>
+            {trailingActions}
           </div>
         }
       >

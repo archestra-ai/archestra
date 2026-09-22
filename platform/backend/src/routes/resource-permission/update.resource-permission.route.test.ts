@@ -42,11 +42,54 @@ describe("resource permission routes", () => {
     await app.close();
   });
 
+  for (const endpoint of ["creation-subjects", "*/subjects"]) {
+    test(`${endpoint} searches people by name or email without exposing other organizations`, async ({
+      makeUser,
+      makeMember,
+      makeOrganization,
+    }) => {
+      const recipient = await makeUser({
+        name: "Synthetic Recipient",
+        email: "recipient_unique@example.com",
+      });
+      await makeMember(recipient.id, organizationId);
+      const foreignOrganization = await makeOrganization();
+      const outsider = await makeUser({
+        name: "Synthetic Recipient Elsewhere",
+        email: "recipient_unique@elsewhere.example.com",
+      });
+      await makeMember(outsider.id, foreignOrganization.id);
+      const wildcardMatch = await makeUser({
+        name: "Unrelated Person",
+        email: "recipientXunique@example.com",
+      });
+      await makeMember(wildcardMatch.id, organizationId);
+
+      for (const query of ["synthetic recipient", "RECIPIENT_UNIQUE"]) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/resource-permissions/agent/${endpoint}?query=${encodeURIComponent(query)}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toEqual([
+          {
+            subject: { type: "user", id: recipient.id },
+            name: recipient.name,
+            email: recipient.email,
+          },
+        ]);
+      }
+    });
+  }
+
   test.each([
+    "agent",
+    "mcpGateway",
+    "skill",
     "scheduledTask",
     "log",
     "auditLog",
-  ] as const)("%s rejects team-relative scope instead of saving an ineffective policy", async (resource) => {
+  ] as const)("%s rejects retired team-relative scope", async (resource) => {
     const key = { organizationId, resource, scope: "teams:*" };
     const before = await ResourcePermissionPolicyModel.find(key);
     const url = `/api/resource-permissions/${resource}/teams:*`;
@@ -63,62 +106,25 @@ describe("resource permission routes", () => {
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
   });
 
-  test("team-relative grants exclude service accounts and reject direct API submissions", async () => {
+  test("service accounts remain available for explicit all-resource grants", async () => {
     const account = await ServiceAccountModel.create({
       organizationId,
       createdBy: user.id,
       name: "Synthetic release automation",
       role: "member",
     });
-    const url = "/api/resource-permissions/agent/teams:*";
-    const subjects = await app.inject({
-      method: "GET",
-      url: `${url}/subjects`,
-    });
-    expect(subjects.statusCode, subjects.body).toBe(200);
-    expect(
-      subjects
-        .json()
-        .some(
-          (recipient: { subject: { type: string } }) =>
-            recipient.subject.type === "serviceAccount",
-        ),
-    ).toBe(false);
-    const organizationSubjects = await app.inject({
+    const response = await app.inject({
       method: "GET",
       url: "/api/resource-permissions/agent/*/subjects",
     });
-    expect(organizationSubjects.statusCode, organizationSubjects.body).toBe(
-      200,
-    );
-    expect(organizationSubjects.json()).toEqual(
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           subject: { type: "serviceAccount", id: account.id },
         }),
       ]),
     );
-    const key = {
-      organizationId,
-      resource: "agent" as const,
-      scope: "teams:*",
-    };
-    const before = await ResourcePermissionPolicyModel.find(key);
-    const response = await app.inject({
-      method: "PUT",
-      url,
-      payload: {
-        revision: before?.revision ?? 0,
-        grants: [
-          {
-            subject: { type: "serviceAccount", id: account.id },
-            actions: ["read"],
-          },
-        ],
-      },
-    });
-    expect(response.statusCode, response.body).toBe(400);
-    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
   });
 
   test("audits retiring the legacy audience even when the selected recipients are unchanged", async ({

@@ -168,17 +168,11 @@ export async function getAgentTypePermissionChecker(params: {
     isTeamAdmin(agentType: AgentType): boolean {
       const resource = getResourceForAgentType(agentType);
       return (
-        grants.some(
-          (grant) =>
-            grant.resource === resource &&
-            grant.scope === "teams:*" &&
-            grant.action === "update",
-        ) ||
-        (!migratedPolicies.some(
+        !migratedPolicies.some(
           (policy) =>
             policy?.resource === resource && policy.legacySharingMigrated,
         ) &&
-          (permissions[resource]?.includes("team-admin") ?? false))
+        (permissions[resource]?.includes("team-admin") ?? false)
       );
     },
     hasAnyReadPermission(): boolean {

@@ -104,7 +104,7 @@ export function PermissionsCard() {
       <div className="space-y-4">
         {totalResources === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Your roles and teams grant no resource permissions.
+            Your roles and teams do not provide access to any resources.
           </p>
         ) : (
           <>

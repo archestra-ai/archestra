@@ -32,7 +32,8 @@ export function useResourcePermissions(
 
 export function usePermissionRecipients(params: {
   resource: ScopedResource;
-  scope: string;
+  /** Omit for a resource that has not been created yet. */
+  scope?: string;
   query: string;
   enabled: boolean;
 }) {
@@ -46,10 +47,15 @@ export function usePermissionRecipients(params: {
     enabled: params.enabled,
     queryFn: async () => {
       const { data, error } =
-        await archestraApiSdk.searchResourcePermissionSubjects({
-          path: { resource: params.resource, scope: params.scope },
-          query: { query: params.query },
-        });
+        params.scope === undefined
+          ? await archestraApiSdk.searchInitialPermissionSubjects({
+              path: { resource: params.resource },
+              query: { query: params.query },
+            })
+          : await archestraApiSdk.searchResourcePermissionSubjects({
+              path: { resource: params.resource, scope: params.scope },
+              query: { query: params.query },
+            });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },

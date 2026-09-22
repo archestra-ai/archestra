@@ -12,6 +12,20 @@ import { test as apiTest } from "./api-fixtures";
 
 const test = mergeTests(uiTest, apiTest);
 
+test("opens agent import from the list actions menu", async ({
+  page,
+  goToPage,
+}) => {
+  await goToPage(page, "/agents");
+
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Import Agent" }).click();
+
+  await expect(
+    page.getByRole("dialog", { name: "Import Agent" }),
+  ).toBeVisible();
+});
+
 /**
  * Drive the routed setup wizard (`/<family>/new`, first step of the shared
  * AgentForm) to a submitted POST, then open the agent's summary or the gateway's

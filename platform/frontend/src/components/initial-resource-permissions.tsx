@@ -2,18 +2,19 @@
 "use client";
 
 import {
-  archestraApiSdk,
   type ResourcePermissionGrant,
   resourcePermissionPresets,
   type ScopedResource,
 } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { presetFor, subjectLabels } from "@/components/resource-permissions";
+import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
+import {
+  presetDescription,
+  presetFor,
+  subjectLabels,
+} from "@/components/resource-permissions";
 import { Button } from "@/components/ui/button";
-import { InlineNotice } from "@/components/ui/inline-notice";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { throwOnApiError } from "@/lib/utils";
 
 export type InitialPermissionGrant = ResourcePermissionGrant & { name: string };
 
@@ -35,28 +35,26 @@ export function InitialResourcePermissions({
   grants: InitialPermissionGrant[];
   onChange: (grants: InitialPermissionGrant[]) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const recipients = useQuery({
-    queryKey: ["initial-permission-recipients", resource, query],
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.searchInitialPermissionSubjects({
-          path: { resource },
-          query: { query },
-        });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
-  });
+  const [addOpen, setAddOpen] = useState(false);
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-medium">Permissions</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You get full access. Choose who else can access this resource when it
-          is created; you can update permissions later. Access set in
-          organization settings also applies.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Permissions</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You’ll have full access. Add others now or later. Organization
+            permissions also apply.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus className="size-4" />
+          <span>Add access</span>
+        </Button>
       </div>
       {grants.length > 0 && (
         <div className="divide-y border-y">
@@ -65,11 +63,11 @@ export function InitialResourcePermissions({
               key={`${grant.subject.type}:${grant.subject.id}`}
               className="flex items-center gap-3 py-2"
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{grant.name}</p>
-                <p className="text-xs text-muted-foreground">
+              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                <span className="break-words text-sm">{grant.name}</span>
+                <span className="text-xs text-muted-foreground">
                   {subjectLabels[grant.subject.type]}
-                </p>
+                </span>
               </div>
               <Select
                 value={presetFor(grant.actions)}
@@ -89,7 +87,7 @@ export function InitialResourcePermissions({
               >
                 <SelectTrigger
                   size="sm"
-                  className="w-36"
+                  className="w-36 shrink-0 border-transparent bg-transparent shadow-none dark:bg-transparent"
                   aria-label={`Permission for ${grant.name}`}
                 >
                   <SelectValue />
@@ -122,49 +120,22 @@ export function InitialResourcePermissions({
           ))}
         </div>
       )}
-      <SearchableSelect
-        className="w-full max-w-xs"
-        value=""
-        ariaLabel="Add initial permission recipient"
-        placeholder="Grant access to…"
-        searchPlaceholder="Search recipients…"
-        onSearchQueryChange={setQuery}
-        items={(recipients.data ?? [])
-          .filter(
-            (recipient) =>
-              !grants.some(
-                (grant) =>
-                  grant.subject.type === recipient.subject.type &&
-                  grant.subject.id === recipient.subject.id,
-              ),
-          )
-          .map((recipient) => ({
-            value: `${recipient.subject.type}:${recipient.subject.id}`,
-            label: recipient.name,
-            description: subjectLabels[recipient.subject.type],
-          }))}
-        onValueChange={(key) => {
-          const recipient = recipients.data?.find(
-            (entry) => `${entry.subject.type}:${entry.subject.id}` === key,
-          );
-          if (recipient)
-            onChange([...grants, { ...recipient, actions: ["read"] }]);
-        }}
+      <AddResourceAccessDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        resource={resource}
+        existingSubjects={grants.map((grant) => grant.subject)}
+        presets={Object.entries(resourcePermissionPresets).map(
+          ([value, preset]) => ({
+            value,
+            label: preset.label,
+            description: presetDescription(value, resource),
+            actions: [...preset.actions],
+            disabled: false,
+          }),
+        )}
+        onAdd={(added) => onChange([...grants, ...added])}
       />
-      {recipients.isError && (
-        <InlineNotice variant="error">
-          <AlertCircle />
-          <span className="font-medium">Could not load recipients.</span>
-          <Button
-            type="button"
-            variant="link"
-            className="ml-auto h-auto p-0"
-            onClick={() => void recipients.refetch()}
-          >
-            <span>Retry</span>
-          </Button>
-        </InlineNotice>
-      )}
     </div>
   );
 }

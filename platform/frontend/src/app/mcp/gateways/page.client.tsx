@@ -43,6 +43,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
@@ -280,15 +281,7 @@ function McpGateways({
   });
 
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["update"] }, "*");
-  const { data: isTeamAdmin } = useHasPermissions(
-    { mcpGateway: ["update"] },
-    "teams:*",
-  );
   const { data: isLegacyAdmin } = useHasPermissions({ agent: ["update"] }, "*");
-  const { data: isLegacyTeamAdmin } = useHasPermissions(
-    { agent: ["update"] },
-    "teams:*",
-  );
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
@@ -401,7 +394,7 @@ function McpGateways({
       scopedGrants: scopedCapabilities.data ?? [],
       agent,
       isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
-      isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
+      isTeamAdmin: false,
       currentUserId,
       userTeamIds: userTeamIdSet,
     });
@@ -649,14 +642,17 @@ function McpGateways({
         </p>
       }
       actionButton={
-        <PermissionButton
-          permissions={{ mcpGateway: ["create"] }}
-          onClick={() => router.push(agentNewHref("mcp_gateway"))}
-          data-testid={E2eTestId.CreateAgentButton}
-        >
-          <Plus className="h-4 w-4" />
-          Create MCP Gateway
-        </PermissionButton>
+        <div className="flex items-center gap-2">
+          <PermissionButton
+            permissions={{ mcpGateway: ["create"] }}
+            onClick={() => router.push(agentNewHref("mcp_gateway"))}
+            data-testid={E2eTestId.CreateAgentButton}
+          >
+            <Plus className="h-4 w-4" />
+            Create MCP Gateway
+          </PermissionButton>
+          <ResourceListActions resource="mcpGateway" />
+        </div>
       }
     >
       <TableCardView storageKey="archestra-mcp-gateways-view">

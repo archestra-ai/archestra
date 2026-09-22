@@ -33,6 +33,7 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
@@ -462,6 +463,7 @@ function KnowledgeBasesList() {
         title="Knowledge Bases"
         description={KNOWLEDGE_BASES_DESCRIPTION}
         createLabel="Create Knowledge Base"
+        trailingActions={<ResourceListActions resource="knowledgeBase" />}
         onCreateClick={() => setIsCreateDialogOpen(true)}
         isPending={false}
       >
@@ -478,6 +480,7 @@ function KnowledgeBasesList() {
       title="Knowledge Bases"
       description={KNOWLEDGE_BASES_DESCRIPTION}
       createLabel="Create Knowledge Base"
+      trailingActions={<ResourceListActions resource="knowledgeBase" />}
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >

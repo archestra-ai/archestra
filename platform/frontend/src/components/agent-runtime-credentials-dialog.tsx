@@ -57,12 +57,17 @@ export function AgentRuntimeCredentialsDeepLink(props: {
     <AgentRuntimeCredentialsDialog
       {...props}
       githubConnected={searchParams.get("github") === "connected"}
+      requestedKeys={(searchParams.get("keys") ?? "")
+        .split(",")
+        .map((key) => key.trim())
+        .filter(Boolean)}
       onClose={() => {
         setLegacyLink(false);
         const params = new URLSearchParams(searchParams.toString());
         params.delete("setup");
         params.delete("github");
         params.delete("tab");
+        params.delete("keys");
         const query = params.toString();
         router.replace(`${pathname}${query ? `?${query}` : ""}`, {
           scroll: false,
@@ -77,12 +82,20 @@ export function AgentRuntimeCredentialsDialog({
   declarations,
   canEditAgent,
   githubConnected = false,
+  requestedKeys = [],
   onClose,
 }: {
   agentId: string;
   declarations: NonNullable<AgentRuntimeConfig["credentials"]>;
   canEditAgent: boolean;
   githubConnected?: boolean;
+  /**
+   * Keys the link asked for by name, shown even when preflight calls them
+   * optional. `transfer_credential` declares a credential as `required: false`
+   * so it never blocks anyone's run, and preflight only reports a required key
+   * as missing — without this the dialog would open on an empty list.
+   */
+  requestedKeys?: string[];
   onClose: () => void;
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
@@ -99,12 +112,19 @@ export function AgentRuntimeCredentialsDialog({
   });
   const [externalKey, setExternalKey] = useState<string | null>(null);
   const [failedKeys, setFailedKeys] = useState<string[]>([]);
+  const configuredKeys = new Set(preflight.data?.configured ?? []);
   const missingKeys = new Set(
     [
       ...(preflight.data?.missing ?? []),
       ...(preflight.data?.misconfigured ?? []),
     ].map(({ key }) => key),
   );
+  // A requested key still has to be declared on this Agent, so a hand-edited
+  // URL cannot conjure a field. One already filled in stays out: the person
+  // followed the link to supply what is empty, not to overwrite what is set.
+  for (const key of requestedKeys) {
+    if (!configuredKeys.has(key)) missingKeys.add(key);
+  }
   const missing = declarations.filter((credential) =>
     missingKeys.has(credential.key),
   );

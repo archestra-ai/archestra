@@ -700,7 +700,13 @@ export function handleError(
     hasProviderHttpErrorShape(error) &&
     (hasExplicitStatus || hasUpstreamErrorPayload(error));
 
-  const errorMessage = extractErrorMessage(error);
+  const extractedMessage = extractErrorMessage(error);
+  const errorMessage =
+    isClassifiedTransportFailure &&
+    (extractedMessage === "Connection error." ||
+      extractedMessage === "fetch failed")
+      ? "Could not connect to the model provider. Check its credentials and network access, then retry."
+      : extractedMessage;
   const adapterInternalCode = extractInternalCode(error);
   const internalCode =
     adapterInternalCode ??

@@ -14182,6 +14182,7 @@ export type GetAgentCatalogResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    ports?: Array<number>;
                     environment: Array<{
                         key: string;
                         value: string;
@@ -14532,6 +14533,7 @@ export type GetAgentsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                ports?: Array<number>;
                 environment: Array<{
                     key: string;
                     value: string;
@@ -14679,6 +14681,7 @@ export type CreateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -14948,6 +14951,7 @@ export type CreateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -15371,6 +15375,7 @@ export type GetAllAgentsResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -15675,6 +15680,7 @@ export type GetDefaultMcpGatewayResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -15971,6 +15977,7 @@ export type ImportAgentResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                ports?: Array<number>;
                 environment: Array<{
                     key: string;
                     value: string;
@@ -16280,6 +16287,7 @@ export type GetAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -16417,6 +16425,7 @@ export type UpdateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -16588,6 +16597,7 @@ export type UpdateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -17072,6 +17082,7 @@ export type RestoreAgentVersionResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -17318,6 +17329,7 @@ export type CloneAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -19756,6 +19768,7 @@ export type RestoreAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            ports?: Array<number>;
             environment: Array<{
                 key: string;
                 value: string;
@@ -21980,6 +21993,7 @@ export type GetMyAgentRunResponses = {
         projectName: string | null;
         projectIcon: string | null;
         terminalRetained: boolean;
+        portForwardCommand?: string | null;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
@@ -95623,6 +95637,7 @@ export type GetProjectRunsResponses = {
         projectName: string | null;
         projectIcon: string | null;
         terminalRetained: boolean;
+        portForwardCommand?: string | null;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;

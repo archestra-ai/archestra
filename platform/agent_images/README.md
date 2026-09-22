@@ -13,6 +13,14 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 
+On stable platform releases, the five native-client templates use the approved
+`:latest` aliases. The `agent-archestra` base stays pinned to the platform
+version. Release candidates and development deployments keep matching fixed
+tags, so they do not pull a CLI from an older stable release. Agent Runtime
+stores the selected image on each Agent; existing pinned Agents need a one-time
+Image edit to follow the stable alias. Floating-tag runs cold-start so a warm
+container cannot retain a previous image after its tag moves.
+
 Build a target from `platform/`:
 
 ```bash
@@ -25,7 +33,7 @@ all six targets locally and use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
 
-Claude Code personal subscriptions use a token from the configured secrets backend and connect directly to Anthropic. Those inference calls bypass proxy logs, limits, and guardrails. MCP calls still use the Agent-scoped gateway and its tool policies.
+Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
 Maintained clients send the task ID as both `X-Archestra-Run-Id` and `X-Archestra-Session-Id` on proxy and MCP gateway requests. Do the same in any new
 wrapper so the platform can group interactions and tool calls with the run.

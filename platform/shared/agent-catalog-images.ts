@@ -10,18 +10,26 @@ export function getDefaultAgentRuntimeImage(version: string): string {
 export function getAgentCatalogImages(
   baseImage: string,
 ): Record<AgentCatalogId, string> {
+  const maintainedBasePrefix = `${CATALOG_REGISTRY}/${AGENT_CATALOG_IMAGE_NAMES.archestra}:`;
+  const maintainedBaseTag = baseImage.startsWith(maintainedBasePrefix)
+    ? baseImage.slice(maintainedBasePrefix.length)
+    : null;
+  // The approved stable release moves :latest. Prerelease and commit builds
+  // must keep their matching image tag instead of pulling an older stable CLI.
+  const useStableAlias =
+    maintainedBaseTag === "latest" ||
+    (maintainedBaseTag !== null && /^\d+\.\d+\.\d+$/.test(maintainedBaseTag));
   const suffix = new RegExp(
     `(^|/)${AGENT_CATALOG_IMAGE_NAMES.archestra}(?=:[^/]+$|$)`,
   );
   return Object.fromEntries(
-    Object.entries(AGENT_CATALOG_IMAGE_NAMES).map(([id, name]) => [
-      id,
-      suffix.test(baseImage)
-        ? baseImage.replace(suffix, `$1${name}`)
-        : id === "archestra"
-          ? baseImage
-          : `${CATALOG_REGISTRY}/${name}:latest`,
-    ]),
+    Object.entries(AGENT_CATALOG_IMAGE_NAMES).map(([id, name]) => {
+      if (id === "archestra") return [id, baseImage];
+      if (useStableAlias) return [id, `${CATALOG_REGISTRY}/${name}:latest`];
+      if (suffix.test(baseImage))
+        return [id, baseImage.replace(suffix, `$1${name}`)];
+      return [id, `${CATALOG_REGISTRY}/${name}:latest`];
+    }),
   ) as Record<AgentCatalogId, string>;
 }
 

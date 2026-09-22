@@ -1770,6 +1770,59 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       );
     });
 
+    test("attributes a Claude subscription request and its usage to the run", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      mockEvaluatePolicies.mockResolvedValue(null);
+      const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
+      const { value: passthroughToken, virtualKey } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "claude-runtime-usage",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: owner.id,
+        });
+      const runId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer sk-ant-oat01-test-subscription",
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "oauth-2025-04-20",
+          "x-archestra-virtual-key": passthroughToken,
+          "x-archestra-run-id": runId,
+          "x-archestra-session-id": runId,
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 64,
+          messages: [{ role: "user", content: "Hello" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0]).toMatchObject({
+        userId: owner.id,
+        runId,
+        sessionId: runId,
+        passthroughVirtualKeyId: virtualKey.id,
+        billingMode: "subscription",
+        inputTokens: 12,
+        outputTokens: 10,
+      });
+    });
+
     test("persists OAuth traffic fulfilled from usage credits as metered", async () => {
       mockEvaluatePolicies.mockResolvedValue(null);
       anthropicResponseHeaders = new Headers({

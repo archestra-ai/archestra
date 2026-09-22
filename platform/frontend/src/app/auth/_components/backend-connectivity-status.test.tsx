@@ -92,10 +92,12 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
+    expect(
+      screen.getByText("Can't reach the Sparky server."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "The backend is not responding yet. Sign-in will appear when it is ready.",
+        "Check your connection. If it persists, ask an administrator to check the service.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
@@ -145,10 +147,12 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Can't reach the Sparky server."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "The Sparky backend did not respond. Check that it is running, then try again.",
+        "Check your connection. If it persists, ask an administrator to check the service.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -158,6 +162,58 @@ describe("BackendConnectivityStatus", () => {
       "href",
       expect.stringMatching(/\/issues$/),
     );
+    expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
+  });
+
+  it("shows the shared database guidance before sign-in", () => {
+    vi.mocked(useBackendConnectivity).mockReturnValue({
+      status: "database-connecting",
+      attemptCount: 1,
+      estimatedTotalAttempts: 7,
+      elapsedMs: 1000,
+      nextRetryInMs: 2000,
+      retry: mockRetry,
+    });
+
+    render(
+      <BackendConnectivityStatus>
+        <div data-testid="child-content">Login Form</div>
+      </BackendConnectivityStatus>,
+    );
+
+    expect(screen.getByText("Database unavailable.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ask an administrator to check the database service, connection settings, and capacity.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+    expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
+  });
+
+  it("shows the shared offline guidance before sign-in", () => {
+    vi.mocked(useBackendConnectivity).mockReturnValue({
+      status: "browser-offline",
+      attemptCount: 5,
+      estimatedTotalAttempts: 7,
+      elapsedMs: 60000,
+      nextRetryInMs: null,
+      retry: mockRetry,
+    });
+
+    render(
+      <BackendConnectivityStatus>
+        <div data-testid="child-content">Login Form</div>
+      </BackendConnectivityStatus>,
+    );
+
+    expect(screen.getByText("You're offline.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Reconnect to the internet, then retry."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Report issue" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 

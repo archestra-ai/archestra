@@ -144,6 +144,8 @@ Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.
           ANTHROPIC_AUTH_TOKEN: "example-proxy-token",
           ANTHROPIC_API_KEY: "example-api-key",
           ANTHROPIC_BASE_URL: "http://localhost:9000/example",
+          ANTHROPIC_CUSTOM_HEADERS:
+            "X-Archestra-Virtual-Key: example-passthrough-token",
           CLAUDE_CODE_USE_VERTEX: "1",
         },
       });
@@ -157,10 +159,15 @@ Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.
         for (const key of [
           "ANTHROPIC_API_KEY",
           "ANTHROPIC_AUTH_TOKEN",
-          "ANTHROPIC_BASE_URL",
           "CLAUDE_CODE_USE_VERTEX",
         ])
           expect(captured).not.toHaveProperty(key);
+        expect(captured.ANTHROPIC_BASE_URL).toBe(
+          "http://localhost:9000/example",
+        );
+        expect(captured.ANTHROPIC_CUSTOM_HEADERS).toBe(
+          "X-Archestra-Virtual-Key: example-passthrough-token",
+        );
       } else {
         expect(captured).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
         expect(captured.ANTHROPIC_AUTH_TOKEN).toBe("example-proxy-token");

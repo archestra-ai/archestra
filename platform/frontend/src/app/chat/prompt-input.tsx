@@ -360,10 +360,11 @@ const PromptInputContent = ({
     : conversationId
       ? "Ask a follow-up..."
       : (chatPlaceholder ?? "What would you like to get done?");
-  const placeholder =
-    placeholderPreview && controller.textInput.value.length === 0
-      ? placeholderPreview
-      : defaultPlaceholder;
+  const isPreviewingSuggestion =
+    !!placeholderPreview && controller.textInput.value.length === 0;
+  const placeholder = isPreviewingSuggestion
+    ? placeholderPreview
+    : defaultPlaceholder;
 
   // Skills exposed as slash commands whenever the org's skill tools are on —
   // the same flag that gates the backend's activation injection.
@@ -1068,11 +1069,17 @@ const PromptInputContent = ({
         <PromptInputAttachments className="px-3 pt-2 pb-0">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
-        <PromptInputBody>
+        <PromptInputBody className="relative block w-full">
           <PromptInputTextarea
             placeholder={placeholder}
             ref={textareaRef}
-            className="px-4"
+            // Keep empty composers stable: sizing to a long placeholder moves
+            // the hovered suggestion and repeatedly toggles its preview.
+            className={cn(
+              "px-4",
+              isPreviewingSuggestion &&
+                "field-sizing-fixed h-16 overflow-hidden placeholder:text-transparent",
+            )}
             autoFocus
             disabled={composerLocked}
             // In a live conversation, Enter during a stream submits and the
@@ -1083,6 +1090,14 @@ const PromptInputContent = ({
             onKeyDown={handleTextareaKeyDown}
             data-testid={E2eTestId.ChatPromptTextarea}
           />
+          {isPreviewingSuggestion && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-4 top-3 line-clamp-2 whitespace-pre-wrap text-base leading-5 text-muted-foreground [overflow-wrap:anywhere] md:text-sm"
+            >
+              {placeholderPreview}
+            </div>
+          )}
         </PromptInputBody>
         <PromptInputFooter ref={footerRef}>
           <ChatPromptInputTools

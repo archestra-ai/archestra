@@ -107,8 +107,11 @@ test.for([
   );
   expect(result.isError).toBe(true);
   expect(JSON.stringify(result.content)).toContain("CLAUDE_CODE_ACCOUNT");
+  // No `section`: the Agent detail page rewrites an unresolvable one through
+  // agentDetailHref, which rebuilds the URL from `section` alone and drops the
+  // `setup` that opens the dialog.
   expect(JSON.stringify(result.content)).toContain(
-    `/agents/${agent.id}?section=advanced&setup=credentials`,
+    `/agents/${agent.id}?setup=credentials&keys=CLAUDE_CODE_ACCOUNT`,
   );
   const tasks = await A2ATaskModel.listForActor({
     actorKind: "user",

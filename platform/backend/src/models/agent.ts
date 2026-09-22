@@ -2837,6 +2837,23 @@ class AgentModel {
     return new Set(results.map((r) => r.id));
   }
 
+  static async getRuntimePorts(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<number[]> {
+    const [agent] = await db
+      .select({ runtime: schema.agentsTable.runtime })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return agent?.runtime?.ports ?? [];
+  }
+
   static async findById(
     id: string,
     userId?: string,

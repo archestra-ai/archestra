@@ -307,7 +307,7 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  */
 export const STARTUP_GUARD_FORMAT_VERSION = 1;
 
-export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `At session start, tell the user: "Say 'move this to Cloud runtime' to continue work in the cloud." When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 
 /**
  * Header name for external agent ID.

@@ -138,9 +138,10 @@ describe("run tools", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toContain("GITHUB_TOKEN");
     expect(text).toContain("CLAUDE_CODE_OAUTH_TOKEN");
-    expect(text).toContain(
-      `/agents/${target.id}?section=advanced&setup=credentials`,
-    );
+    // The link names every missing key and carries no `section`, which
+    // agentDetailHref would otherwise rewrite away along with `setup`.
+    expect(text).toContain(`/agents/${target.id}?setup=credentials&keys=`);
+    expect(text).toContain("GITHUB_TOKEN%2CCLAUDE_CODE_OAUTH_TOKEN");
     expect(
       await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
     ).toEqual([]);

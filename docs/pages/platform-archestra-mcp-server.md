@@ -2428,7 +2428,7 @@ Required RBAC permission: `plugin:admin`
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | `agent:read` |
 | `cancel_run` | Stop an active run. | `agent:read` |
 | `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | `agent:read` |
-| `transfer_credential` | Give an Agent Runtime Agent a credential this client already holds, so a handed-over task can use the CLI authentication the local session was using. | `credential:create` |
+| `transfer_credential` | Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. | `credential:create` |
 
 #### delete_workspace
 
@@ -2678,7 +2678,7 @@ Required RBAC permission: `credential:create`
 | `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
 | `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
 | `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |
-| `environment[].value` | `string` | Yes | The credential value to transfer. |
+| `environment[].value` | `string` | No | The credential value to transfer. OMIT IT to declare the credential without a value and get back a link the person opens to paste it themselves — the value then never enters your context. Send a value only when the person asked you to move one you already hold. |
 | `label` | `string` | No | Human-readable name shown in the Agent's credential list. Defaults to the key. |
 
 ##### Output
@@ -2688,6 +2688,8 @@ Required RBAC permission: `credential:create`
 | `key` | `string` | Yes | The environment variable the value is stored under. |
 | `scope` | `"personal"` | Yes | Who the value applies to. Always personal to the calling user. |
 | `declarationCreated` | `boolean` | Yes | Whether this call declared the credential on the Agent. |
+| `valueStored` | `boolean` | Yes | Whether a value is now stored. False means the credential is declared and still empty. |
+| `url` | `string \| null` | Yes | Where the person pastes the value. Null when this call already stored one. |
 | `availability` | `string` | Yes | When a run can read the value, in plain words. |
 
 ### Code Sandbox

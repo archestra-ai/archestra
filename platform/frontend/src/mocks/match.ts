@@ -22,7 +22,7 @@ const API_PATH_PREFIXES = [
   "/_sandbox/",
 ] as const;
 
-const API_EXACT_PATHS = ["/health"] as const;
+const API_EXACT_PATHS = ["/health", "/ready"] as const;
 
 const TRACKED_HOSTS = new Set(["localhost", "127.0.0.1"]);
 

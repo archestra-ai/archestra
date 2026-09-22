@@ -1236,6 +1236,48 @@ describe("Agent Runtime routes", () => {
     expect(agentRuntimeManager.getStartupProgress).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: task.id }),
     );
+    expect(response.json().portForwardCommand).toBeNull();
+  });
+
+  test("offers configured ports for the active workspace pod", async ({
+    makeAgent,
+  }) => {
+    assert(agent.runtime);
+    agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: { ...agent.runtime, ports: [3000, 3000, 9000] },
+    });
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "active",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    vi.spyOn(agentRuntimeManager, "getWorkspaceConnection").mockResolvedValue({
+      hostname: "active-pod.archestra-dev",
+      shellCommand: "kubectl exec active-pod",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().portForwardCommand).toBe(
+      "kubectl port-forward -n archestra-dev pod/active-pod :3000 :9000",
+    );
   });
 
   test("opens a run read-only through a shared project for a read-all member", async ({

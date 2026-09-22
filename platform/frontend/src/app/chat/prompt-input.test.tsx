@@ -902,19 +902,23 @@ describe("ArchestraPromptInput", () => {
         placeholder: "Let's build something nice!",
         isAnimating: false,
       });
+      const prompt = "Summarize this release plan. ".repeat(80);
 
       const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          placeholderPreview="Generate an epic gif of a lobster shipping code"
-        />,
+        <ArchestraPromptInput {...defaultProps} placeholderPreview={prompt} />,
       );
 
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(
+        "placeholder",
+        prompt,
+      );
       expect(
-        screen.getByPlaceholderText(
-          "Generate an epic gif of a lobster shipping code",
+        screen.getByText(
+          (content, element) =>
+            element?.getAttribute("aria-hidden") === "true" &&
+            content.trim() === prompt.trim(),
         ),
-      ).toBeInTheDocument();
+      ).toHaveAttribute("aria-hidden", "true");
 
       rerender(
         <ArchestraPromptInput {...defaultProps} placeholderPreview={null} />,

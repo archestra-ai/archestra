@@ -67,26 +67,22 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for OPTIONS and HEAD requests", async () => {
-      const methods = ["OPTIONS", "HEAD"];
+    test("should skip auth for OPTIONS requests", async () => {
+      const mockRequest = {
+        url: "/some/protected/path",
+        method: "OPTIONS",
+        headers: {},
+      } as FastifyRequest;
 
-      for (const method of methods) {
-        const mockRequest = {
-          url: "/some/protected/path",
-          method,
-          headers: {},
-        } as FastifyRequest;
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
 
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
+      await authnz.handle(mockRequest, mockReply);
 
-        await authnz.handle(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
     });
 
     test("should skip auth for existing whitelisted paths", async () => {

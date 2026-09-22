@@ -105,6 +105,7 @@ export default function ModelsPage() {
     data: models = [],
     isFetching,
     isLoadingError: isModelsLoadError,
+    error: modelsError,
     refetch,
   } = useModelsWithApiKeys({ toastOnError: false });
   const { data: apiKeys = [], isLoading: isApiKeysLoading } =
@@ -583,6 +584,7 @@ export default function ModelsPage() {
       >
         <QueryLoadError
           title="Couldn't load your models"
+          description={modelsError?.message}
           onRetry={() => refetch()}
         />
       </PageLayout>

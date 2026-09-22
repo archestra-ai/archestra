@@ -15,6 +15,7 @@ import {
 } from "@/services/agent-runtime/runtime-contract";
 import type { AgentRuntimeResources } from "@/types";
 import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
+import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_RUNTIME_TASK_LABEL,
   AGENT_RUNTIME_WORKSPACE_LABEL,
@@ -200,6 +201,9 @@ export function buildAgentRuntimeSandbox(
   spec: KubernetesAgentRunLaunchSpec,
 ): AgentSandbox {
   const names = agentRuntimeNames(spec.frozenName);
+  const imagePullPolicy = usesFloatingAgentImageTag(spec.image)
+    ? ("Always" as const)
+    : undefined;
   const labels = agentRuntimeLabels({
     taskId: spec.taskId,
     agentRuntimeId: spec.agentRuntimeId,
@@ -281,6 +285,7 @@ export function buildAgentRuntimeSandbox(
             {
               name: "initialize-workspace",
               image: spec.image,
+              ...(imagePullPolicy ? { imagePullPolicy } : {}),
               command: [
                 "/bin/sh",
                 "-c",
@@ -307,6 +312,7 @@ export function buildAgentRuntimeSandbox(
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
               image: spec.image,
+              ...(imagePullPolicy ? { imagePullPolicy } : {}),
               command: ["/bin/sh", "-c", buildAgentRuntimeBootstrapScript()],
               env: [
                 ...Object.entries({

@@ -42,7 +42,7 @@ import {
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
-import { BATTERY_STATUS_LABELS } from "./policy-decorations";
+import { BATTERY_STATUS_BADGES } from "./policy-decorations";
 
 /**
  * What the organization's policy text includes, as the text declares it. The
@@ -302,8 +302,8 @@ function IncludedBattery({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{battery.name}</span>
         <Badge variant="outline">{source}</Badge>
-        <Badge variant={STATUS_VARIANTS[status]}>
-          {BATTERY_STATUS_LABELS[status]}
+        <Badge variant={BATTERY_STATUS_BADGES[status].variant}>
+          {BATTERY_STATUS_BADGES[status].label}
         </Badge>
         {writable && installs.length > 0 && (
           <Button
@@ -434,6 +434,14 @@ function CredentialRow({
   const others = credential.readers.filter((reader) => reader !== batteryName);
   const options =
     credentials.data?.filter((entry) => entry.allowOrganization) ?? [];
+  // The policy can name a key the list no longer offers — deleted, or closed
+  // to the organization — and the binding still has to read as what it is.
+  const unlisted =
+    credential.key !== null &&
+    credentials.data !== undefined &&
+    !options.some((entry) => entry.key === credential.key)
+      ? credential.key
+      : null;
   const id = `${batteryName}-${credential.variable}`;
   return (
     <div className="space-y-1">
@@ -468,6 +476,11 @@ function CredentialRow({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={UNBOUND}>Not bound</SelectItem>
+            {unlisted !== null && (
+              <SelectItem value={unlisted} disabled>
+                {`${unlisted} (not available)`}
+              </SelectItem>
+            )}
             {options.map((entry) => (
               <SelectItem key={entry.key} value={entry.key}>
                 {entry.organizationConfigured
@@ -662,18 +675,6 @@ const HELD_PULL_REASONS: Record<
     "The repository text drops batteries this deployment declared",
   changes_credentials:
     "The repository text changes which credentials batteries read",
-};
-
-const STATUS_VARIANTS: Record<
-  PolicyBattery["status"],
-  "secondary" | "outline" | "destructive"
-> = {
-  active: "secondary",
-  missing_credentials: "destructive",
-  naming_conflict: "destructive",
-  server_missing: "outline",
-  refused: "destructive",
-  unavailable: "destructive",
 };
 
 /** The `[credentials]` rows this entry owns, as a PATCH body spells them. */

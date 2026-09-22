@@ -7,13 +7,16 @@ import type {
 type BatteryStatus = PolicyBattery["status"];
 
 /** How a battery's status reads wherever it is shown: a badge, an editor hover. */
-export const BATTERY_STATUS_LABELS: Record<BatteryStatus, string> = {
-  active: "Active",
-  missing_credentials: "Needs a credential",
-  naming_conflict: "Tool name conflict",
-  server_missing: "No server bound",
-  refused: "Not enforced",
-  unavailable: "Package missing",
+export const BATTERY_STATUS_BADGES: Record<
+  BatteryStatus,
+  { label: string; variant: "secondary" | "outline" | "destructive" }
+> = {
+  active: { label: "Active", variant: "secondary" },
+  missing_credentials: { label: "Needs a credential", variant: "destructive" },
+  naming_conflict: { label: "Tool name conflict", variant: "destructive" },
+  server_missing: { label: "No server bound", variant: "outline" },
+  refused: { label: "Not enforced", variant: "destructive" },
+  unavailable: { label: "Package missing", variant: "destructive" },
 };
 
 export type PolicyAnnotation =
@@ -80,5 +83,5 @@ function isWarning(annotation: PolicyAnnotation): boolean {
 function annotationMessage(annotation: PolicyAnnotation): string {
   return annotation.kind === "unusedAlias"
     ? "No included battery declares this namespace."
-    : `${annotation.name}: ${BATTERY_STATUS_LABELS[annotation.status]}`;
+    : `${annotation.name}: ${BATTERY_STATUS_BADGES[annotation.status].label}`;
 }

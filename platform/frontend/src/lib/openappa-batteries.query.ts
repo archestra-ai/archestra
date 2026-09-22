@@ -19,7 +19,6 @@ export type BatteryMatch =
   archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"][number];
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
-export type BatteryInstall = BatterySummary["installs"][number];
 export type PolicyDeclarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 export type PolicyBattery = PolicyDeclarations["batteries"][number];

@@ -507,6 +507,28 @@ test("a package no entry names can be deleted", async () => {
   ).toBeEnabled();
 });
 
+test("a binding to a key the credential list no longer offers still reads as that key", async () => {
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "retired-token",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  await waitFor(() => expect(select).toHaveTextContent("retired-token"));
+});
+
 test("a policy the repository owns is read-only", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub()],

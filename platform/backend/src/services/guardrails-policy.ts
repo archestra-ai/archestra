@@ -3,10 +3,51 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
-import { addedGrants, openappaDeclarations } from "@/openappa/declarations";
+import {
+  addedGrants,
+  openappaDeclarations,
+  type PolicyResolution,
+} from "@/openappa/declarations";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
+
+/**
+ * A document and the revision it would replace, resolved together: resolving
+ * one says nothing about the other, and every write compares the two.
+ */
+async function resolveBoth(params: {
+  organizationId: string;
+  content: string;
+  previous: string;
+}): Promise<{ submitted: PolicyResolution; previous: PolicyResolution }> {
+  const { organizationId } = params;
+  const [submitted, previous] = await Promise.all([
+    openappaDeclarations.resolve({ organizationId, content: params.content }),
+    openappaDeclarations.resolve({ organizationId, content: params.previous }),
+  ]);
+  return { submitted, previous };
+}
+
+/**
+ * Two entries answering one battery name: the runtime refuses to compose such a
+ * document, and the installs derived from it would collide on one row. The
+ * error names both entries so the author can see which line to drop.
+ */
+function duplicateEntryErrors(resolution: PolicyResolution): string[] {
+  const byName = new Map<string, typeof resolution.entries>();
+  for (const entry of resolution.entries)
+    if (entry.battery)
+      byName.set(entry.name, [...(byName.get(entry.name) ?? []), entry]);
+  return [...byName]
+    .filter(([, entries]) => entries.length > 1)
+    .map(
+      ([name, entries]) =>
+        `include: ${JSON.stringify(name)} is included ${entries.length} times: ${entries
+          .map((entry) => `${JSON.stringify(entry.entry)} (line ${entry.line})`)
+          .join(", ")}`,
+    );
+}
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
@@ -57,25 +98,25 @@ export const guardrailsPolicyService = {
    */
   async validate(
     content: string,
-    params: { organizationId: string; previous?: string },
+    params: {
+      organizationId: string;
+      previous?: string;
+      /** Both documents already resolved, when the caller resolved them itself. */
+      resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
+    },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
-    const resolution = await openappaDeclarations.resolve({
-      organizationId,
-      content,
-    });
+    const resolved =
+      params.resolved ??
+      (await resolveBoth({
+        organizationId,
+        content,
+        previous: params.previous ?? (await this.get(organizationId)).content,
+      }));
+    const resolution = resolved.submitted;
     const errors = [...resolution.errors];
-    const previous =
-      params.previous ?? (await this.get(organizationId)).content;
-    const kept = new Set(
-      (
-        await openappaDeclarations.resolve({
-          organizationId,
-          content: previous,
-        })
-      ).entries.map((entry) => entry.entry),
-    );
+    const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)
       if (!entry.battery)
@@ -84,6 +125,7 @@ export const guardrailsPolicyService = {
             ? `include: ${JSON.stringify(entry.entry)} resolves to no battery and governs nothing`
             : `include: no battery answers ${JSON.stringify(entry.entry)}`,
         );
+    errors.push(...duplicateEntryErrors(resolution));
     if (errors.length === 0) {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
@@ -118,12 +160,14 @@ export const guardrailsPolicyService = {
         "Stop GitHub syncing before editing this policy.",
       );
     const latest = await this.get(organizationId);
+    const resolved = await resolveBoth({
+      organizationId,
+      content,
+      previous: latest.content,
+    });
     const granted = addedGrants(
-      await openappaDeclarations.grantsOf({
-        organizationId,
-        content: latest.content,
-      }),
-      await openappaDeclarations.grantsOf({ organizationId, content }),
+      openappaDeclarations.grants(resolved.previous),
+      openappaDeclarations.grants(resolved.submitted),
     );
     if (
       granted.length > 0 &&
@@ -138,6 +182,7 @@ export const guardrailsPolicyService = {
     const validation = await this.validate(content, {
       organizationId,
       previous: latest.content,
+      resolved,
     });
     if (!validation.valid)
       throw new ApiError(400, validation.errors.join("\n"));

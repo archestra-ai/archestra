@@ -57,7 +57,6 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import SkillUserModel from "./skill-user";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 /**
@@ -1281,58 +1280,6 @@ class SkillModel {
         }
       }),
     );
-  }
-
-  /**
-   * Move one skill to a visibility scope, replacing its team assignments and
-   * per-person grants in the same transaction.
-   *
-   * Deliberately not routed through {@link SkillModel.updateWithFiles}: nothing
-   * versioned changes here (a version snapshots the SKILL.md body and resource
-   * files, and the publication artifacts derive from the frontmatter), so this
-   * must not read the file set back or risk forking a version. Team and user
-   * rows are replaced wholesale rather than diffed — the caller already
-   * resolved the target sets.
-   *
-   * Returns the updated row, or null when no live skill has that id.
-   */
-  static async updateVisibility(params: {
-    id: string;
-    scope: ResourceVisibilityScope;
-    /** Replaces the team assignments. Empty for non-`team` scopes. */
-    teamIds: string[];
-    /** Replaces the per-person grants. Empty for non-`personal` scopes. */
-    userIds: string[];
-  }): Promise<Skill | null> {
-    return await withDbTransaction(async (tx) => {
-      const [skill] = await tx
-        .update(schema.skillsTable)
-        .set({ scope: params.scope })
-        .where(
-          and(
-            eq(schema.skillsTable.id, params.id),
-            notDeleted(schema.skillsTable),
-          ),
-        )
-        .returning();
-
-      if (!skill) return null;
-
-      await tx
-        .delete(schema.skillTeamsTable)
-        .where(eq(schema.skillTeamsTable.skillId, params.id));
-      if (params.teamIds.length > 0) {
-        await tx
-          .insert(schema.skillTeamsTable)
-          .values(
-            params.teamIds.map((teamId) => ({ skillId: params.id, teamId })),
-          );
-      }
-
-      await SkillUserModel.syncSkillUsers(params.id, params.userIds, tx);
-
-      return skill;
-    });
   }
 
   /**

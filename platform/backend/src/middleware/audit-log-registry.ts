@@ -747,16 +747,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
-  // Bulk visibility / delete act on a list of skills from the request body, so
-  // there is no single resourceId and `fetchById` (which sees route params
-  // only) cannot represent the batch. Both handlers set `auditBefore` and
-  // `auditAfter` themselves — see buildBulkSkillAuditSnapshot in
-  // routes/skill/skill.routes.ts.
-  "/api/skills/bulk-visibility": {
-    resourceType: "skill",
-    action: "skill.bulk_updated",
-    resourceIdSource: "organizationContext",
-  },
+  // Bulk delete acts on a list of skills from the request body, so there is
+  // no single resourceId and `fetchById` (which sees route params only) cannot
+  // represent the batch. The handler sets `auditBefore` and `auditAfter`
+  // itself — see buildBulkSkillAuditSnapshot in routes/skill/skill.routes.ts.
   "/api/skills/bulk-delete": {
     resourceType: "skill",
     action: "skill.bulk_deleted",
@@ -1320,15 +1314,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agents/bulk": {
     resourceType: "agent",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "agent.bulk_updated",
-      DELETE: "agent.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "agent.bulk_deleted" },
   },
   "/api/apps/bulk": {
     resourceType: "app",
     resourceIdSource: "organizationContext",
-    actionByMethod: { PATCH: "app.bulk_updated", DELETE: "app.bulk_deleted" },
+    actionByMethod: { DELETE: "app.bulk_deleted" },
   },
   "/api/projects/bulk": {
     resourceType: "project",

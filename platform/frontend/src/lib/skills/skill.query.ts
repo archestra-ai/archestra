@@ -22,7 +22,6 @@ import {
 
 const {
   bulkDeleteSkills,
-  bulkUpdateSkillsVisibility,
   getSkills,
   getSkill,
   getExternalMcpSkill,
@@ -490,40 +489,11 @@ export function useDeleteSkill() {
 }
 
 /**
- * Move a selection of skills to one visibility scope in a single request.
+ * Soft-delete a selection of skills in one request.
  *
- * Partial success is normal — the route authorizes each skill on its own, and a
- * skill widening into a namespace where its name is taken is rejected
- * individually — so the toast reports both sides rather than claiming a clean
- * sweep. The caller is told whether anything at all landed, so it can keep a
- * failed selection on screen instead of clearing it.
+ * Partial success is normal — the route authorizes each skill on its own — so
+ * the toast reports both sides rather than claiming a clean sweep.
  */
-export function useBulkUpdateSkillsVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.BulkUpdateSkillsVisibilityData["body"],
-    ) => {
-      const { data, error } = await bulkUpdateSkillsVisibility({ body });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
-      reportBulkSkillOutcome(data, {
-        verb: "Updated",
-        failureVerb: "update",
-      });
-    },
-    onError: (error) => handleApiError(error),
-  });
-}
-
-/** Soft-delete a selection of skills; see {@link useBulkUpdateSkillsVisibility}. */
 export function useBulkDeleteSkills() {
   const queryClient = useQueryClient();
   return useMutation({

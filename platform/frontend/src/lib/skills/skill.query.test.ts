@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useBulkDeleteSkills,
-  useBulkUpdateSkillsVisibility,
   useExternalMcpSkill,
   useRestoreSkillVersion,
   useSkillsList,
@@ -34,7 +33,6 @@ vi.mock("@archestra/shared", () => ({
     searchSkillCatalog: vi.fn(),
     previewGithubSkill: vi.fn(),
     importGithubSkills: vi.fn(),
-    bulkUpdateSkillsVisibility: vi.fn(),
     bulkDeleteSkills: vi.fn(),
   },
 }));
@@ -654,10 +652,8 @@ describe("bulk skill mutations", () => {
     return renderHook(hook, { wrapper });
   }
 
-  const visibilityArgs = { skillIds: ["a"], scope: "org" as const };
-
   it("reports a clean sweep as a plain success", async () => {
-    sdk.bulkUpdateSkillsVisibility.mockResolvedValue({
+    sdk.bulkDeleteSkills.mockResolvedValue({
       data: {
         succeeded: [
           { id: "a", name: "alpha" },
@@ -667,44 +663,44 @@ describe("bulk skill mutations", () => {
       },
       error: undefined,
     });
-    const { result } = setupBulk(useBulkUpdateSkillsVisibility);
+    const { result } = setupBulk(useBulkDeleteSkills);
 
     await act(async () => {
-      await result.current.mutateAsync(visibilityArgs);
+      await result.current.mutateAsync(["a", "b"]);
     });
 
-    expect(toast.success).toHaveBeenCalledWith("Updated 2 skills");
+    expect(toast.success).toHaveBeenCalledWith("Deleted 2 skills");
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
   it("names the skills a partial batch left behind", async () => {
-    sdk.bulkUpdateSkillsVisibility.mockResolvedValue({
+    sdk.bulkDeleteSkills.mockResolvedValue({
       data: {
         succeeded: [{ id: "a", name: "alpha" }],
         failed: [
           {
             id: "b",
             name: "beta",
-            error: 'A skill named "beta" already exists',
+            error: "You can only manage your own personal skills",
           },
         ],
       },
       error: undefined,
     });
-    const { result } = setupBulk(useBulkUpdateSkillsVisibility);
+    const { result } = setupBulk(useBulkDeleteSkills);
 
     await act(async () => {
-      await result.current.mutateAsync(visibilityArgs);
+      await result.current.mutateAsync(["a", "b"]);
     });
 
-    // Not a success: claiming "Updated 1 skill" would hide that beta is still
-    // where it was.
+    // Not a success: claiming "Deleted 1 skill" would hide that beta is still
+    // there.
     expect(toast.success).not.toHaveBeenCalled();
     const [message, options] = vi.mocked(toast.warning).mock.calls[0];
-    expect(message).toContain("Updated 1 skill");
-    expect(message).toContain("1 skill could not be updated");
+    expect(message).toContain("Deleted 1 skill");
+    expect(message).toContain("1 skill could not be deleted");
     expect(options?.description).toContain("beta");
-    expect(options?.description).toContain("already exists");
+    expect(options?.description).toContain("your own personal skills");
   });
 
   it("counts the failures it does not name", async () => {

@@ -19,10 +19,6 @@ vi.mock("@/lib/app.query", () => ({
   useAppLabelValues: () => ({ data: [] }),
   useApps: () => ({ data: undefined }),
   useBulkDeleteApps: () => ({ isPending: false, mutate: vi.fn() }),
-  useBulkUpdateAppVisibility: () => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  }),
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
   usePinApp: () => ({ mutate: vi.fn() }),

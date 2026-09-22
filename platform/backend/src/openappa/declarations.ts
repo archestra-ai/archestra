@@ -190,6 +190,45 @@ class OpenAppaDeclarations {
   }
 
   /**
+   * The newest stored version of a battery name that still validates. A version
+   * whose bytes no longer inspect is not the organization's battery any more, so
+   * the search walks back through the older versions rather than reporting the
+   * name as having no package at all.
+   */
+  async resolveNewestStored(params: {
+    organizationId: string;
+    name: string;
+    /** The newest version, when the caller already knows it; tried first. */
+    newest?: string;
+  }): Promise<{ contentHash: string; battery: NativeBatteryPackage } | null> {
+    const { organizationId, name } = params;
+    const tried = new Set<string>();
+    const attempt = async (contentHash: string) => {
+      tried.add(contentHash);
+      const battery = await this.resolveSpelling({
+        organizationId,
+        name,
+        source: "upload",
+        packageHash: contentHash,
+      });
+      return battery ? { contentHash, battery } : null;
+    };
+    if (params.newest) {
+      const resolved = await attempt(params.newest);
+      if (resolved) return resolved;
+    }
+    for (const stored of await OpenAppaBatteryPackageModel.listByName({
+      organizationId,
+      name,
+    })) {
+      if (tried.has(stored.contentHash)) continue;
+      const resolved = await attempt(stored.contentHash);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+
+  /**
    * The batteries to compose for a resolution: every entry in the order the root
    * spells it, an entry that resolves to nothing — or to a battery the host holds
    * back — composing as an empty battery under its name so one stale entry never

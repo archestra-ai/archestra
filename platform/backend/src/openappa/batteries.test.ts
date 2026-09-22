@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
 import config from "@/config";
+import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
@@ -8,6 +10,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
+import { openappaDeclarations, packageContentHash } from "./declarations";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
@@ -24,7 +27,7 @@ describe("bundled batteries", () => {
     const native = await import("@archestra/openappa-rs");
     // Composing is a direct addon call here, so it owes the addon the same
     // thing the service owes it: the bearer, in the environment, first.
-    const tokenEnv = openappaBatteriesService.publishBridgeToken();
+    const tokenEnv = openappaDeclarations.publishBridgeToken();
     const bundled = await native.listBundledOpenappaBatteries();
     const names = bundled.map((battery) => battery.name);
     expect(names).toContain("github");
@@ -234,6 +237,136 @@ describe("composing an organization's declarations", () => {
     ).toEqual(["refused"]);
   });
 
+  test("a document that answers one battery twice is refused, and one already stored derives one row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const first = await uploadAcme({ organizationId, userId });
+    const second = await uploadAcme({
+      organizationId,
+      userId,
+      note: "another version of the same battery",
+    });
+    const content = root([first.entry, second.entry], ["acme_prod"]);
+
+    const validation = await guardrailsPolicyService.validate(content, {
+      organizationId,
+    });
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toHaveLength(1);
+    expect(validation.errors[0]).toContain(first.entry);
+    expect(validation.errors[0]).toContain(second.entry);
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId,
+        content,
+        expectedRevision: (await guardrailsPolicyService.get(organizationId))
+          .revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    // Text written before the check existed still has to recompose: one row per
+    // catalog and battery, carrying the refusal rather than aborting the write.
+    await declare({ organizationId, userId, content, checked: false });
+
+    const policy = await openappaBatteriesService.recompile(organizationId);
+    expect(policy.lastError).toBeTruthy();
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map((row) => ({
+        batteryName: row.batteryName,
+        catalogId: row.catalogId,
+        status: row.status,
+      })),
+    ).toEqual([
+      { batteryName: "acme", catalogId: catalog.id, status: "refused" },
+    ]);
+  });
+
+  test("reading the batteries of an unchanged policy rewrites no row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod"]),
+    });
+    const written = await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(written.map((row) => row.status)).toEqual(["active"]);
+
+    const declarations =
+      await openappaBatteriesService.policyDeclarations(organizationId);
+    const listed = await openappaBatteriesService.listBatteries(organizationId);
+    // The panel reads this one for the same catalog; it too may write nothing.
+    await openappaBatteriesService.matchesForCatalog({
+      organizationId,
+      catalogId: catalog.id,
+    });
+
+    expect(declarations.batteries).toEqual([
+      expect.objectContaining({ name: "acme", status: "active" }),
+    ]);
+    expect(
+      listed.find((battery) => battery.name === "acme")?.installs,
+    ).toHaveLength(1);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map((row) => ({
+        id: row.id,
+        updatedAt: row.updatedAt,
+      })),
+    ).toEqual(written.map((row) => ({ id: row.id, updatedAt: row.updatedAt })));
+  });
+
+  test("a stored version that no longer inspects falls back to the newest that does", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const readable = await uploadAcme({ organizationId, userId });
+    await storeUnreadable({ organizationId, name: "acme" });
+
+    const listed = await openappaBatteriesService.listBatteries(organizationId);
+
+    expect(listed.find((battery) => battery.name === "acme")?.contentHash).toBe(
+      readable.contentHash,
+    );
+  });
+
   test("a composition publishes the bridge bearer the runtime resolves for a helper", async ({
     makeOrganization,
     makeUser,
@@ -266,7 +399,7 @@ describe("composing an organization's declarations", () => {
 
     expect(policy.lastError).toBeNull();
     expect(process.env[BRIDGE_TOKEN_ENV]).toBe(
-      openappaBatteriesService.bridgeToken,
+      openappaDeclarations.bridgeToken,
     );
   });
 });
@@ -282,9 +415,12 @@ namespaces = ["acme"]
 helpers = ["check.py"]
 `;
 
-/** A root that includes one battery and points its namespace at `targets`. */
-function root(entry: string, targets: string[]): string {
-  return `include = ["${entry}"]
+/** A root that includes the batteries and points the `acme` namespace at `targets`. */
+function root(entry: string | string[], targets: string[]): string {
+  const included = (Array.isArray(entry) ? entry : [entry])
+    .map((spelling) => `"${spelling}"`)
+    .join(", ");
+  return `include = [${included}]
 
 [server_aliases]
 acme = [${targets.map((target) => `"${target}"`).join(", ")}]
@@ -314,6 +450,8 @@ async function uploadAcme(params: {
   userId: string;
   /** Leaves the helper's annotator undeclared, which no composition accepts. */
   broken?: boolean;
+  /** Tells one uploaded version of the battery from another. */
+  note?: string;
 }) {
   const declaration = params.broken
     ? ""
@@ -340,9 +478,44 @@ delta = {}
 command = ["python3", "check.py"]
 `,
       },
-      { path: "check.py", text: "print('{}')\n" },
+      {
+        path: "check.py",
+        text: `print('{}')\n${params.note ? `# ${params.note}\n` : ""}`,
+      },
     ],
   });
+}
+
+/** A stored version of `name` whose bytes inspect to nothing, newer than the rest. */
+async function storeUnreadable(params: {
+  organizationId: string;
+  name: string;
+}) {
+  const files = [
+    { path: "appa-package.toml", text: "schema = 1\nname = " },
+    { path: "appa.toml", text: "[policy]\nversion = 2\n" },
+  ];
+  const contentHash = packageContentHash(files);
+  await OpenAppaBatteryPackageModel.insert({
+    organizationId: params.organizationId,
+    name: params.name,
+    description: "Bytes that stopped inspecting",
+    contentHash,
+    files,
+  });
+  await db
+    .update(schema.openappaBatteryPackagesTable)
+    .set({ createdAt: new Date(Date.now() + 60_000) })
+    .where(
+      and(
+        eq(
+          schema.openappaBatteryPackagesTable.organizationId,
+          params.organizationId,
+        ),
+        eq(schema.openappaBatteryPackagesTable.contentHash, contentHash),
+      ),
+    );
+  return contentHash;
 }
 
 /** Save a root revision and recompose from it. */

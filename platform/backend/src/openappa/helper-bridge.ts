@@ -10,7 +10,6 @@ import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
-import { openappaBatteriesService } from "./batteries";
 import { openappaDeclarations } from "./declarations";
 
 type HelperConsultOutcome =
@@ -32,9 +31,7 @@ class OpenAppaHelperBridge {
   private inFlight = 0;
 
   presentsBridgeToken(authorization: string | undefined): boolean {
-    const expected = Buffer.from(
-      `Bearer ${openappaBatteriesService.bridgeToken}`,
-    );
+    const expected = Buffer.from(`Bearer ${openappaDeclarations.bridgeToken}`);
     const presented = Buffer.from(authorization ?? "");
     return (
       presented.length === expected.length &&

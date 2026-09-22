@@ -16,6 +16,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -219,7 +220,7 @@ async function binding(content: string) {
   // names the helper bridge bearer as a `token_env` the runtime resolves from
   // this process's environment. Publish it on every crossing, not once at
   // import time, so opening and reloading never depend on module order.
-  openappaBatteriesService.publishBridgeToken();
+  openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());

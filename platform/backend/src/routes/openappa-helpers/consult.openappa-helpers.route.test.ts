@@ -6,6 +6,7 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
@@ -58,7 +59,7 @@ describe("battery helper bridge", () => {
       remoteAddress: params.remoteAddress ?? "127.0.0.1",
       payload: params.payload ?? envelope,
     });
-  const bridgeBearer = () => `Bearer ${openappaBatteriesService.bridgeToken}`;
+  const bridgeBearer = () => `Bearer ${openappaDeclarations.bridgeToken}`;
 
   const installGithub = async (
     catalogId: string,

@@ -30,16 +30,20 @@ export type PolicyAnnotation =
  *
  * The lines come from the revision the declarations were read at, so the
  * caller must only show these while the editor still holds that exact text.
+ *
+ * A composition that failed enforces no battery, whatever each entry's own
+ * status says, so every entry then reads as refused — as the panel shows it.
  */
 export function policyAnnotations(
   declarations: PolicyDeclarations,
 ): PolicyAnnotation[] {
+  const enforced = declarations.lastError === null;
   const batteries = declarations.batteries.map(
     ({ line, name, status }): PolicyAnnotation => ({
       kind: "battery",
       line,
       name,
-      status,
+      status: enforced ? status : "refused",
     }),
   );
   const aliases = declarations.unusedAliases.map(

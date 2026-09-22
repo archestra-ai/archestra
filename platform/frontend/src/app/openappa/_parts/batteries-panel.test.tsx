@@ -529,6 +529,30 @@ test("a binding to a key the credential list no longer offers still reads as tha
   await waitFor(() => expect(select).toHaveTextContent("retired-token"));
 });
 
+test("a reader who cannot bind still sees which key a variable is bound to", async () => {
+  grantOnly();
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  expect(select).toBeDisabled();
+  await waitFor(() => expect(select).toHaveTextContent("github-token"));
+});
+
 test("a policy the repository owns is read-only", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub()],

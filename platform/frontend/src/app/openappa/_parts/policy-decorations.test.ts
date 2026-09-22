@@ -53,6 +53,23 @@ test("annotates every declared battery and unclaimed alias, in reading order", (
   ]);
 });
 
+test("a failed composition reads every battery as refused", () => {
+  expect(
+    policyAnnotations(
+      declarations({
+        batteries: [
+          battery({ name: "acme", status: "active", line: 2 }),
+          battery({ name: "globex", status: "missing_credentials", line: 5 }),
+        ],
+        lastError: "acme: unknown trust rank",
+      }),
+    ),
+  ).toEqual([
+    { kind: "battery", line: 2, name: "acme", status: "refused" },
+    { kind: "battery", line: 5, name: "globex", status: "refused" },
+  ]);
+});
+
 test("a policy that declares nothing annotates nothing", () => {
   expect(policyAnnotations(declarations())).toEqual([]);
 });

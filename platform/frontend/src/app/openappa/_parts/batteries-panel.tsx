@@ -434,11 +434,11 @@ function CredentialRow({
   const others = credential.readers.filter((reader) => reader !== batteryName);
   const options =
     credentials.data?.filter((entry) => entry.allowOrganization) ?? [];
-  // The policy can name a key the list no longer offers — deleted, or closed
-  // to the organization — and the binding still has to read as what it is.
+  // The policy can name a key the list does not offer — deleted, closed to
+  // the organization, or a list this reader never loads — and the binding
+  // still has to read as what it is.
   const unlisted =
     credential.key !== null &&
-    credentials.data !== undefined &&
     !options.some((entry) => entry.key === credential.key)
       ? credential.key
       : null;

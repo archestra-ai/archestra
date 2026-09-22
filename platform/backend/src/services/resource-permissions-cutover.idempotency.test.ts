@@ -24,6 +24,7 @@ describe("cutover idempotency", () => {
     makeUser,
     makeMember,
     makeAgent,
+    removeObjectPolicies,
   }) => {
     enterpriseTier.setUserCountForTesting(0);
     const org = await makeOrganization({ legacyPermissions: true });
@@ -40,6 +41,9 @@ describe("cutover idempotency", () => {
       resource: "conversation" as const,
       scope: chat.id,
     };
+    // Creation writes the owner's policy; drop it so the seed below is the
+    // only one, as on a chat that predates the upgrade.
+    await removeObjectPolicies(org.id);
     // Seed exactly the policy the conversion would write, but unmigrated —
     // the shape a half-finished earlier cutover leaves behind.
     await db.insert(schema.resourcePermissionPoliciesTable).values({

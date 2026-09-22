@@ -1544,7 +1544,8 @@ describe("Agent Runtime routes", () => {
       userId: owner.id,
       resource: "agentRun",
       scope: task.id,
-      revision: 0,
+      // Creating the run wrote its owner's policy at revision 1.
+      revision: 1,
       grants: [
         {
           subject: { type: "user", id: owner.id },
@@ -1586,7 +1587,7 @@ describe("Agent Runtime routes", () => {
       userId: owner.id,
       resource: "agentRun",
       scope: task.id,
-      revision: 1,
+      revision: 2,
       grants: [
         {
           subject: { type: "user", id: owner.id },

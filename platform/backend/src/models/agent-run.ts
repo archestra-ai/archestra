@@ -55,11 +55,27 @@ class AgentRunModel {
   static async create(
     run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
   ): Promise<AgentRunRecord> {
-    const [created] = await db
-      .insert(schema.agentRunsTable)
-      .values(run)
-      .returning();
-    return created;
+    // A run is governed by its policy from the moment it exists: the actor's
+    // grant is what lets them open the share editor and share it.
+    return db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.agentRunsTable)
+        .values(run)
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: created.organizationId,
+        resource: "agentRun",
+        scope: created.taskId,
+        authorId: created.actorUserId,
+        grants: [],
+      });
+      // SPDX-SnippetEnd
+      return created;
+    });
   }
 
   static async findByTaskId(taskId: string): Promise<AgentRunRecord | null> {

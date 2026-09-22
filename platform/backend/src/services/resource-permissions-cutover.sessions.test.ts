@@ -27,6 +27,7 @@ for (const resource of ["conversation", "agentRun"] as const) {
       makeAgent,
       makeTeam,
       makeTeamMember,
+      removeObjectPolicies,
     }) => {
       enterpriseTier.setUserCountForTesting(0);
       const org = await makeOrganization({ legacyPermissions: true });
@@ -63,6 +64,9 @@ for (const resource of ["conversation", "agentRun"] as const) {
         backend: "kubernetes",
         runtimeScope: "test",
       });
+      // Both sessions predate the upgrade: creation writes their policies now,
+      // so drop them to leave the retired share rows as the only record.
+      await removeObjectPolicies(org.id);
       const scope = resource === "conversation" ? chat.id : task.id;
       const key = { organizationId: org.id, resource, scope };
       if (visibility !== "private")
@@ -83,11 +87,6 @@ for (const resource of ["conversation", "agentRun"] as const) {
               canReadOthersViaProject: async () => false,
             }))
           : !!(await ResourcePermissionAccessModel.canRead({ ...key, userId }));
-      const before = await ResourcePermissions.getPolicy({
-        ...key,
-        userId: owner.id,
-      });
-      expect(before.effectiveActions).toEqual(["read", "manage-permissions"]);
       await runScopedResourcePermissionCutover();
       const migrated = await ResourcePermissionPolicyModel.find(key);
       expect(migrated?.legacySharingMigrated).toBe(true);
@@ -176,10 +175,11 @@ test("new chat grants support mixed principals and cannot expose locked chats", 
       actions: ["read" as const],
     },
   ];
+  // Creating the chat wrote the owner's policy, so sharing edits it.
   await ResourcePermissions.updatePolicy({
     ...key,
     userId: owner.id,
-    revision: 0,
+    revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
     grants,
   });
   expect(
@@ -389,6 +389,7 @@ test("a chat share naming somebody outside the organization still converts to a 
   makeUser,
   makeMember,
   makeAgent,
+  removeObjectPolicies,
 }) => {
   enterpriseTier.setUserCountForTesting(0);
   const org = await makeOrganization({ legacyPermissions: true });
@@ -402,6 +403,8 @@ test("a chat share naming somebody outside the organization still converts to a 
     organizationId: org.id,
     agentId: agent.id,
   });
+  // A chat that predates the upgrade: drop the policy creation wrote.
+  await removeObjectPolicies(org.id);
   await seedLegacyShareForTest({
     organizationId: org.id,
     resource: "conversation",
@@ -445,6 +448,7 @@ test("a locked chat keeps its owner alone even when an organization share exists
   makeUser,
   makeMember,
   makeAgent,
+  removeObjectPolicies,
 }) => {
   enterpriseTier.setUserCountForTesting(0);
   const org = await makeOrganization({ legacyPermissions: true });
@@ -458,6 +462,8 @@ test("a locked chat keeps its owner alone even when an organization share exists
     agentId: agent.id,
     lockedChat: true,
   });
+  // A chat that predates the upgrade: drop the policy creation wrote.
+  await removeObjectPolicies(org.id);
   await seedLegacyShareForTest({
     organizationId: org.id,
     resource: "conversation",

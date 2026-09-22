@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import A2AContextModel from "@/models/a2a/context";
+import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
+import AgentRunModel from "@/models/agent-run";
+import ConversationModel from "@/models/conversation";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
@@ -347,6 +351,73 @@ describe("resource permissions", () => {
         grants: [{ subject, actions: ["read", "manage-permissions"] }],
       }),
     ).resolves.toBeUndefined();
+  });
+
+  test("a new chat and a new agent run give their owner the session manage preset, and only them", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser();
+    await makeMember(owner.id, org.id);
+    await makeMember(other.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const chat = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    await AgentRunModel.create({
+      organizationId: org.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      workloadName: `test-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    for (const [resource, scope] of [
+      ["conversation", chat.id],
+      ["agentRun", task.id],
+    ] as const) {
+      const key = { organizationId: org.id, resource, scope };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      // Sessions have no use, update or delete, so the manage preset stores
+      // as read plus manage-permissions.
+      expect(policy?.grants).toEqual([
+        {
+          subject: { type: "user", id: owner.id },
+          actions: ["read", "manage-permissions"],
+        },
+      ]);
+      expect(policy?.legacySharingMigrated).toBe(true);
+      // The owner can open the share editor straight away; nobody else can.
+      const effective = await ResourcePermissions.getPolicy({
+        ...key,
+        userId: owner.id,
+      });
+      expect(effective.effectiveActions).toEqual([
+        "read",
+        "manage-permissions",
+      ]);
+      await expect(
+        ResourcePermissions.getPolicy({ ...key, userId: other.id }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    }
   });
 });
 

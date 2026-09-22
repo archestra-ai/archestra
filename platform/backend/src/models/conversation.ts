@@ -42,10 +42,27 @@ class ConversationModel {
   static async create(
     data: InsertConversation & { id?: string },
   ): Promise<Conversation> {
-    const [conversation] = await db
-      .insert(schema.conversationsTable)
-      .values(data)
-      .returning();
+    // A chat is governed by its policy from the moment it exists: the owner's
+    // grant is what lets them open the share editor and share it.
+    const conversation = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.conversationsTable)
+        .values(data)
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: created.organizationId,
+        resource: "conversation",
+        scope: created.id,
+        authorId: created.userId,
+        grants: [],
+      });
+      // SPDX-SnippetEnd
+      return created;
+    });
 
     // All tools assigned to the agent are enabled by default.
     // Users can customize enabled tools per-conversation after creation.

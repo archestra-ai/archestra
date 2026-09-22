@@ -71,10 +71,11 @@ describe("resource permission routes", () => {
     const saved = await app.inject({
       method: "PUT",
       url,
-      payload: { revision: 0, grants },
+      // Creating the chat wrote its owner's policy at revision 1.
+      payload: { revision: 1, grants },
     });
     expect(saved.statusCode, saved.body).toBe(200);
-    expect(saved.json()).toMatchObject({ revision: 1, grants });
+    expect(saved.json()).toMatchObject({ revision: 2, grants });
     const audit = await AuditLogModel.findPaginated({
       organizationId,
       resourceId: conversation.id,
@@ -96,7 +97,7 @@ describe("resource permission routes", () => {
         await app.inject({
           method: "PUT",
           url,
-          payload: { revision: 1, grants: [] },
+          payload: { revision: 2, grants: [] },
         })
       ).statusCode,
     ).toBe(403);

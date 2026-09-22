@@ -392,6 +392,155 @@ describe("Gemini 3 thought signature round-trip", () => {
   });
 });
 
+describe("openaiToGemini — trailing model turn repair", () => {
+  // Gemini 400s with "Requests ending with a model turn are not supported."
+  // when `contents` ends with role `model`, but the OpenAI wire contract lets
+  // a request end with an assistant message. The translator must repair that
+  // shape instead of forwarding a request Google will reject.
+
+  test("appends a minimal user turn after a trailing assistant text message", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        messages: [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "hi there" },
+        ],
+      }),
+    );
+
+    expect(geminiBody.contents.at(-1)).toEqual({
+      role: "user",
+      parts: [{ text: "Continue." }],
+    });
+  });
+
+  test("answers a trailing unanswered tool call with a synthetic functionResponse", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        messages: [
+          { role: "user", content: "run it" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: { name: "run_command", arguments: '{"cmd":"ls"}' },
+              },
+            ],
+          },
+        ],
+        // biome-ignore lint/suspicious/noExplicitAny: minimal tool-call message
+      } as any),
+    );
+
+    // id and name are copied from the call — Gemini 3 validates both against
+    // the functionCall turn the response answers.
+    expect(geminiBody.contents.at(-1)).toEqual({
+      role: "user",
+      parts: [
+        {
+          functionResponse: {
+            id: "call-1",
+            name: "run_command",
+            response: {
+              content:
+                "Tool execution was interrupted before it produced a result. The tool did not run; do not assume it did.",
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  test("answers every call of trailing parallel tool calls in one user turn", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        messages: [
+          { role: "user", content: "weather in Toronto and Ottawa" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  arguments: '{"city":"Toronto"}',
+                },
+              },
+              {
+                id: "call-2",
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  arguments: '{"city":"Ottawa"}',
+                },
+              },
+            ],
+          },
+        ],
+        // biome-ignore lint/suspicious/noExplicitAny: minimal tool-call message
+      } as any),
+    );
+
+    // Gemini rejects the history when the response-part count does not match
+    // the call turn, so both synthetic responses share one user turn.
+    const responseTurn = geminiBody.contents.at(-1);
+    expect(responseTurn?.role).toBe("user");
+    expect(
+      responseTurn?.parts.map(
+        (part) =>
+          (part as { functionResponse: { id: string } }).functionResponse.id,
+      ),
+    ).toEqual(["call-1", "call-2"]);
+  });
+
+  test("prefers synthetic responses over the continue turn when a trailing assistant message mixes text and tool calls", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        messages: [
+          { role: "user", content: "go" },
+          {
+            role: "assistant",
+            content: "let me check",
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: { name: "check", arguments: "{}" },
+              },
+            ],
+          },
+        ],
+        // biome-ignore lint/suspicious/noExplicitAny: minimal tool-call message
+      } as any),
+    );
+
+    const responseTurn = geminiBody.contents.at(-1);
+    expect(responseTurn?.role).toBe("user");
+    expect(responseTurn?.parts).toHaveLength(1);
+    expect("functionResponse" in (responseTurn?.parts[0] ?? {})).toBe(true);
+  });
+
+  test("leaves a history that already ends with a user turn untouched", () => {
+    const { geminiBody } = openaiToGemini(
+      req({
+        messages: [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "hi" },
+          { role: "user", content: "what is 2+2?" },
+        ],
+      }),
+    );
+
+    expect(geminiBody.contents).toHaveLength(3);
+    expect(geminiBody.contents.at(-1)?.role).toBe("user");
+  });
+});
+
 function firstToolCall(response: ReturnType<typeof geminiResponseToOpenai>) {
   const toolCall = response.choices[0].message.tool_calls?.[0];
   if (!toolCall) throw new Error("expected a tool call");

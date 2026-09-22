@@ -138,6 +138,8 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
   }
 
+  ensureTrailingUserTurn(contents);
+
   const geminiBody: GeminiRequest = {
     contents,
     _model: req.model,
@@ -401,6 +403,46 @@ export function decodeSignedToolCallId(id: string | undefined): {
 }
 
 const SIGNED_TOOL_CALL_ID_PREFIX = "gemsig-";
+
+// Gemini rejects a generateContent request whose `contents` ends with a
+// `model` turn ("Requests ending with a model turn are not supported."), but
+// the OpenAI wire contract permits a trailing assistant message: clients send
+// one to continue a turn, and an aborted tool loop resurfaces an assistant
+// tool_calls turn whose tool results were never attached. Repair both shapes
+// so the translated request stays servable — each unanswered trailing
+// functionCall gets a synthetic functionResponse (id and name copied from the
+// call, which Gemini 3 validates against it), and a text-only trailing model
+// turn is followed by the same minimal user turn the chat-side leading-turn
+// repair uses (prepare-model-messages.ts).
+const TRAILING_USER_TURN_TEXT = "Continue.";
+const INTERRUPTED_TOOL_RESULT_TEXT =
+  "Tool execution was interrupted before it produced a result. The tool did not run; do not assume it did.";
+
+function ensureTrailingUserTurn(contents: GeminiRequest["contents"]): void {
+  const last = contents[contents.length - 1];
+  if (!last || last.role === "user") {
+    return;
+  }
+
+  const responseParts: Gemini.Types.MessagePart[] = [];
+  for (const part of last.parts) {
+    if ("functionCall" in part && part.functionCall) {
+      responseParts.push({
+        functionResponse: {
+          id: part.functionCall.id,
+          name: part.functionCall.name,
+          response: { content: INTERRUPTED_TOOL_RESULT_TEXT },
+        },
+      });
+    }
+  }
+
+  contents.push(
+    responseParts.length > 0
+      ? { role: "user", parts: responseParts }
+      : { role: "user", parts: [{ text: TRAILING_USER_TURN_TEXT }] },
+  );
+}
 
 function toGeminiToolChoice(
   toolChoice: OpenAiRequest["tool_choice"],

@@ -315,11 +315,11 @@ function groupByBattery(
   rows: readonly BatteryInstall[],
 ): Map<string, BatteryInstall[]> {
   const grouped = new Map<string, BatteryInstall[]>();
-  for (const row of rows)
-    grouped.set(row.batteryName, [
-      ...(grouped.get(row.batteryName) ?? []),
-      row,
-    ]);
+  for (const row of rows) {
+    const group = grouped.get(row.batteryName);
+    if (group) group.push(row);
+    else grouped.set(row.batteryName, [row]);
+  }
   return grouped;
 }
 

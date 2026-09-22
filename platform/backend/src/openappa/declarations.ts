@@ -239,7 +239,6 @@ class OpenAppaDeclarations {
     /** The helper endpoint for a battery, or null to compose it as the stub. */
     helpers: (entry: EntryResolution) => HelperBindingInput | null | "stub";
   }): ComposeBatteryInput[] {
-    this.publishBridgeToken();
     return params.entries.map((entry) => {
       const helpers = entry.battery ? params.helpers(entry) : "stub";
       return helpers === "stub" || !entry.battery
@@ -288,14 +287,6 @@ class OpenAppaDeclarations {
       }
     }
     return grants;
-  }
-
-  /** The grant set of a policy text, as this organization resolves it. */
-  async grantsOf(params: {
-    organizationId: string;
-    content: string;
-  }): Promise<Grant[]> {
-    return this.grants(await this.resolve(params));
   }
 
   /** The batteries bundled with the pinned OpenAPPA checkout. */

@@ -317,26 +317,11 @@ class OpenAppaBatteriesService {
             409,
             `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
           );
-        // An include with no alias would compose as a stub governing nothing,
-        // so a catalog with no prefix to point at is refused instead.
         const { targets, readiness } = await this.attachTargets({
           organizationId,
           catalogId: catalog.id,
         });
-        switch (readiness) {
-          case "conflicting":
-            throw new ApiError(
-              409,
-              `The tools of ${catalog.name} carry a prefix holding "__", which a composed alias cannot target.`,
-            );
-          case "unsynced":
-            throw new ApiError(
-              409,
-              `${catalog.name} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
-            );
-          case "ready":
-            break;
-        }
+        assertAttachable({ catalog: catalog.name, readiness });
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -366,6 +351,10 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog = await this.requireCatalog({
+      organizationId,
+      catalogId: existing.catalogId,
+    });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -380,22 +369,34 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const namespaces = battery?.namespaces ?? [];
-        const { targets } = await this.attachTargets({
+        const { targets, readiness } = await this.attachTargets({
           organizationId,
           catalogId: existing.catalogId,
         });
         const edits: PolicyEditInput[] = [];
-        if (changes.enabled !== undefined)
-          edits.push(
-            ...(changes.enabled
-              ? bindEdits({ resolution, namespaces, targets })
-              : unbindEdits({
-                  resolution,
-                  namespaces,
-                  targets,
-                  keep: otherNamespaces(resolution, existing.batteryName),
-                })),
-          );
+        switch (changes.enabled) {
+          case true:
+            assertAttachable({ catalog: catalog.name, readiness });
+            edits.push(...bindEdits({ resolution, namespaces, targets }));
+            break;
+          case false: {
+            const unbind = unbindEdits({
+              resolution,
+              namespaces,
+              targets,
+              keep: otherNamespaces(resolution, existing.batteryName),
+            });
+            assertDetaches({
+              edits: unbind,
+              battery: existing.batteryName,
+              catalog: catalog.name,
+            });
+            edits.push(...unbind);
+            break;
+          }
+          case undefined:
+            break;
+        }
         for (const [variable, key] of Object.entries(
           changes.credentialBindings ?? {},
         ))
@@ -439,6 +440,10 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog = await this.requireCatalog({
+      organizationId,
+      catalogId: existing.catalogId,
+    });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -466,7 +471,7 @@ class OpenAppaBatteriesService {
             remainingTargets({ resolution, namespace, targets }).length > 0,
         );
         const keep = otherNamespaces(resolution, existing.batteryName);
-        return [
+        const edits: PolicyEditInput[] = [
           // With no target left anywhere the battery governs nothing, so the
           // entry that declares it goes with its last catalog.
           ...(remaining
@@ -474,6 +479,12 @@ class OpenAppaBatteriesService {
             : [{ kind: "removeInclude" as const, entry: included.entry }]),
           ...unbindEdits({ resolution, namespaces, targets, keep }),
         ];
+        assertDetaches({
+          edits,
+          battery: existing.batteryName,
+          catalog: catalog.name,
+        });
+        return edits;
       },
     });
     await this.recompile(organizationId);
@@ -1429,6 +1440,50 @@ function helperOwner(
           a.createdAt.getTime() - b.createdAt.getTime() ||
           a.id.localeCompare(b.id),
       )[0] ?? null
+  );
+}
+
+/**
+ * An include with no alias would compose as a stub governing nothing, so a
+ * catalog with no prefix an alias can point at takes no battery.
+ */
+function assertAttachable(params: {
+  catalog: string;
+  readiness: AttachReadiness;
+}): void {
+  const { catalog, readiness } = params;
+  switch (readiness) {
+    case "conflicting":
+      throw new ApiError(
+        409,
+        `The tools of ${catalog} carry a prefix holding "__", which a composed alias cannot target.`,
+      );
+    case "unsynced":
+      throw new ApiError(
+        409,
+        `${catalog} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+      );
+    case "ready":
+      return;
+  }
+}
+
+/**
+ * A derived row outlives the prefixes it was derived from until the next
+ * recompose, so a detach can find nothing to edit: the aliases it would drop
+ * are stale, or another included battery's. Answering success would leave the
+ * text as it is, so the caller is sent to the removal that drops them.
+ */
+function assertDetaches(params: {
+  edits: readonly PolicyEditInput[];
+  battery: string;
+  catalog: string;
+}): void {
+  const { edits, battery, catalog } = params;
+  if (edits.length > 0) return;
+  throw new ApiError(
+    409,
+    `Detaching ${catalog} leaves the policy as it is: the aliases ${battery} binds are stale or another battery's. Remove the ${battery} include to drop them.`,
   );
 }
 

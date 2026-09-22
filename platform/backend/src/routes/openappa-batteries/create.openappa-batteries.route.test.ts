@@ -559,6 +559,68 @@ describe("guardrails batteries", () => {
     expect(await declarations()).toMatchObject({ batteries: [] });
   });
 
+  test("a row that outlived its catalog's tools is not detached but removed with its include", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const [row] = await installRows();
+    if (!row) throw new Error("the github battery derived no row");
+    // The tools go without a recompose: the row stays, its prefix does not.
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalog.id));
+    const before = (await guardrailsPolicyService.get(organizationId)).content;
+    for (const request of [
+      {
+        method: "DELETE" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: false },
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: true },
+      },
+    ]) {
+      const refused = await app.inject(request);
+      expect(refused.statusCode, refused.body).toBe(409);
+    }
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      before,
+    );
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/github",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).not.toContain("github_prod");
+    expect(await installRows()).toEqual([]);
+  });
+
   test("removing an include drops the entry and the alias no catalog answers to", async ({
     makeInternalMcpCatalog,
     makeTool,

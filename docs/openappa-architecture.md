@@ -140,8 +140,11 @@ alias its namespaces bind) or the text is edited. An attach to a catalog with no
 synced tools is refused with 409, since the alias would have no target, and so
 is one to a catalog whose tool prefix holds `__`; `GET /api/openappa/battery-matches`
 answers `attach` (`ready | unsynced | conflicting`) beside the matches, and the
-wizard checkbox and the panel's attach form disable on it with the reason. Every
-write path edits the text
+wizard checkbox and the panel's attach form disable on it with the reason. A
+detach or disable that would edit nothing (the row outlived the prefixes it was
+derived from, or the alias is another included battery's) is refused with 409
+pointing at the include removal rather than answering success over an unchanged
+text. Every write path edits the text
 through the addon's `editOpenappaPolicy` and saves a revision: the batteries
 routes (attach, detach, remove, rebind, upload), the wizard checkbox, the
 editor, the MCP guardrails tools, and GitHub sync. Attaching through the routes requires

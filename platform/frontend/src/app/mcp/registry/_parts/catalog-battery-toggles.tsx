@@ -52,9 +52,9 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
       </p>
     );
   if (!data?.matches.length) return null;
-  // The alias points at the server's tool prefix; the server refuses the
-  // attach while it has none an alias can target, so an unattached match says
-  // why before the box is tried.
+  // The alias points at the server's tool prefix. With none an alias can
+  // target no write lands: not an attach, and not the detach of a row that
+  // outlived its prefixes. The box says why before it is tried.
   const attachNote = data.attach === "ready" ? null : ATTACH_NOTES[data.attach];
   return (
     <div className="space-y-2 rounded-md border p-3">
@@ -68,7 +68,9 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
           : batteries.isError;
         const credentialIsSomeoneElses =
           declaresCredentials && canBindCredentials !== true;
-        const unattachable = match.install === null && attachNote !== null;
+        const blocked =
+          data.attach === "unsynced" ||
+          (match.install === null && attachNote !== null);
         return (
           <div key={match.battery} className="flex items-start gap-2 text-sm">
             <Checkbox
@@ -77,7 +79,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
               checked={match.install?.enabled ?? false}
               disabled={
                 canManage !== true ||
-                unattachable ||
+                blocked ||
                 setEnabled.isPending ||
                 batteries.isLoading
               }
@@ -101,7 +103,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
                   </Link>
                 ) : null}
               </p>
-              {unattachable ? (
+              {blocked ? (
                 <p role="note" className="text-muted-foreground">
                   {attachNote}
                 </p>

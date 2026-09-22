@@ -99,7 +99,7 @@ export function useBatteryMatches(catalogId: string, enabled: boolean) {
         query: { catalogId },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? { attach: "unsynced", matches: [] };
+      return answered(data);
     },
   });
 }
@@ -283,9 +283,14 @@ async function setInstallEnabled(id: string, enabled: boolean) {
 /** The SDK call's data, or its refusal toasted and thrown. */
 function settled<T>(result: { data?: T; error?: unknown }): T {
   if (result.error !== undefined) throw reportApiError(result.error);
-  if (result.data === undefined)
+  return answered(result.data);
+}
+
+/** A response with no error carries data; one with neither is a failure, not an empty answer. */
+function answered<T>(data: T | undefined): T {
+  if (data === undefined)
     throw new Error("The API answered with neither data nor an error");
-  return result.data;
+  return data;
 }
 
 /**

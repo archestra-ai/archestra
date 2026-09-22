@@ -273,6 +273,17 @@ test("a server whose tools are not synced yet cannot take a battery", async () =
   expect(screen.getByRole("note")).toBeInTheDocument();
 });
 
+test("an installed battery cannot be switched while its server's tools are not synced", async () => {
+  attach = "unsynced";
+  matches = [{ battery: "github", evidence: "host", install: install({}) }];
+  batteries = [battery({})];
+  show();
+  const checkbox = await screen.findByRole("checkbox", { name: /github/ });
+  expect(checkbox).toBeChecked();
+  expect(checkbox).toBeDisabled();
+  expect(screen.getByRole("note")).toBeInTheDocument();
+});
+
 test("a battery is off until the policy declares it, whatever matched it", async () => {
   matches = [{ battery: "linear", evidence: "host", install: null }];
   show();

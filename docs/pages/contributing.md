@@ -2,7 +2,7 @@
 title: How to Contribute
 category: Development
 order: 1
-lastUpdated: 2026-07-03
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

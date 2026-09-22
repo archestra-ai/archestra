@@ -21,22 +21,8 @@ To change an existing entry, open an
 [Update an MCP server](https://github.com/archestra-ai/archestra/issues/new?template=edit-mcp-server.yml)
 issue.
 
-## Maintainer steps
+The entry format is described in the
+[catalog entry skill](../.agents/skills/archestra-mcp-catalog-entry/SKILL.md).
 
-1. Add the server's URL to `data/mcp-servers.json`.
-2. Add or edit its manifest under `data/mcp-evaluations/` — copy an existing entry as a
-   template. The file name (and its `name` field) must match the name the catalog derives
-   from the URL:
-   - GitHub: `<owner>__<repo>.json` (plus `__<path segments>` for monorepo subdirectories)
-   - Remote: `<domain>__remote-mcp.json`, where the domain is the hostname minus any
-     leading `www.`/`mcp.`/`api.` and everything after the first dot
-     (`https://mcp.linear.app/mcp` → `linear__remote-mcp.json`)
-
-   Set `archestra_config.works_in_archestra: true` (with a filled-in
-   `server`/`oauth_config`) for servers the Archestra platform's registry picker should
-   offer.
-
-3. Open a pull request against this repository.
-
-A merged pull request shows up on the catalog page automatically — a workflow triggers a
+A merged change shows up on the catalog page automatically — a workflow triggers a
 website deploy whenever catalog data lands on `main`.

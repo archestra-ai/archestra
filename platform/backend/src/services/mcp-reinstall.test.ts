@@ -37,6 +37,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpCatalogSkillModel, McpServerModel, ToolModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 
@@ -1776,6 +1777,47 @@ describe("mcp-reinstall", () => {
       expect(getTools).toHaveBeenCalledTimes(1);
     });
     // SPDX-SnippetEnd
+
+    test("a sync that moved no tool leaves the battery compositions alone", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Reload Unchanged",
+        serverType: "remote",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: "Reload Unchanged",
+      });
+      const tools = [
+        {
+          name: "kept_tool",
+          description: "same",
+          inputSchema: { type: "object" },
+        },
+      ];
+      vi.spyOn(McpServerModel, "getToolsFromServer").mockResolvedValue(tools);
+      // An observer, not a stand-in: the fan-out still runs when it is called.
+      const recompose = vi.spyOn(
+        openappaBatteriesService,
+        "onCatalogToolsChanged",
+      );
+
+      const created = await reloadToolsForServer(server);
+      expect(created.created).toBe(1);
+      expect(recompose).toHaveBeenCalledTimes(1);
+
+      const unchanged = await reloadToolsForServer(server);
+
+      expect(unchanged).toMatchObject({
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        unchanged: 1,
+      });
+      expect(recompose).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("reinstallMultitenantCatalog", () => {

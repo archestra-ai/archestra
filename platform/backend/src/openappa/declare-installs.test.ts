@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -103,6 +104,82 @@ describe("declaring the legacy battery installs", () => {
     const declared = await declarationsOf(organizationId);
     expect(declared.include.map((entry) => entry.entry)).toEqual([
       uploadedEntry({ name: "github", contentHash }),
+    ]);
+  });
+
+  test("removes every spelling that already answers the battery", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ catalogId: catalog.id, name: "github_prod__list" });
+    const stale = await storePackage({
+      organizationId,
+      name: "github",
+      note: "the version the text spells",
+      storedAt: new Date(Date.UTC(2026, 0, 1)),
+    });
+    const newest = await storePackage({
+      organizationId,
+      name: "github",
+      note: "the version the rows ran under",
+      storedAt: new Date(Date.UTC(2026, 0, 2)),
+    });
+    await legacyInstall({
+      organizationId,
+      batteryName: "github",
+      catalogId: catalog.id,
+    });
+    // The text answers the battery twice already; both spellings have to go,
+    // since a document that includes one battery twice composes to nothing.
+    const written = `include = ["batteries/github/appa.toml", "${uploadedEntry({ name: "github", contentHash: stale })}"]\n\n[policy]\nversion = 2\n`;
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: written,
+      contentHash: createHash("sha256").update(written).digest("hex"),
+      expectedRevision: 0,
+    });
+
+    await declareExistingInstalls();
+
+    const declared = await declarationsOf(organizationId);
+    expect(declared.include.map((entry) => entry.entry)).toEqual([
+      uploadedEntry({ name: "github", contentHash: newest }),
+    ]);
+  });
+
+  test("declares the newest stored version this deployment can still read", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ catalogId: catalog.id, name: "github_prod__list" });
+    const readable = await storePackage({
+      organizationId,
+      name: "github",
+      storedAt: new Date(Date.UTC(2026, 0, 1)),
+    });
+    await storePackage({
+      organizationId,
+      name: "github",
+      unreadable: true,
+      storedAt: new Date(Date.UTC(2026, 0, 2)),
+    });
+    await legacyInstall({
+      organizationId,
+      batteryName: "github",
+      catalogId: catalog.id,
+    });
+
+    await declareExistingInstalls();
+
+    const declared = await declarationsOf(organizationId);
+    expect(declared.include.map((entry) => entry.entry)).toEqual([
+      uploadedEntry({ name: "github", contentHash: readable }),
     ]);
   });
 
@@ -331,11 +408,18 @@ async function legacyInstall(params: {
 async function storePackage(params: {
   organizationId: string;
   name: string;
+  /** Tells one stored version of a name from another. */
+  note?: string;
+  /** Bytes no inspection can make a battery of. */
+  unreadable?: boolean;
+  storedAt?: Date;
 }): Promise<string> {
   const files: BatteryPackageFile[] = [
     {
       path: "appa-package.toml",
-      text: `schema = 1
+      text: params.unreadable
+        ? "schema = 1\nname = "
+        : `schema = 1
 name = "${params.name}"
 description = "An organization's own ${params.name} battery"
 
@@ -349,7 +433,7 @@ namespaces = ["${params.name}"]
       path: "appa.toml",
       text: `[policy]
 version = 2
-
+${params.note ? `# ${params.note}\n` : ""}
 [[policy.tool]]
 name = "mcp/${params.name}/list"
 delta = {}
@@ -364,6 +448,19 @@ delta = {}
     contentHash,
     files,
   });
+  if (params.storedAt)
+    await db
+      .update(schema.openappaBatteryPackagesTable)
+      .set({ createdAt: params.storedAt })
+      .where(
+        and(
+          eq(
+            schema.openappaBatteryPackagesTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.openappaBatteryPackagesTable.contentHash, contentHash),
+        ),
+      );
   return contentHash;
 }
 

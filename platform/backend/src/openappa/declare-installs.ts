@@ -6,8 +6,6 @@ import type {
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
-import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
-import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { INITIAL_POLICY } from "@/services/guardrails-policy";
 import type { BatteryInstall } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
@@ -138,11 +136,6 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
       expectedRevision: latest.revision,
     });
     if (!saved) continue;
-    await OpenAppaGithubSyncModel.ensureRow(organizationId);
-    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
-      organizationId,
-      true,
-    );
     logger.info(
       {
         organizationId,
@@ -199,11 +192,11 @@ async function planFor(params: {
       continue;
     }
     batteries.push(name);
-    // A battery is included once: text that already spells this battery under
-    // another entry has that entry replaced, never doubled.
-    const included = resolution.entries.find((entry) => entry.name === name);
-    if (included && included.entry !== resolved.entry)
-      includes.push({ kind: "removeInclude", entry: included.entry });
+    // A battery is included once: every entry that already spells this battery
+    // under another spelling goes, so the text never answers the name twice.
+    for (const included of resolution.entries)
+      if (included.name === name && included.entry !== resolved.entry)
+        includes.push({ kind: "removeInclude", entry: included.entry });
     includes.push({ kind: "addInclude", entry: resolved.entry });
     owners.push(batteryRows[0]);
     for (const row of batteryRows.slice(1))
@@ -291,27 +284,24 @@ function credentialEdits(params: {
 
 /**
  * The battery an install row serves and the entry that spells it: the newest
- * stored package of the name, since an upload shadowed the bundled battery under
- * the rows this step reads, and the bundled battery when no upload answers.
+ * stored package of the name this deployment can still inspect, since an upload
+ * shadowed the bundled battery under the rows this step reads, and the bundled
+ * battery when no stored version answers.
  */
 async function resolveBattery(params: {
   organizationId: string;
   name: string;
 }): Promise<{ entry: string; battery: NativeBatteryPackage } | null> {
   const { organizationId, name } = params;
-  const [newest] = await OpenAppaBatteryPackageModel.listByName(params);
-  if (newest) {
-    const uploaded = await openappaDeclarations.resolveInstalled({
-      organizationId,
-      name,
-      packageHash: newest.contentHash,
-    });
-    if (uploaded)
-      return {
-        entry: uploadedEntry({ name, contentHash: newest.contentHash }),
-        battery: uploaded,
-      };
-  }
+  const uploaded = await openappaDeclarations.resolveNewestStored({
+    organizationId,
+    name,
+  });
+  if (uploaded)
+    return {
+      entry: uploadedEntry({ name, contentHash: uploaded.contentHash }),
+      battery: uploaded.battery,
+    };
   const bundled = await openappaDeclarations.resolveInstalled({
     organizationId,
     name,

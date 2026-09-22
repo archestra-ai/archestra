@@ -21,6 +21,20 @@ class OpenAppaBatteryPackageModel {
     );
   }
 
+  /** The newest stored version of every battery name the organization holds. */
+  static async listNewestPerName(
+    organizationId: string,
+  ): Promise<BatteryPackageSummary[]> {
+    return (
+      db
+        .selectDistinctOn([table.name], summary)
+        .from(table)
+        .where(eq(table.organizationId, organizationId))
+        // Two versions can share a timestamp, so the id decides which is newest.
+        .orderBy(asc(table.name), desc(table.createdAt), desc(table.id))
+    );
+  }
+
   /** The stored versions of one battery name, newest first. */
   static async listByName(params: {
     organizationId: string;

@@ -67,20 +67,13 @@ type BatteryWriteResult = {
  * those declarations on behalf of the panel and the install wizard.
  */
 class OpenAppaBatteriesService {
-  /** Presented by the runtime on every helper consult; minted at boot, never stored. */
-  readonly bridgeToken = openappaDeclarations.bridgeToken;
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
   /** Concurrent dispatches of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
 
-  /** Publishes the bridge bearer where the runtime reads it; answers its variable. */
-  publishBridgeToken(): string {
-    return openappaDeclarations.publishBridgeToken();
-  }
-
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
-    const { installs } = await this.recompose(organizationId);
+    const { installs } = await this.current(organizationId);
     const installsByBattery = new Map<string, BatteryInstallView[]>();
     for (const install of installs) {
       const views = installsByBattery.get(install.batteryName) ?? [];
@@ -110,7 +103,7 @@ class OpenAppaBatteriesService {
   }): Promise<BatteryMatch[]> {
     const { organizationId, catalogId } = params;
     const catalog = await this.requireCatalog(params);
-    const { installs } = await this.recompose(organizationId);
+    const { installs } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
     return matchBatteries(catalog, new Set(available.keys())).map((match) => ({
       ...match,
@@ -128,7 +121,7 @@ class OpenAppaBatteriesService {
     organizationId: string,
   ): Promise<PolicyDeclarationsView> {
     const { policy, batteries, unusedAliases } =
-      await this.recompose(organizationId);
+      await this.current(organizationId);
     const sync = await OpenAppaGithubSyncModel.find(organizationId);
     return {
       batteries,
@@ -292,7 +285,10 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const prefixes = await catalogToolPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId, {
+          targets: [],
+          catalogIds: [catalog.id],
+        });
         const targets = prefixes.byCatalog.get(catalog.id) ?? new Set<string>();
         return [
           { kind: "addInclude", entry },
@@ -337,7 +333,10 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId, {
+          targets: [],
+          catalogIds: [existing.catalogId],
+        });
         const targets =
           prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const edits: PolicyEditInput[] = [];
@@ -405,7 +404,10 @@ class OpenAppaBatteriesService {
         );
         if (!included) return [];
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId, {
+          targets: [],
+          catalogIds: [existing.catalogId],
+        });
         const targets =
           prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const remaining = namespaces.some(
@@ -570,16 +572,55 @@ class OpenAppaBatteriesService {
     );
   }
 
+  /**
+   * What the panel reads: the stored composition when it still answers the root
+   * and the rows it derived, recomposed when it does not. A reading writes
+   * nothing - a policy nobody edited is served from what the last write stored.
+   */
+  private async current(organizationId: string): Promise<Recomposition> {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    const root = await guardrailsPolicyService.get(organizationId);
+    if (!stored || stored.rootRevision !== root.revision)
+      return this.recompose(organizationId);
+    const installs = await OpenAppaBatteryInstallModel.list(organizationId);
+    const planned = await this.plan({
+      organizationId,
+      root,
+      governed: installs.map((install) => install.catalogId),
+    });
+    const fingerprint = hash(
+      JSON.stringify({
+        batteries: this.composeInputs({ planned, installs }),
+        credentials: planned.resolution.credentials,
+      }),
+    );
+    // Catalogs, credentials or stored packages moved under the policy; only a
+    // recomposition can say what the root composes to now.
+    if (fingerprint !== stored.installFingerprint)
+      return this.recompose(organizationId);
+    return { ...planned, policy: stored, installs };
+  }
+
   private async recomposeNow(organizationId: string): Promise<Recomposition> {
     for (let attempt = 0; attempt < RECOMPILE_ATTEMPTS; attempt++) {
       const expected = await OpenAppaEffectivePolicyModel.find(organizationId);
       const root = await guardrailsPolicyService.get(organizationId);
-      const planned = await this.plan({ organizationId, root });
       const previous = await OpenAppaBatteryInstallModel.list(organizationId);
-      const installs = await OpenAppaBatteryInstallModel.replaceAll({
+      const planned = await this.plan({
         organizationId,
-        rows: planned.rows,
+        root,
+        governed: previous.map((install) => install.catalogId),
       });
+      // Rows the plan already agrees with are left alone: rewriting them would
+      // touch every row of the organization on a call that changed nothing.
+      const held = expected?.lastError ?? null;
+      const settled = rowsSettled({ previous, rows: planned.rows, held });
+      let installs = settled
+        ? previous
+        : await OpenAppaBatteryInstallModel.replaceAll({
+            organizationId,
+            rows: planned.rows,
+          });
       const composed = this.composeInputs({ planned, installs });
       const installFingerprint = hash(
         JSON.stringify({
@@ -593,13 +634,13 @@ class OpenAppaBatteriesService {
         expected.rootRevision === root.revision &&
         expected.installFingerprint === installFingerprint
       ) {
-        // The rows were just rewritten from the plan, so a stored refusal has to
-        // be put back on them: the composition it refused is still the one held.
-        if (expected.lastError === null)
+        // A rewrite put the plan's statuses back on rows a stored refusal owns;
+        // the composition it refused is still the one held.
+        if (held === null || settled)
           return { ...planned, policy: expected, installs };
         await OpenAppaBatteryInstallModel.markRefused({
           organizationId,
-          lastError: expected.lastError,
+          lastError: held,
         });
         return {
           ...planned,
@@ -614,9 +655,15 @@ class OpenAppaBatteriesService {
         previousContent: expected?.content ?? null,
       });
       if (values.error === null) {
+        // The kept rows still carry the refusal this composition lifts.
+        if (settled && held !== null)
+          installs = await OpenAppaBatteryInstallModel.replaceAll({
+            organizationId,
+            rows: planned.rows,
+          });
         if (expected)
           this.logGrantGrowth({ organizationId, previous, next: planned.rows });
-      } else {
+      } else if (!settled || held !== values.error) {
         await OpenAppaBatteryInstallModel.markRefused({
           organizationId,
           lastError: values.error,
@@ -716,14 +763,19 @@ class OpenAppaBatteriesService {
   private async plan(params: {
     organizationId: string;
     root: GuardrailsPolicy;
+    /** Catalogs the organization already governs; read even if no target names them. */
+    governed: readonly string[];
   }): Promise<PlannedComposition> {
-    const { organizationId, root } = params;
+    const { organizationId, root, governed } = params;
     const resolution = await openappaDeclarations.resolve({
       organizationId,
       content: root.content,
     });
     const [prefixes, bindable] = await Promise.all([
-      catalogToolPrefixes(organizationId),
+      catalogToolPrefixes(organizationId, {
+        targets: resolution.aliases.flatMap((alias) => alias.servers),
+        catalogIds: governed,
+      }),
       this.bindableKeys(organizationId),
     ]);
     const aliases = new Map(
@@ -733,8 +785,22 @@ class OpenAppaBatteriesService {
     for (const entry of resolution.entries)
       for (const variable of entry.battery?.credentials ?? [])
         readers.set(variable, [...(readers.get(variable) ?? []), entry.name]);
+    // Two entries answering one name compose to nothing the runtime accepts and
+    // derive one row apiece for the same battery. `validate` refuses such a
+    // document; one already stored resolves to nothing rather than to whichever
+    // entry happens to be read last.
+    const duplicated = new Set(
+      resolution.entries
+        .filter(
+          (entry, index) =>
+            resolution.entries.findIndex(
+              (other) => other.name === entry.name,
+            ) !== index,
+        )
+        .map((entry) => entry.name),
+    );
     const batteries: PlannedBattery[] = [];
-    const rows: BatteryInstallRow[] = [];
+    const rows = new Map<string, BatteryInstallRow>();
     for (const entry of resolution.entries) {
       const namespaces = entry.battery?.namespaces ?? [];
       const servers = namespaces
@@ -754,7 +820,7 @@ class OpenAppaBatteriesService {
         ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
       ];
       const status = batteryStatus({
-        resolved: entry.battery !== null,
+        resolved: entry.battery !== null && !duplicated.has(entry.name),
         credentials,
         bindable,
         servers,
@@ -781,8 +847,10 @@ class OpenAppaBatteriesService {
         })),
         credentials,
       });
-      for (const catalogId of catalogIds)
-        rows.push({
+      for (const catalogId of catalogIds) {
+        const key = `${entry.name}\u0000${catalogId}`;
+        if (rows.has(key)) continue;
+        rows.set(key, {
           batteryName: entry.name,
           catalogId,
           status,
@@ -790,6 +858,7 @@ class OpenAppaBatteriesService {
           lastError: null,
           credentialBindings: bindings,
         });
+      }
     }
     const declared = new Set(
       resolution.entries.flatMap((entry) => entry.battery?.namespaces ?? []),
@@ -797,7 +866,7 @@ class OpenAppaBatteriesService {
     return {
       resolution,
       batteries,
-      rows,
+      rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
         (alias) => !declared.has(alias.namespace),
       ),
@@ -835,29 +904,29 @@ class OpenAppaBatteriesService {
         contentHash: null,
         package: bundled,
       });
-    const newest = new Map<string, string>();
-    for (const stored of await OpenAppaBatteryPackageModel.list(organizationId))
-      if (!newest.has(stored.name)) newest.set(stored.name, stored.contentHash);
     // One stored package's bytes say nothing about another's, so the newest
-    // version of every name is inspected at once.
-    const inspected = await Promise.all(
-      [...newest].map(async ([name, contentHash]) => ({
-        name,
-        contentHash,
-        package: await openappaDeclarations.resolveInstalled({
+    // version of every name is inspected concurrently, bounded like a recompile.
+    const newest =
+      await OpenAppaBatteryPackageModel.listNewestPerName(organizationId);
+    const inspected = await mapWithConcurrency(
+      newest,
+      RECOMPILE_CONCURRENCY,
+      (stored) =>
+        openappaDeclarations.resolveNewestStored({
           organizationId,
-          name,
-          packageHash: contentHash,
+          name: stored.name,
+          newest: stored.contentHash,
         }),
-      })),
     );
-    for (const upload of inspected)
-      if (upload.package)
-        available.set(upload.name, {
-          source: "upload",
-          contentHash: upload.contentHash,
-          package: upload.package,
-        });
+    inspected.forEach((result, index) => {
+      const name = newest[index]?.name;
+      if (result.status === "rejected" || !result.value || !name) return;
+      available.set(name, {
+        source: "upload",
+        contentHash: result.value.contentHash,
+        package: result.value.battery,
+      });
+    });
     return available;
   }
 
@@ -1060,10 +1129,85 @@ export const openappaBatteriesService = new OpenAppaBatteriesService();
  */
 export async function catalogToolPrefixes(
   organizationId: string,
+  /**
+   * What the reading needs to cover: the alias targets a policy declares and the
+   * catalogs it already governs. Without it every visible catalog is read, which
+   * only the migration step and a bare listing need.
+   */
+  scope?: { targets: readonly string[]; catalogIds: readonly string[] },
 ): Promise<CatalogPrefixes> {
-  const catalogIds =
+  const visible =
     await InternalMcpCatalogModel.findIdsVisibleToOrganization(organizationId);
-  const toolNames = await ToolModel.getToolNamesByCatalogIds(catalogIds);
+  return prefixesOf(
+    await ToolModel.getToolNamesByCatalogIds(
+      scope ? await scopedCatalogIds({ visible, scope }) : visible,
+    ),
+  );
+}
+
+/**
+ * The catalogs a scoped reading covers: those carrying a tool under one of the
+ * declared targets, plus the ones already governed. Whether a catalog is a
+ * naming conflict depends on every tool it carries, so the catalogs are settled
+ * first and their tools read afterwards.
+ */
+async function scopedCatalogIds(params: {
+  visible: string[];
+  scope: { targets: readonly string[]; catalogIds: readonly string[] };
+}): Promise<string[]> {
+  const { visible, scope } = params;
+  const governed = scope.catalogIds.filter((catalogId) =>
+    visible.includes(catalogId),
+  );
+  const matched = await ToolModel.getToolNamesByPrefixes({
+    scopeCatalogIds: visible,
+    prefixes: [...scope.targets],
+    catalogIds: governed,
+  });
+  return [...new Set([...matched.map((tool) => tool.catalogId), ...governed])];
+}
+
+/**
+ * Whether the stored rows already are what the plan derives. A refusal the
+ * stored policy holds is the truth of every row while it holds, so rows
+ * carrying it answer a plan they differ from only in status.
+ */
+function rowsSettled(params: {
+  previous: BatteryInstall[];
+  rows: readonly BatteryInstallRow[];
+  held: string | null;
+}): boolean {
+  const { previous, rows, held } = params;
+  if (previous.length !== rows.length) return false;
+  const stored = new Map(previous.map((row) => [rowKey(row), row]));
+  return rows.every((row) => {
+    const seen = stored.get(rowKey(row));
+    if (!seen || !seen.enabled) return false;
+    if (seen.packageHash !== row.packageHash) return false;
+    if (
+      JSON.stringify(sortedBindings(seen.credentialBindings)) !==
+      JSON.stringify(sortedBindings(row.credentialBindings))
+    )
+      return false;
+    return held === null
+      ? seen.status === row.status && seen.lastError === null
+      : seen.status === "refused" && seen.lastError === held;
+  });
+}
+
+function rowKey(row: { batteryName: string; catalogId: string }): string {
+  return `${row.batteryName}\u0000${row.catalogId}`;
+}
+
+function sortedBindings(
+  bindings: BatteryCredentialBindings,
+): Array<[string, string]> {
+  return Object.entries(bindings).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function prefixesOf(
+  toolNames: ReadonlyArray<{ name: string; catalogId: string }>,
+): CatalogPrefixes {
   const byCatalog = new Map<string, Set<string>>();
   const byPrefix = new Map<string, Set<string>>();
   const conflicting = new Set<string>();

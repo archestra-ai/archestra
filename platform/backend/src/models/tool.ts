@@ -2880,6 +2880,49 @@ class ToolModel {
   }
 
   /**
+   * Tool names of the given catalogs, narrowed to those carrying one of the
+   * given server prefixes plus every tool of `catalogIds`. A guardrails policy
+   * names the servers it governs, so its composition reads the tools those
+   * names can reach instead of every tool the organization can see.
+   */
+  static async getToolNamesByPrefixes(params: {
+    scopeCatalogIds: string[];
+    prefixes: string[];
+    catalogIds: string[];
+  }): Promise<Array<{ name: string; catalogId: string }>> {
+    const { scopeCatalogIds, prefixes, catalogIds } = params;
+    if (scopeCatalogIds.length === 0) return [];
+    const wanted = [
+      ...prefixes.map(
+        (prefix) =>
+          // `like` escapes nothing, and a prefix is `[a-z0-9_]+` by construction.
+          sql`${schema.toolsTable.name} like ${`${prefix}__%`}`,
+      ),
+      ...(catalogIds.length > 0
+        ? [inArray(schema.toolsTable.catalogId, catalogIds)]
+        : []),
+    ];
+    if (wanted.length === 0) return [];
+    const tools = await db
+      .select({
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, scopeCatalogIds),
+          isNull(schema.toolsTable.deletedAt),
+          or(...wanted),
+        ),
+      );
+    return tools.filter(
+      (tool): tool is { name: string; catalogId: string } =>
+        tool.catalogId !== null,
+    );
+  }
+
+  /**
    * Get tool IDs for multiple catalogs in a single query.
    * Used for batch loading tool IDs across multiple catalogs.
    */

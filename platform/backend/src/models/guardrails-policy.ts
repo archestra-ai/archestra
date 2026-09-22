@@ -1,5 +1,5 @@
 import { desc, eq, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { guardrailsPolicyRevisionsTable as table } from "@/database/schemas/guardrails-policy";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 
@@ -47,6 +47,9 @@ class GuardrailsPolicyModel {
    * otherwise delete. It is the migration's own path — every user-driven write
    * goes through `guardrailsPolicyService.update`, which authorizes the grants
    * it adds; this one authors none that the install rows did not already serve.
+   *
+   * The revision and the flag that marks it unpublished are one write: a crash
+   * between them would leave declarations the repository never learns about.
    */
   static async saveDeclarationMigration(params: {
     organizationId: string;
@@ -56,7 +59,10 @@ class GuardrailsPolicyModel {
   }): Promise<GuardrailsPolicy | null> {
     return db.transaction(async (tx) => {
       await lockPolicy(tx, params.organizationId);
-      return insertRevision(tx, { ...params, updatedBy: null });
+      const saved = await insertRevision(tx, { ...params, updatedBy: null });
+      if (saved)
+        await markDeclarationsPendingPublish(tx, params.organizationId);
+      return saved;
     });
   }
 
@@ -78,13 +84,30 @@ class GuardrailsPolicyModel {
 }
 export default GuardrailsPolicyModel;
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /** Serialize the initial insert too: there is no policy row to lock yet. */
 async function lockPolicy(tx: Transaction, organizationId: string) {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
   );
+}
+
+/**
+ * Mark the organization's declarations as not yet in its repository, creating
+ * the sync row when it configured no source: the flag is what keeps the next
+ * pull from dropping batteries the repository text does not know about.
+ */
+async function markDeclarationsPendingPublish(
+  tx: Transaction,
+  organizationId: string,
+) {
+  const sync = schema.openappaGithubSyncTable;
+  await tx
+    .insert(sync)
+    .values({ organizationId, declarationsPendingPublish: true })
+    .onConflictDoUpdate({
+      target: sync.organizationId,
+      set: { declarationsPendingPublish: true },
+    });
 }
 
 /** The revision after `expectedRevision`, or nothing when that race was lost. */

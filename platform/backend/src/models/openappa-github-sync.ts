@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   AppaGithubSource,
   HeldPullReason,
@@ -15,6 +15,17 @@ const NO_HOLD = {
 };
 
 const table = schema.openappaGithubSyncTable;
+
+/**
+ * Share the editor's lock: source changes, manual edits, imported revisions and
+ * accepted holds serialize against one another.
+ */
+function lockPolicy(tx: Transaction, organizationId: string) {
+  return tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
+  );
+}
+
 class OpenAppaGithubSyncModel {
   static async find(organizationId: string) {
     const [row] = await db
@@ -22,10 +33,6 @@ class OpenAppaGithubSyncModel {
       .from(table)
       .where(eq(table.organizationId, organizationId));
     return row ?? null;
-  }
-  /** A row for an organization that has configured no source, so its flags can be set. */
-  static async ensureRow(organizationId: string) {
-    await db.insert(table).values({ organizationId }).onConflictDoNothing();
   }
   static async setDeclarationsPendingPublish(
     organizationId: string,
@@ -47,9 +54,7 @@ class OpenAppaGithubSyncModel {
       ...NO_HOLD,
     };
     await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, organizationId);
       await tx
         .insert(table)
         .values({ organizationId, ...values })
@@ -66,9 +71,7 @@ class OpenAppaGithubSyncModel {
     interval: AppaGithubSource["interval"] | null,
   ) {
     await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, organizationId);
       await tx
         .update(table)
         .set({ interval, revision: randomUUID(), ...NO_HOLD })
@@ -89,10 +92,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<boolean> {
     const { organizationId, revision, outcome } = params;
     return db.transaction(async (tx) => {
-      // Share the editor's lock: source changes, manual edits and imported revisions serialize.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, organizationId);
       const [source] = await tx
         .update(table)
         .set({
@@ -106,6 +106,9 @@ class OpenAppaGithubSyncModel {
                 ...NO_HOLD,
               }),
           lastSyncedAt: new Date(),
+          // A writer that read this revision has had its turn; whatever else
+          // read it is answering for a row that no longer exists.
+          revision: randomUUID(),
         })
         .where(
           and(
@@ -152,9 +155,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<boolean> {
     const { organizationId, revision, ...held } = params;
     return db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, organizationId);
       const [row] = await tx
         .update(table)
         .set({
@@ -164,6 +165,7 @@ class OpenAppaGithubSyncModel {
           heldReasons: held.reasons,
           lastSyncError: held.error,
           lastSyncedAt: new Date(),
+          revision: randomUUID(),
         })
         .where(
           and(
@@ -191,9 +193,7 @@ class OpenAppaGithubSyncModel {
   }): Promise<{ contentHash: string; sourceCommit: string } | null> {
     const { organizationId, userId } = params;
     return db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, organizationId);
       const [row] = await tx
         .select()
         .from(table)
@@ -226,6 +226,7 @@ class OpenAppaGithubSyncModel {
           sourceCommit: row.heldSourceCommit,
           lastSyncError: null,
           declarationsPendingPublish: false,
+          revision: randomUUID(),
           ...NO_HOLD,
         })
         .where(eq(table.organizationId, organizationId));
@@ -234,13 +235,6 @@ class OpenAppaGithubSyncModel {
         sourceCommit: row.heldSourceCommit,
       };
     });
-  }
-
-  static async clearHold(organizationId: string) {
-    await db
-      .update(table)
-      .set(NO_HOLD)
-      .where(eq(table.organizationId, organizationId));
   }
 
   static async findDue() {

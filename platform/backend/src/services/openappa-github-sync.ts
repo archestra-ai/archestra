@@ -4,7 +4,11 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { addedGrants, openappaDeclarations } from "@/openappa/declarations";
+import {
+  addedGrants,
+  openappaDeclarations,
+  type PolicyResolution,
+} from "@/openappa/declarations";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
@@ -99,10 +103,12 @@ export async function acceptHeldAppaGithubPull(params: {
       "Credential update permission is required: this pull changes which credentials batteries read",
     );
   const local = await guardrailsPolicyService.get(organizationId);
-  const changes = await heldChanges({
-    organizationId,
-    local: local.content,
-    pulled: row.heldContent,
+  const changes = heldChanges({
+    ...(await resolvePair({
+      organizationId,
+      local: local.content,
+      pulled: row.heldContent,
+    })),
     // The record of what was accepted has to name the batteries the pull drops,
     // whatever the flag says by now: the hold is why they are being named.
     pendingPublish:
@@ -170,8 +176,17 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     if (!bytes) throw new ApiError(400, "APPA policy exceeds the 1 MiB limit");
     const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const local = await guardrailsPolicyService.get(organizationId);
+    const resolved = await resolvePair({
+      organizationId,
+      local: local.content,
+      pulled: content,
+    });
     const validation = await guardrailsPolicyService
-      .validate(content, { organizationId, previous: local.content })
+      .validate(content, {
+        organizationId,
+        previous: local.content,
+        resolved: { submitted: resolved.pulled, previous: resolved.local },
+      })
       .catch((error) => {
         logger.warn(
           { organizationId, error },
@@ -184,10 +199,8 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         400,
         "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
       );
-    const changes = await heldChanges({
-      organizationId,
-      local: local.content,
-      pulled: content,
+    const changes = heldChanges({
+      ...resolved,
       pendingPublish: row.declarationsPendingPublish,
     });
     const contentHash = createHash("sha256").update(content).digest("hex");
@@ -248,25 +261,16 @@ export async function checkDueAppaGithubSyncs() {
  * a credential grant it adds or rekeys, and — while this deployment's own
  * declarations are not in the repository yet — a battery it would drop.
  */
-async function heldChanges(params: {
-  organizationId: string;
-  local: string;
-  pulled: string;
+function heldChanges(params: {
+  local: PolicyResolution;
+  pulled: PolicyResolution;
   pendingPublish?: boolean;
-}): Promise<{
+}): {
   reasons: HeldPullReason[];
   granted: Array<{ battery: string; variable: string; key: string }>;
   dropped: string[];
-}> {
-  const { organizationId } = params;
-  const local = await openappaDeclarations.resolve({
-    organizationId,
-    content: params.local,
-  });
-  const pulled = await openappaDeclarations.resolve({
-    organizationId,
-    content: params.pulled,
-  });
+} {
+  const { local, pulled } = params;
   const granted = addedGrants(
     openappaDeclarations.grants(local),
     openappaDeclarations.grants(pulled),
@@ -281,6 +285,20 @@ async function heldChanges(params: {
   if (dropped.length > 0) reasons.push("drops_batteries");
   if (granted.length > 0) reasons.push("changes_credentials");
   return { reasons, granted, dropped };
+}
+
+/** The local text and the pulled one, resolved together: neither answers for the other. */
+async function resolvePair(params: {
+  organizationId: string;
+  local: string;
+  pulled: string;
+}): Promise<{ local: PolicyResolution; pulled: PolicyResolution }> {
+  const { organizationId } = params;
+  const [local, pulled] = await Promise.all([
+    openappaDeclarations.resolve({ organizationId, content: params.local }),
+    openappaDeclarations.resolve({ organizationId, content: params.pulled }),
+  ]);
+  return { local, pulled };
 }
 
 function holdMessage(changes: {

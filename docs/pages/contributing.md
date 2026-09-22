@@ -44,7 +44,7 @@ From our perspective, carefully reviewing such a contribution can take longer th
 
 We take contributions as human-written text, not code. Pull requests from non-maintainers are closed automatically by CI.
 
-Describe the change you want informally in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose). If we agree, we handle the implementation with our coding agents. A precise issue lands faster.
+Describe the change you want in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose) written by a human. If we agree, we handle the implementation with our coding agents. A precise issue lands faster.
 
 ## Bounties
 

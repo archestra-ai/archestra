@@ -28,7 +28,7 @@ env:
   CLOSE_COMMENT: |
     We take contributions as human-written text, not code — see https://www.archestra.ai/docs/contributing.
 
-    Describe the change you'd like informally in a GitHub issue (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents. Link this PR from the issue so the context is not lost.
+    Describe the change you'd like in a GitHub issue written by a human (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents.
 
     This PR is closed automatically.
 

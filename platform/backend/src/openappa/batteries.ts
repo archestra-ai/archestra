@@ -46,7 +46,6 @@ import { matchBatteries } from "./battery-match";
 import {
   addedGrants,
   bundledEntry,
-  type EntryResolution,
   helperUrlBase,
   openappaDeclarations,
   type PolicyResolution,
@@ -355,10 +354,18 @@ class OpenAppaBatteriesService {
           changes.credentialBindings ?? {},
         ))
           edits.push({ kind: "setCredential", variable, key });
+        // The table is one per organization: a variable another included
+        // battery reads stays bound when this one lets go of it.
+        const readElsewhere = new Set(
+          resolution.entries
+            .filter((entry) => entry.name !== existing.batteryName)
+            .flatMap((entry) => entry.battery?.credentials ?? []),
+        );
         for (const variable of Object.keys(existing.credentialBindings))
           if (
             changes.credentialBindings &&
-            !(variable in changes.credentialBindings)
+            !(variable in changes.credentialBindings) &&
+            !readElsewhere.has(variable)
           )
             edits.push({ kind: "setCredential", variable });
         return edits;

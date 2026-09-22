@@ -356,6 +356,107 @@ describe("guardrails batteries", () => {
     });
   });
 
+  test("unbinding one battery keeps a variable another included battery reads", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const github = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: github.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const acme = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: acme.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const credentialBindings = await bindGithubToken();
+    // A second battery whose helper reads the same provider variable: a package
+    // owns the variables under its own prefix, and `github-token` owns this one.
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/github-token",
+      payload: {
+        files: [
+          {
+            path: "appa-package.toml",
+            text: 'schema = 1\nname = "github-token"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+          },
+          {
+            path: "appa.toml",
+            text: '[policy]\nversion = 2\n[[policy.annotator]]\nname = "github-token.echo"\nranks = ["suspicious"]\naudiences = ["self"]\nmarks = []\n[externals.annotators."github-token.echo"]\ncommand = ["python3", "echo.py"]\ntoken_env = "APPA_PROVIDER_GITHUB_TOKEN"\n[[policy.tool]]\nname = "mcp/acme/list"\ndelta = {}\n',
+          },
+          { path: "echo.py", text: "print('{}')\n" },
+        ],
+      },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    for (const install of [
+      { batteryName: "github", catalogId: github.id },
+      {
+        batteryName: "github-token",
+        catalogId: acme.id,
+        packageHash: uploaded.json().contentHash,
+      },
+    ]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload: install,
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      expect(created.json()).toMatchObject({ status: "missing_credentials" });
+    }
+    const rowOf = async (batteryName: string) => {
+      const row = (await installRows()).find(
+        (install) => install.batteryName === batteryName,
+      );
+      if (!row) throw new Error(`the ${batteryName} battery derived no row`);
+      return row;
+    };
+    const bound = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${(await rowOf("github")).id}`,
+      payload: { credentialBindings },
+    });
+    expect(bound.statusCode, bound.body).toBe(200);
+    expect(
+      (await declarations()).batteries.map(
+        (battery: { status: string }) => battery.status,
+      ),
+    ).toEqual(["active", "active"]);
+    const unbound = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${(await rowOf("github")).id}`,
+      payload: { credentialBindings: {} },
+    });
+    expect(unbound.statusCode, unbound.body).toBe(200);
+    // The table is one per organization: the other helper still reads the key.
+    expect(await declarations()).toMatchObject({
+      batteries: expect.arrayContaining([
+        expect.objectContaining({
+          name: "github-token",
+          status: "active",
+          credentials: [
+            {
+              variable: "APPA_PROVIDER_GITHUB_TOKEN",
+              key: "github-token",
+              readers: ["github", "github-token"],
+            },
+          ],
+        }),
+      ]),
+    });
+  });
+
   test("a tool namespace holding a double underscore is no alias target", async ({
     makeInternalMcpCatalog,
     makeTool,

@@ -4790,4 +4790,33 @@ describe("getMcpToolsAccessibleToUser requireUiResource", () => {
     expect(allNames).toContain(nonUiTool.name);
     expect(allNames).toContain(nonUiSchemeTool.name);
   });
+
+  test("getToolNamesByPrefixes matches a prefix literally", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId: null });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_x__get_me",
+      rawName: "get_me",
+    });
+    const names = async (prefix: string) =>
+      (
+        await ToolModel.getToolNamesByPrefixes({
+          scopeCatalogIds: [catalog.id],
+          prefixes: [prefix],
+          catalogIds: [],
+        })
+      ).map((tool) => tool.name);
+    expect(await names("github_prod")).toEqual(["github_prod__get_me"]);
+    // `%` and `_` are policy text, not pattern characters.
+    expect(await names("github%")).toEqual([]);
+    expect(await names("github_")).toEqual([]);
+  });
 });

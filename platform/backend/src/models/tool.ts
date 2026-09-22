@@ -76,6 +76,7 @@ import type {
   UpdateTool,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
@@ -2895,8 +2896,9 @@ class ToolModel {
     const wanted = [
       ...prefixes.map(
         (prefix) =>
-          // `like` escapes nothing, and a prefix is `[a-z0-9_]+` by construction.
-          sql`${schema.toolsTable.name} like ${`${prefix}__%`}`,
+          // A prefix is policy text, and the separator is two literal
+          // underscores: nothing here is a pattern character.
+          sql`${schema.toolsTable.name} like ${`${escapeLikePattern(`${prefix}__`)}%`}`,
       ),
       ...(catalogIds.length > 0
         ? [inArray(schema.toolsTable.catalogId, catalogIds)]

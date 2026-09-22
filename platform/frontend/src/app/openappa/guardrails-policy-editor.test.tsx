@@ -305,6 +305,10 @@ test("the effective policy is fetched only once its tab is opened", async () => 
   expect(screen.getByTestId("effective-policy-error")).toHaveTextContent(
     "acme: unknown trust rank",
   );
+  expect(screen.getByTestId("effective-policy")).toHaveAttribute(
+    "data-refused",
+    "true",
+  );
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");

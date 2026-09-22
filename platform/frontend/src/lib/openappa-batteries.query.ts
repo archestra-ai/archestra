@@ -188,9 +188,9 @@ export function useDeleteBatteryPackage() {
 /**
  * The one create call: a battery is included once, so a second server joining
  * one the policy already includes has to name that entry's package — the
- * server refuses any other spelling. The package is read at write time through
- * the query cache — fresh data answers, stale data is refetched — so a policy
- * that moved meanwhile still lands without a round-trip the page already paid.
+ * server refuses any other spelling. The package is read at write time, always
+ * from the server, so a policy that moved since the render still lands; the
+ * answer goes through the query cache so the page shows what was written to.
  */
 async function createInstall(
   client: QueryClient,
@@ -210,12 +210,18 @@ async function includedPackageHash(
   client: QueryClient,
   name: string,
 ): Promise<string | null> {
-  const declarations = await client.fetchQuery(policyDeclarationsQuery);
+  const declarations = await client.fetchQuery({
+    ...policyDeclarationsQuery,
+    staleTime: 0,
+  });
   const included = declarations?.batteries.find(
     (battery) => battery.name === name,
   );
   if (included) return included.packageHash;
-  const batteries = await client.fetchQuery(batteriesQuery);
+  const batteries = await client.fetchQuery({
+    ...batteriesQuery,
+    staleTime: 0,
+  });
   const battery = batteries.find((candidate) => candidate.name === name);
   return battery?.source === "upload" ? battery.contentHash : null;
 }

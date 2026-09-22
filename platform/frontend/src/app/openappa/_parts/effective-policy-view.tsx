@@ -10,7 +10,9 @@ import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
 /**
  * The composed document the runtime actually enforces: the organization's text
  * with every included battery's policy folded in. Read-only — the way to change
- * it is to change the text or the batteries it includes.
+ * it is to change the text or the batteries it includes. A text the host
+ * refused composes to nothing, so the document shown then is the last one that
+ * opened, kept until a text composes again.
  */
 export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
   const effective = useEffectivePolicy(enabled);
@@ -23,14 +25,24 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
       />
     );
   const { content, contentHash, rootRevision, lastError } = effective.data;
+  const refused = lastError !== null;
+  const hash = contentHash.slice(0, 12);
   return (
-    <div className="overflow-hidden rounded-lg border bg-background">
+    <div
+      className="overflow-hidden rounded-lg border bg-background"
+      data-testid="effective-policy"
+      data-refused={refused}
+    >
       <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
         <Layers className="size-4 text-muted-foreground" />
         <div>
-          <h2 className="text-sm font-medium">Effective policy</h2>
+          <h2 className="text-sm font-medium">
+            {refused ? "Last composed policy" : "Effective policy"}
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            What the runtime enforces, batteries included.
+            {refused
+              ? "The current text was refused and composes to nothing; this is the last document that opened."
+              : "What the runtime enforces, batteries included."}
           </p>
         </div>
       </div>
@@ -60,7 +72,11 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
         }}
       />
       <div className="border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>{`Composed from revision ${rootRevision} · ${contentHash.slice(0, 12)}`}</span>
+        <span>
+          {refused
+            ? `Revision ${rootRevision} refused · kept ${hash}`
+            : `Composed from revision ${rootRevision} · ${hash}`}
+        </span>
       </div>
     </div>
   );

@@ -3406,9 +3406,9 @@ export function AgentForm({
               modelSelector={modelControl}
             />
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {providerKeyControl}
-              {modelControl}
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="min-w-0">{providerKeyControl}</div>
+              <div className="min-w-0">{modelControl}</div>
             </div>
           )}
           {runtimeModelIncompatibility &&
@@ -4052,7 +4052,7 @@ export function AgentForm({
                         agent can consult the advisor is one decision, even
                         though the two modes record it differently. */}
                       {advisorAgentId && (
-                        <div className="flex items-center gap-3 border-t pt-4">
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 border-t pt-4 sm:flex sm:items-center">
                           <SettingIcon tone={advisorEnabled ? "on" : "off"}>
                             <AgentIcon
                               icon={
@@ -4100,7 +4100,7 @@ export function AgentForm({
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="shrink-0"
+                                className="col-start-2 row-start-2 w-fit shrink-0 sm:w-auto"
                                 asChild
                               >
                                 {/* New tab: this form holds unsaved edits
@@ -4127,6 +4127,7 @@ export function AgentForm({
                             </TooltipContent>
                           </Tooltip>
                           <Switch
+                            className="col-start-3 row-start-1"
                             id="consult-advisor"
                             checked={advisorEnabled}
                             onCheckedChange={writeAdvisorEnabled}

@@ -45,10 +45,9 @@ export function A2aRemoteAgentScopeSelector({
   const { data: canManageExternalAgents } = useHasPermissions({
     agentSettings: ["update"],
   });
-  const { data: isAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: isTeamAdmin } = useHasPermissions({ agent: ["team-admin"] });
+  const { data: isAdmin } = useHasPermissions({ agent: ["update"] }, "*");
   const canShareOrganization = !!canManageExternalAgents || !!isAdmin;
-  const canShareTeams = canShareOrganization || !!isTeamAdmin;
+  const canShareTeams = canShareOrganization;
   const { data: teams = [] } = useTeams({ enabled: !!canReadTeams });
   const { data: members = [] } = useOrganizationMembers();
   const { data: session } = useSession();

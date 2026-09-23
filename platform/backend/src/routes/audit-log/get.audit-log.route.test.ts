@@ -15,10 +15,11 @@
  */
 
 import { vi } from "vitest";
-import { hasPermission, userHasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type AuditLog, type User } from "@/types";
 
@@ -68,8 +69,9 @@ describe("GET /api/audit-logs", () => {
   beforeEach(async ({ makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
-    // Suite default: org-wide view (auditLog:admin). Own-only tests flip this.
-    vi.mocked(userHasPermission).mockResolvedValue(true);
+    // Suite default: org-wide view (`read` on the audit log at `*`, which the
+    // retired auditLog:admin became). Own-only tests flip this.
+    vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(true);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -578,7 +580,7 @@ describe("GET /api/audit-logs", () => {
       await seedRow(organizationId, { actorId: other.id, actorEmail: "o@x" });
       await seedRow(organizationId, { actorId: null });
 
-      vi.mocked(userHasPermission).mockResolvedValue(false);
+      vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(false);
 
       const list = await app.inject({
         method: "GET",

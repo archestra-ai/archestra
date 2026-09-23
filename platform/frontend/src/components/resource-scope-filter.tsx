@@ -145,15 +145,21 @@ export function useScopeFilterParams(options?: {
 
 export function ResourceDeletedStatusFilter({
   deletePermission,
+  deletePermissionScope,
   queryParamsAdapter,
 }: {
   deletePermission: Permissions;
+  /** Checks `deletePermission` as a grant at this scope (e.g. `*`). */
+  deletePermissionScope?: string;
   queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { data: canDelete } = useHasPermissions(deletePermission);
+  const { data: canDelete } = useHasPermissions(
+    deletePermission,
+    deletePermissionScope,
+  );
 
   const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
   const status =

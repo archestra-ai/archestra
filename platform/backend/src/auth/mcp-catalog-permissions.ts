@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { TeamModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isForeignKeyConstraintError } from "@/utils/db";
-import { getPermissionsForUserContext } from "./utils";
 
 /**
  * Internal MCP catalog RBAC helpers. Catalog items follow the 3-tier scope
@@ -11,12 +11,14 @@ import { getPermissionsForUserContext } from "./utils";
  * team holds either `use` (discover, self-install, resolve through shared
  * installs) or `write` (`use` plus modifying the definition).
  *
- * The catalog's full-admin bypass lives on `mcpServerInstallation:admin`.
- * A `write` team grants modification to its members. Team membership roles
- * govern team administration, not access to the resources shared with it.
+ * The catalog's full-admin bypass is `update` on every registry entry — a
+ * grant at `*` — which is what the retired `mcpServerInstallation:admin` role
+ * action became. A `write` team grants modification to its members. Team
+ * membership roles govern team administration, not access to the resources
+ * shared with it.
  */
 interface McpCatalogPermissionChecker {
-  /** Holds `mcpServerInstallation:admin` — bypasses scope restrictions. */
+  /** Holds `update` on every registry entry — bypasses scope restrictions. */
   isAdmin: boolean;
 }
 
@@ -25,13 +27,25 @@ export async function getMcpCatalogPermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<McpCatalogPermissionChecker> {
-  const permissions = await getPermissionsForUserContext({
+  return { isAdmin: await isMcpInstallationAdmin(params) };
+}
+
+/**
+ * Whether the caller administers every MCP installation and registry entry:
+ * `update` on the registry at `*`. The upgrade converted each holder of the
+ * retired `mcpServerInstallation:admin` role action into exactly this grant.
+ */
+export async function isMcpInstallationAdmin(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  return ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
+    resource: "mcpRegistry",
+    scope: "*",
+    action: "update",
   });
-  return {
-    isAdmin: (permissions.mcpServerInstallation ?? []).includes("admin"),
-  };
 }
 
 /**

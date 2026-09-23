@@ -19,6 +19,7 @@ import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { InsertInteraction, InteractionResponse, User } from "@/types";
 
 describe("interaction routes", () => {
@@ -1246,7 +1247,14 @@ describe("interaction routes", () => {
     }) => {
       const auditor = await makeUser();
       const allLogs = await makeCustomRole(organizationId, {
-        permission: { log: ["read", "admin"] },
+        permission: { log: ["read"] },
+      });
+      // Every row is `read` on the log at `*`, which log:admin became.
+      await grantRoleEverywhere({
+        organizationId,
+        resource: "log",
+        roleId: allLogs.id,
+        actions: ["read"],
       });
       await makeMember(auditor.id, organizationId, { role: allLogs.role });
       currentUser = auditor;

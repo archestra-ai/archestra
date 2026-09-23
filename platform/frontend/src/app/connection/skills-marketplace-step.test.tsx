@@ -134,7 +134,7 @@ function permissionsForMember() {
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
-        data: !permissions.skill?.includes("admin"),
+        data: !(permissions.skill as string[] | undefined)?.includes("admin"),
       }) as ReturnType<typeof useHasPermissions>,
   );
 }

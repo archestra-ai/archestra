@@ -633,9 +633,14 @@ async function makeTrustedDataPolicy(
  */
 async function makeCustomRole(
   organizationId: string,
-  overrides: Partial<
-    Pick<InsertOrganizationRole, "role" | "name" | "permission">
-  > = {},
+  overrides: Partial<Pick<InsertOrganizationRole, "role" | "name">> & {
+    /**
+     * Stored as-is. A role saved before an action was retired can still carry
+     * it in its stored JSON, so this accepts any action name, not only the
+     * current vocabulary.
+     */
+    permission?: Record<string, string[]>;
+  } = {},
 ): Promise<OrganizationRole> {
   const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
   const roleData = {

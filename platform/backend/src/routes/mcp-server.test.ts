@@ -21,6 +21,7 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
 
@@ -129,6 +130,18 @@ describe("mcp server inspect route", () => {
     await makeMember(user.id, organization.id);
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    grantEverywhere(
+      ["mcpRegistry"],
+      async () =>
+        (
+          await hasPermissionMock.getMockImplementation()?.(
+            // The retired action this grant replaced; per-test stubs that
+            // key on real actions leave it denied.
+            { mcpServerInstallation: ["admin"] } as never,
+            {},
+          )
+        )?.success ?? false,
+    );
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
     k8sStopServerMock.mockResolvedValue(undefined);
@@ -4391,6 +4404,18 @@ describe("mcp server core route coverage", () => {
     await makeMember(user.id, organization.id);
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    grantEverywhere(
+      ["mcpRegistry"],
+      async () =>
+        (
+          await hasPermissionMock.getMockImplementation()?.(
+            // The retired action this grant replaced; per-test stubs that
+            // key on real actions leave it denied.
+            { mcpServerInstallation: ["admin"] } as never,
+            {},
+          )
+        )?.success ?? false,
+    );
     k8sStopServerMock.mockResolvedValue(undefined);
 
     app = createFastifyInstance();

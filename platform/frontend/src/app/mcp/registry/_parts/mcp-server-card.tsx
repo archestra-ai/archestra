@@ -203,9 +203,10 @@ export function McpServerCard({
   const { data: allMcpServers } = useMcpServers();
   // Teams the user may install a shared connection for: any team for an install
   // admin, otherwise only the teams they belong to.
-  const { data: isMcpServerInstallAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: isMcpServerInstallAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const { data: teams } = useAssignableTeams({
     isResourceAdmin: !!isMcpServerInstallAdmin,
   });

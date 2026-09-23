@@ -5,7 +5,6 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
-import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import { AppModel } from "@/models";
 import {
@@ -113,12 +112,13 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const appCacheKey = `${appId}:${userId}:${organizationId}`;
       let app = bypassAccessCache ? undefined : appAccessCache.get(appCacheKey);
       if (!app) {
-        const isAppAdmin = await userHasPermission(
-          userId,
-          organizationId,
-          "app",
-          "admin",
-        );
+        const isAppAdmin = await ResourcePermissions.allows({
+          userId: userId,
+          organizationId: organizationId,
+          resource: "app",
+          scope: "*",
+          action: "update",
+        });
         app =
           (await AppModel.findByIdForCaller({
             action: "use",

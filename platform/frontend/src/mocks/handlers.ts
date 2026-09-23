@@ -11,6 +11,7 @@ import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
 import {
   adminPermissionsSeed,
+  adminScopedCapabilitiesSeed,
   betterAuthOrgSeed,
   sessionSeed,
 } from "./data/auth";
@@ -143,6 +144,7 @@ export const handlers: HttpHandler[] = [
     role: sessionSeed.user.role,
   }),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
+  ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   ...getJson("/api/user/permission-sources", [
     {
       role: sessionSeed.user.role,

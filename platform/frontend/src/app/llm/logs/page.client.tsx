@@ -256,7 +256,7 @@ function SessionsTable() {
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
-  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["read"] }, "*");
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;

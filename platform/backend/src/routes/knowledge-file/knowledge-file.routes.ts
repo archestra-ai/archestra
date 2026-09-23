@@ -9,7 +9,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { extractText } from "@/knowledge-base/file-upload/extract";
 import {
@@ -398,7 +397,13 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         canReadOthersViaProject: () =>
-          userHasPermission(user.id, organizationId, "project", "read-all"),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "conversation",
+            scope: "*",
+            action: "read",
+          }),
       });
       if (!conversation) {
         throw new ApiError(403, "No access to the owning conversation");

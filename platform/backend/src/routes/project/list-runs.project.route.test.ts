@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { Agent, User } from "@/types";
 
 type RunItem = {
@@ -98,7 +99,14 @@ describe("GET /api/projects/:id/runs (project:read-all)", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "read-all"] },
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
     });
     const reader = await makeUser({ email: "reader@test.com" });
     await makeMember(reader.id, organizationId, { role: role.role });

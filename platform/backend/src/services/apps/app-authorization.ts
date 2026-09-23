@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
-import { userHasPermission } from "@/auth/utils";
 import { AppAccessModel, TeamModel } from "@/models";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -63,13 +60,11 @@ export async function resolveOrgTeams(
  * Shared app write-authorization, used by both the create/update/delete
  * Archestra MCP tools and the REST CRUD routes so the rule lives in one place.
  *
- * Visibility (being able to view an app) is NOT enough to mutate it: an
- * org-scoped app is visible to every member but only an admin may change it.
- * Delegates to the same 3-tier scope rule agents/skills use (admin bypass /
- * org→admin / team→team-admin+membership / personal→authorship).
+ * Visibility (being able to view an app) is NOT enough to mutate it: reading
+ * and modifying are separate grants on the app's permission policy.
  */
 
-/** Whether the caller holds the org-wide `app:admin` permission. */
+/** Whether the caller holds `update` on every app (a grant at `*`). */
 export async function callerIsAppAdmin(
   userId: string,
   organizationId: string,
@@ -84,46 +79,21 @@ export async function callerIsAppAdmin(
 }
 
 /**
- * Throw `ApiError(403)` unless the caller may modify an app with the given
- * scope/author/teams. For a re-scope, call once per scope (current + target).
+ * Throw `ApiError(403)` unless the caller holds `action` (default `update`) on
+ * the app through its permission policy.
  */
 export async function assertCallerMayModifyApp(params: {
-  appId?: string;
+  appId: string;
   action?: "update" | "delete" | "manage-permissions";
   userId: string;
   organizationId: string;
-  scope: AppScope;
-  authorId: string | null;
-  resourceTeamIds: string[];
 }): Promise<void> {
-  if (params.appId) {
-    await ResourcePermissions.require({
-      ...params,
-      resource: "app",
-      scope: params.appId,
-      action: params.action ?? "update",
-    });
-    return;
-  }
-  const [isAdmin, isTeamAdmin, userTeamIds] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "app", "admin"),
-    userHasPermission(
-      params.userId,
-      params.organizationId,
-      "app",
-      "team-admin",
-    ),
-    TeamModel.getUserTeamIds(params.userId),
-  ]);
-  requireScopedModifyPermission({
-    isAdmin,
-    isTeamAdmin,
-    scope: params.scope,
-    authorId: params.authorId,
-    resourceTeamIds: params.resourceTeamIds,
-    userTeamIds,
+  await ResourcePermissions.require({
     userId: params.userId,
-    resourceLabel: "app",
+    organizationId: params.organizationId,
+    resource: "app",
+    scope: params.appId,
+    action: params.action ?? "update",
   });
 }
 
@@ -168,7 +138,6 @@ export async function assertCallerMayAuthorApp(params: {
    * meets the freeze as before.
    */
   creationGraceSession?: boolean;
-  resourceTeamIds: string[];
 }): Promise<void> {
   // "Reachable without the admin bypass" is exactly "not oversight-only": the
   // author of a personal app, a member of a team app, and everyone for an org
@@ -201,8 +170,5 @@ export async function assertCallerMayAuthorApp(params: {
     action: params.action,
     userId: params.userId,
     organizationId: params.organizationId,
-    scope: params.app.scope,
-    authorId: params.app.authorId,
-    resourceTeamIds: params.resourceTeamIds,
   });
 }

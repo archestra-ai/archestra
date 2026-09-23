@@ -12,6 +12,7 @@ import type { User } from "@/types";
 vi.mock("@/auth");
 
 import { userHasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -109,6 +110,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    grantEverywhere(["llmVirtualKey"]);
     const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
     const copilotKey = await makeLlmProviderApiKey(
       organizationId,
@@ -217,6 +219,7 @@ describe("POST /api/llm-virtual-keys", () => {
     // A codex credential lives on the `openai` provider but is one person's
     // ChatGPT account, so it must get the same per-user treatment as Copilot.
     mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    grantEverywhere(["llmVirtualKey"]);
     const codexSecret = await makeSecret({
       secret: {
         apiKey: encodeOpenAiCodexCredential({
@@ -255,6 +258,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeUser,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
@@ -289,6 +293,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -322,6 +327,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const anthropicSecret = await makeSecret({
@@ -372,6 +378,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const openaiKey = await makeLlmProviderApiKey(
@@ -407,6 +414,7 @@ describe("POST /api/llm-virtual-keys", () => {
 
   test("POST /api/llm-virtual-keys rejects keys without provider mappings", async () => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const response = await app.inject({
       method: "POST",
@@ -428,6 +436,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
     const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
@@ -465,6 +474,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const openaiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -491,6 +501,7 @@ describe("POST /api/llm-virtual-keys", () => {
 
   test("POST /api/llm-virtual-keys supports keyless parent keys", async () => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const parentKey = await LlmProviderApiKeyModel.create({
       organizationId,
@@ -524,6 +535,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -557,6 +569,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeMember,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
@@ -618,6 +631,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeUser,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
@@ -701,6 +715,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeOrganization,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
@@ -771,6 +786,7 @@ describe("POST /api/llm-virtual-keys", () => {
     makeMember,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
     const owner = await makeUser();
     await makeMember(owner.id, organizationId);
 
@@ -805,6 +821,7 @@ describe("scoped virtual key grants", () => {
     await makeMember(user.id, organizationId, { role: "admin" });
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

@@ -463,9 +463,10 @@ function RunsPanel({
   const { data: canCreateRuns } = useHasPermissions({
     scheduledTask: ["create"],
   });
-  const { data: isScheduleAdmin } = useHasPermissions({
-    scheduledTask: ["admin"],
-  });
+  const { data: isScheduleAdmin } = useHasPermissions(
+    { scheduledTask: ["read"] },
+    "*",
+  );
   const canRun =
     canCreateRuns &&
     trigger &&

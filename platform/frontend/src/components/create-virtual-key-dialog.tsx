@@ -80,9 +80,10 @@ export function CreateVirtualKeyDialogWithData({
     enabled: open && keyType === "standard",
     toastOnError: false,
   });
-  const { data: isVirtualKeyAdmin } = useHasPermissions({
-    llmVirtualKey: ["admin"],
-  });
+  const { data: isVirtualKeyAdmin } = useHasPermissions(
+    { llmVirtualKey: ["update"] },
+    "*",
+  );
   const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
   );

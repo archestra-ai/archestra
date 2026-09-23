@@ -32,6 +32,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { Agent, User } from "@/types";
 
 vi.mock("@/observability");
@@ -1302,7 +1303,14 @@ describe("Agent Runtime routes", () => {
       projectId: project.id,
     });
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "read-all"] },
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
     });
     const reader = await makeUser();
     await makeMember(reader.id, organizationId, { role: role.role });
@@ -1390,7 +1398,14 @@ describe("Agent Runtime routes", () => {
     });
 
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "read-all"] },
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
     });
     const reader = await makeUser();
     await makeMember(reader.id, organizationId, { role: role.role });
@@ -1419,7 +1434,7 @@ describe("Agent Runtime routes", () => {
   }) => {
     const task = await createTask(agent.id);
     await createRun({ taskId: task.id, actorUserId: user.id });
-    const owner = user;
+    const _owner = user;
 
     const colleague = await makeAdmin();
     await makeMember(colleague.id, organizationId, { role: "member" });

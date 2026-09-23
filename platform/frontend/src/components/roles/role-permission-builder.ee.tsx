@@ -35,17 +35,12 @@ const actionLabels: Record<Action, string> = {
   read: "Read",
   update: "Update",
   delete: "Delete",
-  "team-admin": "Team Admin",
-  admin: "Admin",
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
   execute: "Execute",
-  "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
   "manage-deleted": "Manage Deleted",
-  "read-all": "Read All Chats",
-  "share-org": "Share Org-Wide",
   impersonate: "Impersonate",
 };
 

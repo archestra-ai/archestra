@@ -506,11 +506,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     });
     const binding = await makeBinding(originalOwner.id);
     user = member;
-    vi.mocked(hasPermission).mockImplementation(async (permissions) =>
-      permissions.agent?.includes("admin")
-        ? { success: false, error: new Error("Forbidden") }
-        : { success: true, error: null },
-    );
+    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
     const response = await apply({
       targetAgentId: inaccessibleAgent.id,

@@ -10,7 +10,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { ProjectLabelModel, ProjectModel } from "@/models";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
@@ -283,12 +282,13 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, organizationId, user }) => {
-      const isProjectAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "project",
-        "admin",
-      );
+      const isProjectAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "project",
+        scope: "*",
+        action: "update",
+      });
       const parsedLabels = parseLabelsParam(query.labels);
       const labelFilteredIds = parsedLabels
         ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
@@ -626,7 +626,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetProjectConversations,
         description:
           "All chats in a project the caller can read. Chats authored by " +
-          "others require `project:read-all`; without it the caller sees " +
+          "others require `read` on every chat (a grant at `*` on " +
+          "`conversation`); without it the caller sees " +
           "only their own. `readOnly` marks chats authored by someone else " +
           "(viewable, never writable).",
         tags: ["Projects"],
@@ -651,7 +652,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetProjectRuns,
         description:
           "All run sessions in a project the caller can read. Sessions " +
-          "started by others require `project:read-all`; all non-owner views " +
+          "started by others require `read` on every chat (a grant at `*` " +
+          "on `conversation`); all non-owner views " +
           "are read-only.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),

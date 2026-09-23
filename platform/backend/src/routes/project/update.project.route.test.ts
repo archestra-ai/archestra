@@ -16,9 +16,10 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
   let owner: User;
   let actingUser: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     actingUser = owner;
 
     app = createFastifyInstance();

@@ -668,12 +668,12 @@ describe("ProjectsPageClient", () => {
     // ?status=deleted is the trash. A deleted project has no card view and no
     // route to navigate to, so it renders as a table of Restore + Delete
     // permanently and nothing else.
-    // Restore is gated on `project:admin`, the same bar that serves this slice
-    // at all, so the viewer has to hold it for the row to be operable.
+    // The trash is served to overseers of every project (`update` at `*`),
+    // and restoring one is its `delete` grant, so the viewer holds both.
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: permissions.project?.includes("admin") === true,
+          data: permissions.project !== undefined,
         }) as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useSearchParams).mockReturnValue(

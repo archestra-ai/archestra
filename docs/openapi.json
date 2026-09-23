@@ -50267,7 +50267,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Create a new agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.",
+        "description": "Create a new agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Grants on the agent may further restrict the request.",
         "requestBody": {
           "required": true,
           "content": {
@@ -52148,7 +52148,7 @@
         },
         "x-required-permissions": {
           "kind": "dynamic",
-          "note": "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.",
+          "note": "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Grants on the agent may further restrict the request.",
           "permissions": []
         }
       }
@@ -57755,7 +57755,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Update an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Additional scope and team-admin checks may apply.",
+        "description": "Update an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Grants on the agent may further restrict the request.",
         "requestBody": {
           "required": true,
           "content": {
@@ -59303,7 +59303,7 @@
         },
         "x-required-permissions": {
           "kind": "dynamic",
-          "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Additional scope and team-admin checks may apply.",
+          "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Grants on the agent may further restrict the request.",
           "permissions": []
         }
       },
@@ -245967,7 +245967,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "List local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "description": "List local catalog items in the org whose custom image is awaiting admin approval (blocked by the target environment's trusted image registries).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:update`: Modify installed MCP server configuration",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -246922,7 +246922,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:admin"
+            "mcpServerInstallation:update"
           ]
         }
       }
@@ -246933,7 +246933,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "description": "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:update`: Modify installed MCP server configuration",
         "parameters": [
           {
             "schema": {
@@ -247897,7 +247897,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:admin"
+            "mcpServerInstallation:update"
           ]
         }
       }
@@ -305469,7 +305469,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Destroy and redeploy a stuck MCP server deployment from a clean slate\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "description": "Destroy and redeploy a stuck MCP server deployment from a clean slate\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:update`: Modify installed MCP server configuration",
         "parameters": [
           {
             "schema": {
@@ -305973,7 +305973,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:admin"
+            "mcpServerInstallation:update"
           ]
         }
       }
@@ -331136,17 +331136,12 @@
                                   "read",
                                   "update",
                                   "delete",
-                                  "team-admin",
-                                  "admin",
                                   "cancel",
                                   "enable",
                                   "query",
                                   "execute",
-                                  "deploy-to-restricted",
                                   "manage",
                                   "manage-deleted",
-                                  "read-all",
-                                  "share-org",
                                   "impersonate"
                                 ]
                               }
@@ -331498,17 +331493,12 @@
                           "read",
                           "update",
                           "delete",
-                          "team-admin",
-                          "admin",
                           "cancel",
                           "enable",
                           "query",
                           "execute",
-                          "deploy-to-restricted",
                           "manage",
                           "manage-deleted",
-                          "read-all",
-                          "share-org",
                           "impersonate"
                         ]
                       }
@@ -331558,17 +331548,12 @@
                             "read",
                             "update",
                             "delete",
-                            "team-admin",
-                            "admin",
                             "cancel",
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted",
                             "manage",
                             "manage-deleted",
-                            "read-all",
-                            "share-org",
                             "impersonate"
                           ]
                         }
@@ -331908,17 +331893,12 @@
                             "read",
                             "update",
                             "delete",
-                            "team-admin",
-                            "admin",
                             "cancel",
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted",
                             "manage",
                             "manage-deleted",
-                            "read-all",
-                            "share-org",
                             "impersonate"
                           ]
                         }
@@ -332222,17 +332202,12 @@
                           "read",
                           "update",
                           "delete",
-                          "team-admin",
-                          "admin",
                           "cancel",
                           "enable",
                           "query",
                           "execute",
-                          "deploy-to-restricted",
                           "manage",
                           "manage-deleted",
-                          "read-all",
-                          "share-org",
                           "impersonate"
                         ]
                       }
@@ -332304,17 +332279,12 @@
                             "read",
                             "update",
                             "delete",
-                            "team-admin",
-                            "admin",
                             "cancel",
                             "enable",
                             "query",
                             "execute",
-                            "deploy-to-restricted",
                             "manage",
                             "manage-deleted",
-                            "read-all",
-                            "share-org",
                             "impersonate"
                           ]
                         }
@@ -350225,7 +350195,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -350509,7 +350479,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -351640,7 +351609,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Create a plugin. Hook configuration bytes are stored verbatim.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:create`: Create plugins",
+        "description": "Create a plugin. Hook configuration bytes are stored verbatim.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:create`: Create plugins",
         "requestBody": {
           "required": true,
           "content": {
@@ -352544,7 +352513,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:create"
           ]
         }
@@ -352556,7 +352524,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Discover and normalize plugins advertised by a GitHub marketplace repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:create`: Create plugins",
+        "description": "Discover and normalize plugins advertised by a GitHub marketplace repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:create`: Create plugins",
         "requestBody": {
           "required": true,
           "content": {
@@ -352949,7 +352917,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:create"
           ]
         }
@@ -352961,7 +352928,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Import selected plugins from one reviewed GitHub marketplace snapshot\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:create`: Create plugins",
+        "description": "Import selected plugins from one reviewed GitHub marketplace snapshot\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:create`: Create plugins",
         "requestBody": {
           "required": true,
           "content": {
@@ -353964,7 +353931,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:create"
           ]
         }
@@ -353976,7 +353942,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Resolve a GitHub ref and preview the exact by-value plugin bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:create`: Create plugins",
+        "description": "Resolve a GitHub ref and preview the exact by-value plugin bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:create`: Create plugins",
         "requestBody": {
           "required": true,
           "content": {
@@ -354336,7 +354302,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:create"
           ]
         }
@@ -354348,7 +354313,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Import and approve a plugin from an immutable GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:create`: Create plugins",
+        "description": "Import and approve a plugin from an immutable GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:create`: Create plugins",
         "requestBody": {
           "required": true,
           "content": {
@@ -355110,7 +355075,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:create"
           ]
         }
@@ -355122,7 +355086,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Preview the latest tracked GitHub commit without changing approved bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Preview the latest tracked GitHub commit without changing approved bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -355469,7 +355433,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -355481,7 +355444,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Re-fetch and explicitly approve the latest tracked GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Re-fetch and explicitly approve the latest tracked GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -356169,7 +356132,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -356181,7 +356143,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Change or pause a Plugin GitHub sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Change or pause a Plugin GitHub sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -356861,7 +356823,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -356873,7 +356834,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Queue an immediate Plugin GitHub source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Queue an immediate Plugin GitHub source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "parameters": [
           {
             "schema": {
@@ -357138,7 +357099,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -357150,7 +357110,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Get one plugin and its opaque files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:read`: View plugins and their file metadata",
+        "description": "Get one plugin and its opaque files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata",
         "parameters": [
           {
             "schema": {
@@ -357796,7 +357756,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:read"
           ]
         }
@@ -357806,7 +357765,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Update plugin metadata, visibility, GitHub source settings, or files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Update plugin metadata, visibility, GitHub source settings, or files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -358651,7 +358610,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:update"
           ]
         }
@@ -358661,7 +358619,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Delete a plugin\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:delete`: Delete plugins",
+        "description": "Delete a plugin\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:delete`: Delete plugins",
         "parameters": [
           {
             "schema": {
@@ -358926,7 +358884,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "plugin:admin",
             "plugin:delete"
           ]
         }
@@ -365838,7 +365795,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -366171,7 +366128,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `project:read-all`; all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -383682,7 +383639,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins."
+            "description": "Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to callers who manage every skill."
           },
           {
             "schema": {
@@ -408062,17 +408019,12 @@
                               "read",
                               "update",
                               "delete",
-                              "team-admin",
-                              "admin",
                               "cancel",
                               "enable",
                               "query",
                               "execute",
-                              "deploy-to-restricted",
                               "manage",
                               "manage-deleted",
-                              "read-all",
-                              "share-org",
                               "impersonate"
                             ]
                           }
@@ -408349,17 +408301,12 @@
                         "read",
                         "update",
                         "delete",
-                        "team-admin",
-                        "admin",
                         "cancel",
                         "enable",
                         "query",
                         "execute",
-                        "deploy-to-restricted",
                         "manage",
                         "manage-deleted",
-                        "read-all",
-                        "share-org",
                         "impersonate"
                       ]
                     }

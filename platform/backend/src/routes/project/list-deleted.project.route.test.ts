@@ -5,10 +5,13 @@ describe("projectService.list (status=deleted)", () => {
   test("a project admin sees every member's soft-deleted projects, org-wide", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const ownerA = await makeUser();
     const ownerB = await makeUser();
+    await makeMember(ownerA.id, organizationId);
+    await makeMember(ownerB.id, organizationId);
 
     const active = await projectService.create({
       organizationId,
@@ -72,9 +75,11 @@ describe("projectService.list (status=deleted)", () => {
   test("a non-admin gets nothing from the deleted slice", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
 
     const project = await projectService.create({
       organizationId,

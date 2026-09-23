@@ -2267,7 +2267,6 @@ async function loadApp(params: {
         // is relaxed — the caller still has to be someone who could author the
         // app if it were live.
         creationGraceSession: graced,
-        resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {
       if (error instanceof ApiError)

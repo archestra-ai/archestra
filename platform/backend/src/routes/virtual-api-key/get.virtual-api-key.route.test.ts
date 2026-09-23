@@ -8,6 +8,7 @@ import type { User } from "@/types";
 vi.mock("@/auth");
 
 import { userHasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -152,6 +153,7 @@ describe("GET /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
@@ -183,6 +185,7 @@ describe("GET /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -278,6 +281,7 @@ describe("GET /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -353,6 +357,7 @@ describe("GET /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const openaiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -444,6 +449,7 @@ describe("GET /api/llm-virtual-keys", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {

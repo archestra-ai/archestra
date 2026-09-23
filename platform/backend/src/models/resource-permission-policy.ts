@@ -165,6 +165,23 @@ export default class ResourcePermissionPolicyModel {
                 : []),
             ],
           })),
+        {
+          // Reading other members' chats inside a project the reader can
+          // open. The admin-tier roles held it as `project:read-all`; it is
+          // honoured for project chats alone, never for a private chat. They
+          // also manage it, so they can still assign the roles that carry it.
+          organizationId: params.organizationId,
+          resource: "conversation" as const,
+          scope: "*",
+          legacySharingMigrated: true,
+          grants: ["admin", "platform_admin"].map((id) => ({
+            subject: { type: "role" as const, id },
+            actions: [
+              "read",
+              "manage-permissions",
+            ] as ResourcePermissionAction[],
+          })),
+        },
       ])
       .onConflictDoNothing();
     const models = await params.tx

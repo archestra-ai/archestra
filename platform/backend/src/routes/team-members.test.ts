@@ -1500,7 +1500,9 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await legacyRoleApp.register(teamRoutes);
       vi.mocked(hasPermission).mockImplementation(async (permissions) => ({
-        success: permissions?.team?.includes("admin") ?? false,
+        success:
+          (permissions?.team as string[] | undefined)?.includes("admin") ??
+          false,
         error: null,
       }));
 

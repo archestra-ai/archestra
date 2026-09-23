@@ -26,9 +26,10 @@ export function useCanReauthenticate() {
   const { data: hasUpdatePermission } = useHasPermissions({
     mcpServerInstallation: ["update"],
   });
-  const { data: hasAdminPermission } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: hasAdminPermission } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
 
   // Stable across renders while the queries it reads are unchanged: callers
   // memoize on this reference (the issue rule behind the sidebar count runs

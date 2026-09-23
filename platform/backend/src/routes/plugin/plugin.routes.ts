@@ -233,12 +233,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      const isAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "plugin",
-        "admin",
-      );
+      const isAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "plugin",
+        scope: "*",
+        action: "update",
+      });
       const accessiblePluginIds = isAdmin
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
@@ -941,16 +942,17 @@ async function requirePluginAdmin(params: {
   organizationId: string;
   userId: string;
 }): Promise<void> {
-  const allowed = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "plugin",
-    "admin",
-  );
+  const allowed = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "plugin",
+    scope: "*",
+    action: "update",
+  });
   if (!allowed) {
     throw new ApiError(
       403,
-      "You need plugin:admin permission to approve executable plugins",
+      "You need permission to manage every plugin to approve executable plugins",
     );
   }
 }

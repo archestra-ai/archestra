@@ -56,9 +56,9 @@ describe("hasPermissions", () => {
     expect(hasPermissions(userPermissions, required)).toBe(false);
   });
 
-  it("lets installation admin satisfy CRUD but not manage-deleted", () => {
+  it("grants only the actions a role holds, with no implied actions", () => {
     const userPermissions: Permissions = {
-      mcpServerInstallation: ["admin"],
+      mcpServerInstallation: ["read", "create", "update", "delete"],
     };
     expect(
       hasPermissions(userPermissions, {
@@ -78,7 +78,7 @@ describe("formatMissingPermissions", () => {
     expect(
       formatMissingPermissions({
         team: ["read"],
-        mcpGateway: ["team-admin"],
+        mcpGateway: ["update"],
       }),
     ).toContain("Missing permissions:");
   });
@@ -95,17 +95,17 @@ describe("formatPermissionConstraint", () => {
     expect(
       formatPermissionConstraint({
         team: ["read"],
-        mcpGateway: ["team-admin"],
+        mcpGateway: ["update"],
       }),
     ).toBe(
-      "Available to roles with the Teams (read), MCP Gateways (team-admin) permissions",
+      "Available to roles with the Teams (read), MCP Gateways (update) permissions",
     );
   });
 
   it("keeps a resource's several actions inside its own parentheses", () => {
     // One resource, so the noun stays singular however many actions it lists.
-    expect(formatPermissionConstraint({ project: ["admin", "delete"] })).toBe(
-      "Available to roles with the Projects (admin, delete) permission",
+    expect(formatPermissionConstraint({ project: ["update", "delete"] })).toBe(
+      "Available to roles with the Projects (update, delete) permission",
     );
   });
 });

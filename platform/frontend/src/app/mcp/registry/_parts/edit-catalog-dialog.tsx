@@ -98,9 +98,10 @@ export function EditCatalogContent({
 
   // Image-approval banner: an admin reviews this config and approves the
   // untrusted image here (the registry card sends them here via "Review config").
-  const { data: isInstallAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: isInstallAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const approveImage = useApproveCatalogItemImage();
   const [approvedNow, setApprovedNow] = useState(false);
   const showApproveBanner =

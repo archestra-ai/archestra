@@ -385,12 +385,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // "Microsoft 365 Copilot" entries. Models keep showing with an empty
       // key list, like the unlinked llm-proxy models below.
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmProviderApiKey",
-        "admin",
-      );
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
       const visibleKeys = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
         user.id,

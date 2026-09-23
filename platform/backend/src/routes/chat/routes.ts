@@ -40,7 +40,7 @@ import {
   openAiReasoningSummaryCacheKey,
 } from "@/agents/openai-reasoning-summary";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
-import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
@@ -2257,7 +2257,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         canReadOthersViaProject: () =>
-          userHasPermission(user.id, organizationId, "project", "read-all"),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "conversation",
+            scope: "*",
+            action: "read",
+          }),
       });
 
       if (!conversation) {
@@ -4669,12 +4675,13 @@ async function findReadableConversationById(params: {
       userId: params.userId,
       organizationId: params.organizationId,
       canReadOthersViaProject: () =>
-        userHasPermission(
-          params.userId,
-          params.organizationId,
-          "project",
-          "read-all",
-        ),
+        ResourcePermissions.allows({
+          userId: params.userId,
+          organizationId: params.organizationId,
+          resource: "conversation",
+          scope: "*",
+          action: "read",
+        }),
     })) ??
     (await findScheduleRunConversationForAdmin({
       conversationId: params.conversationId,
@@ -4689,12 +4696,13 @@ async function findScheduleRunConversationForAdmin(params: {
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
-  const isScheduledTaskAdmin = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "scheduledTask",
-    "admin",
-  );
+  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "scheduledTask",
+    scope: "*",
+    action: "read",
+  });
   if (!isScheduledTaskAdmin) {
     return null;
   }

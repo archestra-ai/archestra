@@ -12,7 +12,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
@@ -167,7 +166,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
         TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+        ResourcePermissions.allows({
+          userId: user.id,
+          organizationId: organizationId,
+          resource: "llmVirtualKey",
+          scope: "*",
+          action: "update",
+        }),
       ]);
 
       const result = await VirtualApiKeyModel.findAllByOrganization({
@@ -207,7 +212,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
         getIsAdmin: () =>
-          userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "llmVirtualKey",
+            scope: "*",
+            action: "update",
+          }),
       });
       if (!virtualKey) {
         throw new ApiError(404, "Virtual API key not found");
@@ -238,7 +249,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
         getIsAdmin: () =>
-          userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "llmVirtualKey",
+            scope: "*",
+            action: "update",
+          }),
       });
       if (!virtualKey) {
         throw new ApiError(404, "Virtual API key not found");
@@ -347,7 +364,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user, body } = request;
       const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
         TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+        ResourcePermissions.allows({
+          userId: user.id,
+          organizationId: organizationId,
+          resource: "llmVirtualKey",
+          scope: "*",
+          action: "update",
+        }),
       ]);
 
       const snapshot = async (ids: string[]) => {
@@ -419,7 +442,13 @@ async function createVirtualApiKey(params: {
 
   const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
     TeamModel.getUserTeamIds(user.id),
-    userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+    ResourcePermissions.allows({
+      userId: user.id,
+      organizationId: organizationId,
+      resource: "llmVirtualKey",
+      scope: "*",
+      action: "update",
+    }),
   ]);
   const ownerId = await resolveKeyOwner({
     requestedOwnerId: body.ownerId,

@@ -97,9 +97,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
     mcpServerInstallation: ["update"],
   });
   // WHY: mcpServerInstallation:admin gates org-wide installations
-  const { data: isMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: isMcpServerAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   // All teams for an install admin, otherwise only the teams the user belongs to.
   const { data: teams, isLoading: isLoadingTeams } = useAssignableTeams({
     isResourceAdmin: !!isMcpServerAdmin,

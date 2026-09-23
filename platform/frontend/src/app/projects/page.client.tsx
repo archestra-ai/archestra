@@ -306,10 +306,12 @@ function ProjectsList() {
                   })}
                 />
               )}
-              {/* Gated on `project:admin`, matching the slice the backend serves:
-              anyone else switching to Deleted would get an empty table. */}
+              {/* Gated on overseeing every project, matching the slice the
+              backend serves: anyone else switching to Deleted would get an
+              empty table. */}
               <ResourceDeletedStatusFilter
-                deletePermission={{ project: ["admin"] }}
+                deletePermission={{ project: ["update"] }}
+                deletePermissionScope="*"
               />
             </FilterBar>
           </CollectionFilters>
@@ -386,8 +388,10 @@ function ProjectSection({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
   const bulkDelete = useBulkDeleteProjects();
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
   const { data: canUpdateProjects } = useHasPermissions({
     project: ["update"],
   });
@@ -404,9 +408,7 @@ function ProjectSection({
       manageable &&
       canDeleteProject({
         viewerRole: project.viewerRole,
-        visibility: project.visibility,
         isProjectAdmin: !!isProjectAdmin,
-        canShareOrg: !!canShareOrg,
       })
     );
   };
@@ -606,8 +608,10 @@ function ProjectCard({
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 } & BulkCardSelectionProps) {
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
   const router = useRouter();
   return (
     <TableCard
@@ -629,9 +633,7 @@ function ProjectCard({
           canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
           canDelete={canDeleteProject({
             viewerRole: project.viewerRole,
-            visibility: project.visibility,
             isProjectAdmin: !!isProjectAdmin,
-            canShareOrg: !!canShareOrg,
           })}
           onTogglePin={() => onTogglePin(project)}
           onEdit={() => onEdit(project)}

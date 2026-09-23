@@ -180,7 +180,7 @@ The conversion runs at the first start after the upgrade. It turns existing shar
 
 Organization-wide sharing becomes a grant to each role that holds that resource's read permission. Access after the conversion is therefore the same as access before it. A member whose role withholds the read permission did not see the resource, and does not see it afterwards. To reach everyone, add the **Everyone in the organization** recipient yourself.
 
-Resource-level \`:admin\` permissions become \`*\` grants with their associated actions. The conversion removes obsolete \`:admin\` and \`:team-admin\` flags from roles. Team membership does not add permissions beyond those explicitly assigned to the team. Existing team-relative access is converted to explicit permissions for each person and resource it applies to at upgrade time. This preserves their current actions without giving those actions to other team members or to future resources. Team membership administration remains separate from resource permissions.
+Resource-level \`:admin\` permissions become \`*\` grants with their associated actions. \`project:read-all\` becomes a \`read\` grant at \`*\` on chats. That grant reaches chats other members started inside projects you can open, never a private chat. The conversion removes the retired \`:admin\`, \`:team-admin\`, \`:deploy-to-restricted\`, \`project:read-all\`, and \`project:share-org\` actions from roles. A role that still stores one of them gains nothing from it. Team membership does not add permissions beyond those explicitly assigned to the team. Existing team-relative access is converted to explicit permissions for each person and resource it applies to at upgrade time. This preserves their current actions without giving those actions to other team members or to future resources. Team membership administration remains separate from resource permissions.
 
 Existing explicit grants, including service-account grants, survive migration. Migrated policies replace legacy sharing checks. Revoking a grant cannot restore access through an old ownership or visibility setting. Other applicable grants can still provide access.
 
@@ -263,9 +263,7 @@ Creating, editing, and deleting environments remain role permissions.
 
 - Personal records are limited to their owner
 - Team records require membership in the selected team, with team member admins able to manage their own team
-- Organization-wide records require the resource-specific admin permission such as \`llmProviderApiKey:admin\` or \`llmVirtualKey:admin\`
-
-These resources do **not** use \`:team-admin\`.
+- Organization-wide records require \`update\` on every record of that resource, a \`*\` grant
 
 ### Models
 

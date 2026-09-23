@@ -22,6 +22,7 @@ import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
   getMcpCatalogPermissionChecker,
+  isMcpInstallationAdmin,
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
@@ -469,7 +470,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_MCP_DESCRIPTION_SHORT_NAME,
     title: "Edit MCP Server Description",
-    description: `Edit an MCP server's display information and metadata. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name. Setting Organization scope requires admin; setting Team scope requires team-admin and membership in the assigned teams.`,
+    description: `Edit an MCP server's display information and metadata. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name. Who else can reach it is managed through its permissions, not here.`,
     schema: EditMcpDescriptionToolArgsSchema,
     handler: ({ args, context }) => handleEditMcpDescription(args, context),
   }),
@@ -541,12 +542,10 @@ async function handleSearchPrivateMcpRegistry(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     const query = args.query;
     // Environment isolation: the registry an agent searches must match the
     // tools it can actually call, so scope to the agent's own environment.
@@ -643,12 +642,10 @@ async function handleGetMcpServers(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     // Environment isolation: only list servers from the agent's environment.
     const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
     const catalogItems = await InternalMcpCatalogModel.findAll({
@@ -698,12 +695,10 @@ async function handleGetMcpServerTools(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     const catalogItem = await InternalMcpCatalogModel.findById(
       args.mcpServerId,
       {
@@ -1325,12 +1320,10 @@ async function handleDeployMcpServer(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     const catalogItem = await InternalMcpCatalogModel.findById(args.catalogId, {
       accessAction: "use",
       userId: context.userId,
@@ -1547,12 +1540,10 @@ async function handleListMcpServerDeployments(
     }
 
     const [isAdmin, userIsPredefinedAdmin] = await Promise.all([
-      userHasPermission(
-        context.userId,
-        organizationId,
-        "mcpServerInstallation",
-        "admin",
-      ),
+      isMcpInstallationAdmin({
+        userId: context.userId,
+        organizationId: organizationId,
+      }),
       isPredefinedAdmin({ userId: context.userId, organizationId }),
     ]);
     // Environment isolation: a deployment inherits its environment from its
@@ -1609,12 +1600,10 @@ async function handleGetMcpServerLogs(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     const server = await McpServerModel.findById(
       args.serverId,
       context.userId,
@@ -1670,12 +1659,10 @@ async function handleReloadMcpServerTools(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isAdmin = await isMcpInstallationAdmin({
+      userId: context.userId,
+      organizationId: organizationId,
+    });
     const server = await McpServerModel.findById(
       args.serverId,
       context.userId,
@@ -1918,12 +1905,10 @@ async function authorizeDeployScope(params: {
     if (!team) {
       return "Team not found.";
     }
-    const isInstallationAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isInstallationAdmin = await isMcpInstallationAdmin({
+      userId: userId,
+      organizationId: organizationId,
+    });
     if (isInstallationAdmin) {
       return null;
     }
@@ -1945,12 +1930,10 @@ async function authorizeDeployScope(params: {
   }
 
   if (scope === "org") {
-    const isOrgInstallationAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    const isOrgInstallationAdmin = await isMcpInstallationAdmin({
+      userId: userId,
+      organizationId: organizationId,
+    });
     if (!isOrgInstallationAdmin) {
       return "Only mcpServerInstallation admins can install organization-scoped MCP servers.";
     }

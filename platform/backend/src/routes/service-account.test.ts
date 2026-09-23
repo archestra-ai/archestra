@@ -8,6 +8,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("service account routes", () => {
@@ -602,9 +603,16 @@ describe("service account API authentication", () => {
     const organizationDataRole = await makeCustomRole(organization.id, {
       permission: {
         llmCost: ["read"],
-        log: ["read", "admin"],
+        log: ["read"],
         member: ["read"],
       },
+    });
+    // Every member's logs are `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId: organization.id,
+      resource: "log",
+      roleId: organizationDataRole.id,
+      actions: ["read"],
     });
     const organizationDataAccount = await ServiceAccountModel.create({
       organizationId: organization.id,

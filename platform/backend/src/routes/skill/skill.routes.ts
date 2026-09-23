@@ -406,7 +406,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .default("active")
             .describe(
               "Which skills to list: active (default) or the soft-deleted " +
-                "trash. `deleted` is restricted to admins and team-admins.",
+                "trash. `deleted` is restricted to callers who manage every skill.",
             ),
           labels: z
             .string()

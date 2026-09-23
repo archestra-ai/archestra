@@ -4,6 +4,7 @@ import {
   PluginSkillUsageEventModel,
   PluginTeamModel,
 } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   deriveSkillFileKind,
   parseSkillManifest,
@@ -180,12 +181,13 @@ async function resolvePluginAccess(params: {
   if (!canRead) {
     return { accessiblePluginIds: [], orgScopeOnly: false };
   }
-  const isAdmin = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "plugin",
-    "admin",
-  );
+  const isAdmin = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "plugin",
+    scope: "*",
+    action: "update",
+  });
   return {
     accessiblePluginIds: isAdmin
       ? undefined

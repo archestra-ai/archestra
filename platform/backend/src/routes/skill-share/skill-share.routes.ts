@@ -468,7 +468,13 @@ async function validatePluginsForLink(params: {
   const pluginPlatform = params.pluginPlatform;
   const [canRead, canAdmin] = await Promise.all([
     userHasPermission(params.userId, params.organizationId, "plugin", "read"),
-    userHasPermission(params.userId, params.organizationId, "plugin", "admin"),
+    ResourcePermissions.allows({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      resource: "plugin",
+      scope: "*",
+      action: "update",
+    }),
   ]);
   if (!canRead || !canAdmin) {
     throw new ApiError(

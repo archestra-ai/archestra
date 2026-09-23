@@ -17,6 +17,7 @@ import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
   getMcpCatalogPermissionChecker,
+  isMcpInstallationAdmin,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
@@ -217,10 +218,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // Don't expand secrets for list view
       const opts = {
         expandSecrets: false,
@@ -755,10 +756,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
@@ -786,10 +787,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // Scoped to exactly the catalogs GET /api/internal_mcp_catalog would
       // list for this caller — app backings included, which stay behind the
       // `app:read`-gated includeApps path there and are excluded here too.
@@ -829,10 +830,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // The built-in Archestra catalog is virtual; custom/private catalog IDs
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
@@ -1700,10 +1701,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
@@ -1916,10 +1917,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
@@ -2006,10 +2007,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         accessAction: "update",
         userId: request.user.id,
@@ -2087,11 +2088,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ user, headers }, reply) => {
-      const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+    async ({ user, organizationId }, reply) => {
+      const isMcpServerAdmin = await isMcpInstallationAdmin({
+        userId: user.id,
+        organizationId,
+      });
 
       const secrets = isMcpServerAdmin
         ? await mcpServerRuntimeManager.listDockerRegistrySecrets({
@@ -2598,10 +2599,10 @@ async function findVisibleCatalogItem(params: {
   catalogId: string;
   request: FastifyRequest;
 }): Promise<InternalMcpCatalog> {
-  const { success: isAdmin } = await hasPermission(
-    { mcpServerInstallation: ["admin"] },
-    params.request.headers,
-  );
+  const isAdmin = await isMcpInstallationAdmin({
+    userId: params.request.user.id,
+    organizationId: params.request.organizationId,
+  });
   const item = await InternalMcpCatalogModel.findById(params.catalogId, {
     userId: params.request.user.id,
     isAdmin,

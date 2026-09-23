@@ -431,9 +431,10 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const { data: allMcpServers } = useMcpServers();
-  const { data: canManageInstalls } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: canManageInstalls } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const restoreMutation = useRestoreMcpServerAlerts();
   const [dismissOpen, setDismissOpen] = useState(false);
   const isBuiltin =

@@ -5,7 +5,7 @@ import {
   type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
-import { isGlobalAdmin, userHasPermission } from "@/auth";
+import { isGlobalAdmin } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -218,7 +218,7 @@ class ProjectService {
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
-    // The deleted slice is a separate, project:admin-only oversight path; the
+    // The deleted slice is a separate, oversight path for holders of a grant on every project; the
     // active browse pipeline below (scope/author/search/team filters, the
     // "All" branch that drops admin-oversight rows) does not apply to it.
     if (params.status === "deleted") {
@@ -237,7 +237,7 @@ class ProjectService {
     });
     const accessibleIds = new Set(accessible.map((p) => p.id));
 
-    // A project:admin oversees every project; everyone else sees only theirs.
+    // A holder of `update` on every project oversees them all; everyone else sees only theirs.
     const base = params.isProjectAdmin
       ? await ProjectAccessModel.listAllOrgProjects({ organizationId })
       : accessible;
@@ -344,7 +344,7 @@ class ProjectService {
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       // Team-shared projects expose their team names for the badge to the
-      // owner and to a project:admin overseeing them. A plain "shared"
+      // owner and to an overseer of every project. A plain "shared"
       // recipient (a member of one of the teams) gets null — the full target
       // list stays the owner's business. Non-team projects: null.
       shareTeamNames:
@@ -368,7 +368,7 @@ class ProjectService {
   }
 
   /**
-   * Org-wide list of soft-deleted projects for a `project:admin` — the oversight
+   * Org-wide list of soft-deleted projects for an overseer of every project — the oversight
    * companion to {@link restore}. Non-admins get nothing. Every row is
    * `viewerRole: "admin"` (a soft-deleted project is never in anyone's
    * accessible set) and carries `deletedAt` for the "deleted N ago" label.
@@ -469,12 +469,13 @@ class ProjectService {
     const canManage =
       viewerRole === "owner" ||
       viewerRole === "admin" ||
-      (await userHasPermission(
-        params.userId,
-        params.organizationId,
-        "project",
-        "admin",
-      ));
+      (await ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "project",
+        scope: "*",
+        action: "update",
+      }));
     return {
       id: project.id,
       name: project.name,
@@ -634,33 +635,28 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<void> {
-    const project = await this.requireManageable(params);
-    // An org-wide project is a shared resource: deleting it takes it away from
-    // the whole organization, so it is gated behind `project:share-org`.
+    // Deleting is decided by the project's own grant, like any other object:
+    // whoever holds `delete` on it — its owner, a recipient given that much, or
+    // a holder of `delete` on every project. Anyone else reads it as missing.
+    const project = await ProjectModel.findById(params.id);
     if (
-      (await ProjectAccessModel.findAudience(project)).visibility ===
-        "organization" &&
-      !(await this.callerCanShareOrg(params))
+      !project ||
+      project.organizationId !== params.organizationId ||
+      !(await this.callerCanDeleteProject({ ...params, projectId: project.id }))
     ) {
-      throw new ApiError(
-        403,
-        "You don't have permission to delete an organization-wide project",
-      );
+      throw new ApiError(404, "Project not found");
     }
     await ProjectModel.delete(params.id);
   }
 
   /**
-   * Restore a soft-deleted project — an admin-only oversight action, the inverse
-   * of {@link delete}. Its retained files and scheduled tasks come back with it;
-   * chats do NOT (they detached on delete), so a restored project reports zero
-   * chats.
+   * Restore a soft-deleted project, the inverse of {@link delete}. Its retained
+   * files and scheduled tasks come back with it; chats do NOT (they detached on
+   * delete), so a restored project reports zero chats.
    *
-   * Admin-only by design: restore and the deleted-projects view are one
-   * `project:admin` capability. The owner branch is deliberately absent — an
-   * owner who cannot even see their deleted projects should not restore one by
-   * id. Unknown / already-active / wrong-org ids read as 404; an org-wide share
-   * needs `project:share-org` (as delete does).
+   * Decided by the same grant as delete: `delete` on the project, which a
+   * soft-deleted project keeps. Unknown / already-active / wrong-org ids, and
+   * callers without that grant, all read as 404.
    *
    * Deleting frees the display name (the `(user_id, name)` index is partial on
    * `deleted_at IS NULL`), so the owner may hold an active project under that
@@ -677,25 +673,15 @@ class ProjectService {
     /** Rename on restore; the remedy when the original name was re-taken. */
     name?: string;
   }): Promise<ProjectDetail> {
-    if (!(await this.callerIsProjectAdmin(params))) {
-      throw new ApiError(404, "Project not found");
-    }
     const project = await ProjectModel.findDeletedByIdForOrganization({
       id: params.id,
       organizationId: params.organizationId,
     });
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
     if (
-      (await ProjectAccessModel.findAudience(project)).visibility ===
-        "organization" &&
-      !(await this.callerCanShareOrg(params))
+      !project ||
+      !(await this.callerCanDeleteProject({ ...params, projectId: project.id }))
     ) {
-      throw new ApiError(
-        403,
-        "You don't have permission to restore an organization-wide project",
-      );
+      throw new ApiError(404, "Project not found");
     }
     let newName: string | undefined;
     if (params.name !== undefined) {
@@ -727,8 +713,9 @@ class ProjectService {
     if (!restored) {
       throw new ApiError(404, "Project not found");
     }
-    // Now active again; the caller is a project:admin (checked above) but not
-    // necessarily an owner/share recipient, so read it back via admin oversight.
+    // Now active again. The caller holds `delete` on it (checked above) but is
+    // not necessarily its owner or a recipient that can read it, so read it
+    // back via admin oversight when that applies.
     return this.get({ ...params, allowAdminOversight: true });
   }
 
@@ -743,12 +730,10 @@ class ProjectService {
    * all read as the same 404: a distinct error on any of them would confirm
    * that a trashed project with that id exists.
    *
-   * `project:admin` deliberately does NOT reach here. It is the oversight grant
-   * — see, restore, tidy up after other members — and a custom role can carry
-   * it without holding {@link delete}'s `project:share-org` gate on org-wide
-   * projects. Destroying a project outright is the deployment owner's call, so
-   * the built-in admin roles are the whole gate and the share-org branch has
-   * nothing left to protect.
+   * A grant on every project deliberately does NOT reach here. It is the
+   * oversight grant — see, restore, tidy up after other members — and a custom
+   * role can carry it. Destroying a project outright is the deployment owner's
+   * call, so the built-in admin roles are the whole gate.
    *
    * File BYTES living outside Postgres are removed by row, INSIDE the
    * transaction and as its last step. Two things follow from that, both
@@ -942,17 +927,17 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<ProjectConversationItem[]> {
-    // Reading another member's chats requires `project:read-all` — uniformly,
-    // including in a project the caller owns. Without it, callers see only the
-    // chats they authored. `project:admin` does NOT grant this (chats are not
-    // part of admin oversight), so a `project:admin` viewing a foreign project
-    // still cannot list its chats (requireReadable already excludes them).
+    // Reading another member's chats requires `read` on every chat (a grant at
+    // `*`) — uniformly, including in a project the caller owns. Without it,
+    // callers see only the chats they authored. Project oversight does NOT
+    // grant this (chats are not part of it), so an overseer viewing a foreign
+    // project still cannot list its chats (requireReadable excludes them).
     const project = await this.requireReadable(params);
     const canReadAllChats = await this.callerCanReadAllProjectSessions({
       ...params,
       project,
     });
-    // Without `project:read-all`, scope the query to the caller's own chats in
+    // Without that grant, scope the query to the caller's own chats in
     // SQL rather than fetching every project chat and filtering in memory.
     const rows = await ProjectModel.listConversations(
       project.id,
@@ -1167,7 +1152,7 @@ class ProjectService {
 
   /**
    * Project the caller may read, with their relationship to it. Share/owner
-   * access always counts; a `project:admin` caller also passes when
+   * access always counts; an overseer of every project also passes when
    * `allowAdminOversight` is set (read-only oversight of a foreign project).
    * "no access" reads as 404.
    */
@@ -1203,7 +1188,7 @@ class ProjectService {
 
   /**
    * Project the caller may manage (edit/share/delete), by id: the owner, or a
-   * `project:admin` for any project in the org. "not allowed" reads as 404.
+   * holder of `update` on every project. "not allowed" reads as 404.
    */
   private async requireManageable(params: {
     id: string;
@@ -1231,24 +1216,37 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<boolean> {
-    return userHasPermission(
-      params.userId,
-      params.organizationId,
-      "project",
-      "admin",
-    );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Oversight of every project is `update` on every project — the grant at
+    // `*` that the retired `project:admin` role action became.
+    return ResourcePermissions.allows({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      resource: "project",
+      scope: "*",
+      action: "update",
+    });
+    // SPDX-SnippetEnd
   }
 
-  private async callerCanShareOrg(params: {
+  private async callerCanDeleteProject(params: {
     organizationId: string;
     userId: string;
+    projectId: string;
   }): Promise<boolean> {
-    return userHasPermission(
-      params.userId,
-      params.organizationId,
-      "project",
-      "share-org",
-    );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    return ResourcePermissions.allows({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      resource: "project",
+      scope: params.projectId,
+      action: "delete",
+    });
+    // SPDX-SnippetEnd
   }
 
   private async callerCanReadAllProjectSessions(params: {
@@ -1266,13 +1264,18 @@ class ProjectService {
       }))
     )
       return false;
+    // Reading others' sessions in a project is `read` on every chat — the
+    // grant at `*` the retired `project:read-all` role action became. It is
+    // honoured only here, for a project the caller can open; a chat outside
+    // a project is never reachable through it.
+    return ResourcePermissions.allows({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      resource: "conversation",
+      scope: "*",
+      action: "read",
+    });
     // SPDX-SnippetEnd
-    return userHasPermission(
-      params.userId,
-      params.organizationId,
-      "project",
-      "read-all",
-    );
   }
 }
 

@@ -57,7 +57,8 @@ export async function transferResourceOwnership(params: {
     const actions = permissions[resource] ?? [];
     if (
       !actions.includes("update") ||
-      (kind === "plugin" && !actions.includes("admin"))
+      (kind === "plugin" &&
+        !(await managesEveryObject({ kind, userId, organizationId })))
     ) {
       throw new ApiError(
         403,
@@ -80,7 +81,11 @@ export async function transferResourceOwnership(params: {
       authorId !== userId &&
       !(kind === "remoteAgent"
         ? actions.includes("update")
-        : actions.includes("admin"))
+        : await managesEveryObject({
+            kind: kind as "plugin" | "project",
+            userId,
+            organizationId,
+          }))
     )
       throw new ApiError(
         403,
@@ -111,7 +116,12 @@ export async function transferResourceOwnership(params: {
     if (
       !recipient.includes("read") ||
       !recipient.includes("update") ||
-      (kind === "plugin" && !recipient.includes("admin"))
+      (kind === "plugin" &&
+        !(await managesEveryObject({
+          kind,
+          userId: ownerId,
+          organizationId,
+        })))
     )
       throw new ApiError(
         400,
@@ -171,6 +181,28 @@ const LEGACY_RESOURCE_FOR_KIND: Record<
   project: "project",
   remoteAgent: "agentSettings",
 };
+
+/**
+ * Whether the user holds `update` on every object of this kind — the grant at
+ * `*` that the retired `admin` role action became.
+ */
+async function managesEveryObject(params: {
+  kind: "plugin" | "project";
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: params.kind,
+    scope: "*",
+    action: "update",
+  });
+  // SPDX-SnippetEnd
+}
 
 /** Kinds whose access is a grant policy; the rest still use role permissions. */
 const SCOPED_RESOURCE_KINDS: Record<

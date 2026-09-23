@@ -713,7 +713,9 @@ function SkillsList() {
               icon: <Puzzle className="h-4 w-4" />,
               label: "Manage plugin",
               href: `/plugins/${item.skill.pluginId}`,
-              permissions: { plugin: ["admin"] },
+              // Managing a plugin needs `update` on every plugin.
+              permissions: { plugin: ["update"] },
+              permissionScope: "*",
             },
           ];
 

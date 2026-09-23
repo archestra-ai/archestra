@@ -135,9 +135,10 @@ function PluginsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { data: canViewPluginDetails } = useHasPermissions({
-    plugin: ["read", "admin"],
-  });
+  const { data: canViewPluginDetails } = useHasPermissions(
+    { plugin: ["read", "update"] },
+    "*",
+  );
 
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const client = searchParams.get("client") ?? "all";
@@ -297,6 +298,7 @@ function PluginsList() {
           ? "plugin-featured-action"
           : undefined,
         permissions: installAction.permissions,
+        permissionScope: installAction.permissionScope,
         onClick: () => setInstallingPlugin(plugin),
         disabled: !plugin.enabled,
         disabledTooltip: !plugin.enabled
@@ -307,6 +309,7 @@ function PluginsList() {
         icon: <Pencil className="h-4 w-4" />,
         label: editAction.label,
         permissions: editAction.permissions,
+        permissionScope: editAction.permissionScope,
         href: pluginActionHref(editAction),
       },
     ];
@@ -316,6 +319,7 @@ function PluginsList() {
         label: deleteAction.label,
         variant: "destructive",
         permissions: deleteAction.permissions,
+        permissionScope: deleteAction.permissionScope,
         onClick: () => setDeletingPlugin(plugin),
       },
     ];
@@ -494,7 +498,8 @@ function PluginsList() {
           <div className="flex items-center gap-2">
             {!showEmptyState && !isInitialPluginsLoad && (
               <PermissionButton
-                permissions={{ plugin: ["create", "admin"] }}
+                permissions={{ plugin: ["create", "update"] }}
+                permissionScope="*"
                 asChild
               >
                 <Link href="/plugins/new">
@@ -652,7 +657,8 @@ function PluginsList() {
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
                 <PermissionButton
-                  permissions={{ plugin: ["read", "admin"] }}
+                  permissions={{ plugin: ["read", "update"] }}
+                  permissionScope="*"
                   variant="outline"
                   size="sm"
                   disabled={!!bulkInstall.error}
@@ -663,7 +669,8 @@ function PluginsList() {
                   <span>Install</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["update", "admin"] }}
+                  permissions={{ plugin: ["update"] }}
+                  permissionScope="*"
                   variant="outline"
                   size="sm"
                   onClick={() => setBulkVisibilityOpen(true)}
@@ -672,7 +679,8 @@ function PluginsList() {
                   <span>Add access</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["delete", "admin"] }}
+                  permissions={{ plugin: ["delete", "update"] }}
+                  permissionScope="*"
                   variant="destructive"
                   size="sm"
                   onClick={() => setBulkDeleteOpen(true)}
@@ -859,7 +867,11 @@ function PluginsEmptyState() {
       title="No plugins yet."
       description="Create a plugin for Claude Code, Codex, Copilot CLI, or Cursor."
       action={
-        <PermissionButton permissions={{ plugin: ["create", "admin"] }} asChild>
+        <PermissionButton
+          permissions={{ plugin: ["create", "update"] }}
+          permissionScope="*"
+          asChild
+        >
           <Link href="/plugins/new">
             <Plus className="mr-2 h-4 w-4" />
             Add your first plugin

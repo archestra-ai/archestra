@@ -64,7 +64,7 @@ const app = {
 } satisfies archestraApiTypes.GetAppResponses["200"];
 const userPermissions = {
   ...adminPermissionsSeed,
-  app: ["read", "update", "admin", "team-admin"],
+  app: ["read", "update"],
 } satisfies Permissions;
 const teamViewerPermissions = {
   ...adminPermissionsSeed,

@@ -77,7 +77,7 @@ describe("hasPermission", () => {
       });
       await makeMember(user.id, org.id, { role: role.role });
 
-      const permissions: Permissions = { agent: ["admin"] };
+      const permissions: Permissions = { agent: ["delete"] };
       const headers: IncomingHttpHeaders = { cookie: "session-cookie" };
 
       mockBetterAuth.api.getSession.mockResolvedValue({
@@ -89,9 +89,9 @@ describe("hasPermission", () => {
       expect(result).toEqual({
         success: false,
         error: expect.objectContaining({
-          message: expect.stringContaining("Missing permission: agent:admin"),
+          message: expect.stringContaining("Missing permission: agent:delete"),
         }),
-        missingPermissions: { agent: ["admin"] },
+        missingPermissions: { agent: ["delete"] },
       });
     });
 
@@ -126,7 +126,7 @@ describe("hasPermission", () => {
       expect(result).toEqual({ success: true, error: null });
     });
 
-    test("treats MCP installation admin as every lower installation action", async ({
+    test("a stored retired installation admin action implies no installation action", async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -143,13 +143,14 @@ describe("hasPermission", () => {
         session: { activeOrganizationId: org.id },
       });
 
+      // The action is retired: stored in the role, it grants nothing.
       for (const action of ["read", "create", "update", "delete"] as const) {
         await expect(
           hasPermission(
             { mcpServerInstallation: [action] },
             { cookie: "session-cookie" },
           ),
-        ).resolves.toEqual({ success: true, error: null });
+        ).resolves.toMatchObject({ success: false });
       }
       await expect(
         hasPermission(
@@ -164,7 +165,7 @@ describe("hasPermission", () => {
       });
       await expect(
         userHasPermission(user.id, org.id, "mcpServerInstallation", "update"),
-      ).resolves.toBe(true);
+      ).resolves.toBe(false);
       await expect(
         userHasPermission(
           user.id,
@@ -246,7 +247,7 @@ describe("hasPermission", () => {
       });
       await makeMember(user.id, org.id, { role: role.role });
 
-      const permissions: Permissions = { agent: ["admin"] };
+      const permissions: Permissions = { agent: ["delete"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer limited-user-key",
       };
@@ -263,9 +264,9 @@ describe("hasPermission", () => {
       expect(result).toEqual({
         success: false,
         error: expect.objectContaining({
-          message: expect.stringContaining("Missing permission: agent:admin"),
+          message: expect.stringContaining("Missing permission: agent:delete"),
         }),
-        missingPermissions: { agent: ["admin"] },
+        missingPermissions: { agent: ["delete"] },
       });
     });
 
@@ -380,7 +381,7 @@ describe("hasPermission", () => {
     }) => {
       const permissions: Permissions = {
         agent: ["read", "create", "update", "delete"],
-        mcpServerInstallation: ["admin"],
+        mcpServerInstallation: ["update"],
         team: ["read"],
       };
       const org = await makeOrganization();

@@ -46,6 +46,7 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/connection-setup-script";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   isReservedMarketplaceName,
   resolvePluginName,
@@ -1201,7 +1202,13 @@ async function userCanDeliverPlugins(params: {
 }): Promise<boolean> {
   const [canRead, canAdmin] = await Promise.all([
     userHasPermission(params.userId, params.organizationId, "plugin", "read"),
-    userHasPermission(params.userId, params.organizationId, "plugin", "admin"),
+    ResourcePermissions.allows({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      resource: "plugin",
+      scope: "*",
+      action: "update",
+    }),
   ]);
   return canRead && canAdmin;
 }
@@ -1219,7 +1226,13 @@ async function findAccessibleGateway(params: {
 
   const [canRead, isAdmin] = await Promise.all([
     userHasPermission(userId, organizationId, "mcpGateway", "read"),
-    userHasPermission(userId, organizationId, "mcpGateway", "admin"),
+    ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "mcpGateway",
+      scope: "*",
+      action: "update",
+    }),
   ]);
   if (!canRead && !isAdmin) return null;
 

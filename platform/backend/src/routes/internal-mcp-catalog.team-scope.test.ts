@@ -33,7 +33,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
-    organizationId = (await makeOrganization({ legacyPermissions: true })).id;
+    organizationId = (await makeOrganization()).id;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

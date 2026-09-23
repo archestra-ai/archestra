@@ -330,9 +330,10 @@ export function InternalMCPCatalog({
   // Track server ID for re-authentication (preserves tool assignments)
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: userIsMcpServerAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
 
   // Deep-link: auto-open install dialog when ?install={catalogId} is present.
   // Optional &scope=personal|team|org (and &team={teamId} for team scope)

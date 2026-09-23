@@ -16,7 +16,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,6 +32,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -317,12 +317,13 @@ export async function validatePassthroughVirtualKey(params: {
   }
 
   // Proxy access follows the owner's own agent access.
-  const ownerIsAgentAdmin = await userHasPermission(
-    virtualKey.authorId,
-    agent.organizationId,
-    "agent",
-    "admin",
-  );
+  const ownerIsAgentAdmin = await ResourcePermissions.allows({
+    userId: virtualKey.authorId,
+    organizationId: agent.organizationId,
+    resource: "agent",
+    scope: "*",
+    action: "update",
+  });
   const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
     userId: virtualKey.authorId,
     agentId: agent.id,

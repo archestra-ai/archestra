@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { eq } from "drizzle-orm";
+import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
+import { ResourcePermissions } from "./resource-permissions";
 import { ROLE_RETIREMENT_STATEMENTS } from "./resource-permissions-cutover";
 
 /** Only the role half, so the fixtures stay about roles. */
@@ -197,5 +201,108 @@ describe("scoped RBAC final cutover", () => {
     const first = await ResourcePermissionPolicyModel.find(key);
     await runMigration();
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(first);
+  });
+
+  test("strips project:read-all and project:share-org from stored roles, turning read-all into a read grant on every chat", async ({
+    makeOrganization,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const reader = await makeCustomRole(org.id, {
+      permission: { project: ["read", "create", "read-all", "share-org"] },
+    });
+    const sharer = await makeCustomRole(org.id, {
+      permission: { project: ["read", "share-org"] },
+    });
+    await runMigration();
+    const permissionOf = async (id: string) => {
+      const [row] = await db
+        .select({ permission: schema.organizationRolesTable.permission })
+        .from(schema.organizationRolesTable)
+        .where(eq(schema.organizationRolesTable.id, id));
+      return JSON.parse(row.permission);
+    };
+    expect(await permissionOf(reader.id)).toEqual({
+      project: ["read", "create"],
+    });
+    expect(await permissionOf(sharer.id)).toEqual({ project: ["read"] });
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "conversation",
+      scope: "*",
+    });
+    // share-org converts to nothing; read-all to `read` on every chat, next to
+    // the built-in admin-tier roles that held it in code.
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        { subject: { type: "role", id: reader.id }, actions: ["read"] },
+        {
+          subject: { type: "role", id: "admin" },
+          actions: ["manage-permissions", "read"],
+        },
+        {
+          subject: { type: "role", id: "platform_admin" },
+          actions: ["manage-permissions", "read"],
+        },
+      ]),
+    );
+    expect(policy?.grants.some((grant) => grant.subject.id === sharer.id)).toBe(
+      false,
+    );
+    const revision = policy?.revision;
+    await runMigration();
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource: "conversation",
+          scope: "*",
+        })
+      )?.revision,
+    ).toBe(revision);
+  });
+
+  test("a role still storing a retired action gains nothing from it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    // Written as if saved before the actions were retired and before any
+    // cutover ran: the checks read grants, so the stored flags confer nothing.
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: {
+        agent: ["read", "admin", "team-admin"],
+        plugin: ["read", "create", "admin"],
+        mcpServerInstallation: ["read", "admin"],
+        log: ["read", "admin"],
+        project: ["read", "admin", "read-all", "share-org"],
+      },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: role.role });
+    const context = { userId: user.id, organizationId: org.id };
+    expect(await isAgentTypeAdmin({ ...context, agentType: "agent" })).toBe(
+      false,
+    );
+    expect(await isMcpInstallationAdmin(context)).toBe(false);
+    for (const [resource, action] of [
+      ["plugin", "update"],
+      ["log", "read"],
+      ["project", "update"],
+      ["conversation", "read"],
+    ] as const)
+      expect(
+        await ResourcePermissions.allows({
+          ...context,
+          resource,
+          scope: "*",
+          action,
+        }),
+      ).toBe(false);
+    expect(await userHasPermission(user.id, org.id, "plugin", "read")).toBe(
+      true,
+    );
   });
 });

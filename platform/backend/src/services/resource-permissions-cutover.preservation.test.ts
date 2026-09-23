@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
-import { eq } from "drizzle-orm";
+import type { Resource } from "@archestra/shared";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
@@ -8,6 +9,7 @@ import AgentTeamModel from "@/models/agent-team";
 import AgentUserModel from "@/models/agent-user";
 import AppAccessModel from "@/models/app-access";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import MemberModel from "@/models/member";
 import OrganizationModel from "@/models/organization";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
@@ -218,12 +220,12 @@ describe("upgrade access preservation", () => {
         "knowledgeSource",
       ] as const)
         if (
-          await userHasPermission(
+          await heldBeforeRetirement({
             userId,
-            org.id,
+            organizationId: org.id,
             resource,
-            "deploy-to-restricted",
-          )
+            action: "deploy-to-restricted",
+          })
         )
           return true;
       return false;
@@ -236,7 +238,12 @@ describe("upgrade access preservation", () => {
         // conversion retires the action it reads, so it has to be recomputed
         // on each pass rather than pinned.
         const isAdminFor = async (resource: "agent" | "skill" | "app") =>
-          userHasPermission(principal.id, org.id, resource, "admin");
+          heldBeforeRetirement({
+            userId: principal.id,
+            organizationId: org.id,
+            resource,
+            action: "admin",
+          });
         // Reaching a resource takes two gates, and only one of them lives in
         // these models. The route asks for the resource-wide read action while
         // the deployment still answers from visibility fields, and stops
@@ -327,12 +334,12 @@ describe("upgrade access preservation", () => {
                   organizationId: org.id,
                 })
               : await legacyVisible({
-                  isAdmin: await userHasPermission(
-                    principal.id,
-                    org.id,
-                    "mcpServerInstallation",
-                    "admin",
-                  ),
+                  isAdmin: await heldBeforeRetirement({
+                    userId: principal.id,
+                    organizationId: org.id,
+                    resource: "mcpServerInstallation",
+                    action: "admin",
+                  }),
                   object: catalog,
                   userId: principal.id,
                   teamIds: await junctionIds(
@@ -515,7 +522,12 @@ describe("upgrade access preservation", () => {
 
     // The historical rule, asked the way the old call sites asked it.
     const couldDeploy = (userId: string, resource: "agent" | "mcpRegistry") =>
-      userHasPermission(userId, org.id, resource, "deploy-to-restricted");
+      heldBeforeRetirement({
+        userId,
+        organizationId: org.id,
+        resource,
+        action: "deploy-to-restricted",
+      });
     expect(await couldDeploy(full.id, "agent")).toBe(true);
     expect(await couldDeploy(full.id, "mcpRegistry")).toBe(true);
     expect(await couldDeploy(partial.id, "agent")).toBe(true);
@@ -630,4 +642,64 @@ async function junctionIds<
     .from(table as unknown as typeof schema.agentTeamsTable)
     .where(eq(columns[objectColumn], objectId));
   return rows.map((row) => String(row.value));
+}
+
+/**
+ * Whether a principal held a now-retired role action before the upgrade, the
+ * way the old call sites asked. A custom role still stores it until the
+ * conversion strips it; a built-in role held it in code, which no longer
+ * carries it, so the built-ins' historical sets are written out here.
+ */
+async function heldBeforeRetirement(params: {
+  userId: string;
+  organizationId: string;
+  resource: Resource;
+  action: "admin" | "deploy-to-restricted";
+}): Promise<boolean> {
+  const member = await MemberModel.getByUserId(
+    params.userId,
+    params.organizationId,
+  );
+  const roles = member?.role.split(",") ?? [];
+  const DEPLOYABLE = [
+    "agent",
+    "skill",
+    "app",
+    "mcpGateway",
+    "mcpRegistry",
+    "knowledgeSource",
+  ];
+  const builtIn = roles.some((role) => {
+    if (role === "admin") return true;
+    if (role === "platform_admin")
+      return !(
+        params.action === "admin" &&
+        (params.resource === "log" || params.resource === "auditLog")
+      );
+    if (role === "editor")
+      return (
+        params.action === "deploy-to-restricted" &&
+        DEPLOYABLE.includes(params.resource)
+      );
+    return false;
+  });
+  if (builtIn) return true;
+  // A custom role's stored JSON, read as stored: the current vocabulary
+  // filters a retired action out, which is the point of retiring it.
+  const custom = await db
+    .select({ permission: schema.organizationRolesTable.permission })
+    .from(schema.organizationRolesTable)
+    .where(
+      and(
+        eq(schema.organizationRolesTable.organizationId, params.organizationId),
+        inArray(schema.organizationRolesTable.role, roles),
+      ),
+    );
+  return custom.some((row) =>
+    (
+      (JSON.parse(row.permission) as Record<string, string[]>)[
+        params.resource
+      ] ?? []
+    ).includes(params.action),
+  );
 }

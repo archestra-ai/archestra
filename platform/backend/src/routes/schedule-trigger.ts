@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -19,6 +19,7 @@ import {
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
@@ -146,7 +147,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
@@ -156,10 +156,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let excludeActorUserId: string | undefined;
 
       if (showAll) {
-        const { success: isScheduledTaskAdmin } = await hasPermission(
-          { scheduledTask: ["admin"] },
-          headers,
-        );
+        const isScheduledTaskAdmin = await ResourcePermissions.allows({
+          userId: user.id,
+          organizationId,
+          resource: "scheduledTask",
+          scope: "*",
+          action: "read",
+        });
         if (isScheduledTaskAdmin) {
           actorUserId = undefined;
           if (actorUserIdsParam) {
@@ -737,13 +740,16 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // scheduledTask:admin can access any trigger (incl. ones inside a project).
-  // Project oversight of schedules rides this existing permission — there is no
-  // separate project:admin path here.
-  const { success: isScheduledTaskAdmin } = await hasPermission(
-    { scheduledTask: ["admin"] },
-    params.headers,
-  );
+  // Reading every scheduled task (a grant at `*`) reaches any trigger, incl.
+  // ones inside a project. Project oversight of schedules rides this grant —
+  // there is no separate project path here.
+  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "scheduledTask",
+    scope: "*",
+    action: "read",
+  });
   if (isScheduledTaskAdmin) {
     return trigger;
   }

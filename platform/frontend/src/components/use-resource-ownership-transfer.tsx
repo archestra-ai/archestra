@@ -51,12 +51,15 @@ export function useResourceOwnershipTransfer({
           ? "agentSettings"
           : kind;
   const update = useHasPermissions({ [permissionResource]: ["update"] });
+  // Managing every object of the kind is `update` at `*`, the grant the
+  // retired `admin` role actions became.
   const admin = useHasPermissions(
     kind === "catalog"
-      ? { mcpServerInstallation: ["admin"] }
+      ? { mcpRegistry: ["update"] }
       : kind === "remoteAgent"
         ? { agentSettings: ["update"] }
-        : { [permissionResource]: ["admin"] },
+        : { [permissionResource]: ["update"] },
+    "*",
   );
   const managed =
     ((kind === "agent" || kind === "mcp_gateway") &&

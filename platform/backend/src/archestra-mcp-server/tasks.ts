@@ -17,7 +17,6 @@ import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
-import { userHasPermission } from "@/auth/utils";
 import config, { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -44,6 +43,7 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
@@ -78,12 +78,13 @@ export async function startDelegatedTask(params: {
     if (!agent || agent.organizationId !== actor.organizationId) {
       return errorResult("Agent not found");
     }
-    const isAgentAdmin = await userHasPermission(
-      actor.id,
-      actor.organizationId,
-      "agent",
-      "admin",
-    );
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: actor.id,
+      organizationId: actor.organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
     if (
       !(await AgentTeamModel.userHasAgentAccess({
         userId: actor.id,
@@ -759,12 +760,13 @@ const registry = defineArchestraTools([
           return errorResult("Current messaging thread context is unavailable");
         }
         const requestedAgentIds = [...new Set(args.agent_ids)];
-        const isAgentAdmin = await userHasPermission(
-          actor.id,
-          actor.organizationId,
-          "agent",
-          "admin",
-        );
+        const isAgentAdmin = await ResourcePermissions.allows({
+          userId: actor.id,
+          organizationId: actor.organizationId,
+          resource: "agent",
+          scope: "*",
+          action: "update",
+        });
         const [agents, accessibleAgentIds] = await Promise.all([
           AgentModel.findBasicByOrganizationIdAndIds({
             organizationId: actor.organizationId,
@@ -1234,12 +1236,13 @@ async function requireAccessibleTask({
   if (!isOwn) {
     const isAdmin =
       row.agentId !== null &&
-      (await userHasPermission(
-        actor.id,
-        actor.organizationId,
-        "agent",
-        "admin",
-      ));
+      (await ResourcePermissions.allows({
+        userId: actor.id,
+        organizationId: actor.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      }));
     if (!isAdmin) return notFound;
   }
   return { row };

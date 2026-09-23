@@ -647,7 +647,7 @@ class ProjectModel {
   static async listConversations(
     projectId: string,
     // When set, restricts the result to chats authored by this user. The
-    // service passes it for callers lacking `project:read-all`, so the filter
+    // service passes it for callers lacking `read` on every chat, so the filter
     // runs in SQL instead of pulling every project chat into memory.
     authorUserId?: string,
   ): Promise<

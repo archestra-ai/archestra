@@ -1222,12 +1222,13 @@ async function mayReadProjectSession(params: {
   ) {
     return false;
   }
-  return userHasPermission(
-    params.userId,
-    params.organizationId,
-    "project",
-    "read-all",
-  );
+  return ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "conversation",
+    scope: "*",
+    action: "read",
+  });
 }
 
 async function requireReadableAgentRuntime(

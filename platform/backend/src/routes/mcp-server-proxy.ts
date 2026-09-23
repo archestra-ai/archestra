@@ -4,7 +4,7 @@ import type { McpServer as McpServerInstance } from "@modelcontextprotocol/sdk/s
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
-import { userHasPermission } from "@/auth/utils";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import { McpServerModel, ToolModel } from "@/models";
 import { enforceAppRuntimeInvocationPolicy } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type McpServer, UuidIdSchema } from "@/types";
@@ -52,12 +52,10 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const cacheKey = `${mcpServerId}:${userId}:${organizationId}`;
       let server = serverAccessCache.get(cacheKey);
       if (!server) {
-        const isMcpServerAdmin = await userHasPermission(
-          userId,
-          organizationId,
-          "mcpServerInstallation",
-          "admin",
-        );
+        const isMcpServerAdmin = await isMcpInstallationAdmin({
+          userId: userId,
+          organizationId: organizationId,
+        });
         server =
           (await McpServerModel.findById(
             mcpServerId,

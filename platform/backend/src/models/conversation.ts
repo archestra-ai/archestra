@@ -598,7 +598,8 @@ class ConversationModel {
     organizationId: string;
     /**
      * Resolves whether the caller may read chats they did not author that are
-     * reachable only through project membership (i.e. holds `project:read-all`).
+     * reachable only through project membership (i.e. holds `read` on every
+     * chat — the grant at `*` that the retired `project:read-all` became).
      * Injected by the route layer so this model needs no `@/auth` dependency,
      * and invoked lazily — only when access would otherwise be granted via the
      * project-membership branch below. Owned chats and explicit conversation
@@ -616,12 +617,15 @@ class ConversationModel {
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // A chat is shared through its permission policy. Returning another
-    // user's conversation is intentional once that policy grants read.
+    // user's conversation is intentional once that policy grants read. A grant
+    // on every chat is left out: it reaches only chats inside a project the
+    // caller can open, which the branch below decides.
     const sharedWithCaller = await ResourcePermissionAccessModel.canRead({
       organizationId: params.organizationId,
       userId: params.userId,
       resource: "conversation",
       scope: params.id,
+      includeWildcard: false,
     });
     if (sharedWithCaller) {
       return ConversationModel.findByIdInOrganization({
@@ -634,7 +638,7 @@ class ConversationModel {
     // Project membership grants a read-only view of chats in the project
     // (writing stays author-only — every mutating route resolves the
     // conversation by owner). Reading a chat the caller did NOT author is
-    // additionally gated by `project:read-all`, uniformly — including when the
+    // additionally gated by `read` on every chat, uniformly — including when the
     // caller owns the project.
     const [bare] = await db
       .select({

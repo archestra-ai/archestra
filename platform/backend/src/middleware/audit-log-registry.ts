@@ -705,7 +705,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
 
-  // Projects. Delete soft-deletes and restore is a project:admin action on
+  // Projects. Delete soft-deletes and restore is an oversight action on
   // another member's project, so both need a trail. The pin and instructions
   // children are denylisted in audit-log-hook.ts rather than registered: they
   // would inherit project.updated/project.deleted by walk-up while changing

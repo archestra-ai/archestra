@@ -28,42 +28,18 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
-  plugin: ["read", "create", "update", "delete", "admin"],
-  app: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  agent: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete"],
+  plugin: ["read", "create", "update", "delete"],
+  app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
-  scheduledTask: ["read", "create", "update", "delete", "admin"],
+  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
-  llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
-  llmVirtualKey: ["read", "create", "update", "delete", "admin"],
+  llmProviderApiKey: ["read", "create", "update", "delete"],
+  llmVirtualKey: ["read", "create", "update", "delete"],
   llmOauthClient: ["read", "create", "update", "delete"],
   // "update" covers the whole model row, generation parameters included. An
   // extra "admin" action once gated `configuredParameters` on the grounds that
@@ -76,67 +52,34 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "manage-deleted",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  mcpRegistry: ["read", "create", "update", "delete", "manage-deleted"],
   mcpServerInstallation: [
     "read",
     "create",
     "update",
     "delete",
     "manage-deleted",
-    "admin",
   ],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeSource: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "query",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  knowledgeSource: ["read", "create", "update", "delete", "query"],
   knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "share-org",
-    "admin",
-    "read-all",
-  ],
+  project: ["read", "create", "update", "delete"],
   file: ["manage"],
-  log: ["read", "admin"],
+  log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read", "admin"],
+  auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -165,31 +108,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  agent: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete"],
   plugin: ["read", "create", "update", "delete"],
-  app: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -204,42 +126,21 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeSource: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "query",
-    "deploy-to-restricted",
-  ],
+  knowledgeSource: ["read", "create", "update", "delete", "query"],
   knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "share-org"],
+  project: ["read", "create", "update", "delete"],
   file: ["manage"],
   // Editors see only their own logs; org-wide visibility is log:admin,
   // reserved for admin-tier roles.
@@ -317,7 +218,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "share-org"],
+  project: ["read", "create", "update", "delete"],
   file: ["manage"],
   log: [],
 
@@ -476,45 +377,24 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  * in allAvailableActions has a corresponding entry here.
  */
 export const permissionDescriptions: Record<string, string> = {
-  "agent:team-admin": "Manage team assignments for agents",
-  "agent:admin":
-    "Full administrative control over all agents, bypassing team restrictions",
-  "skill:team-admin": "Manage team assignments for agent skills",
-  "skill:admin":
-    "Full administrative control over all agent skills, bypassing team restrictions",
-  "app:team-admin":
-    "Manage team-scoped MCP Apps, including their team assignments, in teams you belong to",
-  "app:admin":
-    "Full administrative control over all MCP Apps, bypassing team restrictions",
-  "mcpGateway:team-admin": "Manage team assignments for MCP gateways",
-  "mcpGateway:admin":
-    "Full administrative control over all MCP gateways, bypassing team restrictions",
-  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   // Agents
   "agent:read": "View and list agents",
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",
   "agent:delete": "Delete agents",
-  "agent:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "skill:read": "View agent skills allowed by your resource grants",
   "skill:create": "Create new agent skills",
   "skill:update": "Modify agent skill content allowed by your resource grants",
   "skill:delete": "Delete agent skills",
-  "skill:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "plugin:read": "View plugins and their file metadata",
   "plugin:create": "Create plugins",
   "plugin:update": "Modify plugin metadata and files",
   "plugin:delete": "Delete plugins",
-  "plugin:admin": "Publish executable plugins through connection marketplaces",
   "app:read": "View MCP Apps allowed by your resource grants",
   "app:create": "Create new MCP Apps",
   "app:update":
     "Modify MCP Apps and their tools allowed by your resource grants",
   "app:delete": "Delete MCP Apps",
-  "app:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
@@ -526,8 +406,6 @@ export const permissionDescriptions: Record<string, string> = {
   "scheduledTask:create": "Create new scheduled tasks and trigger runs",
   "scheduledTask:update": "Modify scheduled task configuration",
   "scheduledTask:delete": "Delete scheduled tasks",
-  "scheduledTask:admin":
-    "View and manage all scheduled tasks, not just your own",
 
   // MCP
   "mcpGateway:read": "View and list MCP gateways",
@@ -538,8 +416,6 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
   "mcpOauthClient:update": "Modify MCP OAuth client registrations",
   "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
-  "mcpGateway:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "toolPolicy:read":
     "View tools, tool invocation policies, and trusted data policies",
   "toolPolicy:create": "Register tools and create security policies",
@@ -552,16 +428,12 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:delete": "Remove servers from the MCP registry",
   "mcpRegistry:manage-deleted":
     "View and restore soft-deleted MCP registry entries",
-  "mcpRegistry:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
   "mcpServerInstallation:delete": "Uninstall MCP servers",
   "mcpServerInstallation:manage-deleted":
     "View and restore soft-deleted (uninstalled) MCP servers",
-  "mcpServerInstallation:admin":
-    "Approve or manage all MCP server installations",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -580,13 +452,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmProviderApiKey:update":
     "Modify LLM provider API key configuration and visibility",
   "llmProviderApiKey:delete": "Remove LLM provider API keys",
-  "llmProviderApiKey:admin":
-    "Manage all LLM provider API keys, including org-wide keys",
   "llmVirtualKey:read": "View LLM virtual keys",
   "llmVirtualKey:create": "Create LLM virtual keys",
   "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
   "llmVirtualKey:delete": "Delete LLM virtual keys",
-  "llmVirtualKey:admin": "Manage all LLM virtual keys and view every scope",
   "llmOauthClient:read": "View LLM OAuth client registrations",
   "llmOauthClient:create": "Create LLM OAuth client registrations",
   "llmOauthClient:update": "Modify LLM OAuth client registrations",
@@ -620,17 +489,9 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
-  "project:share-org":
-    "Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete.",
-  "project:admin":
-    "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
-  "project:read-all":
-    "View chats and Agent Runtime runs that other members started in any project you can access. Without this, you only see the sessions you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read":
     "View your own LLM proxy and MCP tool call logs in the active organization",
-  "log:admin":
-    "View every LLM proxy and MCP tool call log in the active organization",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -663,8 +524,6 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
   "auditLog:read": "View audit log records of your own administrative actions",
-  "auditLog:admin":
-    "View the organization-wide audit log of every member's administrative actions",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -675,10 +534,6 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:delete":
     "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
-  "knowledgeSource:admin":
-    "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
-  "knowledgeSource:deploy-to-restricted":
-    "Retired: deploying to a restricted environment is now a `use` grant on that environment",
   "knowledgeSourceAutoSync:read":
     "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
   "knowledgeSourceAutoSync:create":
@@ -831,7 +686,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
   [RouteId.TransferSkillOwnership]: { skill: ["update"] },
-  [RouteId.TransferPluginOwnership]: { plugin: ["update", "admin"] },
+  [RouteId.TransferPluginOwnership]: { plugin: ["update"] },
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: { app: ["update"] },
   [RouteId.TransferMcpCatalogOwnership]: { mcpRegistry: ["update"] },
@@ -1021,11 +876,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalogLabelValues]: {
     mcpRegistry: ["read"],
   },
+  // Both handlers further require `update` on every registry entry (a grant
+  // at `*`), which is what the retired installation admin action became.
   [RouteId.ListPendingImageApprovalCatalogItems]: {
-    mcpServerInstallation: ["admin"],
+    mcpServerInstallation: ["update"],
   },
   [RouteId.ApproveCatalogItemImage]: {
-    mcpServerInstallation: ["admin"],
+    mcpServerInstallation: ["update"],
   },
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
@@ -1080,12 +937,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.HardResetMcpServer]: {
     // The recovery escape hatch for a wedged deployment: it destroys and
-    // recreates the pod for EVERY install sharing it, so it is gated on the
-    // org-wide :admin capability rather than the per-connection scope rules
-    // the other lifecycle routes use. A connection's own owner must not be
-    // able to reset a shared multitenant deployment out from under the other
-    // installs on it.
-    mcpServerInstallation: ["admin"],
+    // recreates the pod for EVERY install sharing it, so the handler further
+    // requires `update` on every registry entry (a grant at `*`) rather than
+    // the per-connection rules the other lifecycle routes use. A connection's
+    // own owner must not be able to reset a shared multitenant deployment out
+    // from under the other installs on it.
+    mcpServerInstallation: ["update"],
   },
   [RouteId.ReloadMcpServerTools]: {
     // Reloading tools is a strict subset of reinstalling, so it is gated and
@@ -1933,22 +1790,22 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
   [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
-  [RouteId.CreatePlugin]: { plugin: ["create", "admin"] },
-  [RouteId.GetPlugin]: { plugin: ["read", "admin"] },
-  [RouteId.UpdatePlugin]: { plugin: ["update", "admin"] },
-  [RouteId.DeletePlugin]: { plugin: ["delete", "admin"] },
-  [RouteId.PreviewGithubPlugin]: { plugin: ["create", "admin"] },
-  [RouteId.ImportGithubPlugin]: { plugin: ["create", "admin"] },
-  [RouteId.PreviewGithubPluginUpdate]: { plugin: ["update", "admin"] },
-  [RouteId.ApplyGithubPluginUpdate]: { plugin: ["update", "admin"] },
+  [RouteId.CreatePlugin]: { plugin: ["create"] },
+  [RouteId.GetPlugin]: { plugin: ["read"] },
+  [RouteId.UpdatePlugin]: { plugin: ["update"] },
+  [RouteId.DeletePlugin]: { plugin: ["delete"] },
+  [RouteId.PreviewGithubPlugin]: { plugin: ["create"] },
+  [RouteId.ImportGithubPlugin]: { plugin: ["create"] },
+  [RouteId.PreviewGithubPluginUpdate]: { plugin: ["update"] },
+  [RouteId.ApplyGithubPluginUpdate]: { plugin: ["update"] },
   [RouteId.DiscoverGithubPluginMarketplace]: {
-    plugin: ["create", "admin"],
+    plugin: ["create"],
   },
   [RouteId.ImportGithubPluginMarketplace]: {
-    plugin: ["create", "admin"],
+    plugin: ["create"],
   },
-  [RouteId.UpdatePluginGithubSync]: { plugin: ["update", "admin"] },
-  [RouteId.TriggerPluginGithubSync]: { plugin: ["update", "admin"] },
+  [RouteId.UpdatePluginGithubSync]: { plugin: ["update"] },
+  [RouteId.TriggerPluginGithubSync]: { plugin: ["update"] },
   // Skills projected from plugin file trees: a Skills surface over plugin
   // metadata, so it needs both floors — per-plugin visibility is enforced
   // in the handlers.
@@ -2198,9 +2055,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
   "/plugins": { plugin: ["read"] },
-  "/plugins/new": { plugin: ["create", "admin"] },
-  "/plugins/import": { plugin: ["create", "admin"] },
-  "/plugins/[id]": { plugin: ["read", "admin"] },
+  "/plugins/new": { plugin: ["create"] },
+  "/plugins/import": { plugin: ["create"] },
+  "/plugins/[id]": { plugin: ["read"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // Apps

@@ -9,7 +9,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission, userHasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -188,11 +189,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const [{ success: isMcpServerAdmin }, userIsPredefinedAdmin] =
-        await Promise.all([
-          hasPermission({ mcpServerInstallation: ["admin"] }, headers),
-          isPredefinedAdmin({ userId: user.id, organizationId }),
-        ]);
+      const [isMcpServerAdmin, userIsPredefinedAdmin] = await Promise.all([
+        isMcpInstallationAdmin({ userId: user.id, organizationId }),
+        isPredefinedAdmin({ userId: user.id, organizationId }),
+      ]);
       let allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
@@ -266,11 +266,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
-      const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const isMcpServerAdmin = await isMcpInstallationAdmin({
+        userId: user.id,
+        organizationId,
+      });
       const server = await McpServerModel.findById(
         id,
         user.id,
@@ -338,10 +338,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "userId can only be provided for personal-scoped installations",
           );
         }
-        const { success: canInstallForOthers } = await hasPermission(
-          { mcpServerInstallation: ["admin"] },
-          headers,
-        );
+        const canInstallForOthers = await isMcpInstallationAdmin({
+          userId: user.id,
+          organizationId,
+        });
         if (!canInstallForOthers) {
           throw new ApiError(
             403,
@@ -362,10 +362,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
-        const { success: isCatalogAdmin } = await hasPermission(
-          { mcpServerInstallation: ["admin"] },
-          headers,
-        );
+        const isCatalogAdmin = await isMcpInstallationAdmin({
+          userId: user.id,
+          organizationId,
+        });
 
         // Installing requires `use` on the item. Scoping the lookup denies a
         // caller the item's scope does not admit before any secret is resolved,
@@ -1345,6 +1345,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       await assertLifecycleRoutePermission({
         headers,
+        userId: user.id,
+        organizationId,
         ordinaryAction: "create",
         verb: "re-authenticate",
       });
@@ -1888,7 +1890,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: { id: mcpServerId, kind },
         body: { issueFingerprint, reason },
         user,
-        headers,
         organizationId,
       } = request;
 
@@ -1899,8 +1900,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId,
         userId: user.id,
-        headers,
         organizationId,
+        inOrganizationOnly: true,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1946,15 +1947,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: { id: mcpServerId, kind },
         query: { issueFingerprint },
         user,
-        headers,
         organizationId,
       } = request;
 
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId,
         userId: user.id,
-        headers,
         organizationId,
+        inOrganizationOnly: true,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1996,11 +1996,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
-        headers,
+        organizationId,
       });
 
       if (!mcpServer) {
@@ -2049,11 +2049,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
-        headers,
+        organizationId,
       });
 
       if (!mcpServer) {
@@ -2087,11 +2087,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.record(z.string(), z.unknown())),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
-        headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2300,10 +2300,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // hard-reset — and the org-wide toggle this would override already takes
       // mcpSettings:update to change.
       if (hibernationMode !== undefined && catalogItem.multitenant) {
-        const { success: isMcpServerInstallationAdmin } = await hasPermission(
-          { mcpServerInstallation: ["admin"] },
-          headers,
-        );
+        const isMcpServerInstallationAdmin = await isMcpInstallationAdmin({
+          userId: user.id,
+          organizationId,
+        });
         if (!isMcpServerInstallationAdmin) {
           throw new ApiError(
             403,
@@ -2727,7 +2727,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { id }, organizationId, headers }, reply) => {
+    async ({ params: { id }, organizationId, user }, reply) => {
       const mcpServer = await findMcpServerInOrganization(id, organizationId);
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2743,10 +2743,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Deliberately NOT assertScopedLifecycleAuthorization: a hard reset
       // destroys the pod that every install on a multitenant catalog shares, so
       // owning one connection cannot be enough to authorize it.
-      const { success: isMcpServerInstallationAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+      const isMcpServerInstallationAdmin = await isMcpInstallationAdmin({
+        userId: user.id,
+        organizationId,
+      });
       if (!isMcpServerInstallationAdmin) {
         throw new ApiError(
           403,
@@ -3057,15 +3057,13 @@ const McpServerHardResetResponseSchema = z.discriminatedUnion("status", [
 async function findAccessibleMcpServer(params: {
   mcpServerId: string;
   userId: string;
-  headers: IncomingHttpHeaders;
-  organizationId?: string;
+  organizationId: string;
+  /** Also require the install to belong to the caller's organization. */
+  inOrganizationOnly?: boolean;
 }) {
-  const { success: isMcpServerAdmin } = await hasPermission(
-    { mcpServerInstallation: ["admin"] },
-    params.headers,
-  );
+  const isMcpServerAdmin = await isMcpInstallationAdmin(params);
 
-  if (params.organizationId) {
+  if (params.inOrganizationOnly) {
     const server = await findMcpServerInOrganization(
       params.mcpServerId,
       params.organizationId,
@@ -3317,6 +3315,8 @@ async function failHardReset(
  */
 async function assertLifecycleRoutePermission(params: {
   headers: IncomingHttpHeaders;
+  userId: string;
+  organizationId: string;
   ordinaryAction: "create";
   verb: string;
 }): Promise<void> {
@@ -3325,9 +3325,9 @@ async function assertLifecycleRoutePermission(params: {
       { mcpServerInstallation: [params.ordinaryAction] },
       params.headers,
     ),
-    hasPermission({ mcpServerInstallation: ["admin"] }, params.headers),
+    isMcpInstallationAdmin(params),
   ]);
-  if (ordinary.success || admin.success) return;
+  if (ordinary.success || admin) return;
   throw new ApiError(
     403,
     `You do not have permission to ${params.verb} this MCP server`,
@@ -3386,11 +3386,7 @@ async function assertScopedLifecycleAuthorization(params: {
       ) {
         throw new ApiError(404, "MCP server not found");
       }
-      const { success: isInstallationAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
-      if (isInstallationAdmin) return;
+      if (await isMcpInstallationAdmin({ userId, organizationId })) return;
 
       // Team deletion clears the FK but retains the connection. Installation
       // admins can still manage it; former team membership grants no access.
@@ -3421,11 +3417,7 @@ async function assertScopedLifecycleAuthorization(params: {
       return;
     }
     case "org": {
-      const { success: isMcpServerInstallationAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
-      if (!isMcpServerInstallationAdmin) {
+      if (!(await isMcpInstallationAdmin({ userId, organizationId }))) {
         throw new ApiError(
           403,
           `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
@@ -3974,10 +3966,10 @@ async function validateScopeAndAuthorization(params: {
       throw new ApiError(404, "Team not found");
     }
 
-    const { success: isInstallationAdmin } = await hasPermission(
-      { mcpServerInstallation: ["admin"] },
-      headers,
-    );
+    const isInstallationAdmin = await isMcpInstallationAdmin({
+      userId,
+      organizationId,
+    });
 
     if (!isInstallationAdmin) {
       const { success: hasMcpServerUpdate } = await hasPermission(
@@ -4001,12 +3993,10 @@ async function validateScopeAndAuthorization(params: {
   }
 
   if (scope === "org") {
-    const isMcpServerInstallationAdmin = await userHasPermission(
+    const isMcpServerInstallationAdmin = await isMcpInstallationAdmin({
       userId,
       organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    });
     if (!isMcpServerInstallationAdmin) {
       throw new ApiError(
         403,

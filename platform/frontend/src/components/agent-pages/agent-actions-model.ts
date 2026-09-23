@@ -118,12 +118,7 @@ export function agentActionHref(definition: AgentActionDefinition): string {
 
 function permission(
   resource: ReturnType<typeof getResourceForAgentType>,
-  action:
-    | "create"
-    | "read"
-    | "update"
-    | "delete"
-    | readonly ["update", "admin"],
+  action: "create" | "read" | "update" | "delete",
 ): Permissions {
   return {
     [resource]: Array.isArray(action) ? action : [action],

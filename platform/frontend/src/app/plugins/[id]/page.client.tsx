@@ -164,12 +164,11 @@ function PluginDetailView({
   onDeleted: () => void;
 }) {
   const router = useRouter();
-  const { data: canDelete } = useHasPermissions({
-    plugin: ["delete", "admin"],
-  });
-  const { data: canUpdate } = useHasPermissions({
-    plugin: ["update", "admin"],
-  });
+  const { data: canDelete } = useHasPermissions(
+    { plugin: ["delete", "update"] },
+    "*",
+  );
+  const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
   const isReadOnly = canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
@@ -399,6 +398,7 @@ function PluginDetailView({
           {plugin.enabled && (
             <PermissionButton
               permissions={installAction.permissions}
+              permissionScope={installAction.permissionScope}
               variant="outline"
               onClick={() => setInstallOpen(true)}
             >
@@ -531,7 +531,8 @@ function PluginDetailView({
             </div>
             <div className="flex items-center gap-2">
               <PermissionButton
-                permissions={{ plugin: ["update", "admin"] }}
+                permissions={{ plugin: ["update"] }}
+                permissionScope="*"
                 disabled={!isDirty || !isComplete || isGone || isSaving}
                 onClick={handleSave}
               >

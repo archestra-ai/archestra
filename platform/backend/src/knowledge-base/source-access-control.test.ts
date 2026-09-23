@@ -1,5 +1,6 @@
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import { buildGroupToken, normalizeEmail } from "./acl-tokens";
 import {
   buildDocumentAccessControlList,
@@ -234,7 +235,7 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toBe(true);
   });
 
-  test("knowledgeSource:admin alone does NOT grant access to auto-sync connectors", async ({
+  test("managing every knowledge base alone does NOT grant access to auto-sync connectors", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -245,8 +246,10 @@ describe("knowledgeSourceAccessControlService", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { knowledgeSource: ["read", "admin"] },
+      permission: { knowledgeSource: ["read"] },
     });
+    // What the retired knowledgeSource:admin became: `update` at `*`.
+    grantEverywhere(["knowledgeBase"]);
     await makeMember(user.id, org.id, { role: role.role });
     const knowledgeBase = await makeKnowledgeBase(org.id);
     const autoSyncConnector = await makeKnowledgeBaseConnector(
@@ -325,7 +328,7 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toEqual([]);
   });
 
-  test("knowledgeSource:admin bypasses source visibility restrictions", async ({
+  test("managing every knowledge base bypasses source visibility restrictions", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -334,6 +337,8 @@ describe("knowledgeSourceAccessControlService", () => {
     makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
+    // What the retired knowledgeSource:admin became: `update` at `*`.
+    grantEverywhere(["knowledgeBase"]);
     const admin = await makeUser();
     await makeMember(admin.id, org.id, { role: "admin" });
     const team = await makeTeam(org.id, admin.id);

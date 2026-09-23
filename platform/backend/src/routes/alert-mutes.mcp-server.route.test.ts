@@ -18,6 +18,7 @@ vi.mock("@/config", async () =>
 );
 
 import { hasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -400,8 +401,10 @@ describe("MCP server alert mute routes", () => {
     expect((await listedServer(server.id)).alertMutes).toHaveLength(1);
 
     // Re-authentication is one of the two places the fault is cleared. The
-    // route needs the install-create capability the rest of this suite denies.
+    // route needs the install-create capability the rest of this suite denies,
+    // and installation administration (`update` on every registry entry).
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    grantEverywhere(["mcpRegistry"]);
     const newSecret = await secretManager().createSecret(
       { access_token: "fresh", refresh_token: "fresh-refresh" },
       "alert-mute-reauth-secret",

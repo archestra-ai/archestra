@@ -11,6 +11,7 @@ import McpToolCallModel from "@/models/mcp-tool-call";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("mcp-tool-call routes", () => {
@@ -113,7 +114,14 @@ describe("mcp-tool-call routes", () => {
   }) => {
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { log: ["read"] },
+    });
+    // Every row is `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "log",
+      roleId: allLogs.id,
+      actions: ["read"],
     });
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;
@@ -150,7 +158,14 @@ describe("mcp-tool-call routes", () => {
     });
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { log: ["read"] },
+    });
+    // Every row is `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "log",
+      roleId: allLogs.id,
+      actions: ["read"],
     });
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;

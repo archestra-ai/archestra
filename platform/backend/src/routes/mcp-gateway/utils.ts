@@ -59,7 +59,6 @@ import {
 } from "@/archestra-mcp-server/dynamic-tools";
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
-import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type ArchestraElicitationOutcome,
@@ -110,6 +109,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
@@ -1546,12 +1546,13 @@ async function validateResolvedUserToken(params: {
   const { profileId, token, agentAccessContext } = params;
 
   // Check if user has MCP gateway admin permission (can access all gateways)
-  const isGatewayAdmin = await userHasPermission(
-    token.userId,
-    token.organizationId,
-    "mcpGateway",
-    "admin",
-  );
+  const isGatewayAdmin = await ResourcePermissions.allows({
+    userId: token.userId,
+    organizationId: token.organizationId,
+    resource: "mcpGateway",
+    scope: "*",
+    action: "update",
+  });
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
   if (
@@ -1707,12 +1708,13 @@ async function validateOAuthTokenByHash(params: {
     const organizationId = agent.organizationId;
 
     // Check if user has MCP gateway admin permission (can access all gateways)
-    const isGatewayAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "mcpGateway",
-      "admin",
-    );
+    const isGatewayAdmin = await ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "mcpGateway",
+      scope: "*",
+      action: "update",
+    });
 
     // Non-admin access has two additive sources:
     //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
@@ -2146,13 +2148,17 @@ async function authenticateExternalIdpToken(
       return { result: null, reason: "not_org_member" };
     }
 
-    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
-    const isAdmin = await userHasPermission(
-      user.id,
-      agent.organizationId,
-      permissionResource,
-      "admin",
-    );
+    // An MCP gateway administrator holds `update` on every gateway (a grant at
+    // `*`). The LLM proxy has no such grant, so nobody bypasses its team check.
+    const isAdmin =
+      permissionResource === "mcpGateway" &&
+      (await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: agent.organizationId,
+        resource: "mcpGateway",
+        scope: "*",
+        action: "update",
+      }));
 
     const authenticated: TokenAuthResult = {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,

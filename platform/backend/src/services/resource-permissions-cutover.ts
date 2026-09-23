@@ -819,12 +819,76 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
   OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
+  // convertReadAllToConversationGrants
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- \`project:read-all\` let a role read chats other members started inside a
+-- project the reader could open. It becomes \`read\` on every chat, a grant at
+-- \`*\` on \`conversation\`, which is consulted only for chats inside a
+-- project the reader can open, so it reaches exactly what the action did.
+-- The built-in admin and platform_admin roles held the action in code; a
+-- custom role held it in its stored permissions. Editor and member never did.
+WITH holders AS (
+  SELECT o.id AS organization_id, builtin.id AS role_id
+  FROM organization o CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'conversation'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+  UNION
+  SELECT roles.organization_id, roles.id FROM organization_role roles
+  WHERE COALESCE(roles.permission::jsonb -> 'project', '[]'::jsonb) ? 'read-all'
+), entries AS (
+  -- Merge rather than replace, and compare before writing: this runs at every
+  -- start, and an unconditional write would raise the revision the permissions
+  -- editor holds while somebody is editing.
+  -- The admin-tier roles also manage the grant, so they can still assign
+  -- roles that carry it: delegating a grant takes managing it.
+  SELECT organization_id, 'role' AS subject_type, role_id AS subject_id,
+    unnest(CASE WHEN role_id IN ('admin', 'platform_admin')
+      THEN ARRAY['read', 'manage-permissions'] ELSE ARRAY['read'] END) AS action
+  FROM holders
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'conversation' AND p.scope = '*'
+    AND p.organization_id IN (SELECT organization_id FROM holders)
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), merged AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object(
+      'subject', jsonb_build_object('type', subject_type, 'id', subject_id),
+      'actions', actions
+    ) ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies
+  (organization_id, resource, scope, grants, revision, legacy_sharing_migrated, updated_at)
+SELECT organization_id, 'conversation', '*', grants, 1, true, now() FROM merged
+ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
+  grants = EXCLUDED.grants,
+  revision = resource_permission_policies.revision + 1,
+  legacy_sharing_migrated = true,
+  updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated
+  OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
+  // ---------------------------------------------------------------------
   // retireConvertedRoleActions
   // ---------------------------------------------------------------------
   sql.raw(`
--- Earlier statements captured admin and deployment authority as scoped
--- grants. Team-admin authority was captured as individual object grants before
--- these flags retire. Preserve unrelated permissions and role IDs.
+-- Earlier statements captured admin, deployment and project read-all
+-- authority as scoped grants. Team-admin authority was captured as individual
+-- object grants before these flags retire. \`project:share-org\` converts to
+-- nothing: sharing a project with the organization is a grant written by
+-- whoever manages the project's permissions, and its holders already hold
+-- their project grants. Preserve unrelated permissions and role IDs.
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE
@@ -837,7 +901,8 @@ WITH converted AS (
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
           FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)
           WHERE action NOT IN (
-            '"admin"'::jsonb, '"team-admin"'::jsonb, '"deploy-to-restricted"'::jsonb
+            '"admin"'::jsonb, '"team-admin"'::jsonb, '"deploy-to-restricted"'::jsonb,
+            '"read-all"'::jsonb, '"share-org"'::jsonb
           )), '[]'::jsonb)
       ELSE actions END)
     FROM jsonb_each(r.permission::jsonb) AS resources(resource, actions)

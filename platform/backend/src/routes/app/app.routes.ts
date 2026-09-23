@@ -947,15 +947,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
-
       await assertCallerMayModifyApp({
         appId: app.id,
         userId: user.id,
         organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
-        resourceTeamIds,
       });
       // Changing the html is editing the app itself, not its settings — hold it
       // to the stricter chat-authoring gate so an admin who only sees the app
@@ -976,7 +971,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorId: app.authorId,
             enabled: app.enabled,
           },
-          resourceTeamIds,
         });
       }
       // Re-binding the environment is authorized like the initial bind: org
@@ -1103,9 +1097,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             appId: app.id,
             userId: user.id,
             organizationId,
-            scope: app.scope,
-            authorId: app.authorId,
-            resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
           });
           if (app.locked) {
             throw new ApiError(
@@ -1159,9 +1150,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         appId: app.id,
         userId: user.id,
         organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
-        resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
       if (app.locked) {
         throw new ApiError(
@@ -1209,9 +1197,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           appId: app.id,
           userId: user.id,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         const updated = await AppModel.setEnabled(appId, enable);
         if (!updated) {
@@ -1262,9 +1247,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           appId: app.id,
           userId: user.id,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         const updated = await AppModel.setLocked(appId, lock);
         if (!updated) {
@@ -1376,7 +1358,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       if (app.locked) {
         throw new ApiError(
           409,
@@ -1392,7 +1373,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorId: app.authorId,
           enabled: app.enabled,
         },
-        resourceTeamIds,
       });
 
       const restored = await restoreAppVersion({
@@ -1753,9 +1733,6 @@ async function assertCallerMayModifyAppById(params: {
     appId: app.id,
     userId: params.userId,
     organizationId: params.organizationId,
-    scope: app.scope,
-    authorId: app.authorId,
-    resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
   });
 }
 

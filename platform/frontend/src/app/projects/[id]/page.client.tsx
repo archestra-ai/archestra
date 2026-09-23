@@ -123,8 +123,10 @@ function ProjectDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { open: editOpen, setOpen: setEditOpen } =
     useDialogFlagUrlParam("edit");
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -166,9 +168,7 @@ function ProjectDetail() {
   const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
   const canDelete = canDeleteProject({
     viewerRole: project.viewerRole,
-    visibility: project.visibility,
     isProjectAdmin: !!isProjectAdmin,
-    canShareOrg: !!canShareOrg,
   });
   // The oversight-only view (a foreign project surfaced purely via project:admin)
   // additionally hides chats: no composer, no chats list, no pin, no new

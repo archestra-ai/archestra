@@ -257,7 +257,7 @@ export const getAgents = <ThrowOnError extends boolean = false>(options?: Option
  *
  * Authorization:
  *
- * Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.
+ * Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Grants on the agent may further restrict the request.
  */
 export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
     url: '/api/agents',
@@ -388,7 +388,7 @@ export const getAgent = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Authorization:
  *
- * Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Additional scope and team-admin checks may apply.
+ * Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Grants on the agent may further restrict the request.
  */
 export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
     url: '/api/agents/{id}',
@@ -4955,7 +4955,7 @@ export const refreshInternalMcpCatalogImage = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
+ * `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
 export const listPendingImageApprovalCatalogItems = <ThrowOnError extends boolean = false>(options?: Options<ListPendingImageApprovalCatalogItemsData, ThrowOnError>) => (options?.client ?? client).get<ListPendingImageApprovalCatalogItemsResponses, ListPendingImageApprovalCatalogItemsErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/pending-image-approval', ...options });
 
@@ -4968,7 +4968,7 @@ export const listPendingImageApprovalCatalogItems = <ThrowOnError extends boolea
  *
  * Authorization:
  *
- * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
+ * `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
 export const approveCatalogItemImage = <ThrowOnError extends boolean = false>(options: Options<ApproveCatalogItemImageData, ThrowOnError>) => (options.client ?? client).post<ApproveCatalogItemImageResponses, ApproveCatalogItemImageErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/approve', ...options });
 
@@ -7057,7 +7057,7 @@ export const reinstallMcpServer = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
+ * `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
 export const hardResetMcpServer = <ThrowOnError extends boolean = false>(options: Options<HardResetMcpServerData, ThrowOnError>) => (options.client ?? client).post<HardResetMcpServerResponses, HardResetMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/hard-reset', ...options });
 
@@ -8612,7 +8612,6 @@ export const perplexityResponsesWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const transferPluginOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferPluginOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferPluginOwnershipResponses, TransferPluginOwnershipErrors, ThrowOnError>({
@@ -8672,7 +8671,6 @@ export const getPlugins = <ThrowOnError extends boolean = false>(options?: Optio
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:create`: Create plugins
  */
 export const createPlugin = <ThrowOnError extends boolean = false>(options: Options<CreatePluginData, ThrowOnError>) => (options.client ?? client).post<CreatePluginResponses, CreatePluginErrors, ThrowOnError>({
@@ -8693,7 +8691,6 @@ export const createPlugin = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:create`: Create plugins
  */
 export const discoverGithubPluginMarketplace = <ThrowOnError extends boolean = false>(options: Options<DiscoverGithubPluginMarketplaceData, ThrowOnError>) => (options.client ?? client).post<DiscoverGithubPluginMarketplaceResponses, DiscoverGithubPluginMarketplaceErrors, ThrowOnError>({
@@ -8714,7 +8711,6 @@ export const discoverGithubPluginMarketplace = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:create`: Create plugins
  */
 export const importGithubPluginMarketplace = <ThrowOnError extends boolean = false>(options: Options<ImportGithubPluginMarketplaceData, ThrowOnError>) => (options.client ?? client).post<ImportGithubPluginMarketplaceResponses, ImportGithubPluginMarketplaceErrors, ThrowOnError>({
@@ -8735,7 +8731,6 @@ export const importGithubPluginMarketplace = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:create`: Create plugins
  */
 export const previewGithubPlugin = <ThrowOnError extends boolean = false>(options: Options<PreviewGithubPluginData, ThrowOnError>) => (options.client ?? client).post<PreviewGithubPluginResponses, PreviewGithubPluginErrors, ThrowOnError>({
@@ -8756,7 +8751,6 @@ export const previewGithubPlugin = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:create`: Create plugins
  */
 export const importGithubPlugin = <ThrowOnError extends boolean = false>(options: Options<ImportGithubPluginData, ThrowOnError>) => (options.client ?? client).post<ImportGithubPluginResponses, ImportGithubPluginErrors, ThrowOnError>({
@@ -8777,7 +8771,6 @@ export const importGithubPlugin = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const previewGithubPluginUpdate = <ThrowOnError extends boolean = false>(options: Options<PreviewGithubPluginUpdateData, ThrowOnError>) => (options.client ?? client).post<PreviewGithubPluginUpdateResponses, PreviewGithubPluginUpdateErrors, ThrowOnError>({
@@ -8798,7 +8791,6 @@ export const previewGithubPluginUpdate = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const applyGithubPluginUpdate = <ThrowOnError extends boolean = false>(options: Options<ApplyGithubPluginUpdateData, ThrowOnError>) => (options.client ?? client).post<ApplyGithubPluginUpdateResponses, ApplyGithubPluginUpdateErrors, ThrowOnError>({
@@ -8819,7 +8811,6 @@ export const applyGithubPluginUpdate = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const updatePluginGithubSync = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginGithubSyncData, ThrowOnError>) => (options.client ?? client).patch<UpdatePluginGithubSyncResponses, UpdatePluginGithubSyncErrors, ThrowOnError>({
@@ -8840,7 +8831,6 @@ export const updatePluginGithubSync = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const triggerPluginGithubSync = <ThrowOnError extends boolean = false>(options: Options<TriggerPluginGithubSyncData, ThrowOnError>) => (options.client ?? client).post<TriggerPluginGithubSyncResponses, TriggerPluginGithubSyncErrors, ThrowOnError>({ url: '/api/plugins/{id}/github/check', ...options });
@@ -8854,7 +8844,6 @@ export const triggerPluginGithubSync = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:delete`: Delete plugins
  */
 export const deletePlugin = <ThrowOnError extends boolean = false>(options: Options<DeletePluginData, ThrowOnError>) => (options.client ?? client).delete<DeletePluginResponses, DeletePluginErrors, ThrowOnError>({ url: '/api/plugins/{id}', ...options });
@@ -8868,7 +8857,6 @@ export const deletePlugin = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:read`: View plugins and their file metadata
  */
 export const getPlugin = <ThrowOnError extends boolean = false>(options: Options<GetPluginData, ThrowOnError>) => (options.client ?? client).get<GetPluginResponses, GetPluginErrors, ThrowOnError>({ url: '/api/plugins/{id}', ...options });
@@ -8882,7 +8870,6 @@ export const getPlugin = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `plugin:admin`: Publish executable plugins through connection marketplaces
  * `plugin:update`: Modify plugin metadata and files
  */
 export const updatePlugin = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginData, ThrowOnError>) => (options.client ?? client).put<UpdatePluginResponses, UpdatePluginErrors, ThrowOnError>({
@@ -9203,7 +9190,7 @@ export const setProjectInstructions = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).
+ * All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).
  *
  * Authentication:
  *
@@ -9216,7 +9203,7 @@ export const setProjectInstructions = <ThrowOnError extends boolean = false>(opt
 export const getProjectConversations = <ThrowOnError extends boolean = false>(options: Options<GetProjectConversationsData, ThrowOnError>) => (options.client ?? client).get<GetProjectConversationsResponses, GetProjectConversationsErrors, ThrowOnError>({ url: '/api/projects/{id}/conversations', ...options });
 
 /**
- * All run sessions in a project the caller can read. Sessions started by others require `project:read-all`; all non-owner views are read-only.
+ * All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.
  *
  * Authentication:
  *

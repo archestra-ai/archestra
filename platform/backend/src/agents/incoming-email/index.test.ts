@@ -29,6 +29,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import ProcessedEmailModel from "@/models/processed-email";
 import { beforeEach, describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { AgentRuntime, IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
 import {
@@ -1576,8 +1577,9 @@ describe("processIncomingEmail security modes", () => {
       .insert(schema.agentTeamsTable)
       .values({ agentId, teamId: team.id });
 
-    // Mock: adminUser IS an agent admin
-    vi.mocked(userHasPermission).mockResolvedValue(true);
+    // adminUser IS an agent admin: `update` on every agent, the grant the
+    // retired agent:admin became.
+    const allows = grantEverywhere(["agent"]);
 
     const mockProvider = {
       providerId: "outlook",
@@ -1612,13 +1614,13 @@ describe("processIncomingEmail security modes", () => {
       }),
     );
 
-    // Verify userHasPermission was called with correct args
-    expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
-      adminUser.id,
-      org.id,
-      "agent",
-      "admin",
-    );
+    expect(allows).toHaveBeenCalledWith({
+      userId: adminUser.id,
+      organizationId: org.id,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
   });
 
   test("internal mode: accepts email from allowed domain", async ({

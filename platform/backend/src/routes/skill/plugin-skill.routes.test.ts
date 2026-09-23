@@ -10,6 +10,7 @@ import {
   test,
   useRouteTestApp,
 } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
@@ -89,6 +90,16 @@ describe("plugin Skill routes", () => {
     // the catalog reader is not a plugin admin, so visibility is scope-based
     mockUserHasPermission.mockImplementation(
       async (_userId, _organizationId, _resource, action) => action === "read",
+    );
+    grantEverywhere(["plugin"], async () =>
+      Boolean(
+        await mockUserHasPermission.getMockImplementation()?.(
+          "",
+          "",
+          "plugin",
+          "admin" as never,
+        ),
+      ),
     );
   });
 

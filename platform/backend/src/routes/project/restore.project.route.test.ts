@@ -3,8 +3,9 @@ import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 
-describe("projectService.restore (admin oversight)", () => {
+describe("projectService.restore (decided by the project delete grant)", () => {
   test("a project admin restores a soft-deleted project, un-hiding its retained files", async ({
     makeOrganization,
     makeUser,
@@ -13,8 +14,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -69,8 +78,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-sched-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -131,8 +148,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-chat-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -165,12 +190,18 @@ describe("projectService.restore (admin oversight)", () => {
     expect(restored.conversationCount).toBe(0);
   });
 
-  test("a caller without project:admin cannot restore (404)", async ({
+  // Restore is decided by the project's own `delete` grant, like deleting it,
+  // so its owner can bring it back; a member without that grant cannot.
+  test("the owner restores their own project; a member without a delete grant cannot (404)", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const other = await makeUser();
+    await makeMember(other.id, organizationId);
 
     const project = await projectService.create({
       organizationId,
@@ -184,15 +215,21 @@ describe("projectService.restore (admin oversight)", () => {
       userId: owner.id,
     });
 
-    // The owner can delete their own project but is not a project:admin, so the
-    // admin-only restore reads as "not found".
     await expect(
       projectService.restore({
         id: project.id,
         organizationId,
-        userId: owner.id,
+        userId: other.id,
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
+    expect(await ProjectModel.findById(project.id)).toBeNull();
+
+    const restored = await projectService.restore({
+      id: project.id,
+      organizationId,
+      userId: owner.id,
+    });
+    expect(restored.id).toBe(project.id);
   });
 
   test("restoring an already-active project is a 404", async ({
@@ -203,8 +240,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-active-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -233,8 +278,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-conflict-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -279,8 +332,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-rename-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -329,8 +390,16 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-rename-taken@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
@@ -377,7 +446,7 @@ describe("projectService.restore (admin oversight)", () => {
     expect(stillDeleted?.name).toBe("dup");
   });
 
-  test("an admin without project:share-org cannot restore an org-wide project (403)", async ({
+  test("an overseer without the retired project:share-org restores an org-wide project", async ({
     makeOrganization,
     makeUser,
     makeCustomRole,
@@ -385,14 +454,19 @@ describe("projectService.restore (admin oversight)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const admin = await makeUser({ email: "restore-share-org@test.com" });
     await makeMember(admin.id, organizationId, { role: role.role });
-    // The default member role carries project:share-org, so the owner can take
-    // their own org-wide project down; the restore is what must be gated.
-    await makeMember(owner.id, organizationId);
 
     const project = await projectService.create({
       organizationId,
@@ -413,19 +487,14 @@ describe("projectService.restore (admin oversight)", () => {
       userId: owner.id,
     });
 
-    // Restore is gated exactly as delete is: putting an org-wide project back
-    // in front of the whole org needs the same permission taking it away did.
-    await expect(
-      projectService.restore({
-        id: project.id,
-        organizationId,
-        userId: admin.id,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: expect.stringContaining("organization-wide"),
+    // `project:share-org` is retired: the org-wide audience no longer adds a
+    // gate, and the overseer's `delete` on every project decides.
+    const restored = await projectService.restore({
+      id: project.id,
+      organizationId,
+      userId: admin.id,
     });
-    expect(await ProjectModel.findById(project.id)).toBeNull();
+    expect(restored.id).toBe(project.id);
   });
 
   test("a project admin cannot restore another organization's deleted project (404)", async ({
@@ -438,6 +507,7 @@ describe("projectService.restore (admin oversight)", () => {
     const victimOwner = await makeUser({
       email: "cross-tenant-owner@test.com",
     });
+    await makeMember(victimOwner.id, victimOrgId);
     const project = await projectService.create({
       organizationId: victimOrgId,
       userId: victimOwner.id,
@@ -453,7 +523,14 @@ describe("projectService.restore (admin oversight)", () => {
     // A full project admin — but of a DIFFERENT org.
     const attackerOrgId = (await makeOrganization()).id;
     const role = await makeCustomRole(attackerOrgId, {
-      permission: { project: ["read", "delete", "admin"] },
+      permission: { project: ["read", "delete"] },
+    });
+    // Oversight of every project is the grant project:admin became.
+    await grantRoleEverywhere({
+      organizationId: attackerOrgId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const attacker = await makeUser({ email: "cross-tenant-admin@test.com" });
     await makeMember(attacker.id, attackerOrgId, { role: role.role });

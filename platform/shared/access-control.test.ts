@@ -74,7 +74,7 @@ describe("access-control", () => {
     });
 
     test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
+      expect(allAvailableActions.auditLog).toEqual(["read"]);
     });
   });
 
@@ -342,11 +342,14 @@ describe("buildForbiddenErrorMessage", () => {
   });
 });
 
-describe("own-vs-all log split (log/auditLog read vs admin)", () => {
-  test("read and admin are distinct actions on both resources", () => {
-    expect(allAvailableActions.log).toEqual(["read", "admin"]);
-    expect(permissionDescriptions["log:admin"]).toBeTruthy();
-    expect(permissionDescriptions["auditLog:admin"]).toBeTruthy();
+describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
+  // Seeing every member's rows is `read` on the resource at `*`, a grant; the
+  // role action only covers the caller's own rows.
+  test("read is the only role action on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read"]);
+    expect(allAvailableActions.auditLog).toEqual(["read"]);
+    expect(permissionDescriptions["log:admin"]).toBeUndefined();
+    expect(permissionDescriptions["auditLog:admin"]).toBeUndefined();
   });
 
   test("editor sees only own logs; member has neither log resource", () => {
@@ -358,7 +361,7 @@ describe("own-vs-all log split (log/auditLog read vs admin)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("holds everything except log:admin, auditLog:admin, and member:impersonate", () => {
+  test("holds everything except member:impersonate", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
@@ -375,11 +378,7 @@ describe("platform_admin predefined role", () => {
   test("cannot grant the withheld permissions (no-escalation rule)", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
-      expect.arrayContaining([
-        "log:admin",
-        "auditLog:admin",
-        "member:impersonate",
-      ]),
+      expect.arrayContaining(["member:impersonate"]),
     );
     // …while granting its own role or member stays possible.
     expect(findUngrantablePermissions(p, p)).toEqual([]);

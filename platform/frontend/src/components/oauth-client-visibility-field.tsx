@@ -23,8 +23,9 @@ import { formatTeamPath } from "@/lib/teams/team-hierarchy";
 /**
  * Scope + teams picker for OAuth client create/edit dialogs (both the LLM
  * proxy and MCP gateway variants). Mirrors the agent dialog's access-level
- * selector: `org` scope needs `<resource>:admin`, `team` scope needs
- * `<resource>:team-admin`, and a shared client can never go back to personal.
+ * selector. Sharing beyond the author is unavailable today (the role actions
+ * that allowed it are retired), and a shared client can never go back to
+ * personal.
  * Scope only controls who can see and manage the credential — it does not
  * change what its tokens can reach at runtime.
  */
@@ -45,10 +46,11 @@ export function OauthClientVisibilityField({
   initialScope?: ResourceVisibilityScope;
 }) {
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: isAdmin } = useHasPermissions({ [resource]: ["admin"] });
-  const { data: isTeamAdmin } = useHasPermissions({
-    [resource]: ["team-admin"],
-  });
+  // OAuth clients have no grant namespace, and no role holds an action that
+  // shares one beyond its author (the backend answers the same), so only
+  // personal clients can be created here.
+  const isAdmin = false;
+  const isTeamAdmin = false;
   // Picker offers all teams to a full resource-admin, otherwise only the teams
   // the user belongs to (the only ones the backend lets a team-admin assign).
   const { data: teams } = useAssignableTeams({
@@ -73,9 +75,9 @@ export function OauthClientVisibilityField({
     if (value === "team" && !canReadTeams)
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
-      return `You need ${resource}:team-admin permission to share with teams`;
+      return "OAuth clients cannot be shared with teams";
     if (value === "org" && !isAdmin)
-      return `You need ${resource}:admin permission to make this available org-wide`;
+      return "OAuth clients cannot be made available org-wide";
     return "";
   };
 

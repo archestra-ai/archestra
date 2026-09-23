@@ -30,7 +30,11 @@ describe("Internal MCP Catalog - configured default environment", () => {
     vi.clearAllMocks();
     canDeployToRestricted = false;
     mockHasPermission.mockImplementation(async (permissions: Permissions) => {
-      if (permissions.mcpRegistry?.includes("deploy-to-restricted")) {
+      if (
+        (permissions.mcpRegistry as string[] | undefined)?.includes(
+          "deploy-to-restricted",
+        )
+      ) {
         return { success: canDeployToRestricted, error: null };
       }
       return { success: true, error: null };

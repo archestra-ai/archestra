@@ -3,7 +3,6 @@ import { ApiError } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isForeignKeyConstraintError } from "@/utils/db";
 import { requireScopedModifyPermission } from "./agent-type-permissions";
-import { getPermissionsForUserContext } from "./utils";
 
 /**
  * RBAC helpers for OAuth clients (MCP gateway and LLM proxy variants). Both
@@ -15,27 +14,25 @@ import { getPermissionsForUserContext } from "./utils";
 type OauthClientResource = "llmOauthClient" | "mcpOauthClient";
 
 export interface OauthClientPermissionChecker {
-  /** Holds `<resource>:admin` — bypasses scope restrictions. */
+  /** Bypasses scope restrictions. Nothing grants this today; see below. */
   isAdmin: boolean;
-  /** Holds `<resource>:team-admin` — may manage team-scoped clients in their teams. */
+  /** May manage team-scoped clients in their teams. Nothing grants this today. */
   isTeamAdmin: boolean;
 }
 
-/** Fetch the user's OAuth-client-relevant permissions once for a request. */
-export async function getOauthClientPermissionChecker(params: {
+/**
+ * The checker for one request. OAuth clients carry no grant namespace, and the
+ * `admin`/`team-admin` actions this once read left both resources' vocabulary
+ * before those role actions were retired everywhere, so no role has held them
+ * since: every caller is confined to personal clients. Deciding who may share
+ * an OAuth client beyond its author is an open product question.
+ */
+export async function getOauthClientPermissionChecker(_params: {
   userId: string;
   organizationId: string;
   resource: OauthClientResource;
 }): Promise<OauthClientPermissionChecker> {
-  const permissions = await getPermissionsForUserContext({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
-  const actions = permissions[params.resource] ?? [];
-  return {
-    isAdmin: actions.includes("admin"),
-    isTeamAdmin: actions.includes("team-admin"),
-  };
+  return { isAdmin: false, isTeamAdmin: false };
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   useRouteTestApp,
 } from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
@@ -31,6 +32,7 @@ const mockUserHasPermission = vi.mocked(userHasPermission);
 beforeEach(() => {
   mockUserHasPermission.mockReset();
   mockUserHasPermission.mockResolvedValue(true);
+  grantEverywhere(["plugin"]);
 });
 
 afterEach(() => {

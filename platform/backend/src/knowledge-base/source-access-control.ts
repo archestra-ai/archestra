@@ -244,12 +244,13 @@ class KnowledgeSourceAccessControlService {
   }): Promise<KnowledgeSourceAccessControlContext> {
     const [canReadAll, canManageAutoSync, teamIds, grants, migratedScopes] =
       await Promise.all([
-        userHasPermission(
-          params.userId,
-          params.organizationId,
-          "knowledgeSource",
-          "admin",
-        ),
+        ResourcePermissions.allows({
+          userId: params.userId,
+          organizationId: params.organizationId,
+          resource: "knowledgeBase",
+          scope: "*",
+          action: "update",
+        }),
         userHasPermission(
           params.userId,
           params.organizationId,

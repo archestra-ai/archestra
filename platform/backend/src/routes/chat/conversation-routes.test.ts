@@ -14,6 +14,7 @@ import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 import { uuidv7 } from "@/utils/uuid";
 
@@ -1620,7 +1621,14 @@ describe("project chats: read-only access for project members", () => {
     // Reading a chat the caller did not author is gated by `project:read-all`,
     // even inside a shared project — so the reader holds a role that grants it.
     const readAllRole = await makeCustomRole(organizationId, {
-      permission: { project: ["read-all"] },
+      permission: {},
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: readAllRole.id,
+      actions: ["read"],
     });
     const member = await makeUser({ email: "ro-member@test.com" });
     await makeMember(member.id, organizationId, { role: readAllRole.role });

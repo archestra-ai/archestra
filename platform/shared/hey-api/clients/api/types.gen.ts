@@ -85925,7 +85925,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -85949,7 +85949,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     };
     path?: never;
@@ -86033,7 +86033,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -86219,7 +86219,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -86234,7 +86234,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     };
     path: {
@@ -86323,7 +86323,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -99419,7 +99419,7 @@ export type GetSkillsData = {
          */
         excludeOtherPersonalSkills?: boolean;
         /**
-         * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins.
+         * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to callers who manage every skill.
          */
         status?: 'active' | 'deleted';
         /**
@@ -106125,7 +106125,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     }>;
 };
@@ -106209,7 +106209,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
     };
 };
 

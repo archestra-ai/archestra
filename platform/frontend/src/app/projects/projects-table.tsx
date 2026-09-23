@@ -63,8 +63,10 @@ export function ProjectsTable({
   rangeSelection: BulkRangeSelectionController;
 }) {
   const router = useRouter();
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
 
   const columns: ColumnDef<ProjectListItem>[] = [
     createSelectColumn<ProjectListItem>({
@@ -134,9 +136,7 @@ export function ProjectsTable({
         );
         const canDelete = canDeleteProject({
           viewerRole: project.viewerRole,
-          visibility: project.visibility,
           isProjectAdmin: !!isProjectAdmin,
-          canShareOrg: !!canShareOrg,
         });
         const actions: TableRowAction[] = [
           ...(canPin
@@ -270,11 +270,10 @@ export function DeletedProjectsTable({
               {
                 icon: <ArchiveRestore className="h-4 w-4" />,
                 label: "Restore",
-                // The route gates restore on `project:admin`, not
-                // `project:delete` — the same bar that serves this slice at
-                // all. A lower one here would disable Restore for exactly the
-                // oversight role the trash is built for.
-                permissions: { project: ["admin"] },
+                // Restore is decided by the project's own `delete` grant, like
+                // deleting it, which an overseer of every project holds too.
+                permissions: { project: ["delete"] },
+                permissionScope: row.original.id,
                 onClick: () => onRestore(row.original),
               },
               permanentDeleteRowAction({

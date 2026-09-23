@@ -1,8 +1,11 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { ConversationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
@@ -26,10 +29,11 @@ function ids(body: string): string[] {
 
 /**
  * GET /api/projects/:id/conversations visibility of OTHER members' chats is
- * gated by `project:read-all`. Without it a caller sees only the chats they
- * authored — uniformly, including in a project they own (no ownership
- * exemption). Admin holds `read-all` by default; a custom role can be granted
- * it. Own chats are always visible.
+ * gated by `read` on every chat (a grant at `*` on `conversation`, which the
+ * retired `project:read-all` role action became). Without it a caller sees
+ * only the chats they authored — uniformly, including in a project they own
+ * (no ownership exemption). Admin holds the grant by default. Own chats are
+ * always visible.
  */
 describe("GET /api/projects/:id/conversations (project:read-all)", () => {
   let app: FastifyInstanceWithZod;
@@ -136,7 +140,7 @@ describe("GET /api/projects/:id/conversations (project:read-all)", () => {
     expect(items(body).every((c) => c.readOnly)).toBe(true);
   });
 
-  test("a custom role granted project:read-all sees every chat", async ({
+  test("a role still storing the retired project:read-all gains nothing until the cutover converts it", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -149,8 +153,46 @@ describe("GET /api/projects/:id/conversations (project:read-all)", () => {
     const { project, ownerChat, viewerChat } = await seedProjectWithTwoChats();
     actingUser = powerUser;
 
+    // The action is retired: stored in the role, it reads as nothing.
+    expect(ids((await listConvos(project.id)).body)).toEqual([]);
+
+    // The cutover turns it into `read` on every chat, which reaches the
+    // other members' chats inside a project the holder can open.
+    await runScopedResourcePermissionCutover();
     expect(ids((await listConvos(project.id)).body)).toEqual(
       [ownerChat.id, viewerChat.id].sort(),
     );
+    const [stored] = await db
+      .select({ permission: schema.organizationRolesTable.permission })
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(stored.permission)).toEqual({ project: ["read"] });
+
+    // It never reaches a chat outside a project.
+    const privateChat = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId,
+      title: "private chat",
+    });
+    expect(
+      await ConversationModel.findAccessibleById({
+        id: privateChat.id,
+        userId: powerUser.id,
+        organizationId,
+        canReadOthersViaProject: async () => true,
+      }),
+    ).toBeNull();
+    // The project path still answers for a project chat it can open.
+    expect(
+      (
+        await ConversationModel.findAccessibleById({
+          id: ownerChat.id,
+          userId: powerUser.id,
+          organizationId,
+          canReadOthersViaProject: async () => true,
+        })
+      )?.id,
+    ).toBe(ownerChat.id);
   });
 });

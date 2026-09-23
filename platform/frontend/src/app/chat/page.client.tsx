@@ -835,7 +835,9 @@ export function ChatPageContent({
         (grant) =>
           grant.resource === "conversation" &&
           grant.action === "manage-permissions" &&
-          (grant.scope === conversationId || grant.scope === "*"),
+          // A grant on every chat is project oversight; it never manages the
+          // sharing of one chat.
+          grant.scope === conversationId,
       ) === true) &&
     // Locked chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");

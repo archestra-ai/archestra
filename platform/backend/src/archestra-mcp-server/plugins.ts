@@ -275,12 +275,13 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const isAdmin = await userHasPermission(
-        ctx.userId,
-        ctx.organizationId,
-        "plugin",
-        "admin",
-      );
+      const isAdmin = await ResourcePermissions.allows({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+        resource: "plugin",
+        scope: "*",
+        action: "update",
+      });
       const accessiblePluginIds = isAdmin
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
@@ -672,23 +673,32 @@ function pluginsDisabledError() {
 }
 
 /**
- * TOOL_PERMISSIONS applies the plugin:admin floor. REST plugin routes also
- * require the action-specific permission, so handlers apply that second half
- * for custom roles that intentionally split approval from CRUD access.
+ * TOOL_PERMISSIONS applies the action-specific role permission. Plugins are
+ * executable bytes, so every tool beyond the metadata listing also needs
+ * `update` on every plugin — the grant at `*` the retired `plugin:admin` role
+ * action became — matching the REST routes (plugin.routes.ts).
  */
 async function pluginActionError(
   ctx: UserContext,
   action: "read" | "create" | "update" | "delete",
 ) {
-  const allowed = await userHasPermission(
-    ctx.userId,
-    ctx.organizationId,
-    "plugin",
-    action,
-  );
-  return allowed
+  const [allowed, isPluginAdmin] = await Promise.all([
+    userHasPermission(ctx.userId, ctx.organizationId, "plugin", action),
+    ResourcePermissions.allows({
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      scope: "*",
+      action: "update",
+    }),
+  ]);
+  if (!allowed)
+    return errorResult(`This tool also requires plugin:${action} permission.`);
+  return isPluginAdmin
     ? null
-    : errorResult(`This tool also requires plugin:${action} permission.`);
+    : errorResult(
+        "This tool requires permission to manage every plugin in the organization.",
+      );
 }
 
 function unknownPluginError(id: string) {

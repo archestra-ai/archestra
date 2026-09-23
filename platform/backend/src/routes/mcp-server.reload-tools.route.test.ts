@@ -115,12 +115,13 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
         scope: "team",
         teamId: null,
       });
-      hasPermissionMock.mockImplementation(async (permissions) => ({
-        success: permissions.mcpServerInstallation?.includes("admin")
-          ? isInstallationAdmin
-          : true,
-        error: null,
-      }));
+      // An installation admin holds `update` on every registry entry, which a
+      // new organization grants the built-in admin role.
+      if (isInstallationAdmin)
+        await db
+          .update(schema.membersTable)
+          .set({ role: "admin" })
+          .where(eq(schema.membersTable.userId, user.id));
       const getTools = vi
         .spyOn(McpServerModel, "getToolsFromServer")
         .mockResolvedValue([
@@ -194,6 +195,12 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
       teamId: team.id,
     });
     await TeamModel.delete(team.id);
+    // Managing a connection whose team is gone belongs to installation
+    // admins, which a new organization makes the built-in admin role.
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.userId, user.id));
 
     const response = await app.inject({
       method: "DELETE",

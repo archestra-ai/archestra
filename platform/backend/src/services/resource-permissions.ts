@@ -437,7 +437,9 @@ export class ResourcePermissions {
     const policies = await ResourcePermissionPolicyModel.findApplicable(params);
     const subjectKeys = new Set(subjects.map(subjectKey));
     return expandScopedGrants({ policies, subjectKeys }).filter(
-      (grant) => grant.scope === "*" || grant.scope === params.scope,
+      (grant) =>
+        grant.scope === params.scope ||
+        (grant.scope === "*" && !sessionOversightOnly(params)),
     );
   }
 
@@ -656,6 +658,17 @@ type PermissionContext = {
   resource: ScopedResource;
   scope: ResourcePermissionScope;
 };
+
+/**
+ * A grant on every chat is the oversight that used to be the `project:read-all`
+ * role action: reading other members' chats inside a project the reader can
+ * open. It is consulted there alone (see `ProjectService` and
+ * `ConversationModel.findAccessibleById`), never when a single chat is
+ * resolved, so it cannot reach a private chat outside a project.
+ */
+function sessionOversightOnly(params: PermissionContext): boolean {
+  return params.resource === "conversation" && params.scope !== "*";
+}
 
 function subjectKey(subject: PermissionSubject): string {
   return JSON.stringify([subject.type, subject.id]);

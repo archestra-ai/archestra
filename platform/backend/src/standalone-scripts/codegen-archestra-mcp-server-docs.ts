@@ -60,9 +60,9 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
   // The read tools stay on the caller's own reach: `project:admin` oversight of
   // a foreign project is a REST/UI capability and does not extend to them.
   list_projects:
-    "Returns only projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
+    "Returns only projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
   get_project:
-    "Readable only for projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
+    "Readable only for projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
 };
 
 /**

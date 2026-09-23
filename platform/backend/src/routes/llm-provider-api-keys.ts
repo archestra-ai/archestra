@@ -321,12 +321,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmProviderApiKey",
-        "admin",
-      );
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
 
       const apiKeys = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
@@ -872,12 +873,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmProviderApiKey",
-        "admin",
-      );
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
 
       const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
@@ -1457,12 +1459,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await Promise.all([
           OrganizationModel.getById(organizationId),
           TeamModel.getUserTeamIds(user.id),
-          userHasPermission(
-            user.id,
-            organizationId,
-            "llmProviderApiKey",
-            "admin",
-          ),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "llmProviderApiKey",
+            scope: "*",
+            action: "update",
+          }),
         ]);
 
       const outcome = await runBulk({
@@ -1656,12 +1659,13 @@ async function validateScopeAndAuthorization(params: {
 
   // For org-wide keys, require the dedicated API-key admin permission
   if (scope === "org") {
-    const isLlmProviderApiKeyAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "llmProviderApiKey",
-      "admin",
-    );
+    const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "llmProviderApiKey",
+      scope: "*",
+      action: "update",
+    });
     if (!isLlmProviderApiKeyAdmin) {
       throw new ApiError(
         403,

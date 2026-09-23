@@ -5,9 +5,9 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/utils";
 import { AuditLogModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   AuditActorTypeSchema,
@@ -84,12 +84,13 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // auditLog:read scopes the view to the caller's own actions;
       // auditLog:admin lifts it to the whole organization.
-      const canSeeAllAuditLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "auditLog",
-        "admin",
-      );
+      const canSeeAllAuditLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "auditLog",
+        scope: "*",
+        action: "read",
+      });
 
       const result = await AuditLogModel.findCursorPaginated({
         organizationId,
@@ -129,12 +130,13 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Own-actions view: an event someone else caused does not exist for
       // this caller — 404, not 403, so existence is not disclosed.
       if (auditLog) {
-        const canSeeAllAuditLogs = await userHasPermission(
-          user.id,
-          organizationId,
-          "auditLog",
-          "admin",
-        );
+        const canSeeAllAuditLogs = await ResourcePermissions.allows({
+          userId: user.id,
+          organizationId: organizationId,
+          resource: "auditLog",
+          scope: "*",
+          action: "read",
+        });
         const belongsToCaller = isServiceAccountUserId(user.id)
           ? auditLog.actorType === "service_account" &&
             auditLog.actorEmail === user.email

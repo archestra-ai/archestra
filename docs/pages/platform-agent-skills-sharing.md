@@ -75,7 +75,7 @@ Admins can publish the marketplace without authentication under **Settings → S
 
 Anyone who can read skills can install the shared marketplace, so members set up their own clients without an admin. Because the URL serves each person their own view, there is no per-skill choice in the setup command: it installs everything shared with you, and stays current as skills are added or removed. To share a fixed subset, use a snapshot link.
 
-Creating, refreshing, and revoking snapshot links (below) requires skill `read`, `use`, and `manage-permissions` grants on `*`. Publishing a snapshot link that contains executable plugins also requires `plugin:admin`.
+Creating, refreshing, and revoking snapshot links (below) requires skill `read`, `use`, and `manage-permissions` grants on `*`. Publishing a snapshot link that contains executable plugins also requires `update` on every plugin, a `*` grant.
 
 A marketplace credential lives only as long as the account it belongs to: it is dropped when the person is removed from the organization, and a clone is refused the moment their role loses skill read access.
 

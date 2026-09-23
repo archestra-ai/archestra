@@ -28,6 +28,7 @@ import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-sto
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import websocketService from "@/websocket";
 
 interface WebSocketClientContext {
@@ -460,7 +461,14 @@ describe("websocket Agent run authorization and cleanup", () => {
     const owner = await makeUser();
     await makeMember(owner.id, organization.id, { role: "member" });
     const role = await makeCustomRole(organization.id, {
-      permission: { project: ["read", "read-all"] },
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organization.id,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
     });
     const viewer = await makeUser();
     await makeMember(viewer.id, organization.id, { role: role.role });

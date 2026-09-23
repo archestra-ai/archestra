@@ -201,7 +201,7 @@ export function PageLayout({
               className={cn(
                 "mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
                 maxWidthKey === "wizard" &&
-                  "min-h-[5.75rem] sm:min-h-[3.75rem]",
+                  "min-h-[5.75rem] sm:min-h-[3.75rem] sm:items-start",
               )}
             >
               <div
@@ -228,8 +228,10 @@ export function PageLayout({
                 <div
                   className={cn(
                     "flex min-w-0 items-center gap-2",
+                    // 40px even without an icon, so a plain text title and
+                    // the actions share one centre line.
                     maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
+                      ? "min-h-10 flex-nowrap overflow-hidden"
                       : "flex-wrap",
                     description && maxWidthKey !== "wizard" && "mb-2",
                   )}
@@ -262,6 +264,11 @@ export function PageLayout({
                   className={cn(
                     "shrink-0",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
+                    // The left block is the 40px title row plus a description
+                    // pinned under it. Centre the actions on the title row,
+                    // not on the whole block, so both sides line up.
+                    maxWidthKey === "wizard" &&
+                      "sm:flex sm:h-10 sm:items-center",
                   )}
                 >
                   {actionButton}

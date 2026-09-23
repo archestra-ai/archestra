@@ -1161,7 +1161,6 @@ export class ChatOpsManager {
               organizationId: agent.organizationId,
               resource: "agent",
               scope: agent.id,
-              ownerId: agent.authorId,
             })
           ).audience
         : null;

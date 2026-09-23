@@ -588,15 +588,14 @@ class LlmProviderApiKeyModel {
       userTeamIds,
       provider,
     );
-    const scopeRank = (key: LlmProviderApiKeyWithScopeInfo) =>
-      key.scope === "personal" && key.userId === userId
-        ? 0
-        : key.scope === "team"
-          ? 1
-          : 2;
+    const rank = await LlmProviderApiKeyModel.ownershipRanks({
+      organizationId,
+      userId,
+      keys: available,
+    });
     available.sort(
       (a, b) =>
-        scopeRank(a) - scopeRank(b) ||
+        (rank.get(a.id) ?? 2) - (rank.get(b.id) ?? 2) ||
         Number(b.isPrimary) - Number(a.isPrimary) ||
         a.createdAt.getTime() - b.createdAt.getTime(),
     );
@@ -669,14 +668,19 @@ class LlmProviderApiKeyModel {
       );
 
     // Without an acting user there is no personal or team membership to read,
-    // so only org-wide keys are reachable — the same set `resolveProviderApiKey`
-    // falls back to in its user-less branch.
+    // so only a key published to the organization at large is reachable.
     const usable = (
       await Promise.all(
         candidates.map(async ({ apiKey }) =>
           (agentLlmApiKeyId != null && apiKey.id === agentLlmApiKeyId) ||
           (userId === undefined
-            ? apiKey.scope === "org"
+            ? await ResourcePermissionPolicyModel.sharedCredentialHasAccess({
+                organizationId,
+                resource: "llmProviderApiKey",
+                scope: apiKey.id,
+                teamId: null,
+                action: "use",
+              })
             : await LlmProviderApiKeyModel.canUseKey(
                 apiKey,
                 userId,
@@ -688,11 +692,14 @@ class LlmProviderApiKeyModel {
       )
     ).filter((key) => key !== null);
 
-    const scopeRank: Record<string, number> = { personal: 0, team: 1, org: 2 };
+    const rank = await LlmProviderApiKeyModel.ownershipRanks({
+      organizationId,
+      userId,
+      keys: usable,
+    });
     return (
-      usable.sort(
-        (a, b) => (scopeRank[a.scope] ?? 3) - (scopeRank[b.scope] ?? 3),
-      )[0] ?? null
+      usable.sort((a, b) => (rank.get(a.id) ?? 2) - (rank.get(b.id) ?? 2))[0] ??
+      null
     );
   }
 
@@ -731,7 +738,7 @@ class LlmProviderApiKeyModel {
             schema.llmProviderApiKeysTable.provider,
             SUBSCRIPTION_CREDENTIALS[kind].provider,
           ),
-          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          // The owner column, not the retired scope, says whose key it is.
           eq(schema.llmProviderApiKeysTable.userId, userId),
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -781,6 +788,38 @@ class LlmProviderApiKeyModel {
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.
    */
+  /**
+   * Resolution order among keys a caller may use: their own key first, then
+   * a key their team was granted, then anything else. "Own" is the key's
+   * owner column. "Team" is the key's own grants reaching a team, the same
+   * label the retired scope column used to carry.
+   */
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  private static async ownershipRanks(params: {
+    organizationId: string;
+    userId: string | undefined;
+    keys: Array<{ id: string; userId: string | null }>;
+  }): Promise<Map<string, number>> {
+    const audiences = await ResourcePermissionPolicyModel.findAudiences({
+      organizationId: params.organizationId,
+      resource: "llmProviderApiKey",
+      scopes: params.keys.map((key) => key.id),
+    });
+    return new Map(
+      params.keys.map((key) => [
+        key.id,
+        params.userId !== undefined && key.userId === params.userId
+          ? 0
+          : audiences.get(key.id)?.audience === "team"
+            ? 1
+            : 2,
+      ]),
+    );
+  }
+  // SPDX-SnippetEnd
+
   /** Grants alone decide who reads or uses a key. */
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -822,7 +861,7 @@ class LlmProviderApiKeyModel {
         and(
           eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
           eq(schema.llmProviderApiKeysTable.provider, provider),
-          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          // The owner column, not the retired scope, says whose key it is.
           eq(schema.llmProviderApiKeysTable.userId, userId),
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -850,37 +889,34 @@ class LlmProviderApiKeyModel {
    */
 
   /**
-   * Find a key by scope and provider.
-   * Primarily used to find org-wide keys for a specific provider.
-   *
-   * @param organizationId - The organization ID
-   * @param provider - The LLM provider (anthropic, openai, gemini)
-   * @param scope - The key scope (personal, team, org)
-   * @param scopeId - For personal: userId, for team: teamId (optional)
-   * @returns The first matching LLM provider API key or null
+   * The key for `provider` that the organization at large may use, for
+   * resolution with no acting user: a use grant to everyone, or the role
+   * grants the conversion wrote for an organization-wide key. Primary first,
+   * then oldest.
    */
-  static async findByScope(
+  static async findOrganizationWideKey(
     organizationId: string,
     provider: SupportedProvider,
-    scope: ResourceVisibilityScope,
-    scopeId?: string, // userId for personal, teamId for team
   ): Promise<LlmProviderApiKey | null> {
-    const conditions = [
-      eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
-      eq(schema.llmProviderApiKeysTable.provider, provider),
-      eq(schema.llmProviderApiKeysTable.scope, scope),
-    ];
-
-    if (scope === "personal" && scopeId) {
-      conditions.push(eq(schema.llmProviderApiKeysTable.userId, scopeId));
-    } else if (scope === "team" && scopeId) {
-      conditions.push(eq(schema.llmProviderApiKeysTable.teamId, scopeId));
-    }
-
     const [apiKey] = await db
       .select()
       .from(schema.llmProviderApiKeysTable)
-      .where(and(...conditions))
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, provider),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scopeColumn: schema.llmProviderApiKeysTable.id,
+            action: "use",
+          }),
+          // SPDX-SnippetEnd
+        ),
+      )
       .orderBy(
         desc(schema.llmProviderApiKeysTable.isPrimary),
         asc(schema.llmProviderApiKeysTable.createdAt),

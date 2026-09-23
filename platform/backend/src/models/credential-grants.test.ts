@@ -335,3 +335,112 @@ for (const provider of ["github-copilot", "openai"] as const) {
       ).toBeNull();
   });
 }
+
+test("key resolution prefers the caller's own key, then a team grant, then the rest, whatever the retired scope says", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+  makeSecret,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const team = await makeTeam(org.id, user.id);
+  await makeTeamMember(team.id, user.id);
+  const make = async (params: {
+    name: string;
+    userId: string | null;
+    scope: "personal" | "team" | "org";
+    subject: { type: "team" | "role" | "user"; id: string };
+  }) => {
+    const secret = await makeSecret({
+      secret: { apiKey: `sk-${params.name}` },
+    });
+    return LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        userId: params.userId,
+        scope: params.scope,
+        name: params.name,
+        provider: "anthropic",
+        secretId: secret.id,
+      },
+      {
+        initialPermissionGrants: [
+          { subject: params.subject, actions: ["read", "use"] },
+        ],
+      },
+    );
+  };
+  const current = async () =>
+    (
+      await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [team.id],
+        provider: "anthropic",
+        conversationId: null,
+      })
+    )?.id;
+  // Each retired scope contradicts the grants, so only the grants can rank.
+  const orgKey = await make({
+    name: "org",
+    userId: null,
+    scope: "team",
+    subject: { type: "role", id: "member" },
+  });
+  expect(await current()).toBe(orgKey.id);
+  const teamKey = await make({
+    name: "team",
+    userId: null,
+    scope: "org",
+    subject: { type: "team", id: team.id },
+  });
+  expect(await current()).toBe(teamKey.id);
+  const ownKey = await make({
+    name: "own",
+    userId: user.id,
+    scope: "org",
+    subject: { type: "user", id: user.id },
+  });
+  expect(await current()).toBe(ownKey.id);
+});
+
+test("a virtual key is personal when its grants reach its author and nobody else", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+}) => {
+  const org = await makeOrganization();
+  const author = await makeUser();
+  await makeMember(author.id, org.id);
+  const team = await makeTeam(org.id, author.id);
+  const { virtualKey } = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "mine",
+    // The retired scope says org-wide; the grants say the author's own.
+    scope: "org",
+    authorId: author.id,
+    initialPermissionGrants: [],
+  });
+  expect(await VirtualApiKeyModel.isPersonal(virtualKey)).toBe(true);
+
+  const key = {
+    organizationId: org.id,
+    resource: "llmVirtualKey" as const,
+    scope: virtualKey.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ],
+  });
+  expect(await VirtualApiKeyModel.isPersonal(virtualKey)).toBe(false);
+});

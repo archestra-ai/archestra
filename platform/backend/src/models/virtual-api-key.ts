@@ -1074,6 +1074,30 @@ class VirtualApiKeyModel {
     };
   }
 
+  /**
+   * Whether a virtual key is its author's own: it has an author and its own
+   * grants reach that author and nobody else. A personal key is the one kind
+   * that identifies a user, so traffic through it is attributed to the author
+   * and it may carry a per-user credential.
+   */
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async isPersonal(virtualKey: {
+    id: string;
+    organizationId: string;
+    authorId: string | null;
+  }): Promise<boolean> {
+    if (!virtualKey.authorId) return false;
+    return ResourcePermissionPolicyModel.reachesOnlyUser({
+      organizationId: virtualKey.organizationId,
+      resource: "llmVirtualKey",
+      scope: virtualKey.id,
+      userId: virtualKey.authorId,
+    });
+  }
+  // SPDX-SnippetEnd
+
   static async getVisibilityForVirtualApiKeyIds(
     virtualApiKeyIds: string[],
   ): Promise<{

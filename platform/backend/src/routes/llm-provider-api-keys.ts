@@ -399,7 +399,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...agentKey,
             // The viewer authenticates with their own subscription, never this owner's.
             requiresReauthentication:
-              agentKey.scope === "personal" && agentKey.userId !== user.id
+              agentKey.userId !== null && agentKey.userId !== user.id
                 ? undefined
                 : agentKey.requiresReauthentication,
             createdBy: await CreatedByModel.resolveOne(
@@ -1337,12 +1337,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!keyRow || keyRow.organizationId !== organizationId) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      // Another user's personal key is invisible (404, matching the GET route);
-      // shared keys go through the regular permission-gated edit flow.
-      if (keyRow.scope === "personal" && keyRow.userId !== user.id) {
+      // Another user's own key is invisible (404, matching the GET route);
+      // a key nobody owns goes through the regular permission-gated edit flow.
+      if (keyRow.userId !== null && keyRow.userId !== user.id) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      if (keyRow.scope !== "personal") {
+      if (keyRow.userId === null) {
         throw new ApiError(
           400,
           "Only personal subscription keys can be reconnected — shared keys use the regular edit flow.",

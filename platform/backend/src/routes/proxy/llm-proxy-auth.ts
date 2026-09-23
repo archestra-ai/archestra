@@ -34,11 +34,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
-import {
-  ApiError,
-  type GatewayAgent,
-  type ResourceVisibilityScope,
-} from "@/types";
+import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackRequest } from "@/utils/network";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
@@ -102,8 +98,8 @@ export interface VirtualKeyValidationResult {
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
   chatApiKeyId?: string;
   virtualKeyId?: string;
-  /** Scope of the resolved key; a personal key identifies its owner. */
-  virtualKeyScope?: ResourceVisibilityScope;
+  /** Whether the resolved key is its author's own; only such a key identifies its owner. */
+  virtualKeyIsPersonal?: boolean;
   /** Owner of the resolved key (for cross-credential user-consistency checks). */
   virtualKeyAuthorId?: string | null;
 }
@@ -234,9 +230,8 @@ export async function validateVirtualApiKey(params: {
       mappedProviderKey.providerApiKeyId,
     );
     if (
-      resolved.virtualKey.scope !== "personal" ||
+      !(await VirtualApiKeyModel.isPersonal(resolved.virtualKey)) ||
       !parentKey ||
-      parentKey.scope !== "personal" ||
       parentKey.userId == null ||
       parentKey.userId !== resolved.virtualKey.authorId
     ) {
@@ -252,7 +247,9 @@ export async function validateVirtualApiKey(params: {
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
     virtualKeyId: resolved.virtualKey.id,
-    virtualKeyScope: resolved.virtualKey.scope,
+    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
+      resolved.virtualKey,
+    ),
     virtualKeyAuthorId: resolved.virtualKey.authorId,
   };
 }

@@ -867,7 +867,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
-      if (virtualResult.virtualKeyScope === "personal") {
+      if (virtualResult.virtualKeyIsPersonal) {
         regularVirtualKeyUserId = virtualResult.virtualKeyAuthorId ?? undefined;
       }
       authMethod = "virtual_key";

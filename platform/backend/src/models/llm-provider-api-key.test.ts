@@ -342,39 +342,60 @@ describe("LlmProviderApiKeyModel", () => {
     });
   });
 
-  describe("findByScope", () => {
-    test("can find org-wide key by scope", async ({ makeOrganization }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-
-      const orgWideKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-      });
-
-      const found = await LlmProviderApiKeyModel.findByScope(
-        org.id,
-        "anthropic",
-        "org",
-      );
-
-      expect(found).toBeDefined();
-      expect(found?.id).toBe(orgWideKey.id);
-    });
-
-    test("returns null when no key exists for scope", async ({
+  describe("findOrganizationWideKey", () => {
+    test("finds a key published to the whole organization, whatever its retired scope says", async ({
       makeOrganization,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
 
-      const found = await LlmProviderApiKeyModel.findByScope(
-        org.id,
-        "anthropic",
-        "org",
+      const key = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Published Key",
+          provider: "anthropic",
+          scope: "personal",
+        },
+        {
+          initialPermissionGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
+        },
       );
 
-      expect(found).toBeNull();
+      expect(
+        (
+          await LlmProviderApiKeyModel.findOrganizationWideKey(
+            org.id,
+            "anthropic",
+          )
+        )?.id,
+      ).toBe(key.id);
+    });
+
+    test("ignores a key the organization cannot use, whatever its retired scope says", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Unpublished Key",
+          provider: "anthropic",
+          scope: "org",
+        },
+        { initialPermissionGrants: [] },
+      );
+
+      expect(
+        await LlmProviderApiKeyModel.findOrganizationWideKey(
+          org.id,
+          "anthropic",
+        ),
+      ).toBeNull();
     });
   });
 

@@ -542,24 +542,57 @@ export default class ResourcePermissionPolicyModel {
     organizationId: string;
     resource: ScopedResource;
     scope: string;
-    ownerId: string | null;
-  }): Promise<{ audience: "personal" | "team" | "org"; teamIds: string[] }> {
+  }): Promise<ObjectAudience> {
+    return audienceOf(await ResourcePermissionPolicyModel.find(params));
+  }
+
+  /**
+   * Whether an object's own policy reaches `userId` and nobody else: every
+   * grant that can read or use it names that user. The per-user credential
+   * rules ask this where they used to ask for a personal scope.
+   */
+  static async reachesOnlyUser(params: {
+    organizationId: string;
+    resource: ScopedResource;
+    scope: string;
+    userId: string;
+  }): Promise<boolean> {
     const policy = await ResourcePermissionPolicyModel.find(params);
-    const readers = (policy?.grants ?? []).filter((grant) =>
-      grant.actions.includes("read"),
-    );
-    const teamIds = readers
-      .filter((grant) => grant.subject.type === "team")
-      .map((grant) => grant.subject.id);
-    const audience = readers.some(
+    const reaching = (policy?.grants ?? []).filter(
       (grant) =>
-        grant.subject.type === "organization" || grant.subject.type === "role",
-    )
-      ? "org"
-      : teamIds.length > 0
-        ? "team"
-        : "personal";
-    return { audience, teamIds };
+        grant.actions.includes("read") || grant.actions.includes("use"),
+    );
+    return (
+      reaching.length > 0 &&
+      reaching.every(
+        (grant) =>
+          grant.subject.type === "user" && grant.subject.id === params.userId,
+      )
+    );
+  }
+
+  /** {@link findAudience} for several objects of one resource at once. */
+  static async findAudiences(params: {
+    organizationId: string;
+    resource: ScopedResource;
+    scopes: string[];
+  }): Promise<Map<string, ObjectAudience>> {
+    if (params.scopes.length === 0) return new Map();
+    const table = schema.resourcePermissionPoliciesTable;
+    const policies = await db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.resource, params.resource),
+          inArray(table.scope, params.scopes),
+        ),
+      );
+    const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
+    return new Map(
+      params.scopes.map((scope) => [scope, audienceOf(byScope.get(scope))]),
+    );
   }
 
   /**
@@ -736,6 +769,32 @@ export default class ResourcePermissionPolicyModel {
       .returning({ scope: table.scope });
     return !!updated;
   }
+}
+
+type ObjectAudience = {
+  audience: "personal" | "team" | "org";
+  teamIds: string[];
+};
+
+/** See {@link ResourcePermissionPolicyModel.findAudience}. */
+function audienceOf(
+  policy: { grants: ResourcePermissionGrant[] } | null | undefined,
+): ObjectAudience {
+  const readers = (policy?.grants ?? []).filter((grant) =>
+    grant.actions.includes("read"),
+  );
+  const teamIds = readers
+    .filter((grant) => grant.subject.type === "team")
+    .map((grant) => grant.subject.id);
+  const audience = readers.some(
+    (grant) =>
+      grant.subject.type === "organization" || grant.subject.type === "role",
+  )
+    ? "org"
+    : teamIds.length > 0
+      ? "team"
+      : "personal";
+  return { audience, teamIds };
 }
 
 type PolicyKey = {

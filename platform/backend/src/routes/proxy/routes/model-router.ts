@@ -122,7 +122,7 @@ type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
   virtualKeyId: string;
-  virtualKeyScope: ResourceVisibilityScope;
+  virtualKeyIsPersonal: boolean;
   virtualKeyAuthorId: string | null;
   providerApiKeysByProvider: Map<
     SupportedProvider,
@@ -916,7 +916,9 @@ async function getModelRouterAuth(
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
       virtualKeyId: resolved.virtualKey.id,
-      virtualKeyScope: resolved.virtualKey.scope,
+      virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
+        resolved.virtualKey,
+      ),
       virtualKeyAuthorId: resolved.virtualKey.authorId,
       providerApiKeysByProvider: new Map(
         mappings.map((mapping) => [mapping.provider, mapping]),
@@ -997,12 +999,11 @@ async function applyModelRouterAuthOverride(params: {
     })
   ) {
     const isOwnedPersonalCredential =
-      mappedApiKey.scope === "personal" &&
       mappedApiKey.userId !== null &&
       (params.auth.authMethod === "oauth_user"
         ? mappedApiKey.userId === params.auth.userId
         : params.auth.authMethod === "virtual_key" &&
-          params.auth.virtualKeyScope === "personal" &&
+          params.auth.virtualKeyIsPersonal &&
           params.auth.virtualKeyAuthorId !== null &&
           mappedApiKey.userId === params.auth.virtualKeyAuthorId);
     if (!isOwnedPersonalCredential) {
@@ -1035,7 +1036,7 @@ async function applyModelRouterAuthOverride(params: {
       params.auth.authMethod === "oauth_user"
         ? params.auth.userId
         : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyScope === "personal"
+            params.auth.virtualKeyIsPersonal
           ? (params.auth.virtualKeyAuthorId ?? undefined)
           : undefined,
   };

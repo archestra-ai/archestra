@@ -579,7 +579,6 @@ async function getAssignmentTargetContext(
           organizationId: agent.organizationId,
           resource: agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
           scope: agent.id,
-          ownerId: agent.authorId,
         });
   // SPDX-SnippetEnd
   return {
@@ -607,7 +606,6 @@ async function getAppAssignmentTargetContext(
       organizationId: app.organizationId,
       resource: "app",
       scope: app.id,
-      ownerId: app.authorId,
     });
   // SPDX-SnippetEnd
   return {

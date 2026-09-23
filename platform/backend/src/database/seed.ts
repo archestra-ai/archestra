@@ -571,10 +571,9 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     }
 
     // Check if API key already exists for this provider
-    const existing = await LlmProviderApiKeyModel.findByScope(
+    const existing = await LlmProviderApiKeyModel.findOrganizationWideKey(
       org.id,
       provider,
-      "org",
     );
 
     if (existing) {

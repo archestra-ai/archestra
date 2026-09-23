@@ -15,6 +15,7 @@ import {
   Bot,
   Globe,
   Info,
+  Loader2,
   Plus,
   Shield,
   Trash2,
@@ -23,7 +24,6 @@ import {
 } from "lucide-react";
 import {
   createContext,
-  Fragment,
   type ReactNode,
   useCallback,
   useContext,
@@ -38,10 +38,6 @@ import {
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  FloatingActionBar,
-  SettingsSectionStack,
-} from "@/components/settings/settings-block";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -60,6 +56,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import {
   type ResourcePermissions as Policy,
   useResourcePermissions,
@@ -438,13 +435,13 @@ function PermissionsEditor({
       </div>
     ) : null;
   const AccessPicker = dialog ? ResourceAccessPicker : AddResourceAccessDialog;
-  // A section that saves itself on a page keeps its floating bar directly
-  // under the list, the way a settings page does. Without a stack of its own
-  // the bar went to the end of the page, below the footer.
-  const Stack =
-    footerContainer === undefined && !dialog ? SettingsSectionStack : Fragment;
+  // A detail page's own tab saves through the same sticky footer as the
+  // page's Settings tab: one "Save changes", shown while you can edit and
+  // enabled once something changed.
+  const pageFooter =
+    !embedded && footerContainer === undefined && !dialog && !registerSave;
   return (
-    <Stack>
+    <>
       <Container
         hidden={!!dialog && addOpen}
         onSubmit={embedded ? undefined : submit}
@@ -659,13 +656,32 @@ function PermissionsEditor({
             ))}
           </div>
 
-          {footerContainer === undefined
-            ? actions && (
-                // A detail page saves through the same floating bar as every
-                // settings page, so the save stays in reach while scrolling.
-                <FloatingActionBar className="p-3">{actions}</FloatingActionBar>
+          {pageFooter
+            ? canManage && (
+                <WizardFooter className="sm:justify-end">
+                  <Button
+                    type="submit"
+                    disabled={
+                      !dirty ||
+                      mutation.isPending ||
+                      changedElsewhere ||
+                      refreshFailed
+                    }
+                  >
+                    {mutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save changes</span>
+                    )}
+                  </Button>
+                </WizardFooter>
               )
-            : footerContainer && createPortal(actions, footerContainer)}
+            : footerContainer === undefined
+              ? actions && <div className="border-t pt-3">{actions}</div>
+              : footerContainer && createPortal(actions, footerContainer)}
           {allPermissionsOpen && (
             <ResourcePermissionsDialog
               resource={policy.resource}
@@ -703,7 +719,7 @@ function PermissionsEditor({
           onAdd={(grants) => append(grants)}
         />
       )}
-    </Stack>
+    </>
   );
 }
 

@@ -92,17 +92,13 @@ it("preserves an unsaved draft when a background refresh fails", async () => {
   server.use(http.get(endpoint, () => new HttpResponse(null, { status: 503 })));
   await client.invalidateQueries({ queryKey: ["resource-permissions"] });
   await waitFor(() =>
-    expect(
-      screen.getByRole("button", { name: "Save permissions" }),
-    ).toBeDisabled(),
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled(),
   );
   expect(screen.queryByText("Build automation")).not.toBeInTheDocument();
   server.use(http.get(endpoint, () => HttpResponse.json(policy)));
   await user.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() =>
-    expect(
-      screen.getByRole("button", { name: "Save permissions" }),
-    ).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled(),
   );
   expect(screen.queryByText("Build automation")).not.toBeInTheDocument();
 });
@@ -222,15 +218,13 @@ it("revokes a service account's direct grant without removing inherited team acc
       name: "Remove direct access for Build automation",
     }),
   );
-  await user.click(screen.getByRole("button", { name: "Save permissions" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(submitted).toEqual({ revision: 1, grants: [] }));
   // The team grant is inherited, so revoking the direct one leaves it standing.
   expect(screen.getByText("Engineering")).toBeInTheDocument();
-  // Saving clears the draft, and with nothing left to save the control goes.
+  // Saving clears the draft, and with nothing left to save the control rests.
   await waitFor(() =>
-    expect(
-      screen.queryByRole("button", { name: "Save permissions" }),
-    ).not.toBeInTheDocument(),
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled(),
   );
 });
 
@@ -290,12 +284,10 @@ it("retains a stale draft and requires an explicit reload after a concurrent edi
       name: "Remove direct access for Build automation",
     }),
   );
-  await user.click(screen.getByRole("button", { name: "Save permissions" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
   await screen.findByRole("alert");
   expect(screen.queryByText("Updated automation")).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Save permissions" }),
-  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   await user.click(
     screen.getByRole("button", { name: "Discard draft and reload" }),
   );
@@ -310,7 +302,7 @@ it("lets readers inspect grants without offering mutations", async () => {
     screen.getByRole("combobox", { name: "Permission for Build automation" }),
   ).toBeDisabled();
   expect(
-    screen.queryByRole("button", { name: "Save permissions" }),
+    screen.queryByRole("button", { name: "Save changes" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Add access" }),

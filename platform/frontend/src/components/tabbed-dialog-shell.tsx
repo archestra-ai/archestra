@@ -148,12 +148,15 @@ export function TabbedDialogShell<TSection extends string>({
           </div>
         </div>
         <DialogStickyFooter className="group/footer mt-0">
-          <div className="contents group-has-[[data-section-actions]]/footer:hidden">
+          {/* Real boxes, not `display: contents`: the footer lifts its direct
+              children above its painted background, and a contents box has
+              nothing to lift, so its buttons were hidden under it. */}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end group-has-[[data-section-actions]]/footer:hidden">
             {footer}
           </div>
           {/* A section that saves itself, such as permissions, puts its Save
               here, beside the dialog's own buttons. */}
-          <div ref={setFooterSlot} className="contents" />
+          <div ref={setFooterSlot} className="flex-1 empty:hidden" />
         </DialogStickyFooter>
       </div>
     </DialogForm>

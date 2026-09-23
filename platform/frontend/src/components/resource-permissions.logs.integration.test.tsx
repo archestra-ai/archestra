@@ -84,7 +84,7 @@ it.each([
     await screen.findByRole("combobox", { name: "Permission for Log reader" }),
   );
   await user.click(screen.getByRole("option", { name: /^Full access/ }));
-  await user.click(screen.getByRole("button", { name: "Save permissions" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() =>
     expect(submitted).toEqual({
       revision: 1,
@@ -97,9 +97,7 @@ it.each([
     }),
   );
   await waitFor(() =>
-    expect(
-      screen.queryByRole("button", { name: "Save permissions" }),
-    ).not.toBeInTheDocument(),
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled(),
   );
   expect(
     screen.getByRole("combobox", { name: "Permission for Log reader" }),

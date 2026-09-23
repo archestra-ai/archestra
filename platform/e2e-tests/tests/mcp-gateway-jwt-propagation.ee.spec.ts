@@ -93,7 +93,6 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       const agentResponse = await createAgent(
         request,
         `JWT Propagation E2E ${Date.now()}`,
-        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
@@ -266,7 +265,6 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       const agentResponse = await createAgent(
         request,
         `JWT Reject E2E ${Date.now()}`,
-        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
@@ -427,7 +425,6 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       const agentResponse = await createAgent(
         request,
         `JWT Local K8s E2E ${Date.now()}`,
-        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;

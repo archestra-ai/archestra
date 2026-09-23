@@ -86,8 +86,6 @@ test("delegates from a parent agent to an external A2A agent", async ({
       urlSuffix: "/api/agents",
       data: {
         name: parentName,
-        teams: [],
-        scope: "personal",
         agentType: "agent",
       },
     });

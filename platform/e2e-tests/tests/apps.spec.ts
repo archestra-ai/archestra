@@ -68,7 +68,7 @@ test("create an app from a template and run it standalone", async ({
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, scope: "personal" },
+    data: { name },
   });
   const app = (await createRes.json()) as { id: string; slug: string };
   // Every app gets a URL slug derived from its name; the name is unique per run.
@@ -144,7 +144,7 @@ test("an app whose default is fullscreen opens filling the page, with the sideba
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, scope: "personal" },
+    data: { name },
   });
   const app = (await createRes.json()) as { id: string };
 
@@ -250,7 +250,7 @@ test("the render lint flags a hidden element an app override left visible", asyn
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, scope: "personal" },
+    data: { name },
   });
   const app = (await createRes.json()) as { id: string };
 
@@ -422,7 +422,7 @@ test("app SDK tools.call unwraps a JSON-as-text tool result", async ({
       request,
       method: "post",
       urlSuffix: "/api/apps",
-      data: { name: appName, scope: "personal" },
+      data: { name: appName },
     });
     const app = (await createRes.json()) as { id: string };
 

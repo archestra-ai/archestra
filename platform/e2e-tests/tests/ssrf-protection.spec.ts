@@ -142,8 +142,12 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
         urlSuffix: "/api/agents",
         data: {
           name: `SSRF Test Profile ${uniqueSuffix}`,
-          teams: [defaultTeam.id],
-          scope: "team",
+          initialGrants: [
+            {
+              subject: { type: "team", id: defaultTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       const profile = await profileResponse.json();

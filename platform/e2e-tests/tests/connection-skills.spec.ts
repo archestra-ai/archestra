@@ -9,7 +9,6 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
   const skillName = makeRandomString(8, "connection-skill").toLowerCase();
   const skillResponse = await page.request.post(`${UI_BASE_URL}/api/skills`, {
     data: {
-      scope: "org",
       content: `---\nname: ${skillName}\ndescription: Review a client connection.\n---\nReview the client connection settings.`,
     },
   });
@@ -68,8 +67,6 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
           data: {
             name: `${skillName}-${agentType}`,
             agentType,
-            scope: "org",
-            teams: [],
           },
         },
       );

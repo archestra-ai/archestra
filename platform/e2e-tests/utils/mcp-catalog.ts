@@ -9,7 +9,6 @@ export async function addCustomSelfHostedCatalogItem({
   cookieHeaders,
   catalogItemName,
   envVars,
-  scope,
 }: {
   page: Page;
   cookieHeaders: string;
@@ -25,7 +24,6 @@ export async function addCustomSelfHostedCatalogItem({
       teamName: string;
     };
   };
-  scope?: "personal" | "team" | "org";
 }) {
   await goToPage(page, "/mcp/registry");
   await page.waitForLoadState("domcontentloaded");
@@ -133,15 +131,9 @@ export async function addCustomSelfHostedCatalogItem({
     await envVarDialog.getByRole("button", { name: "Add variable" }).click();
     await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
-  if (scope && scope !== "personal") {
-    await createForm
-      .getByRole("button", { name: /Only you can access this MCP server/i })
-      .click();
-    const scopeLabel = scope === "org" ? "Organization" : "Teams";
-    await createForm
-      .getByRole("button", { name: new RegExp(scopeLabel, "i") })
-      .click();
-  }
+  // Who can reach the item is its permissions; the create form no longer
+  // carries a personal/team/organization choice. Organization permissions
+  // (the `*` policy) already let every role that reads the registry see it.
   await createForm.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("domcontentloaded");
 

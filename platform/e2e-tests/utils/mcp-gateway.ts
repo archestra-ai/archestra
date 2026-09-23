@@ -751,8 +751,16 @@ export async function createSharedTestGatewayViaApi({
     body: {
       name: gatewayName,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [defaultTeam.id, engineeringTeam.id],
+      initialGrants: [
+        {
+          subject: { type: "team", id: defaultTeam.id },
+          actions: ["read", "use"],
+        },
+        {
+          subject: { type: "team", id: engineeringTeam.id },
+          actions: ["read", "use"],
+        },
+      ],
     },
   });
   if (createResponse.error) {
@@ -799,8 +807,12 @@ export async function createTeamMcpGatewayViaApi({
     body: {
       name: gatewayName,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [team.id],
+      initialGrants: [
+        {
+          subject: { type: "team", id: team.id },
+          actions: ["read", "use"],
+        },
+      ],
     },
   });
   if (createResponse.error) {

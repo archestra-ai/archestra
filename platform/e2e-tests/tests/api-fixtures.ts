@@ -200,20 +200,12 @@ function extractPaginatedArray<T>(data: unknown): T[] {
  * Create an agent
  * (authnz is handled by the authenticated session)
  */
-const createAgent = async (
-  request: APIRequestContext,
-  name: string,
-  scope: "personal" | "team" | "org",
-) =>
+const createAgent = async (request: APIRequestContext, name: string) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/agents",
-    data: {
-      name,
-      teams: [],
-      scope,
-    },
+    data: { name },
   });
 
 /**
@@ -232,21 +224,12 @@ const getLlmProxy = async (request: APIRequestContext) =>
  * Create an MCP Gateway
  * (authnz is handled by the authenticated session)
  */
-const createMcpGateway = async (
-  request: APIRequestContext,
-  name: string,
-  scope: "personal" | "team" | "org",
-) =>
+const createMcpGateway = async (request: APIRequestContext, name: string) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/agents",
-    data: {
-      name,
-      teams: [],
-      agentType: "mcp_gateway",
-      scope,
-    },
+    data: { name, agentType: "mcp_gateway" },
   });
 
 /**

@@ -650,8 +650,12 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
         data: {
           name: `MCP Hibernation Gateway ${Date.now()}`,
           agentType: "mcp_gateway",
-          scope: "team",
-          teams: [defaultTeam.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: defaultTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       gatewayId = (await gatewayResponse.json()).id;

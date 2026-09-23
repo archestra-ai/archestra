@@ -297,7 +297,6 @@ async function createWireMockAnthropicKey({
       apiKey: E2E_ANTHROPIC_API_KEY,
       baseUrl: E2E_ANTHROPIC_BASE_URL,
       inferenceBaseUrl: E2E_ANTHROPIC_BASE_URL,
-      scope: "personal",
     },
   });
 

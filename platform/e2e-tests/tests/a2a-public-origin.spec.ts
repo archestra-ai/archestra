@@ -28,8 +28,6 @@ test.describe("A2A over the public origin", () => {
       urlSuffix: "/api/agents",
       data: {
         name: `A2A Public Origin ${Date.now()}`,
-        teams: [],
-        scope: "personal",
         agentType: "agent",
       },
     });

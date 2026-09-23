@@ -22,7 +22,7 @@ test("labels an app's launch tool with its app, not as observed traffic", async 
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, scope: "personal" },
+    data: { name },
   });
   const app = (await createRes.json()) as { id: string };
 

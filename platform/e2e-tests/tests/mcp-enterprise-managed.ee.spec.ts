@@ -434,8 +434,6 @@ async function createProfile(params: {
     urlSuffix: "/api/agents",
     data: {
       name: params.name,
-      teams: [],
-      scope: "org",
       agentType: params.agentType,
       identityProviderId: params.identityProviderId,
     },

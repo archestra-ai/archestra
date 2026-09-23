@@ -78,7 +78,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         page: adminPage,
         cookieHeaders,
         catalogItemName,
-        scope: "org",
       });
 
       await goToMcpRegistry(page);
@@ -306,7 +305,6 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     page: adminPage,
     cookieHeaders,
     catalogItemName,
-    scope: "org",
   });
   const MATRIX = [
     { user: "Admin", page: adminPage, canCreateTeamCredential: true },
@@ -387,7 +385,6 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     cookieHeaders,
     catalogItemName: CATALOG_ITEM_NAME,
-    scope: "org",
     envVars: {
       key: "ARCHESTRA_TEST",
       promptOnInstallation: true,

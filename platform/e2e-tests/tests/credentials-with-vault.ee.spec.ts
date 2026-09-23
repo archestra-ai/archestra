@@ -285,7 +285,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
         body: {
           name: catalogItemName,
           serverType: "local",
-          scope: "personal",
           localConfig: {
             command: "sh",
             arguments: ["-c", testMcpServerCommand.replace(/\n/g, " ")],

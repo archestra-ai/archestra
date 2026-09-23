@@ -59,8 +59,6 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         urlSuffix: "/api/agents",
         data: {
           name: `JWKS E2E Test ${Date.now()}`,
-          teams: [],
-          scope: "org",
           agentType: "mcp_gateway",
           identityProviderId,
         },
@@ -156,8 +154,6 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         urlSuffix: "/api/agents",
         data: {
           name: `JWKS Reject Test ${Date.now()}`,
-          teams: [],
-          scope: "org",
           agentType: "mcp_gateway",
           identityProviderId,
         },
@@ -205,7 +201,6 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const agentResponse = await createAgent(
       request,
       `No IdP Test ${Date.now()}`,
-      "personal",
     );
     const agent = await agentResponse.json();
     const profileId = agent.id;

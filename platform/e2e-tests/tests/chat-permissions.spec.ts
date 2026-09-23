@@ -58,7 +58,8 @@ async function ensureOrgProviderKey(request: APIRequestContext): Promise<void> {
         name: ORG_KEY_NAME,
         provider: "openai",
         apiKey: "sk-e2e-test",
-        scope: "org",
+        // An organization key belongs to no one.
+        shared: true,
         baseUrl: `${WIREMOCK_INTERNAL_URL}/v1`,
       },
     },

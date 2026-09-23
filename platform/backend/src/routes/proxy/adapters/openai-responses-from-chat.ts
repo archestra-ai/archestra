@@ -263,6 +263,14 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     ];
   }
 
+  prepareResponseReplacement(): void {
+    this.inner.prepareResponseReplacement?.();
+    this.outputStarted = false;
+    this.outputCompleted = false;
+    this.sequenceNumber = 0;
+    this.replacedText = null;
+  }
+
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     // completeOutput() has already written a `response.completed` naming the
     // calls the model made directly (it fires on the inner stream's final

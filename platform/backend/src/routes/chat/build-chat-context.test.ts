@@ -151,7 +151,7 @@ describe("buildChatContext", () => {
     });
 
     expect(result.systemPrompt).toContain(
-      `If you offer them choices, use ${askUser}, never a plain-text multiple-choice question.`,
+      `When you ask the user a question, clarification, preference, or approval, call ${askUser}. Never ask multiple-choice questions or request user decisions in plain text.`,
     );
   });
 });

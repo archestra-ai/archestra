@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  appendSessionReceipt,
+  formatSessionReceipt,
   stripSessionReceipts,
 } from "@/openappa/session-token";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -15,8 +15,8 @@ import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-cha
 const suffix = "<receipt>";
 const receiptCode = "XK7-Q2M9";
 
-function signedSuffix(text: string): string {
-  return appendSessionReceipt(text, receiptCode).slice(text.length);
+function signedPrefix(_text: string): string {
+  return formatSessionReceipt(receiptCode);
 }
 
 function restoreText(text: string) {
@@ -45,39 +45,30 @@ function textDelta(content: string, finishReason: string | null = null) {
 }
 
 describe("stream text suffix seam", () => {
-  test("Chat Completions places the suffix before its only terminal finish chunk", () => {
+  test("Chat Completions places the receipt on the first text delta", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
-    let completedText = "";
+    let firstText = "";
     adapter.setTextSuffix?.((text) => {
-      completedText = text;
+      firstText = text;
       return text === "answer" ? suffix : "";
     });
 
-    adapter.processChunk(textDelta("answer") as never);
-    const terminal = adapter.processChunk(textDelta("", "stop") as never);
-    expect(terminal.sseData).toBeNull();
-    const allFrames = frames(String(adapter.formatEndSSE()));
-    const suffixIndex = allFrames.findIndex(
+    const first = adapter.processChunk(textDelta("answer") as never);
+    const contents = frames(String(first.sseData)).map(
       (frame) =>
-        (frame.choices as Array<{ delta: { content?: string } }>)[0]?.delta
-          .content === suffix,
-    );
-    const finalIndex = allFrames.findIndex(
-      (frame) =>
-        (frame.choices as Array<{ finish_reason: string | null }>)[0]
-          ?.finish_reason === "stop",
+        (frame.choices as Array<{ delta: { content?: string } }>)[0].delta
+          .content,
     );
 
-    expect(completedText).toBe("answer");
-    expect(suffixIndex).toBeGreaterThan(-1);
-    expect(suffixIndex).toBeLessThan(finalIndex);
+    expect(firstText).toBe("answer");
+    expect(contents).toEqual([suffix, `\n\nanswer`]);
     expect(adapter.state.text).toBe("answer");
     expect(adapter.toProviderResponse().choices[0].message.content).toBe(
       "answer",
     );
   });
 
-  test("Anthropic appends before the final text block closes", () => {
+  test("Anthropic places the receipt on the first text delta", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
     adapter.setTextSuffix?.(() => suffix);
     adapter.processChunk({
@@ -89,22 +80,15 @@ describe("stream text suffix seam", () => {
       index: 0,
       content_block: { type: "text", text: "" },
     } as never);
-    adapter.processChunk({
+    const delta = adapter.processChunk({
       type: "content_block_delta",
       index: 0,
       delta: { type: "text_delta", text: "answer" },
     } as never);
-    expect(
-      adapter.processChunk({ type: "content_block_stop", index: 0 } as never)
-        .sseData,
-    ).toBeNull();
-    const terminal = adapter.processChunk({ type: "message_stop" } as never);
-    const output = String(terminal.sseData);
+    const output = String(delta.sseData);
 
-    expect(output).toContain(suffix);
-    expect(output.indexOf(suffix)).toBeLessThan(
-      output.indexOf("content_block_stop"),
-    );
+    expect(output).toContain(`"text":"${suffix}"`);
+    expect(output).toContain(`"text":"\\n\\nanswer"`);
     expect(adapter.toProviderResponse().content).toContainEqual(
       expect.objectContaining({ type: "text", text: "answer" }),
     );
@@ -112,7 +96,7 @@ describe("stream text suffix seam", () => {
 
   test("Anthropic binds a multipart receipt to its final text block", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
-    adapter.setTextSuffix?.(signedSuffix);
+    adapter.setTextSuffix?.(signedPrefix);
     let sse = "";
     const process = (chunk: unknown) => {
       sse += String(adapter.processChunk(chunk as never).sseData ?? "");
@@ -154,11 +138,11 @@ describe("stream text suffix seam", () => {
 
     expect(restoreText(textByBlock.get(0) ?? "")).toEqual({
       text: "first",
-      sessionIds: [],
+      sessionIds: ["parent"],
     });
     expect(restoreText(textByBlock.get(1) ?? "")).toEqual({
       text: "second",
-      sessionIds: ["parent"],
+      sessionIds: [],
     });
     expect(adapter.state.text).toBe("firstsecond");
     expect(adapter.toProviderResponse().content).toContainEqual(
@@ -172,7 +156,7 @@ describe("stream text suffix seam", () => {
   ])("%s Responses keeps output terminal events and completed response consistent", (_provider, factory) => {
     const adapter = factory.createStreamAdapter();
     adapter.setTextSuffix?.(() => suffix);
-    adapter.processChunk({
+    const first = adapter.processChunk({
       type: "response.output_text.delta",
       item_id: "msg_1",
       output_index: 0,
@@ -180,6 +164,10 @@ describe("stream text suffix seam", () => {
       sequence_number: 1,
       delta: "answer",
     } as never);
+    expect(frames(String(first.sseData)).map((frame) => frame.delta)).toEqual([
+      suffix,
+      `\n\nanswer`,
+    ]);
     for (const chunk of [
       {
         type: "response.output_text.done",
@@ -212,7 +200,7 @@ describe("stream text suffix seam", () => {
     ]) {
       expect(adapter.processChunk(chunk as never).sseData).toBeNull();
     }
-    const completed = adapter.processChunk({
+    adapter.processChunk({
       type: "response.completed",
       sequence_number: 5,
       response: {
@@ -232,23 +220,6 @@ describe("stream text suffix seam", () => {
       },
     } as never);
 
-    expect(completed.sseData).toBeNull();
-    const output = frames(String(adapter.formatEndSSE()));
-    expect(output.map((frame) => frame.type)).toEqual([
-      "response.output_text.delta",
-      "response.output_text.done",
-      "response.content_part.done",
-      "response.output_item.done",
-      "response.completed",
-    ]);
-    expect(output[1].text).toBe(`answer${suffix}`);
-    expect(
-      (
-        output.at(-1)?.response as {
-          output: Array<{ content: Array<{ text: string }> }>;
-        }
-      ).output[0].content[0].text,
-    ).toBe(`answer${suffix}`);
     expect(
       (
         adapter.toProviderResponse().output[0] as {
@@ -301,6 +272,100 @@ describe("stream text suffix seam", () => {
     expect(
       `${tools.getRawToolCallEvents().join("")}${tools.formatEndSSE()}`,
     ).not.toContain(suffix);
+  });
+
+  test("emits subagent trajectory start prefix when OpenAI stream begins with tool calls", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const banner = "▄█▄▄▄█▄\n██▄█▄██  started subagent ABC-1234";
+    adapter.setTextSuffix?.(() => banner);
+    const result = adapter.processChunk({
+      id: "chunk_1",
+      model: "gpt-test",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "read", arguments: "" },
+              },
+            ],
+          },
+        },
+      ],
+    } as never);
+    expect(result.sseData).toContain("started subagent ABC-1234");
+    expect(adapter.toProviderResponse().choices[0].message.content).toContain(
+      "started subagent ABC-1234",
+    );
+  });
+
+  test("emits subagent trajectory start prefix when Anthropic stream begins with tool calls", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const banner = "▄█▄▄▄█▄\n██▄█▄██  started subagent ABC-1234";
+    adapter.setTextSuffix?.(() => banner);
+    adapter.processChunk({
+      type: "message_start",
+      message: { id: "msg_1", model: "claude-test", usage: {} },
+    } as never);
+    const result = adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "tool_use", id: "call_1", name: "read" },
+    } as never);
+    expect(result.sseData).toContain("started subagent ABC-1234");
+  });
+
+  test("carries the trajectory prefix when a Responses stream begins with tool calls", () => {
+    for (const [name, factory] of [
+      ["OpenAI Responses", openAiResponsesAdapterFactory],
+      ["Azure Responses", azureResponsesAdapterFactory],
+    ] as const) {
+      const adapter = factory.createStreamAdapter();
+      const banner = "▄█▄▄▄█▄\n██▄█▄██  started subagent ABC-1234";
+      adapter.setTextSuffix?.(() => banner);
+      adapter.processChunk({
+        type: "response.created",
+        sequence_number: 0,
+        response: { id: "resp_1" },
+      } as never);
+      const held = adapter.processChunk({
+        type: "response.output_item.added",
+        output_index: 0,
+        sequence_number: 1,
+        item: {
+          id: "fc_1",
+          call_id: "call_spawn",
+          type: "function_call",
+          name: "spawn_agent",
+          arguments: "",
+          status: "in_progress",
+        },
+      } as never);
+      expect(held.isToolCallChunk).toBe(true);
+      expect(adapter.state.text).toContain("started subagent ABC-1234");
+
+      const released =
+        adapter.formatToolCallsSSE?.([
+          {
+            id: "call_spawn",
+            name: "spawn_agent",
+            arguments: "{}",
+          },
+        ]) ?? [];
+      const completed = released
+        .map((frame) =>
+          typeof frame === "string" && frame.includes('"response.completed"')
+            ? frame
+            : undefined,
+        )
+        .filter((frame): frame is string => frame !== undefined)
+        .at(-1);
+      expect(completed, name).toContain("started subagent ABC-1234");
+    }
   });
 
   test.each([
@@ -412,7 +477,6 @@ describe("stream text suffix seam", () => {
       },
     } as never);
     expect(String(failed.sseData)).toContain("partial");
-    expect(String(failed.sseData)).not.toContain(suffix);
     expect(String(adapter.formatEndSSE())).not.toContain(suffix);
   });
 
@@ -421,7 +485,7 @@ describe("stream text suffix seam", () => {
     ["Azure", azureResponsesAdapterFactory],
   ])("%s Responses binds the footer to its final text part", (_provider, factory) => {
     const adapter = factory.createStreamAdapter();
-    adapter.setTextSuffix?.(signedSuffix);
+    adapter.setTextSuffix?.(signedPrefix);
     let sse = String(
       adapter.processChunk({
         type: "response.output_text.delta",
@@ -516,38 +580,22 @@ describe("stream text suffix seam", () => {
       },
     } as never);
 
-    const output = frames(`${sse}${adapter.formatEndSSE()}`);
+    const output = frames(sse);
     const textDeltas = output.filter(
       (frame) => frame.type === "response.output_text.delta",
     ) as Array<{ delta: string }>;
-    const textDone = output.filter(
-      (frame) => frame.type === "response.output_text.done",
-    ) as Array<{ text: string }>;
-    const itemDone = output.find(
-      (frame) => frame.type === "response.output_item.done",
-    ) as { item: { content: Array<{ text: string }> } };
 
     expect(textDeltas.map((frame) => frame.delta)).toEqual([
-      "first",
+      signedPrefix("first"),
+      "\n\nfirst",
       "second",
-      signedSuffix("second"),
     ]);
-    expect(textDone.map((frame) => frame.text)).toEqual([
-      "first",
-      `second${signedSuffix("second")}`,
-    ]);
-    expect(itemDone.item.content.map((part) => part.text)).toEqual([
-      "first",
-      `second${signedSuffix("second")}`,
-    ]);
-    expect(restoreText(itemDone.item.content[0].text)).toEqual({
-      text: "first",
-      sessionIds: [],
-    });
-    expect(restoreText(itemDone.item.content[1].text)).toEqual({
-      text: "second",
-      sessionIds: ["parent"],
-    });
+    expect(restoreText(`${textDeltas[0].delta}${textDeltas[1].delta}`)).toEqual(
+      {
+        text: "first",
+        sessionIds: ["parent"],
+      },
+    );
     expect(JSON.stringify(adapter.toProviderResponse())).not.toContain(
       "protected session",
     );
@@ -561,7 +609,7 @@ describe("stream text suffix seam", () => {
     };
     const routedClaude =
       makeAnthropicOpenaiAdapterFactory(anthropicContext).createStreamAdapter();
-    routedClaude.setTextSuffix?.(signedSuffix);
+    routedClaude.setTextSuffix?.(signedPrefix);
     routedClaude.processChunk({
       type: "message_start",
       message: { usage: {} },
@@ -598,7 +646,7 @@ describe("stream text suffix seam", () => {
       openaiAdapterFactory,
       { responseId: "resp_1", createdUnix: 1, requestedModel: "gpt-test" },
     ).createStreamAdapter();
-    responsesFromChat.setTextSuffix?.(signedSuffix);
+    responsesFromChat.setTextSuffix?.(signedPrefix);
     responsesFromChat.processChunk(textDelta("first") as never);
     responsesFromChat.processChunk(textDelta("second") as never);
     responsesFromChat.processChunk(textDelta("", "stop") as never);

@@ -1995,6 +1995,75 @@ describe("InteractionModel", () => {
       );
       expect(sessions.data[0]?.lastInteractionId).toBe(geminiMain.id);
     });
+
+    test("badges OpenCode title generation as a subagent and the tool-using turn as main", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "opencode-title-vs-main";
+      const openaiResponse = {
+        id: "r",
+        object: "chat.completion" as const,
+        created: Date.now(),
+        model: "k3",
+        choices: [],
+      };
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        type: "vllm:chatCompletions",
+        request: {
+          model: "k3",
+          messages: [
+            { role: "system", content: "You are a title generator." },
+            { role: "user", content: "43" },
+          ],
+        },
+        response: openaiResponse,
+      });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        type: "vllm:chatCompletions",
+        request: {
+          model: "k3",
+          tools: [
+            {
+              type: "function",
+              function: { name: "task", description: "spawn" },
+            },
+            {
+              type: "function",
+              function: { name: "bash", description: "shell" },
+            },
+          ],
+          messages: [
+            { role: "system", content: "You are opencode, a coding agent." },
+            { role: "user", content: "43" },
+          ],
+        },
+        response: openaiResponse,
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+      const types = result.data.map(
+        (row) => (row as unknown as { requestType?: string }).requestType,
+      );
+      expect(types.sort()).toEqual(["main", "subagent"]);
+    });
   });
 
   describe("getSessions auth attribution", () => {

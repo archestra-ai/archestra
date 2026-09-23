@@ -657,6 +657,28 @@ describe("normalizeToolCallsForPolicy", () => {
       { toolCallName: "archestra__run_tool", toolCallArgs: '{"tool_args":{}}' },
     ]);
   });
+
+  test("keeps a human display name under run_tool instead of forming an invalid policy identity", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        }),
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        toolCallName: "archestra__run_tool",
+        toolCallArgs: JSON.stringify({
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        }),
+      },
+    ]);
+  });
 });
 
 // --------------------------------------------------------------------------

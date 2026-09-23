@@ -242,6 +242,10 @@ class AnthropicOpenaiStreamAdapter
     ];
   }
 
+  prepareResponseReplacement(): void {
+    this.inner.prepareResponseReplacement?.();
+  }
+
   formatEndSSE(): string {
     const finishReason = mapStopReason(
       this.inner.toProviderResponse().stop_reason,

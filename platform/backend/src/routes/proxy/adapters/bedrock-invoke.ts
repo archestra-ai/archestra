@@ -378,6 +378,10 @@ class BedrockInvokeStreamAdapter
       .map((event) => sseToInvokeEventStream(innerSse(event)));
   }
 
+  prepareResponseReplacement(): void {
+    this.inner.prepareResponseReplacement?.();
+  }
+
   formatToolCallsSSE(
     toolCalls: StreamAccumulatorState["toolCalls"],
   ): Uint8Array[] {

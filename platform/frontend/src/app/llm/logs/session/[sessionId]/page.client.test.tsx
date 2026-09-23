@@ -128,7 +128,11 @@ describe("SessionDetailPage", () => {
       isLoading: false,
     } as unknown as ReturnType<typeof useInteractionSummaries>);
     vi.mocked(useSessionLineage).mockReturnValue({
-      data: { forkedFrom: "parent-session", forks: ["fork-a", "fork-b"] },
+      data: {
+        forkedFrom: "parent-session",
+        forks: ["fork-a", "fork-b"],
+        forksTruncated: true,
+      },
     } as unknown as ReturnType<typeof useSessionLineage>);
 
     renderSessionDetailPage();
@@ -142,6 +146,36 @@ describe("SessionDetailPage", () => {
       "href",
       "/llm/logs/session/fork-b",
     );
+    expect(screen.getByText("Additional forks not shown")).toBeVisible();
+  });
+
+  it("hides fork lineage when OpenAPPA is off", async () => {
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionId: "test-session" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+    vi.mocked(useSessionLineage).mockReturnValue({
+      data: {
+        forkedFrom: "parent-session",
+        forks: ["fork-a"],
+        forksTruncated: true,
+      },
+    } as unknown as ReturnType<typeof useSessionLineage>);
+
+    renderSessionDetailPage();
+
+    expect(
+      await screen.findByText("No interactions found for this session"),
+    ).toBeVisible();
+    expect(screen.queryByText("Forked from")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fork")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Additional forks not shown"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows cache read/write totals when the session used prompt caching", async () => {

@@ -82,6 +82,23 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { scopedSessionId } from "@/openappa/actor";
+import {
+  type CollectedChildReturns,
+  collectAndStripChildReturns,
+} from "@/openappa/child-return";
+import {
+  type AppaChildTrajectoryReceipt,
+  stripChildTrajectoryReceipts,
+} from "@/openappa/child-trajectory-receipt";
+import {
+  unwrapCompactionCarriersFromRequest,
+  wrapCompactionResponse,
+} from "@/openappa/compaction-carrier";
+import {
+  type AppaDelegationMarker,
+  collectDelegationMarkers,
+  stripDelegationMarkers,
+} from "@/openappa/delegation";
 import { forkedSession } from "@/openappa/lineage";
 import { prepareAppaRequest } from "@/openappa/request";
 import {
@@ -98,14 +115,25 @@ import { stampedSessions } from "@/openappa/trajectory-stamp";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
+  appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
   restoreTrajectoryStamps,
   sessionReceiptEvidence,
+  stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "@/openappa/wire";
-import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
+  asRecord,
+  parseJsonHeader,
+} from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
+import {
+  extractAppaSessionIdentity,
+  nativeSpawnParentId,
+} from "@/proxy/plugins/appa-plugin-archestra/session-identity";
+import {
+  APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
@@ -188,6 +216,8 @@ const {
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
   sessionReceipt?: SessionReceiptOutput;
+  childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
+  childCompactionContext?: string;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   /** Captured by the host after binding an authenticated APPA session. */
@@ -266,6 +296,11 @@ type SessionReceiptOutput = {
   organizationId: string;
   sessionId: string;
   code: string;
+  footer: string;
+};
+
+type ChildTrajectoryReceiptOutput = {
+  family: NonNullable<ReturnType<typeof appaWireFamily>>;
   footer: string;
 };
 
@@ -386,7 +421,10 @@ function isBoundedHeaderValue(
   );
 }
 
-function markSessionReceiptIssued(receipt: SessionReceiptOutput): void {
+function markSessionReceiptIssued(receipt: {
+  organizationId: string;
+  sessionId: string;
+}): void {
   trackBackgroundWork(
     OpenAppaSessionModel.markReceiptIssued({
       organizationId: receipt.organizationId,
@@ -406,40 +444,83 @@ function markSessionReceiptIssued(receipt: SessionReceiptOutput): void {
  * sites only so a large tool result cannot trigger a false re-issue and so
  * the body is never serialized just to search it.
  */
-function isClientCompactionRequest(body: unknown): boolean {
+function isClientCompactionRequest(params: {
+  body: unknown;
+  headers: Record<string, string | string[] | undefined>;
+  url: string;
+}): boolean {
+  const { body, headers } = params;
+  if (params.url.split("?")[0].endsWith("/responses/compact")) return true;
+  const header = (name: string) =>
+    utils.headers.metaHeader.getHeaderValue(headers, name);
+  if (
+    header(OPENCODE_AGENT_HEADER) === "compaction" ||
+    header("x-openai-subagent") === "compact"
+  )
+    return true;
   if (!body || typeof body !== "object" || Array.isArray(body)) return false;
   const request = body as Record<string, unknown>;
+  const metadata =
+    asRecord(request.client_metadata) ?? asRecord(request.metadata);
+  const nestedTurn = metadata?.["x-codex-turn-metadata"];
+  if (
+    [
+      metadata,
+      asRecord(metadata?.turn_metadata),
+      asRecord(metadata?.turn),
+      typeof nestedTurn === "string"
+        ? parseJsonHeader(
+            { "x-codex-turn-metadata": nestedTurn },
+            "x-codex-turn-metadata",
+          )
+        : asRecord(nestedTurn),
+      parseJsonHeader(headers, "x-codex-turn-metadata"),
+    ].some((turn) => turn?.request_kind === "compaction")
+  )
+    return true;
   if (containsCompactionInstruction(request.system)) return true;
   if (!Array.isArray(request.messages)) return false;
-  for (const message of request.messages) {
+  for (let index = request.messages.length - 1; index >= 0; index--) {
+    const message = request.messages[index];
     if (!message || typeof message !== "object" || Array.isArray(message)) {
       continue;
     }
     const role = (message as Record<string, unknown>).role;
-    if (role !== "user" && role !== "system") continue;
-    if (
-      containsCompactionInstruction(
-        (message as Record<string, unknown>).content,
-      )
-    ) {
-      return true;
-    }
+    if (role !== "user") continue;
+    const content = (message as Record<string, unknown>).content;
+    const texts =
+      typeof content === "string"
+        ? [content]
+        : Array.isArray(content)
+          ? content.flatMap((part) => {
+              const text = asRecord(part)?.text;
+              return typeof text === "string" ? [text] : [];
+            })
+          : [];
+    // A model spawn prompt can request a summary.
+    // The delegation marker distinguishes it from client compaction.
+    if (texts.some((text) => text.includes("[appa] delegated trajectory ")))
+      return false;
+    return containsCompactionInstruction(content);
   }
   return false;
 }
 
 function containsCompactionInstruction(value: unknown): boolean {
   if (typeof value === "string") {
-    return value.includes(CLAUDE_COMPACTION_INSTRUCTION);
+    const text = value.trimStart();
+    return (
+      text.startsWith(CLAUDE_COMPACTION_INSTRUCTION) ||
+      text.startsWith(
+        `CRITICAL: Respond with TEXT ONLY. ${CLAUDE_COMPACTION_INSTRUCTION}`,
+      )
+    );
   }
   if (!Array.isArray(value)) return false;
   for (const block of value) {
     if (!block || typeof block !== "object" || Array.isArray(block)) continue;
     const text = (block as Record<string, unknown>).text;
-    if (
-      typeof text === "string" &&
-      text.includes(CLAUDE_COMPACTION_INSTRUCTION)
-    ) {
+    if (typeof text === "string" && containsCompactionInstruction(text)) {
       return true;
     }
   }
@@ -509,14 +590,51 @@ export async function handleLLMProxy<
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
+  const clientCompaction = isClientCompactionRequest({
+    body,
+    headers: headers as Record<string, string | string[] | undefined>,
+    url: request.url,
+  });
 
-  // Receipt stripping is unconditional: a transcript carrying marks must never
-  // leak them to a provider or the logs, even with OpenAPPA off. APPA resolves
-  // the collected codes into lineage evidence separately, when it is active.
+  // Removes receipts and delegation markers before forwarding requests.
+  // Markers must not reach providers or logs, even when OpenAPPA is off.
+  // When active, OpenAPPA resolves extracted markers into lineage evidence.
   const requestWireFamily = appaWireFamily(provider.interactionType);
-  const strippedReceiptCodes = requestWireFamily
-    ? stripSessionReceiptsFromRequest({ family: requestWireFamily, body })
-    : [];
+  let strippedReceiptCodes: string[] = [];
+  let delegationMarkers: AppaDelegationMarker[] | undefined;
+  let childReturns: CollectedChildReturns | undefined;
+  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
+  if (requestWireFamily) {
+    strippedReceiptCodes = stripSessionReceiptsFromRequest({
+      family: requestWireFamily,
+      body,
+    });
+    const opaqueProofs =
+      requestWireFamily === "openai:responses"
+        ? unwrapCompactionCarriersFromRequest(body)
+        : [];
+    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+      family: requestWireFamily,
+      body,
+    });
+    childTrajectoryReceipts.push(
+      ...opaqueProofs.flatMap(
+        (proof) => stripChildTrajectoryReceipts(proof).receipts,
+      ),
+    );
+    delegationMarkers = collectDelegationMarkers({
+      family: requestWireFamily,
+      body,
+    });
+    stripDelegationMarkers({ family: requestWireFamily, body });
+    childReturns = collectAndStripChildReturns(body);
+  }
+  // Restores original provider call IDs before request processing, logging,
+  // or policy evaluation.
+  const trajectoryStamps = restoreTrajectoryStamps({
+    interactionType: provider.interactionType,
+    body,
+  });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -643,13 +761,6 @@ export async function handleLLMProxy<
   // before adapters, logs, provider requests, or database records access them.
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
-  // When OpenAPPA is enabled, the proxy issues stamped tool-call IDs.
-  // The proxy restores original provider IDs before inspection, and uses
-  // the stamps to trace source session lineage.
-  const trajectoryStamps = restoreTrajectoryStamps({
-    interactionType: provider.interactionType,
-    body,
-  });
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
@@ -1389,11 +1500,23 @@ export async function handleLLMProxy<
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
     let sessionReceipt: SessionReceiptOutput | undefined;
+    let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
+    let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
+    // Captures raw client headers before conversion to X-Appa-* headers.
+    // Child trajectory validation checks against these original claims.
+    const appaClaims = {
+      sessionId: firstHeaderValue(
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()],
+      ),
+      parentId: firstHeaderValue(
+        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()],
+      ),
+    };
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
@@ -1489,7 +1612,12 @@ export async function handleLLMProxy<
           appaFamily &&
           !isInternalChat &&
           !incomingAppaSessionHeader &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()];
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] &&
+          !nativeSpawnParentId({
+            headers: headersForExtraction,
+            body,
+            sessionId: appaIdentity.sessionId,
+          });
         const stamped =
           traceable && callerId
             ? stampedSessions({
@@ -1624,12 +1752,19 @@ export async function handleLLMProxy<
           session: appaIdentity,
           identity: toolIdentity,
           trustBarePlatformTools: isInternalChat,
+          ...(delegationMarkers ? { delegationMarkers } : {}),
+          ...(childReturns ? { childReturns } : {}),
+          ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+            ? { childTrajectoryReceipts }
+            : {}),
         });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
           toolIdentity,
           request: appaRequest,
+          claims: appaClaims,
+          compaction: clientCompaction && !isInternalChat,
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }
@@ -1648,7 +1783,12 @@ export async function handleLLMProxy<
             legacyTrustOutcome?.toolResultUpdates[result.id] ?? result.content,
         })),
       });
+      const issued = pluginContext.resources.get(
+        APPA_CHILD_TRAJECTORY_RECEIPT,
+      ) as AppaChildTrajectoryReceiptOutput | undefined;
+      childCompactionContext = issued?.footer;
       if (
+        !issued &&
         openappaSession &&
         hasNativeClientSession &&
         !isInternalChat &&
@@ -1663,10 +1803,7 @@ export async function handleLLMProxy<
           sessionId: openappaSession.session_id,
           secret: config.openappa.offerSigningSecret,
         });
-        if (
-          receipt &&
-          (receipt.receiptIssuedAt == null || isClientCompactionRequest(body))
-        ) {
+        if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
           sessionReceipt = {
             family: appaFamily,
             organizationId: resolvedAgent.organizationId,
@@ -1675,6 +1812,12 @@ export async function handleLLMProxy<
             footer: formatSessionReceipt(receipt.token),
           };
         }
+      }
+      if (issued && appaFamily && (!issued.inHistory || clientCompaction)) {
+        childTrajectoryReceipt = {
+          family: appaFamily,
+          footer: issued.footer,
+        };
       }
     }
     const trustedDataOutcome =
@@ -1891,6 +2034,8 @@ export async function handleLLMProxy<
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
       ...(sessionReceipt ? { sessionReceipt } : {}),
+      ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
+      ...(childCompactionContext ? { childCompactionContext } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -2073,17 +2218,34 @@ async function handleStreaming<
     pluginRegistry,
     pluginContext,
     sessionReceipt,
+    childTrajectoryReceipt,
+    childCompactionContext,
   } = ctx;
 
   const providerName = provider.provider;
+  const bufferModelResponse =
+    pluginContext !== undefined &&
+    pluginRegistry?.buffersModelResponse(pluginContext) === true;
   if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
     streamAdapter.withholdHostedToolCalls?.();
   }
-  if (sessionReceipt) {
+  let sessionReceiptPrepared = false;
+  if (childCompactionContext) {
+    streamAdapter.setCompactionContext?.(childCompactionContext);
+  }
+  if (sessionReceipt || childTrajectoryReceipt) {
     streamAdapter.setTextSuffix?.((text) => {
-      if (text.length === 0) return "";
-      markSessionReceiptIssued(sessionReceipt);
-      return sessionReceipt.footer;
+      if (text.length === 0 && !childTrajectoryReceipt) return "";
+      const parts: string[] = [];
+      if (childTrajectoryReceipt) {
+        parts.push(childTrajectoryReceipt.footer);
+      }
+      if (sessionReceipt && text.length > 0) {
+        sessionReceiptPrepared = true;
+        if (!bufferModelResponse) markSessionReceiptIssued(sessionReceipt);
+        parts.push(sessionReceipt.footer);
+      }
+      return parts.join("\n");
     });
   }
   let billingMode = initialBillingMode;
@@ -2109,6 +2271,43 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+  };
+  const MAX_BUFFERED_CHILD_STREAM_BYTES = 10 * 1024 * 1024;
+  let bufferedChildBytes = 0;
+  const bufferedModelEvents: (string | Uint8Array)[] = [];
+  const bufferedPolicyEvents: (string | Uint8Array)[] = [];
+  const emitModelEvent = (
+    data: string | Uint8Array,
+    isResponsePreamble = false,
+  ) => {
+    if (bufferModelResponse && !isResponsePreamble) {
+      bufferedChildBytes +=
+        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
+      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
+        throw new ApiError(
+          413,
+          "OpenAPPA child stream exceeded response buffer limit",
+        );
+      }
+      bufferedModelEvents.push(data);
+      return;
+    }
+    writeToClient(data);
+  };
+  const emitPolicyEvent = (data: string | Uint8Array) => {
+    if (bufferModelResponse) {
+      bufferedChildBytes +=
+        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
+      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
+        throw new ApiError(
+          413,
+          "OpenAPPA child stream exceeded response buffer limit",
+        );
+      }
+      bufferedPolicyEvents.push(data);
+      return;
+    }
+    writeToClient(data);
   };
   // Providers whose transport can't self-instrument duration (Bedrock) rely on
   // us to record llm_request_duration_seconds. Guard against a second (error-path)
@@ -2255,7 +2454,7 @@ async function handleStreaming<
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            writeToClient(result.sseData);
+            emitModelEvent(result.sseData, result.isResponsePreamble);
           }
 
           if (result.isFinal) {
@@ -2389,7 +2588,7 @@ async function handleStreaming<
       );
       if (!reply.raw.destroyed) {
         for (const event of heldEvents) {
-          writeToClient(event);
+          emitPolicyEvent(event);
         }
       }
     }
@@ -2422,6 +2621,7 @@ async function handleStreaming<
         ctx.pluginRegistry,
         ctx.pluginContext,
         rewrittenToolCalls ?? toolCalls,
+        streamAdapter.formatToolCallsSSE !== undefined,
         async (calls) =>
           await utils.toolInvocation.evaluatePolicies(
             toolCallsForPolicyEvaluation({
@@ -2475,11 +2675,21 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
+      const fullContentMessage =
+        !bufferModelResponse && childTrajectoryReceipt
+          ? `${childTrajectoryReceipt.footer}\n\n${contentMessage}`
+          : contentMessage;
+      if (bufferModelResponse) {
+        streamAdapter.prepareResponseReplacement?.();
+        bufferedModelEvents.length = 0;
+        bufferedPolicyEvents.length = 0;
+      }
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
+      const refusalEvents =
+        streamAdapter.formatCompleteTextSSE(fullContentMessage);
       for (const event of refusalEvents) {
-        writeToClient(event);
+        emitPolicyEvent(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -2526,15 +2736,41 @@ async function handleStreaming<
           );
         }
         for (const event of allEvents) {
-          writeToClient(event);
+          emitPolicyEvent(event);
         }
       }
     }
 
-    // The stream is already client-visible. This observes the assembled wire
-    // response without pretending a plugin can rewrite bytes already sent.
+    let response = streamAdapter.toProviderResponse();
+    let bufferedOutcome:
+      | { decision: "release" }
+      | { decision: "replace"; responseText: string } = {
+      decision: "release",
+    };
+    if (bufferModelResponse && pluginRegistry && pluginContext) {
+      bufferedOutcome = await pluginRegistry.onBufferedModelResponse({
+        ...pluginContext,
+        response,
+        responseText:
+          toolInvocationRefusal?.contentMessage ??
+          stripChildTrajectoryReceipts(
+            provider.createResponseAdapter(response).getText(),
+          ).text,
+      });
+      if (bufferedOutcome.decision === "replace") {
+        streamAdapter.prepareResponseReplacement?.();
+        bufferedModelEvents.length = 0;
+        bufferedPolicyEvents.length = 0;
+        bufferedPolicyEvents.push(
+          ...streamAdapter.formatCompleteTextSSE(bufferedOutcome.responseText),
+        );
+        response = streamAdapter.toProviderResponse();
+      }
+    }
+
+    // Evaluates plugins on buffered child responses before release.
+    // If a plugin rejects the response, unapproved output does not reach the client.
     if (pluginRegistry && pluginContext) {
-      const response = streamAdapter.toProviderResponse();
       await pluginRegistry.onModelResponse({
         ...pluginContext,
         response,
@@ -2543,6 +2779,18 @@ async function handleStreaming<
         ...pluginContext,
         response,
       });
+    }
+
+    if (bufferModelResponse && !reply.raw.destroyed) {
+      for (const event of bufferedModelEvents) writeToClient(event);
+      for (const event of bufferedPolicyEvents) writeToClient(event);
+      if (
+        sessionReceipt &&
+        sessionReceiptPrepared &&
+        bufferedOutcome.decision === "release"
+      ) {
+        markSessionReceiptIssued(sessionReceipt);
+      }
     }
 
     // Stream end events
@@ -2785,6 +3033,8 @@ async function handleNonStreaming<
     pluginRegistry,
     pluginContext,
     sessionReceipt,
+    childTrajectoryReceipt,
+    childCompactionContext,
   } = ctx;
 
   const providerName = provider.provider;
@@ -2993,6 +3243,7 @@ async function handleNonStreaming<
       ctx.pluginRegistry,
       ctx.pluginContext,
       rewrittenToolCalls ?? emittedToolCalls,
+      responseAdapter.withRewrittenToolCalls !== undefined,
       async (calls) =>
         await utils.toolInvocation.evaluatePolicies(
           toolCallsForPolicyEvaluation({
@@ -3042,10 +3293,33 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
-      const refusalResponse = responseAdapter.toRefusalResponse(
+      let refusalResponse = responseAdapter.toRefusalResponse(
         refusalMessage,
         contentMessage,
       );
+      if (
+        pluginRegistry &&
+        pluginContext &&
+        pluginRegistry.buffersModelResponse(pluginContext)
+      ) {
+        const refusalAdapter = provider.createResponseAdapter(refusalResponse);
+        const bufferedOutcome = await pluginRegistry.onBufferedModelResponse({
+          ...pluginContext,
+          response: refusalResponse,
+          responseText: refusalAdapter.getText(),
+        });
+        if (bufferedOutcome.decision === "replace") {
+          if (!refusalAdapter.withReplacedText) {
+            throw new ApiError(
+              503,
+              "LLM provider cannot safely replace a governed child response",
+            );
+          }
+          refusalResponse = refusalAdapter.withReplacedText(
+            bufferedOutcome.responseText,
+          );
+        }
+      }
 
       recordBlockedToolCallMetrics({
         allToolCallNames,
@@ -3150,10 +3424,34 @@ async function handleNonStreaming<
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
         : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
+  if (
+    pluginRegistry &&
+    pluginContext &&
+    pluginRegistry.buffersModelResponse(pluginContext)
+  ) {
+    const clientResponseAdapter =
+      provider.createResponseAdapter(clientResponse);
+    const bufferedOutcome = await pluginRegistry.onBufferedModelResponse({
+      ...pluginContext,
+      response: clientResponse,
+      responseText: clientResponseAdapter.getText(),
+    });
+    if (bufferedOutcome.decision === "replace") {
+      if (!clientResponseAdapter.withReplacedText) {
+        throw new ApiError(
+          503,
+          "LLM provider cannot safely replace a governed child response",
+        );
+      }
+      clientResponse = clientResponseAdapter.withReplacedText(
+        bufferedOutcome.responseText,
+      );
+    }
+  }
   if (pluginRegistry && pluginContext) {
     const pluginResponse = await pluginRegistry.onModelResponse({
       ...pluginContext,
-      response: unobservedClientResponse,
+      response: clientResponse,
     });
     // The registry intentionally permits generic transformations. At the HTTP
     // boundary, provider wire responses must be objects, but are not schema-validated here.
@@ -3256,14 +3554,41 @@ async function handleNonStreaming<
       response: clientResponse,
     });
   }
-  if (!sessionReceipt) return reply.send(clientResponse);
+  if (childCompactionContext) {
+    clientResponse = wrapCompactionResponse(
+      clientResponse,
+      childCompactionContext,
+    );
+    const response = asRecord(clientResponse);
+    if (
+      response?.object === "response.compaction" ||
+      (Array.isArray(response?.output) &&
+        response.output.length > 0 &&
+        response.output.every((item) => asRecord(item)?.type === "compaction"))
+    ) {
+      // Opaque clients keep the compaction item itself, not synthetic messages.
+      return reply.send(clientResponse);
+    }
+  }
+  if (!sessionReceipt && !childTrajectoryReceipt) {
+    return reply.send(clientResponse);
+  }
   const outboundResponse = structuredClone(clientResponse);
-  const appended = appendSessionReceiptToResponse({
-    family: sessionReceipt.family,
-    response: outboundResponse,
-    code: sessionReceipt.code,
-  });
-  if (appended) markSessionReceiptIssued(sessionReceipt);
+  if (childTrajectoryReceipt) {
+    appendChildTrajectoryReceiptToResponse({
+      family: childTrajectoryReceipt.family,
+      response: outboundResponse,
+      footer: childTrajectoryReceipt.footer,
+    });
+  }
+  if (sessionReceipt) {
+    const appended = appendSessionReceiptToResponse({
+      family: sessionReceipt.family,
+      response: outboundResponse,
+      code: sessionReceipt.code,
+    });
+    if (appended) markSessionReceiptIssued(sessionReceipt);
+  }
   return reply.send(outboundResponse);
 }
 
@@ -3271,6 +3596,8 @@ async function evaluateProxyPluginToolCalls(
   registry: LlmProxyPluginRegistry | undefined,
   context: LlmProxyRequestContext | undefined,
   toolCalls: readonly AccumulatedToolCall[],
+  /** Whether this transport re-emits the calls the plugins return. */
+  canRewriteToolCalls: boolean,
   validate: (
     calls: LlmProxyToolCallsContext["toolCalls"],
   ) => Promise<LlmProxyToolCallRefusal | null>,
@@ -3296,7 +3623,7 @@ async function evaluateProxyPluginToolCalls(
         : JSON.stringify(call.arguments),
   }));
   const outcome = await registry.onToolCalls(
-    { ...context, toolCalls },
+    { ...context, toolCalls, canRewriteToolCalls },
     validate,
   );
   if (outcome.decision === "allow") {
@@ -3412,6 +3739,12 @@ function planDispatchRewrites(params: {
     );
   }
   return rewritten;
+}
+
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function normalizeVirtualKeyCandidate(

@@ -70,6 +70,44 @@ describe("GeminiOpenaiStreamAdapter", () => {
     expect(adapter.getRawToolCallEvents()).toHaveLength(0);
   });
 
+  test.each([
+    false,
+    true,
+  ])("ends a function-calling turn with the client-visible finish reason (refused=%s)", (refused) => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "gemini:gemini-2.5-flash",
+    }).createStreamAdapter();
+
+    adapter.processChunk({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: { id: "call-1", name: "read", args: { p: "a" } },
+              },
+            ],
+            role: "model",
+          },
+          finishReason: "STOP",
+          index: 0,
+        },
+      ],
+      modelVersion: "gemini-2.5-flash",
+      responseId: "gemini-response",
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+    if (refused) {
+      adapter.formatCompleteTextSSE("blocked by policy");
+    } else {
+      adapter.formatToolCallsSSE?.(adapter.state.toolCalls);
+    }
+    expect(adapter.formatEndSSE()).toContain(
+      `"finish_reason":"${refused ? "stop" : "tool_calls"}"`,
+    );
+  });
+
   test("restores client tool names in OpenAI-shaped stream events", () => {
     const clientToolName = "1 report/tool";
     const request = {

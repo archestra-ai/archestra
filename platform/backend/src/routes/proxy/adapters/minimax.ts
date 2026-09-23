@@ -654,7 +654,8 @@ class MinimaxStreamAdapter
       return { sseData: null, isToolCallChunk: false, isFinal: false };
     }
 
-    let sseData: string | null = null;
+    // What streams to the client now: the text and reasoning of this chunk.
+    let forwarded: MinimaxStreamChunk | null = null;
     let isToolCallChunk = false;
     let isFinal = false;
 
@@ -665,7 +666,7 @@ class MinimaxStreamAdapter
     // Handle content delta
     if (delta.content) {
       this.state.text += delta.content;
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      forwarded = chunk;
     }
 
     // Handle reasoning_details delta (thinking content)
@@ -714,7 +715,7 @@ class MinimaxStreamAdapter
             ],
           }
         : chunk;
-      sseData = `data: ${JSON.stringify(forwardedChunk)}\n\n`;
+      forwarded = forwardedChunk;
     }
 
     // Handle tool_calls delta
@@ -748,9 +749,17 @@ class MinimaxStreamAdapter
         }
       }
 
-      this.state.rawToolCallEvents.push(chunk);
+      // A chunk carrying text and a call together is split: the text streams
+      // now, the call is held for the policies. Forwarding the call's fragment
+      // with the text would hand the client part of a call before the policies
+      // ruled on it, and a second copy of it when the proxy re-emits the batch.
+      this.state.rawToolCallEvents.push(
+        forwarded ? onlyToolCallDeltas(chunk) : chunk,
+      );
+      if (forwarded) forwarded = withoutToolCallDeltas(forwarded);
       isToolCallChunk = true;
     }
+    const sseData = forwarded ? `data: ${JSON.stringify(forwarded)}\n\n` : null;
 
     // Handle usage (typically in final chunk)
     if (chunk.usage) {
@@ -1014,6 +1023,27 @@ class MinimaxStreamAdapter
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/** The text half of a chunk that carries text and tool calls together. */
+function withoutToolCallDeltas(chunk: MinimaxStreamChunk): MinimaxStreamChunk {
+  const [choice, ...rest] = chunk.choices;
+  const { tool_calls: _toolCalls, ...delta } = choice.delta;
+  // The turn is not over while its calls are held: formatEndSSE finishes it.
+  return {
+    ...chunk,
+    choices: [{ ...choice, delta, finish_reason: null }, ...rest],
+  };
+}
+
+/** The tool-call half of such a chunk, which waits for the policies. */
+function onlyToolCallDeltas(chunk: MinimaxStreamChunk): MinimaxStreamChunk {
+  const [choice] = chunk.choices;
+  const { role, tool_calls } = choice.delta;
+  return {
+    ...chunk,
+    choices: [{ ...choice, delta: { ...(role ? { role } : {}), tool_calls } }],
+  };
+}
 
 /**
  * Mirror the thinking text from MiniMax's native reasoning_details into the

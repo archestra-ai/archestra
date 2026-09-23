@@ -1,13 +1,23 @@
-import { vi } from "vitest";
+import { type MockInstance, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
+import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import {
+  collectDelegationMarkers,
+  mintDelegationMarker,
+} from "@/openappa/delegation";
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { prepareAppaRequest } from "@/openappa/request";
 import * as appaService from "@/openappa/service";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
-import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
-import { describe, expect, test } from "@/test";
+import {
+  LlmProxyPluginRegistry,
+  type LlmProxyRequestContext,
+  type LlmProxyToolCallsContext,
+} from "@/proxy/plugins/registry";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
@@ -1097,6 +1107,13 @@ describe("AppaPluginArchestra", () => {
         matches: () => true,
         classifyToolName: () => "local",
         normalizeLocalToolName: (name) => `local:${name}`,
+        trajectoryPrefix: "t",
+        isSpawnTool: () => false,
+        spawnPromptField: () => undefined,
+        nativeConversationId: () => undefined,
+        namesChildren: () => [],
+        bindChildTrajectory: () => undefined,
+        stripCarrierMetadata: () => undefined,
       },
     ]);
     const first = requestContext({
@@ -2238,10 +2255,13 @@ function requestContext(params: {
   sessionId: string;
   parentId?: string;
   toolIdentity?: AppaTrustedContext["toolIdentity"];
+  organizationId?: string;
+  callerId?: string | null;
 }): LlmProxyRequestContext {
+  const organizationId = params.organizationId ?? "organization";
   return {
     requestId: params.sessionId,
-    organizationId: "organization",
+    organizationId,
     profileId: "profile",
     provider: "anthropic",
     interactionType: "anthropic:messages",
@@ -2254,8 +2274,10 @@ function requestContext(params: {
         APPA_PLUGIN_TRUSTED_CONTEXT,
         {
           session: {
-            organization_id: "organization",
-            caller_id: "user:user",
+            organization_id: organizationId,
+            ...(params.callerId === null
+              ? {}
+              : { caller_id: params.callerId ?? "user:user" }),
             session_id: params.sessionId,
             parent_id: params.parentId,
           },
@@ -2285,5 +2307,1418 @@ function identityStub(
     attestationOf: () => undefined,
     looseRunToolDispatch: false,
     ...overrides,
+  };
+}
+
+describe("AppaPluginArchestra", () => {
+  test("evaluates a child request under its minted id as a parent branch", async ({
+    makeOrganization,
+  }) => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "user:user|s1:a1",
+        parent_id: "user:user|s1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("buffers a child final answer until ChildEnd admits the canonical return", async ({
+    makeOrganization,
+  }) => {
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "replace",
+      content: "SUMMARY(24 characters): safe",
+      crossed: true,
+    });
+    const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:request-digest";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      expect(plugin.buffersModelResponse(context)).toBe(true);
+      const outcome = await plugin.onBufferedModelResponse({
+        ...context,
+        response: {},
+        responseText: "raw child return",
+      });
+      expect(endChild).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session: expect.objectContaining({
+            session_id: "user:user|s1:a1",
+            parent_id: "user:user|s1",
+          }),
+        }),
+      );
+      if (outcome?.decision === "replace") {
+        expect(outcome.responseText).toContain("SUMMARY(24 characters): safe");
+        expect(outcome.responseText).toContain("finished subagent");
+      } else {
+        throw new Error("expected outcome to replace responseText");
+      }
+    } finally {
+      endChild.mockRestore();
+      endTurn.mockRestore();
+    }
+  });
+
+  test("fails closed before ChildEnd when the deployment cannot receipt returns", async ({
+    makeOrganization,
+  }) => {
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:request-digest";
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = "";
+
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "REPORT-RAW-KOALA-0831",
+        }),
+      ).rejects.toMatchObject({ statusCode: 503 });
+      expect(endChild).not.toHaveBeenCalled();
+    } finally {
+      config.openappa.offerSigningSecret = priorSecret;
+      endChild.mockRestore();
+    }
+  });
+
+  test("advertises Archestra Chat as child-incapable", async ({
+    makeOrganization,
+  }) => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaChatAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "chat-session",
+      organizationId: organization.id,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.chatSource = "chat";
+    trusted.request.tools = stubRequestTools();
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "call-1", name: "read", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[2]?.supportsDelegation).toBe(
+        false,
+      );
+      expect(plugin.buffersModelResponse(context)).toBe(false);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("does not rescope a child id that already carries the caller prefix", async () => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        trajectoryPrefix: "test",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => name,
+        isSpawnTool: () => false,
+        spawnPromptField: () => undefined,
+        nativeConversationId: () => undefined,
+        namesChildren: () => [],
+        bindChildTrajectory: () => ({
+          sessionId: "user:user|s1:a1",
+          parentId: "user:user|s1",
+          lineage: {
+            source: "native" as const,
+            nativeParentId: "s1",
+            childNativeId: "a1",
+          },
+        }),
+        stripCarrierMetadata: () => undefined,
+      },
+    ]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+    });
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "user:user|s1:a1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("leaves minted child ids unscoped when the session has no caller", async ({
+    makeOrganization,
+  }) => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "s1",
+      callerId: null,
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "s1:a1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("refuses a tool call that names a child outside this parent", async () => {
+    const evaluateToolCalls = vi.spyOn(appaService, "evaluateToolCalls");
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        trajectoryPrefix: "test",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => name,
+        isSpawnTool: () => false,
+        spawnPromptField: () => undefined,
+        nativeConversationId: () => undefined,
+        namesChildren: () => ["foreign:child"],
+        bindChildTrajectory: () => undefined,
+        stripCarrierMetadata: () => undefined,
+      },
+    ]);
+    const context = requestContext({
+      sessionId: "s1",
+    });
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onToolCalls({
+          ...context,
+          toolCalls: [{ id: "1", name: "Read", arguments: {} }],
+        }),
+      ).rejects.toBeInstanceOf(ApiError);
+      expect(evaluateToolCalls).not.toHaveBeenCalled();
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("keeps bindings private to each request and deletes them at cleanup", async () => {
+    const canonicalizedNames: string[] = [];
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls, options) => {
+        canonicalizedNames.push(options.canonicalize("read_file"));
+        return calls.map(() => ({ kind: "allow" }) as const);
+      });
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        trajectoryPrefix: "test",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => `local:${name}`,
+        isSpawnTool: () => false,
+        spawnPromptField: () => undefined,
+        nativeConversationId: () => undefined,
+        namesChildren: () => [],
+        bindChildTrajectory: () => undefined,
+        stripCarrierMetadata: () => undefined,
+      },
+    ]);
+    // Each canonicalizer marks the local names it sees, so the output shows
+    // which request's binding ruled the call.
+    const first = requestContext({
+      sessionId: "first-session",
+      toolIdentity: identityStub({
+        canonicalize: (name) =>
+          name.startsWith("local:") ? `first:${name}` : name,
+      }),
+    });
+    const second = requestContext({
+      sessionId: "second-session",
+      toolIdentity: identityStub({
+        canonicalize: (name) =>
+          name.startsWith("local:") ? `second:${name}` : name,
+      }),
+    });
+
+    try {
+      await plugin.onSessionInit(first);
+      await plugin.onSessionInit(second);
+      // A later plugin shares this resources map and can overwrite the trusted
+      // context in it. APPA copied its binding when the session opened, so the
+      // overwrite reaches nothing it relies on.
+      first.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+        session: {
+          organization_id: "other-organization",
+          caller_id: "user:other",
+          session_id: "other-session",
+        },
+        profileId: "other-profile",
+        toolIdentity: identityStub({ canonicalize: () => "overwritten" }),
+        request: {
+          tools: undefined,
+          customTools: new Set(),
+          declaredTools: [],
+        },
+      });
+
+      await plugin.onToolCalls({
+        ...first,
+        toolCalls: [{ id: "first-call", name: "read_file", arguments: {} }],
+      });
+      await plugin.onToolCalls({
+        ...second,
+        toolCalls: [{ id: "second-call", name: "read_file", arguments: {} }],
+      });
+
+      expect(canonicalizedNames).toEqual([
+        "first:local:read_file",
+        "second:local:read_file",
+      ]);
+      expect(
+        evaluateToolCalls.mock.calls.map(([session]) => session.session_id),
+      ).toEqual(["first-session", "second-session"]);
+
+      await plugin.onCleanup(first);
+      await expect(
+        plugin.onToolCalls({
+          ...first,
+          toolCalls: [{ id: "cleaned-call", name: "read_file", arguments: {} }],
+        }),
+      ).resolves.toBeUndefined();
+      expect(evaluateToolCalls).toHaveBeenCalledTimes(2);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test.each([
+    {
+      client: "Codex",
+      // Codex declares the gateway's tools in its `mcp__<server>` namespace
+      // under their bare names.
+      adapter: new AppaCodexAdapter(),
+      headers: { originator: "codex_cli_rs" },
+      gatewayCall: "archestra__ask_user",
+      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+      localCall: "exec_command",
+    },
+    {
+      client: "OpenCode",
+      // OpenCode decorates the gateway's tools as `<label>_<tool>`.
+      adapter: new AppaOpenCodeAdapter(),
+      headers: { "x-opencode-session": "s" },
+      gatewayCall: "my_gateway_archestra__ask_user",
+      namespaces: new Map<string, string>(),
+      localCall: "exec_command",
+    },
+  ])("rules $client's call to a gateway tool as the gateway's tool, not a builtin", async ({
+    adapter,
+    headers,
+    gatewayCall,
+    namespaces,
+    localCall,
+  }) => {
+    // Ruled as a client builtin, a gateway tool would miss both the policy's
+    // rule for it and the ask_user exemption.
+    const ruledAs: string[] = [];
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls, options) => {
+        ruledAs.push(...calls.map((call) => options.canonicalize(call.name)));
+        return calls.map(() => ({ kind: "allow" }) as const);
+      });
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: "client-naming-session",
+      toolIdentity: identityStub({
+        canonicalize: (name) => name.replace(/^my_gateway_(?=archestra__)/, ""),
+      }),
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = {
+      ...stubRequestTools(),
+      namespaces,
+    };
+    context.headers = headers;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "ask", name: gatewayCall, arguments: {} },
+          { id: "shell", name: localCall, arguments: {} },
+        ],
+      });
+
+      expect(ruledAs).toEqual(["archestra__ask_user", localCall]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+});
+
+describe("delegation markers", () => {
+  let evaluate: MockInstance<typeof appaService.evaluateToolCalls>;
+  beforeEach(async ({ makeOrganization }) => {
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    delegationOrganizationId = (await makeOrganization()).id;
+    evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map(() => ({ kind: "allow" as const })),
+      );
+  });
+  afterEach(() => {
+    evaluate.mockRestore();
+  });
+
+  const claudePlugin = () =>
+    new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+  const agentCall = (id = "toolu_1") => ({
+    id,
+    name: "Agent",
+    arguments: {
+      description: "build",
+      prompt: SPAWN_PROMPT,
+      subagent_type: "general-purpose",
+    },
+  });
+
+  describe("on an allowed spawn call", () => {
+    test("appends the marker to a Claude Code Agent prompt, and the registry accepts the annotation", async () => {
+      const plugin = claudePlugin();
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(plugin);
+      const context = clientContext({
+        interactionType: "anthropic:messages",
+        headers: CLAUDE_CODE,
+        body: { messages: [{ role: "user", content: "Fix the build" }] },
+      });
+      await registry.onSessionInit(context);
+
+      const outcome = await registry.onToolCalls({
+        ...context,
+        canRewriteToolCalls: true,
+        toolCalls: [
+          agentCall(),
+          { id: "toolu_2", name: "Bash", arguments: { command: "ls" } },
+        ],
+      });
+
+      if (outcome.decision !== "allow") throw new Error("expected calls");
+      expect(outcome.toolCalls[0]).toMatchObject({
+        ...agentCall(),
+        arguments: {
+          ...agentCall().arguments,
+          prompt: expect.stringMatching(markedPrompt("s1")),
+        },
+        wireId: expect.any(String),
+      });
+      expect(outcome.toolCalls[1]).toMatchObject({
+        id: "toolu_2",
+        name: "Bash",
+        arguments: { command: "ls" },
+        wireId: expect.any(String),
+      });
+      // The runtime ruled on the call the model wrote.
+      expect(evaluate.mock.calls[0]?.[1][0]?.arguments).toEqual(
+        agentCall().arguments,
+      );
+    });
+
+    test("reports the annotation it made, and nothing for a batch without spawns", async () => {
+      const plugin = claudePlugin();
+      const context = clientContext({
+        interactionType: "anthropic:messages",
+        headers: CLAUDE_CODE,
+        body: { messages: [{ role: "user", content: "go" }] },
+      });
+      await plugin.onSessionInit(context);
+
+      const outcome = await plugin.onToolCalls(
+        toolCalls(context, [agentCall()]),
+      );
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        annotated: [
+          {
+            id: "toolu_1",
+            name: "Agent",
+            field: "prompt",
+            appended: expect.stringMatching(
+              /^\n\n\[appa\] delegated trajectory appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40} — child of s1\.$/,
+            ),
+          },
+        ],
+      });
+      expect(outcome).not.toHaveProperty("blocked");
+
+      const unannotated = await plugin.onToolCalls(
+        toolCalls(context, [
+          { id: "toolu_3", name: "Skill", arguments: { skill: "pdf" } },
+          { id: "toolu_4", name: "Bash", arguments: { command: "ls" } },
+        ]),
+      );
+      expect(unannotated).toMatchObject({
+        decision: "allow",
+        toolCalls: [
+          { id: "toolu_3", name: "Skill", arguments: { skill: "pdf" } },
+          { id: "toolu_4", name: "Bash", arguments: { command: "ls" } },
+        ],
+      });
+      expect(unannotated).not.toHaveProperty("annotated");
+      expect(unannotated).not.toHaveProperty("blocked");
+      expect(
+        unannotated && unannotated.decision === "allow"
+          ? unannotated.toolCalls.map((call) => call.wireId)
+          : [],
+      ).toEqual([expect.any(String), expect.any(String)]);
+    });
+
+    test("names the child's own trajectory as the parent of what a child spawns", async () => {
+      const plugin = claudePlugin();
+      const context = clientContext({
+        interactionType: "anthropic:messages",
+        headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+        body: {
+          messages: [
+            {
+              role: "user",
+              content: marked({ parentId: "s1", spawner: "s1" }),
+            },
+          ],
+        },
+      });
+      await plugin.onSessionInit(context);
+
+      const outcome = await plugin.onToolCalls(
+        toolCalls(context, [agentCall()]),
+      );
+
+      if (outcome?.decision !== "allow") throw new Error("expected calls");
+      expect(outcome.toolCalls[0].arguments).toMatchObject({
+        prompt: expect.stringMatching(markedPrompt("s1:a1")),
+      });
+    });
+
+    test("renders a denied spawn as a notice carrying the call as the model wrote it", async () => {
+      evaluate.mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no agents." },
+      ]);
+      const plugin = claudePlugin();
+      const context = clientContext({
+        interactionType: "anthropic:messages",
+        headers: CLAUDE_CODE,
+        body: { messages: [{ role: "user", content: "go" }] },
+        tools: true,
+      });
+      await plugin.onSessionInit(context);
+
+      const outcome = await plugin.onToolCalls(
+        toolCalls(context, [agentCall()]),
+      );
+
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(outcome).not.toHaveProperty("annotated");
+      const notice = JSON.parse(String(outcome.toolCalls[0].arguments));
+      expect(notice.tool).toBe("Agent");
+      expect(JSON.stringify(notice)).not.toContain("delegated trajectory");
+    });
+
+    test("appends to a Codex spawn_agent message or pushes onto its items, keeping the namespace", async () => {
+      const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.154.0",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: [{ type: "message", role: "user", content: "go" }],
+        },
+      });
+      await plugin.onSessionInit(context);
+      const items = [{ type: "text", text: SPAWN_PROMPT }];
+
+      const outcome = await plugin.onToolCalls(
+        toolCalls(context, [
+          {
+            id: "call_1",
+            name: "spawn_agent",
+            namespace: "multi_agent_v1",
+            arguments: JSON.stringify({ message: SPAWN_PROMPT }),
+          },
+          {
+            id: "call_2",
+            name: "spawn_agent",
+            namespace: "multi_agent_v1",
+            arguments: JSON.stringify({ items }),
+          },
+        ]),
+      );
+
+      const [evaluatedCalls, options] = [
+        evaluate.mock.calls.at(-1)?.[1],
+        evaluate.mock.calls.at(-1)?.[2],
+      ];
+      expect(evaluatedCalls?.map((call) => call.name)).toEqual([
+        "spawn_agent",
+        "spawn_agent",
+      ]);
+      expect(options?.isSpawn?.("spawn_agent")).toBe(true);
+      expect(options?.supportsDelegation).toBe(true);
+
+      if (outcome?.decision !== "allow") throw new Error("expected calls");
+      const [message, withItems] = outcome.toolCalls;
+      expect(message).toMatchObject({
+        id: "call_1",
+        name: "spawn_agent",
+        namespace: "multi_agent_v1",
+      });
+      expect(typeof message.arguments).toBe("string");
+      expect(JSON.parse(String(message.arguments)).message).toMatch(
+        markedPrompt("t0"),
+      );
+      expect(withItems.namespace).toBe("multi_agent_v1");
+      const pushed = JSON.parse(String(withItems.arguments)).items;
+      expect(pushed.slice(0, 1)).toEqual(items);
+      expect(pushed[1]).toEqual({
+        type: "text",
+        text: expect.stringMatching(
+          /^\[appa\] delegated trajectory appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40} — child of t0\.$/,
+        ),
+      });
+    });
+
+    test("appends to an OpenCode task prompt, never to a skill", async () => {
+      const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+      const context = clientContext({
+        sessionId: "user:user|p",
+        interactionType: "openai:chatCompletions",
+        headers: { "user-agent": "opencode/1.18.31", "x-session-id": "p" },
+        body: { messages: [{ role: "user", content: "go" }] },
+      });
+      await plugin.onSessionInit(context);
+
+      const outcome = await plugin.onToolCalls(
+        toolCalls(context, [
+          {
+            id: "c1",
+            name: "task",
+            arguments: JSON.stringify({
+              description: "d",
+              prompt: SPAWN_PROMPT,
+              subagent_type: "general",
+            }),
+          },
+          { id: "c2", name: "skill", arguments: '{"name":"pdf"}' },
+        ]),
+      );
+
+      if (outcome?.decision !== "allow") throw new Error("expected calls");
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments)).prompt).toMatch(
+        markedPrompt("p"),
+      );
+      expect(outcome.toolCalls[1].arguments).toBe('{"name":"pdf"}');
+    });
+
+    test("adds nothing where a marker could not travel safely", async () => {
+      const annotate = async (params: {
+        interactionType?: string;
+        canRewriteToolCalls?: boolean;
+        calls?: LlmProxyToolCallsContext["toolCalls"];
+      }) => {
+        const plugin = claudePlugin();
+        const context = clientContext({
+          interactionType: params.interactionType ?? "anthropic:messages",
+          headers: CLAUDE_CODE,
+          body: { messages: [{ role: "user", content: "go" }] },
+        });
+        await plugin.onSessionInit(context);
+        return plugin.onToolCalls({
+          ...context,
+          toolCalls: params.calls ?? [agentCall()],
+          ...(params.canRewriteToolCalls === undefined
+            ? { canRewriteToolCalls: true }
+            : { canRewriteToolCalls: params.canRewriteToolCalls }),
+        });
+      };
+
+      const unmarked = async (
+        params: Parameters<typeof annotate>[0],
+        expectedCalls: LlmProxyToolCallsContext["toolCalls"],
+      ) => {
+        const outcome = await annotate(params);
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          toolCalls: expectedCalls,
+        });
+        expect(outcome).not.toHaveProperty("annotated");
+        expect(JSON.stringify(outcome)).not.toContain("delegated trajectory");
+      };
+
+      // A transport that sends the calls as the model streamed them: no
+      // marker, but a trajectory stamp still identifies the session.
+      await unmarked({ canRewriteToolCalls: false }, [agentCall()]);
+      // A sibling the re-emitted batch would have to replace with an empty call.
+      await unmarked(
+        {
+          calls: [
+            agentCall(),
+            { id: "toolu_2", name: "Bash", arguments: '{"command":"l' },
+          ],
+        },
+        [
+          agentCall(),
+          { id: "toolu_2", name: "Bash", arguments: '{"command":"l' },
+        ],
+      );
+      // A wire family whose history this proxy cannot strip: no marker and
+      // no stamp.
+      await expect(
+        annotate({ interactionType: "gemini:generateContent" }),
+      ).resolves.toBeUndefined();
+      // No signing secret, no markers and no stamps.
+      config.openappa.offerSigningSecret = "";
+      await expect(annotate({})).resolves.toBeUndefined();
+    });
+
+    test("refuses nested child spawns that cannot carry a marker", async () => {
+      const cancel = vi
+        .spyOn(appaService, "cancelCalls")
+        .mockResolvedValue(undefined);
+      const nestedClaude = async (params: {
+        calls: LlmProxyToolCallsContext["toolCalls"];
+        canRewriteToolCalls?: boolean;
+      }) => {
+        const plugin = claudePlugin();
+        const context = clientContext({
+          interactionType: "anthropic:messages",
+          headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+          body: userTurns([marked({ parentId: "s1", spawner: "s1" })]),
+        });
+        await plugin.onSessionInit(context);
+        return plugin.onToolCalls({
+          ...context,
+          toolCalls: params.calls,
+          canRewriteToolCalls: params.canRewriteToolCalls ?? true,
+        });
+      };
+      try {
+        await expect(
+          nestedClaude({
+            calls: [
+              agentCall(),
+              { id: "toolu_2", name: "Bash", arguments: '{"command":"l' },
+            ],
+          }),
+        ).rejects.toBeInstanceOf(ApiError);
+        await expect(
+          nestedClaude({
+            calls: [
+              {
+                ...agentCall(),
+                arguments: { ...agentCall().arguments, prompt: "  \n" },
+              },
+            ],
+          }),
+        ).rejects.toBeInstanceOf(ApiError);
+        await expect(
+          nestedClaude({ calls: [agentCall()], canRewriteToolCalls: false }),
+        ).rejects.toBeInstanceOf(ApiError);
+
+        const codex = new AppaPluginArchestra([new AppaCodexAdapter()]);
+        const codexContext = clientContext({
+          sessionId: "user:user|t1",
+          interactionType: "openai:responses",
+          headers: codexChild({ parent: "t0", thread: "t1" }),
+          body: responsesTurns([marked({ parentId: "t0", spawner: "t0" })]),
+        });
+        await codex.onSessionInit(codexContext);
+        await expect(
+          codex.onToolCalls(
+            toolCalls(codexContext, [
+              {
+                id: "call_1",
+                name: "spawn_agent",
+                arguments: JSON.stringify({ items: [] }),
+              },
+            ]),
+          ),
+        ).rejects.toBeInstanceOf(ApiError);
+        expect(cancel).toHaveBeenCalledTimes(4);
+      } finally {
+        cancel.mockRestore();
+      }
+    });
+  });
+
+  describe("binding a child from its marker", () => {
+    test("binds a Claude Code child and grandchild under the lineage their markers name", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            body: userTurns([marked({ parentId: "s1", spawner: "s1" })]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1");
+      // Claude Code reports only the session: natively this is s1:g1, a
+      // sibling of its own parent.
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "g1" },
+            body: userTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1:g1");
+    });
+
+    test("binds a Codex grandchild under the root, not under its bare parent thread", async () => {
+      await expect(
+        boundSessionId(
+          new AppaPluginArchestra([new AppaCodexAdapter()]),
+          clientContext({
+            sessionId: "user:user|t2",
+            interactionType: "openai:responses",
+            headers: codexChild({ parent: "t1", thread: "t2" }),
+            body: responsesTurns([
+              marked({ parentId: "t0:t1", spawner: "t1" }),
+            ]),
+          }),
+        ),
+      ).resolves.toBe("user:user|t0:t1:t2");
+    });
+
+    test("binds an OpenCode grandchild under the root, even beside a parent header the proxy derived", async () => {
+      const context = clientContext({
+        sessionId: "user:user|g",
+        interactionType: "openai:chatCompletions",
+        headers: {
+          "user-agent": "opencode/1.18.31",
+          "x-session-id": "g",
+          "x-parent-session-id": "c",
+          // Written by the proxy from x-parent-session-id, not by the client.
+          "x-appa-parent-id": "c",
+        },
+        body: userTurns([marked({ parentId: "p:c", spawner: "c" })]),
+      });
+      trustedOf(context).claims = {};
+      await expect(
+        boundSessionId(
+          new AppaPluginArchestra([new AppaOpenCodeAdapter()]),
+          context,
+        ),
+      ).resolves.toBe("user:user|p:c:g");
+    });
+
+    test("drops a derived fork source when a native child binding wins", async () => {
+      const context = clientContext({
+        interactionType: "openai:chatCompletions",
+        headers: {
+          "user-agent": "opencode/1.18.31",
+          "x-session-id": "g",
+          "x-parent-session-id": "c",
+        },
+        body: userTurns([marked({ parentId: "p:c", spawner: "c" })]),
+      });
+      trustedOf(context).session = {
+        ...trustedOf(context).session,
+        fork_of: "user:user|p",
+      };
+      const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+      await plugin.onSessionInit(context);
+      const binding = (
+        plugin as unknown as {
+          bindings: Map<
+            object,
+            {
+              session: {
+                session_id: string;
+                parent_id?: string;
+                fork_of?: string;
+              };
+            }
+          >;
+        }
+      ).bindings.get(context.resources);
+
+      expect(binding?.session).toMatchObject({
+        session_id: "user:user|p:c:g",
+        parent_id: "user:user|p:c",
+      });
+      expect(binding?.session.fork_of).toBeUndefined();
+    });
+
+    test("keeps an OpenCode child's id when a resumed task brings a second marker", async () => {
+      await expect(
+        boundSessionId(
+          new AppaPluginArchestra([new AppaOpenCodeAdapter()]),
+          clientContext({
+            sessionId: "user:user|c",
+            interactionType: "openai:chatCompletions",
+            headers: {
+              "user-agent": "opencode/1.18.31",
+              "x-session-id": "c",
+              "x-parent-session-id": "p",
+            },
+            body: userTurns([
+              marked({ parentId: "p", spawner: "p" }),
+              marked({
+                parentId: "p:x",
+                spawner: "p",
+                prompt: "And now this.",
+              }),
+            ]),
+          }),
+        ),
+      ).resolves.toBe("user:user|p:c");
+    });
+
+    test("binds as today without a marker", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            body: userTurns([SPAWN_PROMPT]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1");
+    });
+  });
+
+  describe("the parent-echo guard and marker position", () => {
+    test("a root stays the root whatever marker its text carries", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: CLAUDE_CODE,
+            body: userTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1");
+    });
+
+    test("never binds a child under a lineage that already contains it", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            // The marker a1 put on its own child, read back.
+            body: userTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1");
+      // A Codex child holding its own child's marker: minted by another
+      // spawner, it does not verify here.
+      await expect(
+        boundSessionId(
+          new AppaPluginArchestra([new AppaCodexAdapter()]),
+          clientContext({
+            sessionId: "user:user|t1",
+            interactionType: "openai:responses",
+            headers: codexChild({ parent: "t0", thread: "t1" }),
+            body: responsesTurns([
+              marked({ parentId: "t0:t1", spawner: "t1" }),
+            ]),
+          }),
+        ),
+      ).resolves.toBe("user:user|t0:t1");
+    });
+
+    test("later text cannot re-parent a child: reminders beside results and later turns lose to the opening", async () => {
+      const sibling = marked({ parentId: "s1:b1", spawner: "s1" });
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            body: {
+              messages: [
+                {
+                  role: "user",
+                  content: marked({ parentId: "s1", spawner: "s1" }),
+                },
+                {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "tool_use",
+                      id: "toolu_1",
+                      name: "Bash",
+                      input: { command: "ls" },
+                    },
+                  ],
+                },
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "tool_result",
+                      tool_use_id: "toolu_1",
+                      content: "ok",
+                    },
+                    { type: "text", text: sibling },
+                  ],
+                },
+                { role: "assistant", content: "done" },
+                // A message another agent sent.
+                { role: "user", content: sibling },
+              ],
+            },
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1");
+    });
+
+    test("a forked Codex history binds under the spawner's marker, not the ancestor's it copied", async () => {
+      await expect(
+        boundSessionId(
+          new AppaPluginArchestra([new AppaCodexAdapter()]),
+          clientContext({
+            sessionId: "user:user|t2",
+            interactionType: "openai:responses",
+            headers: codexChild({ parent: "t1", thread: "t2" }),
+            body: responsesTurns([
+              // t1's own opening, copied into the fork.
+              marked({ parentId: "t0", spawner: "t0" }),
+              marked({ parentId: "t0:t1", spawner: "t1" }),
+            ]),
+          }),
+        ),
+      ).resolves.toBe("user:user|t0:t1:t2");
+    });
+  });
+
+  describe("markers that cannot be used", () => {
+    test("ignores a marker minted for another caller or organization, or tampered with", async () => {
+      const grandchild = (opening: string) =>
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "g1" },
+            body: userTurns([opening]),
+          }),
+        );
+      const forged = marked({ parentId: "s1:a1", spawner: "s1" }).replace(
+        /appa-([0-9a-f])/,
+        (_all, hex: string) => `appa-${hex === "0" ? "1" : "0"}`,
+      );
+      for (const opening of [
+        marked({ parentId: "s1:a1", spawner: "s1", callerId: "user:other" }),
+        marked({ parentId: "s1:a1", spawner: "s1", organizationId: "other" }),
+        // Replayed from another conversation of the same caller.
+        marked({ parentId: "s2:a1", spawner: "s2" }),
+        forged,
+      ]) {
+        await expect(grandchild(opening)).resolves.toBe("user:user|s1:g1");
+      }
+    });
+
+    test("holds explicit X-Appa ids to the marker's lineage", async () => {
+      const grandchild = (claims: Record<string, string>) =>
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: {
+              ...CLAUDE_CODE,
+              "x-claude-code-agent-id": "g1",
+              ...claims,
+            },
+            body: userTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
+          }),
+        );
+      await expect(
+        grandchild({ "x-appa-session-id": "s1:a1:g1" }),
+      ).resolves.toBe("user:user|s1:a1:g1");
+      await expect(grandchild({ "x-appa-parent-id": "s1" })).rejects.toThrow(
+        ApiError,
+      );
+      await expect(
+        grandchild({ "x-appa-session-id": "s1:g1" }),
+      ).rejects.toThrow(ApiError);
+    });
+
+    test.each([
+      512, 513,
+    ])("enforces the scoped lineage limit (%s bytes) without rebinding", async (bytes) => {
+      // The scoped id has the same 512-byte bound the gateway and the offers
+      // hold session ids to.
+      const scope = "user:user|";
+      const leaf = ":g1";
+      const lineage = (bytes: number) =>
+        `s1:${"a".repeat(bytes - scope.length - leaf.length - "s1:".length)}`;
+      const grandchild = (parentId: string) =>
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "g1" },
+            body: userTurns([marked({ parentId, spawner: "s1" })]),
+          }),
+        );
+      if (bytes === 512) {
+        await expect(grandchild(lineage(bytes))).resolves.toBe(
+          `${scope}${lineage(bytes)}${leaf}`,
+        );
+      } else {
+        await expect(grandchild(lineage(bytes))).rejects.toThrow(
+          "OpenAPPA child trajectory exceeds the session id limit",
+        );
+      }
+    });
+  });
+
+  describe("a child's first lineage", () => {
+    const child = (body: unknown, agentId?: string) =>
+      boundSessionId(
+        // A fresh plugin per request: another replica, or a restarted one.
+        claudePlugin(),
+        clientContext({
+          interactionType: "anthropic:messages",
+          headers: {
+            ...CLAUDE_CODE,
+            ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
+          },
+          body,
+        }),
+      );
+    const grandchild = (body: unknown) => child(body, "g1");
+
+    const receiptFor = (parentId: string, childId: string) =>
+      mintChildTrajectoryReceipt({
+        organizationId: delegationOrganizationId,
+        callerId: "user:user",
+        parentId,
+        childId,
+        childNativeId: "g1",
+        spawnerNativeId: "s1",
+      });
+
+    test("outlives the opening message that named it", async () => {
+      await expect(
+        grandchild(userTurns([marked({ parentId: "s1:a1", spawner: "s1" })])),
+      ).resolves.toBe("user:user|s1:a1:g1");
+      const footer = receiptFor("s1:a1", "s1:a1:g1");
+      await expect(
+        grandchild({
+          messages: [
+            { role: "assistant", content: `${footer}\n\nok` },
+            {
+              role: "user",
+              content: "Summary of the conversation so far.",
+            },
+          ],
+        }),
+      ).resolves.toBe("user:user|s1:a1:g1");
+    });
+
+    test("rebinds a marker-only child from its signed compaction proof", async () => {
+      await expect(
+        child(
+          userTurns([
+            marked({
+              parentId: "s1",
+              spawner: "s1",
+              spawnCallId: "spawn-call",
+            }),
+          ]),
+        ),
+      ).resolves.toBe("user:user|s1:spawn-call");
+      const footer = mintChildTrajectoryReceipt({
+        organizationId: delegationOrganizationId,
+        callerId: "user:user",
+        parentId: "s1",
+        childId: "s1:spawn-call",
+        spawnerNativeId: "s1",
+        spawnCallId: "spawn-call",
+      });
+      await expect(
+        child({
+          messages: [
+            { role: "assistant", content: `${footer}\n\nok` },
+            {
+              role: "user",
+              content: "Summary of the conversation so far.",
+            },
+          ],
+        }),
+      ).resolves.toBe("user:user|s1:spawn-call");
+    });
+
+    test("falls back to the native parent when history has no receipt", async () => {
+      await expect(
+        grandchild(userTurns(["Summary of the conversation so far."])),
+      ).resolves.toBe("user:user|s1:g1");
+    });
+  });
+});
+
+const DELEGATION_SECRET = "plugin-test-secret-0123456789abcdef";
+const SPAWN_PROMPT = "Find out why the build fails.";
+let delegationOrganizationId = "organization";
+const CLAUDE_CODE = {
+  "user-agent": "claude-cli/2.1.0 (external, cli)",
+  "x-claude-code-session-id": "s1",
+};
+
+/** A spawn prompt with the marker APPA appended for this spawn. */
+function marked(params: {
+  parentId: string;
+  spawner: string;
+  prompt?: string;
+  callerId?: string;
+  organizationId?: string;
+  spawnCallId?: string;
+}): string {
+  const prompt = params.prompt ?? SPAWN_PROMPT;
+  const marker = mintDelegationMarker({
+    organizationId: params.organizationId ?? delegationOrganizationId,
+    callerId: params.callerId ?? "user:user",
+    parentId: params.parentId,
+    spawnerNativeId: params.spawner,
+    prompt,
+    spawnCallId: params.spawnCallId,
+  });
+  return `${prompt}\n\n${marker}`;
+}
+
+/** The whole prompt, marker included, as a pattern. */
+function markedPrompt(parentId: string): RegExp {
+  const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `^${literal(SPAWN_PROMPT)}\n\n\\[appa\\] delegated trajectory (?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\\.[0-9a-f]{40}) — child of ${literal(parentId)}\\.$`,
+  );
+}
+
+function userTurns(texts: string[]) {
+  return {
+    messages: texts.flatMap((content, index) => [
+      ...(index > 0 ? [{ role: "assistant", content: "ok" }] : []),
+      { role: "user", content },
+    ]),
+  };
+}
+
+function responsesTurns(texts: string[]) {
+  return {
+    input: texts.flatMap((text, index) => [
+      ...(index > 0
+        ? [
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "ok" }],
+            },
+          ]
+        : []),
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text }],
+      },
+    ]),
+  };
+}
+
+function codexChild(params: { parent: string; thread: string }) {
+  return {
+    "user-agent": "codex_cli_rs/0.154.0",
+    "x-codex-turn-metadata": JSON.stringify({
+      parent_thread_id: params.parent,
+      thread_id: params.thread,
+    }),
+  };
+}
+
+function trustedOf(context: LlmProxyRequestContext): AppaTrustedContext {
+  return context.resources.get(
+    APPA_PLUGIN_TRUSTED_CONTEXT,
+  ) as AppaTrustedContext;
+}
+
+/** A client request the proxy prepared: its markers read, then stripped. */
+function clientContext(params: {
+  interactionType: string;
+  headers: Record<string, string>;
+  body: unknown;
+  sessionId?: string;
+  tools?: boolean;
+}): LlmProxyRequestContext {
+  const context = requestContext({
+    sessionId: params.sessionId ?? "user:user|s1",
+    organizationId: delegationOrganizationId,
+  });
+  context.interactionType = params.interactionType;
+  context.headers = params.headers;
+  context.requestBody = params.body;
+  const trusted = trustedOf(context);
+  trusted.request = {
+    ...prepareAppaRequest({
+      body: params.body,
+      interactionType: params.interactionType,
+      identity: requestIdentity(),
+    }),
+    ...(params.tools ? { tools: stubRequestTools() } : {}),
+  };
+  return context;
+}
+
+function toolCalls(
+  context: LlmProxyRequestContext,
+  calls: LlmProxyToolCallsContext["toolCalls"],
+): LlmProxyToolCallsContext {
+  return { ...context, toolCalls: calls, canRewriteToolCalls: true };
+}
+
+/** The session a request's calls are evaluated under. */
+async function boundSessionId(
+  plugin: AppaPluginArchestra,
+  context: LlmProxyRequestContext,
+): Promise<string | undefined> {
+  const evaluate = vi.mocked(appaService.evaluateToolCalls);
+  const before = evaluate.mock.calls.length;
+  await plugin.onSessionInit(context);
+  await plugin.onToolCalls(
+    toolCalls(context, [{ id: "probe", name: "Bash", arguments: {} }]),
+  );
+  return evaluate.mock.calls[before]?.[0].session_id;
+}
+
+function requestIdentity() {
+  return {
+    mode: "compat" as const,
+    canonicalize: (name: string) => name,
+    attestationOf: () => undefined,
+    verified: [] as const,
+    unverifiedMarkerCount: 0,
+  };
+}
+
+function stubRequestTools() {
+  return {
+    control: { name: "archestra__execute_remedy_plan" },
+    notice: { name: "archestra__get_remedy_plans" },
+    askUser: undefined,
+    platformToolNames: new Set<string>(),
+    namespaces: new Map<string, string>(),
   };
 }

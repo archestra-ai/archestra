@@ -111,14 +111,14 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy can append this two-line mark to a protected session's first reply and compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can prepend this two-line mark to a protected session's first reply and compaction summaries:
 
 ```
-▄█▄▄▄█▄  protected session XK7-Q2M9
-██▄█▄██
+▄█▄▄▄█▄
+██▄█▄██  protected session XK7-Q2M9
 ```
 
-Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
+Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark shows which protected session wrote the reply. The proxy removes the mark before forwarding requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
 
 Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients never carry the mark. Compaction summaries retain the mark so lineage survives client-side history rewrites.
 

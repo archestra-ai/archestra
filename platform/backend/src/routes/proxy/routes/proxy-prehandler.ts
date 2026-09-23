@@ -26,7 +26,7 @@ const UUID_REGEX =
  */
 export function createProxyPreHandler(params: {
   apiPrefix: string;
-  endpointSuffix: string | string[];
+  endpointSuffix: string | readonly string[];
   upstream: string;
   providerName: string;
   rewritePrefix?: string;
@@ -48,9 +48,8 @@ export function createProxyPreHandler(params: {
     next: HookHandlerDoneFunction,
   ) => {
     const urlPath = request.url.split("?")[0];
-    const endpointSuffixes = Array.isArray(endpointSuffix)
-      ? endpointSuffix
-      : [endpointSuffix];
+    const endpointSuffixes =
+      typeof endpointSuffix === "string" ? [endpointSuffix] : endpointSuffix;
 
     const matchedSuffix = endpointSuffixes.find((suffix) =>
       urlPath.endsWith(suffix),

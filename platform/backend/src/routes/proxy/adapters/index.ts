@@ -23,7 +23,10 @@ export {
   openAiEmbeddingsAdapterFactory,
   openaiAdapterFactory,
 } from "./openai";
-export { openAiResponsesAdapterFactory } from "./openai-responses";
+export {
+  openAiResponsesAdapterFactory,
+  openAiResponsesCompactAdapterFactory,
+} from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";
 export { perplexityResponsesAdapterFactory } from "./perplexity-responses";

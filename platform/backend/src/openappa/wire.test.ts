@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import { extractGatewayToolDeclarations } from "@/routes/proxy/utils/gateway-tool-declarations";
@@ -7,11 +8,14 @@ import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-na
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { openappaActor } from "./actor";
+import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
+import { mintDelegationMarker } from "./delegation";
 import {
   buildNoticeArguments,
   NoticeArguments,
   RemedyExecutionSchema,
   readNotice,
+  readRemedyExecution,
 } from "./notice";
 import { prepareAppaRequest } from "./request";
 import { appendSessionReceipt } from "./session-token";
@@ -19,10 +23,12 @@ import {
   appaSessionIdentity,
   appaTurnBoundaries,
   appaWireFamily,
+  appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
   canonicalJson,
   declaredToolEntries,
   sessionReceiptEvidence,
+  stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "./wire";
 
@@ -31,6 +37,7 @@ const CONTROL = "mcp__archestra__execute_remedy_plan";
 /** The names the gateway advertises, which Codex declares bare in a namespace. */
 const ADVERTISED_NOTICE = "archestra__get_remedy_plans";
 const ADVERTISED_CONTROL = "archestra__execute_remedy_plan";
+const ADVERTISED_ASK_USER = "archestra__ask_user";
 const canonicalize = (name: string) =>
   name.startsWith("mcp__archestra__")
     ? `archestra__${name.slice("mcp__archestra__".length)}`
@@ -242,6 +249,89 @@ describe("session receipt text carriers", () => {
     expect(
       await sessionReceiptEvidence({ organizationId, callerId, codes }),
     ).toEqual(["parent"]);
+  });
+});
+
+describe("child trajectory receipt text carriers", () => {
+  test("strips a signed carrier from history and prepends it on the response", () => {
+    config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1:a1",
+      childId: "s1:a1:g1",
+      childNativeId: "g1",
+      spawnerNativeId: "s1",
+    });
+    expect(footer).toBeDefined();
+    const response = { content: [{ type: "text", text: "hello" }] };
+    expect(
+      appendChildTrajectoryReceiptToResponse({
+        family: "anthropic:messages",
+        response,
+        footer: footer ?? "",
+      }),
+    ).toBe(true);
+    expect(response.content[0].text).toBe(`${footer}\n\nhello`);
+    const body = {
+      messages: [{ role: "assistant", content: response.content[0].text }],
+    };
+    const receipts = stripChildTrajectoryReceiptsFromRequest({
+      family: "anthropic:messages",
+      body,
+    });
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      parentId: "s1:a1",
+      childId: "s1:a1:g1",
+      childNativeId: "g1",
+    });
+    expect(body.messages[0].content).toBe("hello");
+  });
+
+  test("merges supplied receipts with additional textual carriers", () => {
+    config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
+    const suppliedFooter = mintChildTrajectoryReceipt({
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1:a1",
+      childId: "s1:a1:g1",
+      childNativeId: "g1",
+      spawnerNativeId: "s1",
+    });
+    const textualFooter = mintChildTrajectoryReceipt({
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1:a2",
+      childId: "s1:a2:g2",
+      childNativeId: "g2",
+      spawnerNativeId: "s1",
+    });
+    expect(suppliedFooter).toBeDefined();
+    expect(textualFooter).toBeDefined();
+    const suppliedBody = {
+      messages: [{ role: "assistant", content: suppliedFooter ?? "" }],
+    };
+    const [suppliedReceipt] = stripChildTrajectoryReceiptsFromRequest({
+      family: "anthropic:messages",
+      body: suppliedBody,
+    });
+    if (!suppliedReceipt) throw new Error("expected supplied receipt");
+    const body = {
+      messages: [{ role: "assistant", content: textualFooter ?? "" }],
+    };
+
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+      childTrajectoryReceipts: [suppliedReceipt],
+    });
+
+    expect(
+      prepared.childTrajectoryReceipts?.map((receipt) => receipt.parentId),
+    ).toEqual(["s1:a1", "s1:a2"]);
+    expect(JSON.stringify(body)).not.toContain("appact2-");
   });
 });
 
@@ -565,10 +655,64 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("leaves a notice for a name no provider accepts as the notice", () => {
+    // A model invented "my_gateway archestra__run_tool"; restored into
+    // history, the name fails the provider's validation on every later turn.
+    const invented = buildNoticeArguments({
+      id: "call_invented",
+      tool: "my_gateway archestra__run_tool",
+      arguments: '{"tool_name":"archestra__whoami"}',
+      result: "[appa] tool is not declared",
+    });
+    const denied = buildNoticeArguments({
+      id: "call_shell",
+      tool: "shell",
+      arguments: '{"command":"ls"}',
+      result: "[appa] Blocked",
+    });
+    const call = (id: string, args: unknown) => ({
+      id,
+      type: "function",
+      function: { name: NOTICE, arguments: JSON.stringify(args) },
+    });
+    const chat = {
+      tools: [
+        { type: "function", function: { name: NOTICE } },
+        { type: "function", function: { name: CONTROL } },
+      ],
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [
+            call("call_invented", invented),
+            call("call_shell", denied),
+          ],
+        },
+        { role: "tool", tool_call_id: "call_invented", content: "ruling" },
+        { role: "tool", tool_call_id: "call_shell", content: "ruling" },
+      ],
+    };
+
+    const prepared = prepareAppaRequest({
+      body: chat,
+      interactionType: "openai:chatCompletions",
+      identity,
+    });
+
+    const [kept, restored] = chat.messages[0].tool_calls ?? [];
+    expect(kept.function.name).toBe(NOTICE);
+    expect(restored.function.name).toBe("shell");
+    expect(prepared.restoredNoticeCallIds).toEqual(new Set(["call_shell"]));
+  });
+
   test("restores a direct control receipt without changing call identity or result adjacency", async () => {
     const originalArguments =
       '{\n  "offer_id": "offer_1",\n  "label": { "trust": "trusted" }\n}';
-    const receipt = (callId: string, toolName = CONTROL) => ({
+    const receipt = (
+      callId: string,
+      toolName = CONTROL,
+      namespace?: string,
+    ) => ({
       offer_id: "offer_1",
       label: { trust: "trusted" },
       execution: {
@@ -576,6 +720,7 @@ describe("denial notice restoration", () => {
         kind: "appa_remedy" as const,
         call_id: callId,
         tool_name: toolName,
+        ...(namespace ? { namespace } : {}),
         original_arguments: originalArguments,
       },
     });
@@ -608,7 +753,7 @@ describe("denial notice restoration", () => {
           name: ADVERTISED_CONTROL,
           namespace: "mcp__gw",
           arguments: JSON.stringify(
-            receipt("call_control", ADVERTISED_CONTROL),
+            receipt("call_control", ADVERTISED_CONTROL, "mcp__gw"),
           ),
         },
         {
@@ -720,6 +865,35 @@ describe("denial notice restoration", () => {
       tool_use_id: "call_control",
       content: "gateway result",
     });
+  });
+
+  test.each([
+    undefined,
+    "mcp__other",
+    "mcp__gw",
+  ])("requires an exact remedy execution namespace (%s)", (namespace) => {
+    const args = { offer_id: "offer_1" };
+    const execution = readRemedyExecution({
+      callId: "call_control",
+      toolName: ADVERTISED_CONTROL,
+      namespace: "mcp__gw",
+      arguments: {
+        ...args,
+        execution: {
+          v: 1,
+          kind: "appa_remedy",
+          call_id: "call_control",
+          tool_name: ADVERTISED_CONTROL,
+          namespace,
+          original_arguments: JSON.stringify(args),
+        },
+      },
+    });
+    if (namespace === "mcp__gw") {
+      expect(execution?.parsedOriginalArguments).toEqual(args);
+    } else {
+      expect(execution).toBeNull();
+    }
   });
 
   test.each([
@@ -912,6 +1086,7 @@ describe("denial notice restoration", () => {
           kind: "appa_remedy",
           call_id: callId,
           tool_name: ADVERTISED_CONTROL,
+          namespace: "mcp__gw",
           original_arguments: originalArguments,
         },
       });
@@ -2327,6 +2502,72 @@ describe("APPA request preflight", () => {
     ]);
   });
 
+  test("strips proxy-only ask_user parameters only from the attested namespace", async () => {
+    const schema = () => ({
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        remedy_offers: { type: "array" },
+      },
+      required: ["question", "remedy_offers"],
+    });
+    const foreignSchema = schema();
+    const platformSchema = schema();
+    const body = {
+      tools: [
+        {
+          type: "namespace",
+          name: "mcp__evil",
+          tools: [
+            {
+              type: "function",
+              name: ADVERTISED_ASK_USER,
+              parameters: foreignSchema,
+            },
+          ],
+        },
+        {
+          type: "namespace",
+          name: "mcp__gw",
+          tools: [
+            attestedTool({
+              type: "function",
+              name: ADVERTISED_NOTICE,
+              advertisedName: ADVERTISED_NOTICE,
+            }),
+            attestedTool({
+              type: "function",
+              name: ADVERTISED_CONTROL,
+              advertisedName: ADVERTISED_CONTROL,
+            }),
+            {
+              ...attestedTool({
+                type: "function",
+                name: ADVERTISED_ASK_USER,
+                advertisedName: ADVERTISED_ASK_USER,
+              }),
+              parameters: platformSchema,
+            },
+          ],
+        },
+      ],
+      input: [],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      identity: await attestedIdentity(body),
+    });
+
+    expect(foreignSchema).toEqual(schema());
+    expect(platformSchema).toEqual({
+      type: "object",
+      properties: { question: { type: "string" } },
+      required: ["question"],
+    });
+  });
+
   test("never resolves a Codex namespace member by its bare name alone", () => {
     // Without attestations, a namespaced member is read as
     // `<namespace>__<member>`: any server's namespace can hold a member
@@ -2499,6 +2740,77 @@ describe("APPA request preflight", () => {
         ],
       }),
     ).toBeUndefined();
+  });
+
+  test("reads a child's delegation markers, then hides them from the provider, with or without declared tools", () => {
+    config.openappa.offerSigningSecret = "wire-test-secret-0123456789abcdef";
+    const prompt = "Find the flaky test.";
+    const marker = mintDelegationMarker({
+      organizationId: "org",
+      callerId: "user:u",
+      parentId: "s1:a1",
+      spawnerNativeId: "s1",
+      prompt,
+    });
+    const history = () => [
+      { role: "user", content: `${prompt}\n\n${marker}` },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "Agent",
+            input: { prompt: `${prompt}\n\n${marker}` },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_1", content: "done" },
+        ],
+      },
+    ];
+    for (const tools of [[], [{ name: NOTICE }, { name: CONTROL }]]) {
+      const body = { tools, messages: history() };
+      const prepared = prepareAppaRequest({
+        body,
+        interactionType: "anthropic:messages",
+        identity,
+      });
+      expect(prepared.delegation?.markers).toEqual([
+        expect.objectContaining({ parentId: "s1:a1" }),
+      ]);
+      expect(JSON.stringify(body.messages)).not.toContain(
+        "delegated trajectory",
+      );
+      expect(body.messages[0].content).toBe(prompt);
+    }
+
+    // The turn digest is taken over what the provider sees.
+    const turn = (messages: unknown[]) =>
+      prepareAppaRequest({
+        body: {
+          tools: [{ name: NOTICE }, { name: CONTROL }],
+          messages: [...messages, { role: "user", content: "go on" }],
+        },
+        interactionType: "anthropic:messages",
+        identity,
+      }).promptOperationId;
+    const stripped = history();
+    stripped[0].content = prompt;
+    (stripped[1].content as { input: unknown }[])[0].input = { prompt };
+    expect(turn(history())).toBe(turn(stripped));
+  });
+
+  test("reads no markers on a wire family it cannot strip them from", () => {
+    const prepared = prepareAppaRequest({
+      body: { contents: [{ role: "user", parts: [{ text: "hi" }] }] },
+      interactionType: "gemini:generateContent",
+      identity,
+    });
+    expect(prepared.delegation).toBeUndefined();
   });
 
   test("uses a semantic turn digest when request object keys are reordered", () => {

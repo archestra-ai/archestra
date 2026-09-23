@@ -1259,8 +1259,11 @@ export function restToSdkGenerateContentParams(
   }
 
   if (body.generationConfig) {
-    params.config =
-      body.generationConfig as GenerateContentParameters["config"];
+    // Copied: the SDK config gains tools and systemInstruction below, which
+    // must not leak back into the request the interaction log records.
+    params.config = {
+      ...body.generationConfig,
+    } as GenerateContentParameters["config"];
   } else {
     const generationConfig: Record<string, unknown> = {};
     const configKeys = [

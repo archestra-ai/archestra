@@ -1322,6 +1322,20 @@ describe("restToSdkGenerateContentParams tool-schema sanitization", () => {
   });
 });
 
+test("leaves the recorded request's generationConfig as sent", () => {
+  const body: Partial<Gemini.Types.GenerateContentRequest> = {
+    contents: [],
+    generationConfig: { maxOutputTokens: 100 },
+    systemInstruction: { parts: [{ text: "be brief" }] },
+  };
+  const tools: Gemini.Types.Tool[] = [
+    { functionDeclarations: [{ name: "read", description: "read" }] },
+  ];
+  const params = restToSdkGenerateContentParams(body, "gemini-2.5-pro", tools);
+  expect(params.config?.tools).toHaveLength(1);
+  expect(body.generationConfig).toEqual({ maxOutputTokens: 100 });
+});
+
 describe("GeminiRequestAdapter tool result updates", () => {
   /**
    * A `functionResponse` without an `id` is the common case — the AI SDK's

@@ -1,14 +1,38 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isCodexClientMetadata } from "@archestra/shared";
+import {
+  codexClientMetadataSessionId,
+  isCodexClientMetadata,
+} from "@archestra/shared";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
-import type { AppaClientAdapter, AskUserArguments } from "../types";
+import type { CommonToolResult } from "@/types/common-llm-format";
+import type {
+  AppaClientAdapter,
+  AppaMatchContext,
+  AppaSpawnPromptField,
+  AskUserArguments,
+} from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { structuredQuestionRuling } from "./native-question-ruling";
+import {
+  asRecord,
+  bindMintedChildTrajectory,
+  localToolName,
+  namesChildrenFromArguments,
+  parseJsonHeader,
+  stringField,
+  stripRecordFields,
+} from "./trajectory";
+
+const SPAWN_TOOLS = new Set(["spawn_agent"]);
+const CHILD_ID_KEYS = ["agent_id", "thread_id", "receiver_thread_id"] as const;
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
+  readonly trajectoryPrefix = "codex";
+  // Codex advertises request_user_input even when Default mode cannot run it.
+  // Keep ask_user on the gateway so Codex shows an MCP elicitation form.
   readonly nativeQuestion = {
     toolName: "request_user_input",
     supportsMultiple: false,
@@ -30,7 +54,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     }),
     rulingFromResult: structuredQuestionRuling,
   };
-  matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
+  matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
     ).toLowerCase();
@@ -56,9 +80,8 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    // OpenAPPA's Archestra adapter derives a bare host spelling to its typed
-    // host/archestra identity. Codex's function and builtin decorations are
-    // client syntax, not part of that spelling.
+    // The Archestra adapter derives bare tool names to host/archestra identity.
+    // Removes `functions.` and `builtin:` client prefixes before derivation.
     const stripped = name.startsWith("functions.")
       ? name.slice("functions.".length)
       : name;
@@ -73,10 +96,9 @@ export class AppaCodexAdapter implements AppaClientAdapter {
    * a new thread, and compactions stay within the same thread.
    * Contradictory claims are rejected.
    */
-  extractSessionIdentity(context: {
-    headers: Readonly<Record<string, string | string[] | undefined>>;
-    requestBody: unknown;
-  }): AppaSessionIdentity | undefined {
+  extractSessionIdentity(
+    context: AppaMatchContext,
+  ): AppaSessionIdentity | undefined {
     const claims: Array<{ sessionId?: string; threadId?: string } | undefined> =
       [];
     const clientMetadata = asRecord(context.requestBody)?.client_metadata;
@@ -109,14 +131,130 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       sessionId ??= claim.sessionId;
       threadId ??= claim.threadId;
     }
-    // `forked_from_thread_id` marks the client's fork, but the runtime only
-    // opens a child on a spawn the parent prepared - a bare parent id would
-    // refuse the session outright. The fork's replayed history carries the
-    // parent's trajectory stamps, which continue the parent's root instead.
+    // `forked_from_thread_id` marks a client fork.
+    // The runtime only opens a child trajectory for a prepared spawn call.
+    // Replayed history carries parent trajectory stamps that continue the parent root.
     const root = threadId ?? sessionId;
     return root
       ? { sessionId: root, provenance: "codex-turn-metadata" }
       : undefined;
+  }
+
+  isSpawnTool(name: string): boolean {
+    return SPAWN_TOOLS.has(localToolName(name));
+  }
+
+  classifySpawnResult(
+    result: CommonToolResult,
+  ): "pending" | "failed" | undefined {
+    if (!this.isSpawnTool(result.name)) return undefined;
+    if (result.isError) return "failed";
+    const output =
+      typeof result.content === "string"
+        ? parseJsonObject(result.content)
+        : asRecord(result.content);
+    return stringField(output?.agent_id) || stringField(output?.task_name)
+      ? "pending"
+      : "failed";
+  }
+
+  isChildCompletionResult(result: CommonToolResult): boolean {
+    if (localToolName(result.name) !== "wait_agent" || result.isError)
+      return false;
+    const output =
+      typeof result.content === "string"
+        ? parseJsonObject(result.content)
+        : asRecord(result.content);
+    const status = asRecord(output?.status);
+    return Object.values(status ?? {}).some(
+      (entry) => typeof asRecord(entry)?.completed === "string",
+    );
+  }
+
+  normalizeChildLaunchResult(result: CommonToolResult): string | undefined {
+    if (
+      !this.isSpawnTool(result.name) ||
+      this.classifySpawnResult(result) === "failed"
+    )
+      return undefined;
+    const output =
+      typeof result.content === "string"
+        ? parseJsonObject(result.content)
+        : asRecord(result.content);
+    const id = stringField(output?.agent_id) ?? stringField(output?.task_name);
+    if (!id || !/^[A-Za-z0-9_.:-]{1,512}$/.test(id)) {
+      throw new ApiError(
+        409,
+        "OpenAPPA withheld an invalid child launch acknowledgment",
+      );
+    }
+    return JSON.stringify({ agent_id: id });
+  }
+
+  spawnPromptField(
+    name: string,
+    args: Record<string, unknown>,
+  ): AppaSpawnPromptField | undefined {
+    if (!SPAWN_TOOLS.has(localToolName(name))) return undefined;
+    // spawn_agent takes its prompt as a message or as input items, never both.
+    if (typeof args.message === "string" && args.message.trim().length > 0)
+      return { field: "message", kind: "text" };
+    if (Array.isArray(args.items) && args.items.length > 0)
+      return { field: "items", kind: "items" };
+    return undefined;
+  }
+
+  nativeConversationId(context: AppaMatchContext): string | undefined {
+    // The request thread, which child subagents report as parent_thread_id.
+    const turn = parseJsonHeader(context.headers, "x-codex-turn-metadata");
+    const body = asRecord(context.requestBody);
+    const metadata =
+      asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
+    return (
+      this.extractSessionIdentity(context)?.sessionId ??
+      stringField(turn?.thread_id) ??
+      stringField(body?.prompt_cache_key) ??
+      stringField(metadata?.thread_id) ??
+      codexClientMetadataSessionId(body?.client_metadata) ??
+      undefined
+    );
+  }
+
+  namesChildren(params: { rootId: string; arguments: unknown }): string[] {
+    return namesChildrenFromArguments({
+      rootId: params.rootId,
+      arguments: params.arguments,
+      pathPatterns: [],
+      idKeys: CHILD_ID_KEYS,
+    });
+  }
+
+  bindChildTrajectory(context: AppaMatchContext) {
+    const parentNativeId = parentThreadId(context);
+    if (!parentNativeId) return undefined;
+    const childNativeId = childThreadId(context, parentNativeId);
+    return bindMintedChildTrajectory({
+      context,
+      parentNativeId,
+      childNativeId,
+    });
+  }
+
+  stripCarrierMetadata(request: unknown): void {
+    const body = asRecord(request);
+    if (!body) return;
+    stripRecordFields(asRecord(body.client_metadata), [
+      "agent_id",
+      "parent_thread_id",
+      "child_thread_id",
+      "parent_id",
+    ]);
+    stripRecordFields(asRecord(body.metadata), [
+      "agent_id",
+      "parent_thread_id",
+      "child_thread_id",
+      "parent_id",
+    ]);
   }
 }
 
@@ -165,6 +303,14 @@ function idField(value: unknown, source: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function parseJsonObject(value: string): Record<string, unknown> | undefined {
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
 function parseTurnMetadataJson(value: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -179,8 +325,50 @@ function parseTurnMetadataJson(value: string): Record<string, unknown> {
   );
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+function parentThreadId(context: AppaMatchContext): string | undefined {
+  const turn = parseJsonHeader(context.headers, "x-codex-turn-metadata");
+  const parent =
+    stringField(turn?.parent_thread_id) ?? stringField(turn?.parent_id);
+  if (parent) return parent;
+  const body = asRecord(context.requestBody);
+  const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
+  const nested = turnMetadataRecord(metadata?.["x-codex-turn-metadata"]);
+  return (
+    stringField(metadata?.parent_thread_id) ??
+    stringField(metadata?.parent_id) ??
+    stringField(metadata?.["x-codex-parent-thread-id"]) ??
+    stringField(nested?.parent_thread_id) ??
+    stringField(nested?.parent_id) ??
+    undefined
+  );
+}
+
+function turnMetadataRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value === "string") return parseTurnMetadataJson(value);
+  return asRecord(value);
+}
+
+function childThreadId(
+  context: AppaMatchContext,
+  parentNativeId: string | undefined,
+): string | undefined {
+  const turn = parseJsonHeader(context.headers, "x-codex-turn-metadata");
+  const child =
+    stringField(turn?.agent_id) ??
+    stringField(turn?.thread_id) ??
+    stringField(turn?.session_id);
+  if (child && child !== parentNativeId) return child;
+  const body = asRecord(context.requestBody);
+  const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
+  const nested = turnMetadataClaims(metadata?.["x-codex-turn-metadata"]);
+  const fromMetadata =
+    stringField(metadata?.agent_id) ??
+    stringField(metadata?.child_thread_id) ??
+    stringField(metadata?.thread_id) ??
+    nested?.threadId;
+  return fromMetadata && fromMetadata !== parentNativeId
+    ? fromMetadata
     : undefined;
 }

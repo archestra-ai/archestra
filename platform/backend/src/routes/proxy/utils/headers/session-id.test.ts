@@ -509,6 +509,49 @@ describe("extractSessionInfo", () => {
     });
   });
 
+  test("OpenCode User-Agent plus x-session-id is the conversation session", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "user-agent": "opencode/1.18.31",
+        "x-session-id": "ses_main",
+      },
+      body: undefined,
+      externalAgentId: OPENCODE_CLIENT_ID,
+    });
+
+    expect(result).toEqual({
+      sessionId: "ses_main",
+      sessionSource: "opencode_session",
+    });
+  });
+
+  test("an OpenCode delegated child keeps its native session", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "user-agent": "opencode/1.18.31",
+        "x-session-id": "ses_child",
+        "x-parent-session-id": "ses_main",
+      },
+      body: undefined,
+      externalAgentId: OPENCODE_CLIENT_ID,
+    });
+
+    expect(result).toEqual({
+      sessionId: "ses_child",
+      sessionSource: "opencode_session",
+    });
+  });
+
+  test("x-session-id without OpenCode attribution is ignored", () => {
+    const result = extractSessionInfo({
+      headers: { "x-session-id": "ses_main" },
+      body: undefined,
+      externalAgentId: undefined,
+    });
+
+    expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
   test("prompt_cache_key is never used as a session signal", () => {
     const result = extractSessionInfo({
       headers: {},

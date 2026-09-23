@@ -215,17 +215,31 @@ describe("session receipt restore", () => {
     ).toEqual(["session-1"]);
   });
 
+  test("puts the session label on the bottom glyph line", () => {
+    expect(formatSessionReceipt("AAA-AAAA")).toBe(
+      `${MARK_TOP}\n${MARK_BOTTOM}  protected session AAA-AAAA`,
+    );
+  });
+
+  test("strips the previous top-line label layout", () => {
+    const legacy = `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`;
+    expect(stripSessionReceipts(`keep${legacy}`)).toEqual({
+      text: "keep",
+      codes: ["AAA-AAAA"],
+    });
+  });
+
   test("near-miss wording and marks are not receipts", () => {
     const code = "XK7-Q2M9";
     const misses = [
-      `${MARK_TOP}  protected sessions ${code}\n${MARK_BOTTOM}`,
-      `${MARK_TOP}  guarded session ${code}\n${MARK_BOTTOM}`,
-      `▄▄▄▄▄▄▄  protected session ${code}\n${MARK_BOTTOM}`,
-      `${MARK_TOP}  protected session ${code}\n▄▄▄▄▄▄▄`,
-      `${MARK_TOP} protected session ${code}\n${MARK_BOTTOM}`,
-      `${MARK_TOP}  protected session  ${code}\n${MARK_BOTTOM}`,
-      `${MARK_TOP}  protected session xk7-q2m9\n${MARK_BOTTOM}`,
-      `${MARK_TOP}  protected session ILO-UXYZ\n${MARK_BOTTOM}`,
+      `${MARK_TOP}\n${MARK_BOTTOM}  protected sessions ${code}`,
+      `${MARK_TOP}\n${MARK_BOTTOM}  guarded session ${code}`,
+      `${MARK_TOP}\n▄▄▄▄▄▄▄  protected session ${code}`,
+      `▄▄▄▄▄▄▄\n${MARK_BOTTOM}  protected session ${code}`,
+      `${MARK_TOP}\n${MARK_BOTTOM} protected session ${code}`,
+      `${MARK_TOP}\n${MARK_BOTTOM}  protected session  ${code}`,
+      `${MARK_TOP}\n${MARK_BOTTOM}  protected session xk7-q2m9`,
+      `${MARK_TOP}\n${MARK_BOTTOM}  protected session ILO-UXYZ`,
       `<!-- appa-context-v1:broken -->`,
     ];
     for (const miss of misses) {
@@ -299,7 +313,7 @@ describe("session receipt restore", () => {
         output: Array<{ content: Array<{ text: string }> }>;
       }) => response.output[0].content.map((part) => part.text),
     },
-  ])("appends one footer to the final non-empty $family text part", ({
+  ])("prepends one receipt to the first non-empty $family text part", ({
     family,
     response,
     texts,
@@ -309,8 +323,8 @@ describe("session receipt restore", () => {
       true,
     );
     expect(texts(response as never)).toEqual([
-      "first",
-      appendSessionReceipt("second", code),
+      appendSessionReceipt("first", code),
+      "second",
     ]);
   });
 });

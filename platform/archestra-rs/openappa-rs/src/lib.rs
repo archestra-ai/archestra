@@ -219,6 +219,9 @@ struct Input {
     spawn: bool,
     #[serde(default)]
     output: Option<String>,
+    /// Fully scoped child trajectory on a parent-side SpawnResult.
+    #[serde(default)]
+    spawned_id: Option<String>,
     #[serde(default)]
     outcome: Option<ExecutionOutcome>,
     #[serde(skip_deserializing, default)]
@@ -937,6 +940,7 @@ pub async fn execute_remedy_by_offer(
         original_arguments: Some(original_arguments),
         spawn: false,
         output: None,
+        spawned_id: None,
         outcome: None,
         owner_root: Some(owner.root),
         spelling: owner.spelling,
@@ -1628,8 +1632,12 @@ impl State {
                 call: proposed_recorded_call(&call)?,
                 call_id: Some(format!("call:{call_id}")),
                 outcome,
-                child: None,
-                value: None,
+                child: input
+                    .spawned_id
+                    .as_deref()
+                    .map(session_actor)
+                    .map(TrajectoryId),
+                value: input.spawned_id.as_ref().and_then(|_| input.output.clone()),
             }
         } else {
             HookEvent::ToolResult {

@@ -206,6 +206,75 @@ describe("BedrockInvokeStreamAdapter", () => {
     ]);
   });
 
+  test("replaces raw text and reasoning in both event-stream frames and the logged response", () => {
+    const adapter = bedrockInvokeAdapterFactory.createStreamAdapter();
+    const process = (chunk: unknown) =>
+      adapter.processChunk(chunk as AnthropicStreamChunk);
+
+    process({
+      type: "message_start",
+      message: {
+        id: "msg_raw",
+        model: "claude-test",
+        usage: { input_tokens: 5, output_tokens: 2 },
+      },
+    });
+    process({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    });
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "RAW reasoning" },
+    });
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig-raw" },
+    });
+    process({
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "text", text: "" },
+    });
+    const rawFrame = process({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "text_delta", text: "RAW" },
+    }).sseData as Uint8Array;
+    expect(JSON.stringify(decodeInvokeChunks(rawFrame))).toContain("RAW");
+    expect(JSON.stringify(adapter.toProviderResponse())).toContain(
+      "RAW reasoning",
+    );
+
+    adapter.prepareResponseReplacement?.();
+    const admittedEvents = [
+      ...adapter
+        .formatCompleteTextSSE("ADMITTED")
+        .flatMap((frame) => decodeInvokeChunks(frame as Uint8Array)),
+      ...decodeInvokeChunks(adapter.formatEndSSE() as Uint8Array),
+    ] as Array<{
+      type: string;
+      delta?: { type?: string; text?: string; stop_reason?: string };
+    }>;
+    const response = adapter.toProviderResponse();
+
+    expect(
+      admittedEvents.find((event) => event.delta?.type === "text_delta")?.delta
+        ?.text,
+    ).toBe("ADMITTED");
+    expect(
+      admittedEvents.find((event) => event.type === "message_delta")?.delta
+        ?.stop_reason,
+    ).toBe(response.stop_reason);
+    expect(response.content).toEqual([
+      { type: "text", text: "ADMITTED", citations: null },
+    ]);
+    expect(JSON.stringify({ admittedEvents, response })).not.toContain("RAW");
+  });
+
   test("advertises the AWS event stream content type", () => {
     const adapter = bedrockInvokeAdapterFactory.createStreamAdapter();
     expect(adapter.getSSEHeaders()["Content-Type"]).toBe(

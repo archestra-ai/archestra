@@ -108,6 +108,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `execution.kind` | `"appa_remedy"` | Yes |  |
 | `execution.call_id` | `string` | Yes |  |
 | `execution.tool_name` | `string` | Yes |  |
+| `execution.namespace` | `string` | No | Optional MCP namespace of the remedy tool. |
 | `execution.original_arguments` | `string` | Yes |  |
 | `protected` | `string` | No | Flattened JWS protected header (RFC 7515). Added by the proxy. |
 | `payload` | `string` | No | Flattened JWS unencoded payload (RFC 7797). Added by the proxy. |

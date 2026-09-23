@@ -375,6 +375,71 @@ describe.each([
     });
   });
 
+  test("re-emits each call in the namespace it names, in the frames and the completed envelope", () => {
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "fc_1",
+        call_id: "call_1",
+        type: "function_call",
+        name: "archestra__run_tool",
+        namespace: "mcp__archestra",
+        arguments: "{}",
+        status: "completed",
+      },
+    } as never);
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_1",
+        model: "gpt-4.1",
+        status: "completed",
+        output: [
+          {
+            id: "fc_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "archestra__run_tool",
+            namespace: "mcp__archestra",
+            arguments: "{}",
+            status: "completed",
+          },
+        ],
+      },
+    } as never);
+
+    const events = sseData<ResponsesFrame>(
+      adapter.formatToolCallsSSE?.([
+        {
+          id: "call_1",
+          name: "archestra__get_remedy_plans",
+          arguments: "{}",
+          namespace: "mcp__archestra",
+        } as never,
+      ]) ?? [],
+    );
+    const done = events.find(
+      (event) => event.type === "response.output_item.done",
+    );
+    expect(done).toMatchObject({
+      item: {
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__archestra",
+      },
+    });
+    expect(adapter.toProviderResponse().output).toContainEqual(
+      expect.objectContaining({
+        call_id: "call_1",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__archestra",
+      }),
+    );
+  });
+
   test("streams the denial as a function call, the allowed call as a custom call, and a completed envelope that agrees with both", () => {
     const adapter = factory.createStreamAdapter();
     for (const item of MIXED_UPSTREAM_OUTPUT.slice(1)) {
@@ -802,6 +867,51 @@ describe("Minimax formatToolCallsSSE", () => {
       function: { name: "archestra__run_tool" },
     });
     expect(event.choices[0].finish_reason).toBeNull();
+  });
+
+  test("streams the text of a chunk that also carries a call, and holds only the call", () => {
+    // Forwarding the whole chunk would hand the client a fragment of the call
+    // before the policies ruled on it, and a second copy on re-emit.
+    const adapter = minimaxAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-mixed",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "MiniMax-M2",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            content: "Delegating.",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_0",
+                type: "function",
+                function: { name: "task", arguments: '{"prompt":"go"}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as never);
+
+    const [forwarded] = sseData<{
+      choices: Array<{ delta: Record<string, unknown> }>;
+    }>(result.sseData ? [result.sseData] : []);
+    expect(forwarded.choices[0].delta).toEqual({
+      role: "assistant",
+      content: "Delegating.",
+    });
+    expect(result.isToolCallChunk).toBe(true);
+    const held = sseData<{
+      choices: Array<{ delta: Record<string, unknown> }>;
+    }>(adapter.getRawToolCallEvents());
+    expect(held).toHaveLength(1);
+    expect(held[0].choices[0].delta).not.toHaveProperty("content");
+    expect(held[0].choices[0].delta.tool_calls).toHaveLength(1);
   });
 });
 

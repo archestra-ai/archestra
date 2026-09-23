@@ -1,7 +1,9 @@
 /**
  * Prepares an OpenAPPA request before provider dispatch:
  * 1. Restores denial notices in history back to original calls and rulings.
- * 2. Resolves session remedy tools and validates client declarations.
+ * 2. Reads delegation markers, then hides them from the provider.
+ * 3. Removes the proxy's transport arguments from history and declarations.
+ * 4. Resolves session remedy tools and validates client declarations.
  */
 import {
   type ArchestraToolShortName,
@@ -13,6 +15,13 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
+import type { CollectedChildReturns } from "./child-return";
+import type { AppaChildTrajectoryReceipt } from "./child-trajectory-receipt";
+import {
+  type AppaDelegationMarker,
+  collectDelegationMarkers,
+  stripDelegationMarkers,
+} from "./delegation";
 import type { OfferJws } from "./offer-claims";
 import {
   type AppaSessionIdentity,
@@ -28,7 +37,9 @@ import {
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
   stripAppaTools,
+  stripChildTrajectoryReceiptsFromRequest,
   stripDeclaredParameters,
+  stripProxyArguments,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -59,8 +70,22 @@ export type AppaPreparedRequest = {
   turnEndOperationId?: string;
   /** Signed offer routing collected from notices before restoration. */
   offerClaims?: OfferJws[];
+  /** Original call IDs whose results are restored rulings, not executions. */
+  restoredNoticeCallIds?: ReadonlySet<string>;
   /** Signed offers the proxy may stamp onto this turn's ask_user calls. */
   askUserOfferClaims?: OfferJws[];
+  /**
+   * Present on wire families where the proxy reads and removes delegation markers.
+   * Only these families allow attaching delegation markers to spawn calls.
+   */
+  delegation?: {
+    /** Unverified markers from user turns, in wire order. */
+    markers: AppaDelegationMarker[];
+  };
+  /** Signed child-return carriers collected before provider dispatch. */
+  childReturns?: CollectedChildReturns;
+  /** Unverified self-contained trajectory proofs; child binding verifies them. */
+  childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
 };
 
 /**
@@ -82,6 +107,13 @@ export function prepareAppaRequest(params: {
     | "verified"
     | "unverifiedMarkerCount"
   >;
+  /**
+   * Markers the proxy already collected before it stripped them
+   * unconditionally at request entry.
+   */
+  delegationMarkers?: AppaDelegationMarker[];
+  childReturns?: CollectedChildReturns;
+  childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
@@ -98,7 +130,10 @@ export function prepareAppaRequest(params: {
   }
   let historicalControlToolName: string | undefined;
   let offerClaims: OfferJws[] | undefined;
+  let restoredNoticeCallIds: ReadonlySet<string> | undefined;
   let askUserOfferClaims: OfferJws[] | undefined;
+  let delegation: AppaPreparedRequest["delegation"];
+  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
@@ -134,14 +169,41 @@ export function prepareAppaRequest(params: {
         shortToolName(params.identity.canonicalize(name, namespace)) ===
         TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     });
-    restoreAppaNotices({
+    const restored = restoreAppaNotices({
       family,
       body: params.body,
       ...noticeMatch,
     });
+    if (restored.size > 0) restoredNoticeCallIds = restored;
+    // The control calls came back whole from their receipts above; ask_user
+    // calls carry the offers the proxy stamped for the tool alone.
+    stripProxyArguments({
+      family,
+      body: params.body,
+      isStampedTool: (name, namespace) =>
+        shortToolName(params.identity.canonicalize(name, namespace)) ===
+        TOOL_ASK_USER_SHORT_NAME,
+      names: ASK_USER_PROXY_ARGUMENTS,
+    });
+    // Read before the strip: every request of a child carries its opening
+    // message, and with it the marker that binds it.
+    delegation = {
+      markers:
+        params.delegationMarkers ??
+        collectDelegationMarkers({ family, body: params.body }),
+    };
+    stripDelegationMarkers({ family, body: params.body });
+    childTrajectoryReceipts = [
+      ...(params.childTrajectoryReceipts ?? []),
+      ...stripChildTrajectoryReceiptsFromRequest({
+        family,
+        body: params.body,
+      }),
+    ];
   }
 
-  // No declared tools, no root: nothing can be proposed, so nothing is gated.
+  // A tool-free child can still return a value. Keep turn accounting available
+  // without introducing tool governance for a tool-free root.
   if (declared.length === 0) {
     return {
       tools: undefined,
@@ -149,8 +211,15 @@ export function prepareAppaRequest(params: {
       session,
       customTools: new Set(),
       declaredTools: [],
+      ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
       ...(offerClaims ? { offerClaims } : {}),
+      ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
       ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
+      ...(delegation ? { delegation } : {}),
+      ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+      ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+        ? { childTrajectoryReceipts }
+        : {}),
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
@@ -247,12 +316,16 @@ export function prepareAppaRequest(params: {
   // The proxy, not the model, writes stamped arguments; the provider's schema
   // never offers them.
   for (const { tool, name, namespace } of entries) {
+    const isAskUser = askUserDeclarations.some(
+      (declaration) =>
+        declaration.name === name && declaration.namespace === namespace,
+    );
     const short =
       name === undefined
         ? null
         : control && name === control.name && namespace === control.namespace
           ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
-          : platformToolNames.has(name)
+          : isAskUser
             ? TOOL_ASK_USER_SHORT_NAME
             : null;
     const proxyArguments =
@@ -283,7 +356,13 @@ export function prepareAppaRequest(params: {
     declaredTools,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
+    ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
+    ...(delegation ? { delegation } : {}),
+    ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+      ? { childTrajectoryReceipts }
+      : {}),
   };
 }
 
@@ -317,6 +396,11 @@ function asArray(value: unknown): unknown[] | null {
 }
 
 // === Internal helpers ===
+
+/** The offers the proxy stamps onto the model's ask_user calls. */
+const ASK_USER_PROXY_ARGUMENTS: ReadonlySet<string> = new Set(
+  PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
+);
 
 /** A name that ends in the notice tool's short name, under any client label. */
 const NOTICE_TOOL_SPELLING = new RegExp(

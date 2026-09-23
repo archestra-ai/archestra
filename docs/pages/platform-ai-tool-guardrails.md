@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,14 +24,21 @@ The built-in APPA Guide skill helps agents inspect, explain, and edit this polic
 
 APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
 
-Claude Code, Codex, and OpenCode can show this two-line mark at the end of a protected session's first reply and on compaction summaries:
+The proxy can prepend this two-line mark to a protected session's first reply and to compaction summaries:
 
 ```
-▄█▄▄▄█▄  protected session XK7-Q2M9
-██▄█▄██
+▄█▄▄▄█▄
+██▄█▄██  protected session XK7-Q2M9
 ```
 
-The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies do not carry a mark. Signed tool-call IDs provide separate lineage evidence.
+The mark shows which protected session wrote the reply. A spawned subagent displays a similar mark when it starts and when it finishes:
+
+```
+▄█▄▄▄█▄
+██▄█▄██  started subagent 7Z8-K9M2
+```
+
+The proxy removes the mark before sending requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs provide separate lineage evidence.
 
 A new session forks only when returned history contains a valid mark or signed tool-call ID. Structured outputs, tool data, and other non-text fields never carry the mark.
 
@@ -209,7 +216,15 @@ This lets the same agent behave normally in safe contexts and become more restri
 
 Policies can also be scoped to specific agents. For example, you might allow an internal support agent to use `send_email` for `@mycompany.com` recipients while keeping the same tool blocked for a broader research agent.
 
-Subagent "delegation" does not reset that trust state. If a parent agent delegates to a subagent after the conversation has already become sensitive, the subagent inherits that unsafe context and the same tool call restrictions continue to apply.
+Subagent delegation does not reset that trust state. If a parent agent delegates to a subagent after the conversation becomes sensitive, the subagent inherits that context. The same tool call restrictions continue to apply.
+
+With OpenAPPA enabled, Claude Code, Codex, and OpenCode protect subagent returns. Signed spawn prompts establish parent-child relationships. The proxy injects signed context into compaction summaries and other client handoffs. It removes transport proofs before provider dispatch. The parent establishes a return contract before the child starts. Archestra buffers final answers, including tool-free turns, until the contract admits them. An output sanitizer can replace raw output with an approved summary.
+
+Archestra verifies each completed child receipt before forwarding output to the parent model. The self-contained receipt binds admitted output to its parent, child, caller, and spawn call. Verification does not depend on a receipt cache or database lookup. This protection applies when one wait result returns multiple children. Loading a skill runs in the current session and does not create a child. OpenAPPA-protected Archestra Chat sessions do not support subagent delegation.
+
+The trusted client and executor must isolate raw child transcripts from model tools. Proxy checks for known transcript paths are defense in depth. They do not sandbox arbitrary shell commands or file access.
+
+Command execution tools (`bash`, `shell`, `exec_command`, `run_command`) normalize arguments across clients. This makes sure the same command policy applies across client parameter formats.
 
 ### Load Tools When Needed
 

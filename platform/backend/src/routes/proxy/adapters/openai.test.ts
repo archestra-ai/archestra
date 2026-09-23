@@ -1066,10 +1066,9 @@ describe("OpenAIStreamAdapter", () => {
     expect(result.sseData).toBeNull();
   });
 
-  test("does not stream a chunk carrying both reasoning and a tool call", () => {
-    // A reasoning+tool_call chunk must route through the tool-call blocking-policy
-    // buffering (sseData null, isToolCallChunk true), not stream immediately — so
-    // reasoning can't carry unapproved tool-call data past the policy gate.
+  test("streams reasoning without its accompanying tool call and records it", () => {
+    // The call remains buffered for policy evaluation, but reasoning is not call
+    // data and must reach the client and the accumulated response.
     const adapter = openaiAdapterFactory.createStreamAdapter();
     const result = adapter.processChunk({
       id: "chatcmpl-rt",
@@ -1095,8 +1094,18 @@ describe("OpenAIStreamAdapter", () => {
       ],
     } as unknown as Chunk);
 
-    expect(result.sseData).toBeNull();
+    expect(deltaOf(result.sseData)).toEqual({ reasoning_content: "thinking" });
     expect(result.isToolCallChunk).toBe(true);
+    expect(
+      (
+        adapter.toProviderResponse().choices[0].message as {
+          reasoning_content?: string;
+        }
+      ).reasoning_content,
+    ).toBe("thinking");
+    expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
+      tool_calls: expect.any(Array),
+    });
   });
 
   function finishReasonOf(endSse: string | Uint8Array): unknown {

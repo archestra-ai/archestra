@@ -701,22 +701,23 @@ class ZhipuaiStreamAdapter
 
     const delta = choice.delta;
 
-    // Handle text content accumulation
+    // Accumulates text and reasoning independently of tool call policy buffering.
     if (delta.content) {
       this.state.text += delta.content;
     }
-
-    // Forward only chunks carrying streamable text/reasoning, and never a chunk
-    // that carries tool calls: those are buffered below so a blocking policy can
-    // discard them. Streaming them live (as the old `hasContent` check did, via
-    // `delta.tool_calls`) exposed blocked tool calls to the client before policy
-    // evaluation and defeated the handler's buffering.
-    const hasStreamableContent = delta.content || delta.reasoning_content;
-    if (delta.reasoning_content && !delta.tool_calls) {
+    if (delta.reasoning_content) {
       this.reasoningText += delta.reasoning_content;
     }
-    if (hasStreamableContent && !delta.tool_calls) {
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+
+    // Splits chunks containing both content and tool calls.
+    // Forwards text and reasoning immediately while buffering tool calls for policy approval.
+    const hasStreamableContent = Boolean(
+      delta.content || delta.reasoning_content,
+    );
+    if (hasStreamableContent) {
+      sseData = `data: ${JSON.stringify(
+        delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk,
+      )}\n\n`;
     }
 
     if (delta.tool_calls) {
@@ -747,7 +748,9 @@ class ZhipuaiStreamAdapter
         }
       }
 
-      this.state.rawToolCallEvents.push(chunk);
+      this.state.rawToolCallEvents.push(
+        hasStreamableContent ? onlyToolCallDeltas(chunk) : chunk,
+      );
       isToolCallChunk = true;
     }
 
@@ -1021,3 +1024,23 @@ export const zhipuaiAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/** The text and reasoning half of a chunk that carries tool calls. */
+function withoutToolCallDeltas(chunk: ZhipuaiStreamChunk): ZhipuaiStreamChunk {
+  const [choice, ...rest] = chunk.choices;
+  const { tool_calls: _toolCalls, ...delta } = choice.delta;
+  return {
+    ...chunk,
+    choices: [{ ...choice, delta, finish_reason: null }, ...rest],
+  };
+}
+
+/** The policy-buffered half of a chunk that carries text or reasoning. */
+function onlyToolCallDeltas(chunk: ZhipuaiStreamChunk): ZhipuaiStreamChunk {
+  const [choice] = chunk.choices;
+  const { role, tool_calls } = choice.delta;
+  return {
+    ...chunk,
+    choices: [{ ...choice, delta: { ...(role ? { role } : {}), tool_calls } }],
+  };
+}

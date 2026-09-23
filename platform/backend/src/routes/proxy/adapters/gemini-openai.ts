@@ -241,11 +241,19 @@ class GeminiOpenaiStreamAdapter
   }
 
   formatEndSSE(): string {
+    // Gemini ends a function-calling turn with STOP, but OpenAI clients read a
+    // "stop" finish as a finished turn and never run the calls. The inner
+    // response names only the calls that were handed over (a refusal replaces
+    // them), matching the non-streaming translation.
+    const candidate = this.inner.toProviderResponse().candidates?.[0];
+    const hasToolCalls = candidate?.content?.parts?.some(
+      (part) => "functionCall" in part && part.functionCall,
+    );
     return `${this.formatChunk({
       delta: {},
-      finishReason: mapGeminiFinishReason(
-        this.inner.toProviderResponse().candidates?.[0]?.finishReason,
-      ),
+      finishReason: hasToolCalls
+        ? "tool_calls"
+        : mapGeminiFinishReason(candidate?.finishReason),
       usage: geminiUsageViewToOpenai(this.state.usage),
     })}data: [DONE]\n\n`;
   }

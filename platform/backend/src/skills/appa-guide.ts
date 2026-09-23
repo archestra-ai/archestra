@@ -6,6 +6,7 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
   description:
     "Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview a policy diff, and publish a local revision or GitHub pull request.",
   feature: "appa",
+  // white-label-ok: applyBuiltInSkillBranding rebrands the built-in skill body at reconcile
   content: `---
 name: appa-guide
 description: Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview a policy diff, and publish a local revision or GitHub pull request.
@@ -309,6 +310,7 @@ If existing bindings cannot express the requested behavior, explain what is miss
     {
       path: "references/contracts.md",
       kind: "reference",
+      // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
       content: `# OpenAPPA policy configuration and contracts reference
 
 An OpenAPPA policy defines restrictions on tool results and requirements for tool calls.

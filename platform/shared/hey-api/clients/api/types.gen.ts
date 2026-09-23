@@ -70490,8 +70490,6 @@ export type GetKnowledgeFilesResponse = GetKnowledgeFilesResponses[keyof GetKnow
 
 export type UploadKnowledgeFileData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         filename: string;
         mimeType: string;
         content: string;
@@ -70748,8 +70746,6 @@ export type UpsertKnowledgeFileResponse = UpsertKnowledgeFileResponses[keyof Ups
 
 export type PromoteAttachmentToKnowledgeFileData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         attachmentId: string;
         initialGrants?: Array<{
             subject: {

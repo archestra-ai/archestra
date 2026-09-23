@@ -13,6 +13,14 @@ import type { User } from "@/types";
 const textFile = (body: string) =>
   Buffer.from(body, "utf-8").toString("base64");
 
+/** `initialGrants` that share a file with everyone in the organization. */
+const everyone = [
+  {
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  },
+];
+
 describe("knowledge file routes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
@@ -61,9 +69,12 @@ describe("knowledge file routes", () => {
     test("stores a readable document", async () => {
       const response = await upload();
       expect(response.statusCode).toBe(200);
+      // With no `initialGrants` the uploader alone reads the file, and the
+      // response's audience fields say so.
       expect(response.json()).toMatchObject({
         filename: "policy.txt",
-        visibility: "org-wide",
+        visibility: "private",
+        teamIds: [],
         knowledgeBases: [],
       });
       // The response must never carry the bytes.
@@ -94,6 +105,17 @@ describe("knowledge file routes", () => {
      * in the repository looks uploaded but retrieves nothing, and the user only
      * finds out when an answer comes back empty.
      */
+    test("refuses the retired visibility and team fields", async () => {
+      for (const retired of [
+        { visibility: "org-wide" },
+        { teamIds: [crypto.randomUUID()] },
+      ]) {
+        const response = await upload(retired);
+        expect(response.statusCode).toBe(400);
+      }
+      expect(await db.select().from(schema.kbFilesTable)).toHaveLength(0);
+    });
+
     test("rejects a file it cannot read, and stores nothing", async () => {
       const response = await upload({
         filename: "archive.zip",
@@ -132,10 +154,7 @@ describe("knowledge file routes", () => {
     test("a private file is invisible to everyone but its uploader", async ({
       makeUser,
     }) => {
-      const uploaded = await upload({
-        filename: "personal-notes.txt",
-        visibility: "private",
-      });
+      const uploaded = await upload({ filename: "personal-notes.txt" });
       expect(uploaded.statusCode).toBe(200);
 
       const mine = await app.inject({
@@ -159,7 +178,7 @@ describe("knowledge file routes", () => {
     test("downloading someone else's private file is a 404", async ({
       makeUser,
     }) => {
-      const uploaded = await upload({ visibility: "private" });
+      const uploaded = await upload();
       const fileId = uploaded.json().id;
 
       const colleague = await makeUser({ email: "other@test.com" });
@@ -173,10 +192,15 @@ describe("knowledge file routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("an org-wide file is visible to a colleague", async ({ makeUser }) => {
-      await upload({ visibility: "org-wide" });
+    test("a file shared with the organization is visible to a colleague", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      await upload({ initialGrants: everyone });
 
       const colleague = await makeUser({ email: "teammate@test.com" });
+      await makeMember(colleague.id, organizationId);
       await bootAs(colleague, organizationId);
       const response = await app.inject({
         method: "GET",
@@ -203,12 +227,9 @@ describe("knowledge file routes", () => {
       await makeTeamMember(team.id, member.id);
       const outsider = await makeUser({ email: "outsider@test.com" });
 
-      // The grant decides who lists the file; the visibility still sets the
-      // indexed documents' audience.
+      // The grant decides who lists the file and who retrieves it.
       const uploaded = await upload({
         filename: "soc2-report.txt",
-        visibility: "team-scoped",
-        teamIds: [team.id],
         initialGrants: [
           { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
         ],
@@ -239,18 +260,17 @@ describe("knowledge file routes", () => {
       expect(content.statusCode).toBe(404);
     });
 
-    test("editing a team-scoped file without touching teams keeps its team audience", async ({
+    test("editing a team-shared file without touching teams keeps its team audience", async ({
+      makeMember,
       makeTeam,
-      makeTeamMember,
     }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
       const team = await makeTeam(organizationId, user.id, { name: "Legal" });
-      // The fixture does not auto-add the creator; a team-scoped file is
-      // visible only to members, its uploader included.
-      await makeTeamMember(team.id, user.id);
       const uploaded = await upload({
         filename: "retainer.txt",
-        visibility: "team-scoped",
-        teamIds: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       });
       const fileId = uploaded.json().id;
 
@@ -488,11 +508,96 @@ describe("knowledge file routes", () => {
       expect(documents).toHaveLength(1);
       expect(documents[0].content).toContain("eu-west-1");
       // Direct audience tokens, never a `container:` token — that table is
-      // owned by the permission-sync pass.
-      expect(documents[0].acl).toEqual(["org:*"]);
+      // owned by the permission-sync pass. No `initialGrants`: the uploader's
+      // own grant is the only audience.
+      expect(documents[0].acl).toEqual([`user_email:${user.email}`]);
 
       const links = await db.select().from(schema.kbFileDocumentsTable);
       expect(links).toHaveLength(1);
+    });
+
+    // The indexed documents' audience is the file's grants, never wider:
+    // the team it is shared with and the uploader, not the organization.
+    test("a new file's documents reach only the file's grant holders", async ({
+      makeMember,
+      makeTeam,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const team = await makeTeam(organizationId, user.id, { name: "Audit" });
+      const uploaded = await upload({
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
+      });
+      const fileId = uploaded.json().id;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: { fileIds: [fileId], newKnowledgeBaseName: "Audit" },
+      });
+      expect(response.json()).toMatchObject({ indexed: 1, failures: [] });
+
+      const [document] = await db.select().from(schema.kbDocumentsTable);
+      expect([...document.acl].sort()).toEqual(
+        [`team:${team.id}`, `user_email:${user.email}`].sort(),
+      );
+      const chunks = await db.select().from(schema.kbChunksTable);
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const chunk of chunks) expect(chunk.acl).toEqual(document.acl);
+    });
+
+    // Editing the file's permissions re-writes its documents' audience, so a
+    // revocation reaches retrieval too.
+    test("editing a file's grants rewrites its documents' audience", async ({
+      makeMember,
+      makeTeam,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const team = await makeTeam(organizationId, user.id, { name: "Ops" });
+      const fileId = (
+        await upload({
+          initialGrants: [
+            {
+              subject: { type: "team", id: team.id },
+              actions: ["read", "use"],
+            },
+          ],
+        })
+      ).json().id;
+      await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: { fileIds: [fileId], newKnowledgeBaseName: "Ops" },
+      });
+
+      const { ResourcePermissions } = await import(
+        "@/services/resource-permissions"
+      );
+      const { default: ResourcePermissionPolicyModel } = await import(
+        "@/models/resource-permission-policy"
+      );
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "knowledgeFile",
+        scope: fileId,
+      });
+      await ResourcePermissions.updatePolicy({
+        organizationId,
+        userId: user.id,
+        resource: "knowledgeFile",
+        scope: fileId,
+        revision: policy?.revision ?? 0,
+        grants: (policy?.grants ?? []).filter(
+          (grant) => grant.subject.type !== "team",
+        ),
+      });
+
+      const [document] = await db.select().from(schema.kbDocumentsTable);
+      expect(document.acl).toEqual([`user_email:${user.email}`]);
+      const chunks = await db.select().from(schema.kbChunksTable);
+      for (const chunk of chunks)
+        expect(chunk.acl).toEqual([`user_email:${user.email}`]);
     });
 
     test("re-indexing the same file refreshes rather than duplicates", async () => {
@@ -542,6 +647,7 @@ describe("knowledge file routes", () => {
     });
 
     test("a directory selection only indexes files the caller can see", async ({
+      makeMember,
       makeUser,
     }) => {
       const directory = await app.inject({
@@ -551,12 +657,13 @@ describe("knowledge file routes", () => {
       });
       const directoryId = directory.json().id;
 
-      await upload({ filename: "shared.txt", directoryId });
+      await makeMember(user.id, organizationId, { role: "admin" });
       await upload({
-        filename: "secret.txt",
+        filename: "shared.txt",
         directoryId,
-        visibility: "private",
+        initialGrants: everyone,
       });
+      await upload({ filename: "secret.txt", directoryId });
 
       const colleague = await makeUser({ email: "limited@test.com" });
       await bootAs(colleague, organizationId);

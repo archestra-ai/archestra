@@ -47,8 +47,6 @@ describe("knowledge repository bulk routes", () => {
       sizeBytes: 5,
       contentHash: `hash-${filename}`,
       data: Buffer.from("hello"),
-      visibility: "org-wide",
-      teamIds: [],
       uploadedBy: user.id,
     });
 

@@ -125,14 +125,17 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const fileIds = items.map((file) => file.id);
-      const [knowledgeBases, teamIds, creators, labelsByFile] =
+      const [knowledgeBases, audiences, creators, labelsByFile] =
         await Promise.all([
           findAccessibleKnowledgeBasesForFiles({
             fileIds,
             organizationId: request.organizationId,
             userId: request.user.id,
           }),
-          KbFileModel.findTeamIdsForFiles(fileIds),
+          KbFileModel.findGrantedAudiences({
+            organizationId: request.organizationId,
+            fileIds,
+          }),
           CreatedByModel.resolve(
             items.map((file) => CreatedByModel.id(file, file.uploadedBy)),
           ),
@@ -154,7 +157,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
               CreatedByModel.id(file, uploadedBy),
             ),
             knowledgeBases: knowledgeBases.get(file.id) ?? [],
-            teamIds: teamIds.get(file.id) ?? [],
+            // Who can read the file, from its grants.
+            visibility: audiences.get(file.id)?.visibility ?? "private",
+            teamIds: audiences.get(file.id)?.teamIds ?? [],
             labels: labelsByFile.get(file.id) ?? [],
           }),
         ),
@@ -170,18 +175,22 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UploadKnowledgeFile,
         description: "Upload a document into the knowledge file repository",
         tags: ["Knowledge Files"],
-        body: VisibilityBodySchema.extend({
-          filename: z.string().trim().min(1).max(512),
-          mimeType: z.string().trim().min(1).max(255),
-          /** Base64, matching how chat attachments already arrive. */
-          content: z.string().min(1),
-          directoryId: z.string().uuid().nullable().default(null),
-          labels: z.array(LabelWithDetailsSchema).default([]),
-          initialGrants: z
-            .array(ResourcePermissionGrantSchema)
-            .max(200)
-            .optional(),
-        }),
+        // Who can read the new file is `initialGrants` alone. The retired
+        // `visibility` and `teamIds` fields are refused (strict), not dropped.
+        body: z
+          .object({
+            filename: z.string().trim().min(1).max(512),
+            mimeType: z.string().trim().min(1).max(255),
+            /** Base64, matching how chat attachments already arrive. */
+            content: z.string().min(1),
+            directoryId: z.string().uuid().nullable().default(null),
+            labels: z.array(LabelWithDetailsSchema).default([]),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
+          })
+          .strict(),
         response: constructResponseSchema(KbFileSchema),
       },
     },
@@ -221,7 +230,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         directoryId: body.directoryId,
         organizationId,
       });
-      await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
@@ -251,8 +259,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sizeBytes: buffer.byteLength,
           contentHash: hashFileContent(buffer),
           data: buffer,
-          visibility: body.visibility,
-          teamIds: body.teamIds,
           uploadedBy: user.id,
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -292,7 +298,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           CreatedByModel.id(file, uploadedBy),
         ),
         knowledgeBases: [],
-        teamIds: body.teamIds,
+        ...(await grantedAudience({ organizationId, fileId: file.id })),
         labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
     },
@@ -355,18 +361,21 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Copy a file attached to a chat into the knowledge file repository",
         tags: ["Knowledge Files"],
-        body: VisibilityBodySchema.extend({
-          attachmentId: z.string().uuid(),
-          initialGrants: z
-            .array(ResourcePermissionGrantSchema)
-            .max(200)
-            .optional(),
-          /** Defaults to the attachment's own name. */
-          filename: z.string().trim().min(1).max(512).optional(),
-          directoryId: z.string().uuid().nullable().default(null),
-          /** Index into this knowledge base straight away, if given. */
-          knowledgeBaseId: z.string().uuid().optional(),
-        }),
+        // Who can read the new file is `initialGrants` alone (strict body).
+        body: z
+          .object({
+            attachmentId: z.string().uuid(),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
+            /** Defaults to the attachment's own name. */
+            filename: z.string().trim().min(1).max(512).optional(),
+            directoryId: z.string().uuid().nullable().default(null),
+            /** Index into this knowledge base straight away, if given. */
+            knowledgeBaseId: z.string().uuid().optional(),
+          })
+          .strict(),
         response: constructResponseSchema(KbFileSchema),
       },
     },
@@ -445,7 +454,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         directoryId: body.directoryId,
         organizationId,
       });
-      await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -475,8 +483,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sizeBytes: attachment.fileData.byteLength,
           contentHash: attachment.contentHash,
           data: attachment.fileData,
-          visibility: body.visibility,
-          teamIds: body.teamIds,
           // The promoter owns the repository copy, not the original uploader:
           // they chose its audience, and for a private one they are the only
           // person its ACL will name.
@@ -510,7 +516,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fileIds: [file.id],
           knowledgeBaseId,
           organizationId,
-          uploaderEmailById: await KbFileModel.findUploaderEmails([file.id]),
         });
         knowledgeBases.push(
           ...((
@@ -536,7 +541,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           CreatedByModel.id(file, uploadedBy),
         ),
         knowledgeBases,
-        teamIds: body.teamIds,
+        ...(await grantedAudience({ organizationId, fileId: file.id })),
         labels: [],
       };
     },
@@ -677,7 +682,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           CreatedByModel.id(file, uploadedBy),
         ),
         knowledgeBases: knowledgeBases.get(file.id) ?? [],
-        teamIds: await KbFileModel.findTeamIds(file.id),
+        ...(await grantedAudience({ organizationId, fileId: file.id })),
         labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
     },
@@ -905,12 +910,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "No readable files were selected");
       }
 
-      const uploaderEmailById = await KbFileModel.findUploaderEmails(fileIds);
       const result = await indexFilesIntoKnowledgeBase({
         fileIds,
         knowledgeBaseId,
         organizationId,
-        uploaderEmailById,
       });
 
       // The audit hook cannot derive these itself: the response carries
@@ -1233,6 +1236,23 @@ async function assertKnowledgeBaseInOrg(params: {
   return (
     await findAccessibleKnowledgeBase({ ...params, id: params.knowledgeBaseId })
   ).id;
+}
+
+/** A file's `visibility` and `teamIds` response fields, from its grants. */
+async function grantedAudience(params: {
+  organizationId: string;
+  fileId: string;
+}) {
+  const audience = (
+    await KbFileModel.findGrantedAudiences({
+      organizationId: params.organizationId,
+      fileIds: [params.fileId],
+    })
+  ).get(params.fileId);
+  return {
+    visibility: audience?.visibility ?? ("private" as const),
+    teamIds: audience?.teamIds ?? [],
+  };
 }
 
 export default knowledgeFileRoutes;

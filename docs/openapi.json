@@ -276058,22 +276058,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "visibility": {
-                    "default": "org-wide",
-                    "type": "string",
-                    "enum": [
-                      "org-wide",
-                      "team-scoped",
-                      "private"
-                    ]
-                  },
-                  "teamIds": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "filename": {
                     "type": "string",
                     "minLength": 1,
@@ -276261,7 +276245,8 @@
                   "filename",
                   "mimeType",
                   "content"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -277065,22 +277050,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "visibility": {
-                    "default": "org-wide",
-                    "type": "string",
-                    "enum": [
-                      "org-wide",
-                      "team-scoped",
-                      "private"
-                    ]
-                  },
-                  "teamIds": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "attachmentId": {
                     "type": "string",
                     "format": "uuid",
@@ -277236,7 +277205,8 @@
                 },
                 "required": [
                   "attachmentId"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }

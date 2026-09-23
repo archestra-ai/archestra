@@ -96,7 +96,8 @@ describe("promote a chat attachment into the knowledge repository", () => {
     expect(response.json()).toMatchObject({
       filename: "retention.txt",
       mimeType: "text/plain",
-      visibility: "org-wide",
+      // No `initialGrants`: the promoter alone reads the copy.
+      visibility: "private",
       knowledgeBases: [],
     });
   });
@@ -116,7 +117,6 @@ describe("promote a chat attachment into the knowledge repository", () => {
     ];
     const response = await promote({
       attachmentId: attachment.id,
-      visibility: "private",
       initialGrants,
     });
     expect(response.statusCode, response.body).toBe(200);

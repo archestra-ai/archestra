@@ -82,7 +82,6 @@ export async function upsertKnowledgeFile(params: {
   }
   if (!file)
     throw new ApiError(409, "This file cannot be replaced by this uploader");
-  const uploaderEmailById = await KbFileModel.findUploaderEmails([file.id]);
   const results = [];
   for (const knowledgeBaseId of knowledgeBaseIds) {
     results.push({
@@ -91,7 +90,6 @@ export async function upsertKnowledgeFile(params: {
         fileIds: [file.id],
         knowledgeBaseId,
         organizationId: params.organizationId,
-        uploaderEmailById,
       })),
     });
   }

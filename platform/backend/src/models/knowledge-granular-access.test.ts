@@ -36,8 +36,6 @@ for (const resource of ["knowledgeFile", "knowledgeConnector"] as const) {
             organizationId: org.id,
             uploadedBy: owner.id,
             filename: "policy.txt",
-            visibility: "private",
-            teamIds: [],
             directoryId: null,
             mimeType: "text/plain",
             sizeBytes: 6,

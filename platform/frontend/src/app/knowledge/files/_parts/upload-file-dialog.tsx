@@ -126,7 +126,6 @@ export function UploadFileDialog({
           mimeType: file.type || "application/octet-stream",
           content: await fileToBase64(file),
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
-          visibility: "private",
           initialGrants: initialGrants.map(({ subject, actions }) => ({
             subject,
             actions,

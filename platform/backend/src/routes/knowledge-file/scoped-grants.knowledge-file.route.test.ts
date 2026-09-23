@@ -41,8 +41,6 @@ describe("scoped knowledge file grants", () => {
         filename: "notes.txt",
         mimeType: "text/plain",
         content: Buffer.from("Shared at creation").toString("base64"),
-        visibility: "private",
-        teamIds: [],
         initialGrants: grants,
       },
     });

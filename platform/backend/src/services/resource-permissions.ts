@@ -22,6 +22,7 @@ import {
   SERVICE_ACCOUNT_USER_ID_PREFIX,
 } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
+import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -370,6 +371,14 @@ export class ResourcePermissions {
     if (params.resource === "app" && params.scope !== "*") {
       await resyncAppBackingInstallScope({
         appId: params.scope,
+        organizationId: params.organizationId,
+      });
+    }
+    // A file's indexed documents carry its audience as ACL tokens, so they
+    // follow the edit, a revocation included.
+    if (params.resource === "knowledgeFile" && params.scope !== "*") {
+      await KbFileModel.refreshDocumentAcl({
+        fileId: params.scope,
         organizationId: params.organizationId,
       });
     }

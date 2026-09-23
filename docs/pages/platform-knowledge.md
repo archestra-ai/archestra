@@ -379,7 +379,7 @@ Open a run's details to review warnings and connector errors. The logs name docu
 
 Knowledge Bases, connectors, and uploaded files each have [per-resource permissions](/docs/platform-access-control). You can give people, teams, roles, or service accounts different access levels. Organization-wide permissions also apply.
 
-**Can view** allows browsing a resource. **Can use** also allows retrieving its content. Changes apply to indexed content without reindexing.
+**Can view** allows browsing a resource. **Can use** also allows retrieving its content. Changes apply to indexed content without reindexing. An uploaded file is retrievable by the people, teams, and whole organization it is shared with — a role or service account grant does not reach its content.
 
 Sharing a collection does not change connector or document permissions. Sources can remain accessible through other authorized collections or direct assignments.
 

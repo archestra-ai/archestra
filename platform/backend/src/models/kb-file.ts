@@ -1,6 +1,7 @@
 import type { ResourcePermissionGrant } from "@archestra/shared";
 import { and, count, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { AclEntry } from "@/types";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -107,10 +108,11 @@ class KbFileModel {
     sizeBytes: number;
     contentHash: string;
     data: Buffer;
-    visibility: KnowledgeFileVisibility;
-    teamIds: string[];
     uploadedBy: string;
-    /** Explicit starting audience; omitted derives one from the visibility. */
+    /**
+     * Who else can read the file. The uploader always gets full access;
+     * omitted or empty means nobody else.
+     */
     initialPermissionGrants?: ResourcePermissionGrant[];
   }) {
     return db.transaction(async (tx) => {
@@ -127,7 +129,6 @@ class KbFileModel {
               contentHash: params.contentHash,
               storageProvider: "db",
               data: params.data,
-              visibility: params.visibility,
               uploadedBy: params.uploadedBy,
             },
             userIdField: "uploadedBy",
@@ -148,13 +149,6 @@ class KbFileModel {
       });
       // SPDX-SnippetEnd
 
-      if (params.visibility === "team-scoped" && params.teamIds.length > 0) {
-        await tx
-          .insert(schema.kbFileTeamsTable)
-          .values(
-            params.teamIds.map((teamId) => ({ kbFileId: file.id, teamId })),
-          );
-      }
       return file;
     });
   }
@@ -276,6 +270,40 @@ class KbFileModel {
     });
   }
 
+  /**
+   * Each file's audience in the vocabulary of its retired `visibility` field,
+   * and the teams it reaches, derived from its grants: `org-wide` when they
+   * reach the organization or a role, `team-scoped` when they reach a team,
+   * `private` otherwise. API responses read this so the old fields describe
+   * who can actually read the file.
+   */
+  static async findGrantedAudiences(params: {
+    organizationId: string;
+    fileIds: string[];
+  }): Promise<
+    Map<string, { visibility: KnowledgeFileVisibility; teamIds: string[] }>
+  > {
+    const audiences = await ResourcePermissionPolicyModel.findAudiences({
+      organizationId: params.organizationId,
+      resource: "knowledgeFile",
+      scopes: params.fileIds,
+    });
+    return new Map(
+      [...audiences].map(([fileId, { audience, teamIds }]) => [
+        fileId,
+        {
+          visibility:
+            audience === "org"
+              ? "org-wide"
+              : audience === "team"
+                ? "team-scoped"
+                : "private",
+          teamIds,
+        },
+      ]),
+    );
+  }
+
   static async findTeamIds(kbFileId: string): Promise<string[]> {
     const rows = await db
       .select({ teamId: schema.kbFileTeamsTable.teamId })
@@ -369,26 +397,89 @@ class KbFileModel {
   }
 
   /**
-   * Uploader emails for a set of files, batched. A `private` file resolves to a
-   * `user_email:` token, so indexing needs the address; an offboarded uploader
-   * yields null and the ACL fails closed rather than widening.
+   * The audience tokens a document indexed from this file carries, from the
+   * file's own grants and never wider than them. Retrieving content takes the
+   * `use` action ("Can use"), so only grants holding it count: the
+   * organization (a grant to everyone, or the upgrade's organization-wide
+   * role grants) gives `org:*`, a team gives `team:<id>`, a person gives
+   * `user_email:<address>`. A role or service account grant has no token of
+   * its own, so it adds nothing and those holders do not retrieve the file
+   * (fails closed). A file nobody may use has an empty ACL.
    */
-  static async findUploaderEmails(
-    kbFileIds: string[],
-  ): Promise<Map<string, string | null>> {
-    if (kbFileIds.length === 0) return new Map();
-    const rows = await db
-      .select({
-        kbFileId: schema.kbFilesTable.id,
-        email: schema.usersTable.email,
+  static async findDocumentAcl(params: {
+    fileId: string;
+    organizationId: string;
+  }): Promise<AclEntry[]> {
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: params.organizationId,
+      resource: "knowledgeFile",
+      scope: params.fileId,
+    });
+    if (!policy) return [];
+    if (
+      ResourcePermissionPolicyModel.isOrganizationWide({
+        policy,
+        scope: params.fileId,
+        action: "use",
       })
-      .from(schema.kbFilesTable)
-      .leftJoin(
-        schema.usersTable,
-        eq(schema.usersTable.id, schema.kbFilesTable.uploadedBy),
-      )
-      .where(inArray(schema.kbFilesTable.id, kbFileIds));
-    return new Map(rows.map((row) => [row.kbFileId, row.email ?? null]));
+    )
+      return ["org:*"];
+    const readers = policy.grants.filter((grant) =>
+      grant.actions.includes("use"),
+    );
+    const teamIds = readers
+      .filter((grant) => grant.subject.type === "team")
+      .map((grant) => grant.subject.id);
+    const userIds = readers
+      .filter((grant) => grant.subject.type === "user")
+      .map((grant) => grant.subject.id);
+    const users =
+      userIds.length === 0
+        ? []
+        : await db
+            .select({ email: schema.usersTable.email })
+            .from(schema.usersTable)
+            .where(inArray(schema.usersTable.id, userIds));
+    return [
+      ...new Set<AclEntry>([
+        ...teamIds.map((id): AclEntry => `team:${id}`),
+        ...users.map((user): AclEntry => `user_email:${user.email}`),
+      ]),
+    ];
+  }
+
+  /**
+   * Rewrite the ACL of every document indexed from this file, and of their
+   * chunks, to {@link findDocumentAcl}. Run after the file's grants change so
+   * retrieval follows the edit, a revocation included.
+   */
+  static async refreshDocumentAcl(params: {
+    fileId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const acl = await KbFileModel.findDocumentAcl(params);
+    const documentIds = (
+      await db
+        .select({ id: schema.kbFileDocumentsTable.kbDocumentId })
+        .from(schema.kbFileDocumentsTable)
+        .where(eq(schema.kbFileDocumentsTable.kbFileId, params.fileId))
+    ).map((row) => row.id);
+    if (documentIds.length === 0) return;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.kbDocumentsTable)
+        .set({ acl })
+        .where(
+          and(
+            inArray(schema.kbDocumentsTable.id, documentIds),
+            eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          ),
+        );
+      await tx
+        .update(schema.kbChunksTable)
+        .set({ acl })
+        .where(inArray(schema.kbChunksTable.documentId, documentIds));
+    });
   }
 
   static async linkDocument(params: {

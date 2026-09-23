@@ -38,7 +38,7 @@ export type SavableAttachment = { id: string; name: string };
  *
  * A chat attachment lives and dies with its conversation; this copies the bytes
  * out so the document persists and can be indexed. Deliberately the same
- * controls as the repository's own upload dialog — directory, visibility — so a
+ * controls as the repository's own upload dialog — directory, who can read it — so a
  * file lands with the same choices however it got here. Renaming is offered
  * only for a single file, where there is one name to mean.
  */
@@ -96,7 +96,6 @@ export function SaveToKnowledgeDialog({
           attachmentId: attachment.id,
           ...(single ? { filename: filename.trim() } : {}),
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
-          visibility: "private",
           initialGrants: initialGrants.map(({ subject, actions }) => ({
             subject,
             actions,

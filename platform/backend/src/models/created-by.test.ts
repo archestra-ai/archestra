@@ -70,8 +70,6 @@ describe("service-account authorship across resource models", () => {
       sizeBytes: 5,
       contentHash: "abc",
       data: Buffer.from("notes"),
-      visibility: "org-wide",
-      teamIds: [],
       uploadedBy: actorId,
     });
     expect(file.uploadedBy).toBeNull();

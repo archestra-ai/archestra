@@ -77,6 +77,9 @@ RUN python3 -m venv /opt/hermes \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=agent_images/patches,target=/tmp/agent-image-patches \
+    /opt/hermes/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \

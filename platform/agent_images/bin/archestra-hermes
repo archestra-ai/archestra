@@ -269,6 +269,9 @@ HOOK
 chmod 0700 "${completion_hook}"
 # Tool discovery must not install optional dependencies: an unreachable package
 # index can block agent construction past the native TUI's initialization limit.
+# The first turn must carry the gateway tools, including the OpenAPPA remedy
+# pair. Hermes waits at most 1.5s for MCP discovery by default; the wait ends
+# as soon as discovery does, so this bound only caps an unreachable gateway.
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
@@ -298,6 +301,7 @@ jq -n \
         "X-Appa-Session-ID":$session
       }
     },
+    mcp_discovery_timeout:30,
     mcp_servers:{archestra:{
       url:$mcp_url,
       headers:{

@@ -167,6 +167,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             method = request["method"]
+            if method == "tools/list":
+                # A gateway slower than Hermes's default discovery bound. The
+                # first turn must still declare its tools.
+                time.sleep(2.5)
             if method == "tools/call":
                 self.server.tool_calls += 1
             result = {

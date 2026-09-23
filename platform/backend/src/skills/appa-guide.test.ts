@@ -310,6 +310,9 @@ describe("APPA Guide feature availability", () => {
     expect(content).toContain(
       "Without the catch-all, declare `archestra__search_tools` with `delta = {}`",
     );
+    expect(content).toContain(
+      "every proxied request fails closed without retry",
+    );
 
     // P13: Multi-runtime / session isolation
     expect(content).toContain(

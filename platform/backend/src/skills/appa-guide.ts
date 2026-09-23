@@ -106,7 +106,7 @@ If publishing opens a GitHub PR, give its link and state that the proposed polic
    - \`naming_conflict\`: alias target is ambiguous.
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: runtime rejected composition.
-   Report every non-\`active\` battery or \`effective.error\` as a problem to fix. If composition fails, the last policy that opened remains in effect; do not claim the new text is enforced.
+   Report every non-\`active\` battery or \`effective.error\` as a problem to fix. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim the new text or a previous policy is enforced.
 2. Read the root policy text and effective policy. Note which rules come from batteries.
 3. Call \`archestra__list_mcp_server_deployments\` to find all deployed MCP servers.
 4. For each distinct Catalog ID, call \`archestra__get_mcp_server_tools\` with \`{ "mcpServerId": "<Catalog ID>" }\`. Use the Catalog ID, not the deployment ID.
@@ -180,7 +180,7 @@ After approval:
 3. If the draft is unchanged, report that no update is needed. Otherwise call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the revision from the re-read. Use a clear \`title\` and \`summary\` when publishing a GitHub PR.
 4. On a conflict, re-read, combine your change with the new text, preview, and ask for approval again if the proposed behavior changes. Never just increase N and retry the old draft.
 5. If publish returns \`pull_request\`, give its URL. Use \`archestra__get_guardrails_policy_change_status\` with its number when asked about progress. State that the proposal is not enforced until the PR merges and repository sync succeeds. Do not say the policy changed yet.
-6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition failed, the last policy that opened remains in effect. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations; this conversation keeps the policy it started with.
+6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed; do not claim a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations; this conversation keeps the policy it started with.
 
 ## Adjust the current config (\`adjust\`)
 
@@ -208,7 +208,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - The supported editor format is \`[policy]\` plus \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change deployment settings through this skill.
-- A refused policy keeps Guardrails v2 off. Report the policy error rather than suggesting a retry or claiming the draft is active.
+- A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error; do not claim Guardrails v2 switched off or that the draft is active.
 `,
   files: [
     {

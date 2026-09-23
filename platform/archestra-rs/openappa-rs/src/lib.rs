@@ -3,6 +3,7 @@
 
 mod adapter;
 mod batteries;
+mod consults;
 mod declarations;
 mod policy;
 
@@ -1241,11 +1242,23 @@ impl State {
             actor_id.clone()
         };
         let _root = RootLock::acquire(root.clone()).await;
-        let leased = self.lease().await?;
-        leased
+        let mut leased = self.lease().await?;
+        let consults = Arc::new(consults::ConsultBuffer::default());
+        leased.state.runtime = Arc::new(leased.state.runtime.recording(consults.clone()));
+        let attribution = consults::Attribution {
+            organization_id: input.organization_id.clone(),
+            session_id: input.session_id.clone(),
+            caller_id: input.caller_id.clone(),
+        };
+        let result = leased
             .state
             .dispatch_on_lease(input, root, actor_id, policy_content)
-            .await
+            .await;
+        // On the dispatch's own connection, after its session lock is released.
+        if let Ok(pg) = postgres_store(&leased.state.store) {
+            consults::store(pg, attribution, &consults);
+        }
+        result
     }
 
     /// The session lock and the runtime's appends lock the same key, which

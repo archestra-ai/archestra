@@ -1,16 +1,25 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   customType,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
+import type {
+  ExternalConsultBackend,
+  ExternalConsultOutcome,
+  ExternalConsultRole,
+} from "@/types/openappa-external-consults";
+import organizationsTable from "./organization";
 
 // The payload and policy bytes belong to OpenAPPA. TypeScript never decodes
 // event batches or rebuilds the policy projection.
@@ -140,5 +149,51 @@ export const openappaProcessedResultsTable = pgTable(
       "openappa_results_status",
       sql`(${table.status} = 'pending' AND ${table.approvedOutput} IS NULL AND ${table.decision} IS NULL) OR (${table.status} = 'complete' AND ${table.approvedOutput} IS NOT NULL AND ${table.decision} IS NOT NULL)`,
     ),
+  ],
+);
+
+// One row per external consult the native runtime made, written by Rust after
+// the dispatch returns. A dataset for export, never read by a decision.
+export const openappaExternalConsultsTable = pgTable(
+  "openappa_external_consults",
+  {
+    // UUID v7, minted by the runtime.
+    id: uuid().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    sessionId: text("session_id"),
+    callerId: text("caller_id"),
+    // Milliseconds, as a JS Date holds them: the export's keyset cursor
+    // round-trips this value exactly.
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    durationMs: bigint("duration_ms", { mode: "number" }).notNull(),
+    role: text().$type<ExternalConsultRole>().notNull(),
+    externalName: text("external_name").notNull(),
+    backend: text().$type<ExternalConsultBackend>().notNull(),
+    request: jsonb().notNull(),
+    outcome: text().$type<ExternalConsultOutcome>().notNull(),
+    answer: jsonb(),
+    rawResponse: bytea("raw_response"),
+    httpStatus: integer("http_status"),
+    diagnostics: bytea("diagnostics"),
+    diagnosticsTruncated: boolean("diagnostics_truncated")
+      .notNull()
+      .default(false),
+    root: text().notNull(),
+    trajectory: text().notNull(),
+    callId: text("call_id"),
+    offerId: text("offer_id"),
+    callDigest: text("call_digest"),
+  },
+  (table) => [
+    index("openappa_external_consults_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    index("openappa_external_consults_root_idx").on(table.root),
   ],
 );

@@ -95,6 +95,10 @@ Lumen Cartography installs the GitHub MCP server for its agents. The setup wizar
 
 Later the team moves the policy into a GitHub repository. A pull request points `APPA_PROVIDER_GITHUB_TOKEN` at a different key. The next pull is held with the reason "changes credentials" instead of handing the battery that key on its own. An administrator with the credential permission reads the held pull in the panel and accepts it, or asks for the change to be reverted.
 
+### External Consult Records
+
+APPA records every consult it makes to an annotator, authority, sanitizer, or other external. A record holds the request, the answer or no-answer outcome, the raw response, and the timing. It also holds the session, trajectory, and tool call the consult served. A helper script's last stderr line is kept as diagnostics. Only users with `log:admin` can read the records. Export them from `GET /api/openappa/external-consults` — add `?format=jsonl` for one record per line. Records expire with `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
+
 ## The Lethal Trifecta
 
 The "lethal trifecta" is a prompt-injection risk that appears when an agent has all three of these at once (a pattern named by security researcher Simon Willison):

@@ -4,11 +4,11 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
   builtInSkillId: "appa-guide",
   name: "appa-guide",
   description:
-    "Configure OpenAPPA: explain the effective policy, review available tools, preview a policy diff, and publish a local revision or GitHub pull request.",
+    "Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview a policy diff, and publish a local revision or GitHub pull request.",
   feature: "appa",
   content: `---
 name: appa-guide
-description: Configure Guardrails v2 (OpenAPPA): explain the current policy, review available tools, and change how tool calls and results are handled using the policy read, validate, and update tools.
+description: Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview a policy diff, and publish a local revision or GitHub pull request.
 argument-hint: "init|adjust"
 ---
 
@@ -16,15 +16,16 @@ Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client
 
 If the request says \`diagnose\` and \`inspect only\`, do not propose or make changes. Inspect the host and report **Health** for runtime, policy, agents, and tool servers. Report an optional **Unavailable** section, one **OpenAPPA pieces** line, and then **No changes applied.** Do not mention battery matches or suggested includes in the report.
 
-You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, propose rules in plain English, wait for approval, apply the rules, and check the result. The database stores the policy and shares it with the OpenAPPA editor in Studio. A local file, client setting, or shell command does not change this policy.
+You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, preview the proposed policy, explain it in plain English, wait for approval, publish it, and check the result. The OpenAPPA Policy page shows the policy read-only. Archestra stores the effective policy in the database; when GitHub sync is configured, the repository owns the source text. A local client file, setting, or shell command does not change this policy.
 
 ## Platform tools in Archestra
 
 Access and manage the policy and platform state through Archestra MCP tools:
 
 - Read policy: \`archestra__get_guardrails_policy\` with no arguments.
-- Validate proposed policy: \`archestra__validate_guardrails_policy\` with \`{ "content": "<complete proposed TOML>" }\`.
-- Update policy: \`archestra__update_guardrails_policy\` with \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`.
+- Preview and validate a proposed change: \`archestra__preview_guardrails_policy_change\` with \`{ "content": "<complete proposed TOML>", "expectedRevision": N }\`. This returns before and after text for a diff, delivery mode, errors, and warnings without saving.
+- Publish an approved change: \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`. An optional \`title\` and \`summary\` describe the GitHub PR if sync is configured.
+- Check a policy PR: \`archestra__get_guardrails_policy_change_status\` with \`{ "number": N }\`, using the number returned by publish.
 - Inspect deployed MCP servers: \`archestra__list_mcp_server_deployments\` with no arguments.
 - Inspect server tools: \`archestra__get_mcp_server_tools\` with \`{ "mcpServerId": "<Catalog ID>" }\`.
 - Discover agent tools: \`archestra__search_tools\` for tools available to the calling agent.
@@ -68,7 +69,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - A battery gives maintained defaults. Never edit a battery. Override a tool contract with a root rule.
 - A battery is declared in this same policy document. \`include\` names it — either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package — \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
 - A battery is available when it exists in the bundled or organization battery layer. It is declared by \`include\` and governs calls only when \`effective.batteries\` marks it \`active\`. Say "include" rather than "install" when you propose that change.
-- Read before you propose. Show the complete proposed behavior in plain English. Wait for approval before you update the policy. Ask for approval again if a correction changes that behavior.
+- Read and preview before you propose. Show the diff, warnings, and complete proposed behavior in plain English. Wait for approval before you publish. Ask for approval again if a correction changes that behavior.
 - An initial request for a change is not approval to execute it. End the first turn with the proposal. Act only after a later message approves that exact proposal.
 - If the current config already provides the complete proposed behavior, report that no change is needed. Do not ask for approval or update an unchanged config.
 - Make the smallest change that meets the request. Keep unrelated entries, comments, reader names, and batteries.
@@ -87,14 +88,16 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Inspection and proposal drafting never require approval.
 - Keep user-facing replies compact. Group tools by server and behavior. Use one short sentence or bullet per outcome.
 
-After a successful update, summarize the active behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
+After a local revision, summarize the active behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
 > Saved policies apply to new conversations; this conversation keeps the policy it started with.
+
+If publishing opens a GitHub PR, give its link and state that the proposed policy is not enforced until merge and a successful repository sync. Do not claim it is active or tell the operator to start a new conversation yet.
 
 ## Initial tool sync (\`init\`)
 
 ### Inspect
 
-1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), and \`effective\` (enforced policy). Note declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
+1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), \`delivery\` (local revision or GitHub PR), and \`effective\` (enforced policy). Note declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
    - \`active\`: battery's rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: \`[credentials]\` does not bind required helper variables.
@@ -148,6 +151,8 @@ Wait for the answer before you show the proposal.
 
 ### Propose, then apply
 
+Before showing the proposal, call \`archestra__preview_guardrails_policy_change\` with the complete draft and the revision you read. It validates and composes the draft without saving. Fix errors and preview again. Show warnings; \`valid\` alone does not prove a battery governs tools or an external service works. If the preview shows no change, report that no update is needed without asking for approval.
+
 Group the proposal by server. Show:
 
 - the proposed starting policy;
@@ -157,6 +162,7 @@ Group the proposal by server. Show:
 - tools left undeclared (covered by \`name = "*"\` if present, refused otherwise);
 - every configured MCP server whose tools could not be detected.
 - any requested subagent return boundary that the connected host cannot support or verify.
+- the previewed diff and whether approval will save a local revision or open a GitHub PR.
 
 Add one short \`OpenAPPA pieces: <primitives>\` line.
 
@@ -168,14 +174,12 @@ End with: **Approve, or tell me what to change.** Wait for the reply.
 
 After approval:
 
-1. Call \`archestra__get_guardrails_policy\` again. Read the latest \`revision\`. If the policy changed since the proposal, revise the proposal and ask for approval again.
-2. Validate proposed TOML with \`archestra__validate_guardrails_policy\` using \`{ "content": "<complete proposed TOML>" }\`. Validation composes \`include\` batteries and can return warnings for unavailable entries. Fix errors and report warnings. Validation cannot prove external services work.
-3. If the text already provides the requested behavior, report that no change is needed.
-4. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`, where N is the revision from the read tool.
-5. If the save reports a conflict, someone saved a newer copy. Read it again, merge your change, validate, and retry. Never increase N without reading the new text.
-6. Read the saved policy back. Check \`effective.error\` and \`effective.batteries\`. Report any non-\`active\` battery or composition error as a problem to fix. If composition failed, the last policy that opened remains in effect.
-7. Report the outcome in a brief summary of the active behavior. Add:
-   > Saved policies apply to new conversations; this conversation keeps the policy it started with.
+1. Re-read the policy and its \`revision\` and \`delivery\`. If either changed since the proposal, revise the proposal and ask for approval again.
+2. Preview the exact approved draft again with \`archestra__preview_guardrails_policy_change\`. If the diff, warnings, or delivery mode changed, show the new proposal and ask for approval again. Do not publish an invalid preview.
+3. If the draft is unchanged, report that no update is needed. Otherwise call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the revision from the re-read. Use a clear \`title\` and \`summary\` when publishing a GitHub PR.
+4. On a conflict, re-read, combine your change with the new text, preview, and ask for approval again if the proposed behavior changes. Never just increase N and retry the old draft.
+5. If publish returns \`pull_request\`, give its URL. Use \`archestra__get_guardrails_policy_change_status\` with its number when asked about progress. State that the proposal is not enforced until the PR merges and repository sync succeeds. Do not say the policy changed yet.
+6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition failed, the last policy that opened remains in effect. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations; this conversation keeps the policy it started with.
 
 ## Adjust the current config (\`adjust\`)
 
@@ -183,22 +187,20 @@ Start from the user's requested outcome, not a full tool rescan.
 
 If the requested outcome is ambiguous, ask one focused question and wait.
 
-1. Call \`archestra__get_guardrails_policy\`. Record current \`content\`, \`revision\`, and \`effective\` status.
+1. Call \`archestra__get_guardrails_policy\`. Record current \`content\`, \`revision\`, \`delivery\`, and \`effective\` status.
 2. For syntax or rules not shown in the current config, read \`references/contracts.md\` or \`references/policy-writing.md\` with \`archestra__load_skill\`.
-3. Explain what happens now, what you propose, and the practical effect. Add one short \`OpenAPPA pieces: <primitives>\` line.
-4. If a battery helps, propose adding it to \`include\` with the one-sentence rule used in \`init\` mode. Existing root rules keep priority.
-5. End with: **Approve, or tell me what to change.** Wait for the reply.
-6. Call \`archestra__get_guardrails_policy\` again. If the revision changed, revise the proposal and ask for approval again.
-7. Call \`archestra__validate_guardrails_policy\` with \`{ "content": "<complete proposed TOML>" }\`. Fix errors and report warnings; validation cannot prove external services work.
-8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`, where N is the revision from step 6.
-9. If the save reports a conflict, read the newer policy, merge your change, validate, and retry.
-10. Read the saved policy back and check \`effective.error\` and \`effective.batteries\`. If composition failed, the last policy that opened remains in effect. Report any problem to fix. Otherwise, report the result in one to three short sentences.
-11. Add:
-    > Saved policies apply to new conversations; this conversation keeps the policy it started with.
+3. If a battery helps, add it to the draft \`include\` list. Explain it with the one-sentence rule used in \`init\` mode. Existing root rules keep priority.
+4. Preview the complete proposed policy with \`archestra__preview_guardrails_policy_change\` and the current \`revision\`. Fix errors and preview again. If it produces no change, report that without approval language.
+5. Explain what happens now, the previewed diff and warnings, and the practical effect. State whether approval will save locally or open a GitHub PR. Add one short \`OpenAPPA pieces: <primitives>\` line.
+6. End with: **Approve, or tell me what to change.** Wait for the reply.
+7. Re-read the policy and its \`revision\` and \`delivery\`. If either changed, revise the proposal and ask for approval again. Otherwise preview the exact approved draft again. If the diff or warnings changed, ask for approval again. Do not publish an invalid or unchanged preview.
+8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the latest revision. Give a GitHub PR a clear \`title\` and \`summary\`.
+9. On a conflict, re-read, merge, preview, and request approval again if the proposed behavior changes.
+10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations; this one keeps its original policy.
 
 ## Boundaries
 
-- Reading requires permission \`toolPolicy:read\`. Validating and saving require permission \`toolPolicy:update\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing.
+- Reading and previewing require \`toolPolicy:read\`; publishing requires \`toolPolicy:update\`. GitHub PR publishing and status checks also require \`credential:read\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing. If GitHub sync lacks a ready App credential or has changed upstream, do not claim a policy update; fix or sync the source before retrying.
 - The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
@@ -220,7 +222,7 @@ The policy document starts with:
 version = 2
 \`\`\`
 
-This version identifies the policy format. The API revision is a separate save number that prevents overwriting concurrent edits.
+This version identifies the policy format. The API revision is a separate save number that prevents overwriting concurrent edits. Preview the complete draft with that revision before showing the diff and publishing it. With GitHub sync, publishing creates a PR; the policy takes effect after merge and successful sync. Without GitHub sync, publishing saves a local revision.
 
 ## Tool rules
 
@@ -314,7 +316,7 @@ It also defines approvals and data transforms when a call is blocked.
 
 ## Policy format and storage
 
-Archestra stores the policy in PostgreSQL and shares it with the Studio editor. The document follows the \`organization.appa.toml\` format.
+Archestra shows the policy read-only on the OpenAPPA Policy page. The document follows the \`organization.appa.toml\` format. With GitHub sync, the repository owns the source text; a proposed edit opens a PR, and Archestra enforces it only after merge and successful sync. Without sync, Archestra saves a local revision in the database.
 
 Rules belong under \`[policy]\`. External services (remote annotators, authorities, sanitizers) and limits belong under \`[externals]\`. Batteries are declared with \`include\`, \`[server_aliases]\`, and \`[credentials]\`.
 

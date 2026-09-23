@@ -241,8 +241,9 @@ describe("APPA Guide feature availability", () => {
 
     // P01: Canonical router and host guidance
     expect(content).toContain("archestra__get_guardrails_policy");
-    expect(content).toContain("archestra__validate_guardrails_policy");
+    expect(content).toContain("archestra__preview_guardrails_policy_change");
     expect(content).toContain("archestra__update_guardrails_policy");
+    expect(content).toContain("archestra__get_guardrails_policy_change_status");
 
     // P02: Complete host inventory before proposal
     expect(content).toContain("archestra__list_mcp_server_deployments");
@@ -289,9 +290,8 @@ describe("APPA Guide feature availability", () => {
 
     // P08: Revalidate immediately before mutation
     expect(content).toContain("expectedRevision");
-    expect(content).toContain(
-      "the policy changed since the proposal, revise the proposal and ask for approval again",
-    );
+    expect(content).toContain("preview the exact approved draft again");
+    expect(content).toContain("the PR merges and repository sync succeeds");
 
     // P09: No-change result performs no write or reload and uses no approval language
     expect(content).toContain(

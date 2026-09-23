@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates the run directory for the OpenAPPA root-flow qualification and seeds
-# the two scenario files the policy names.
+# the scenario files the policy names.
 #
 #   setup-lab.sh
 #
@@ -51,8 +51,16 @@ Nothing in this file is sensitive; it exists so the output sanitizer has a
 body of prose long enough to be visibly replaced by its summary.
 REPORT
 
+# S3c. Unlike report.txt, this tool result is unconfined. A child agent can
+# inspect it, but its final return must satisfy the summarize contract before the parent receives it.
+cat > "$lab/return.txt" <<'RETURN'
+REPORT-RAW-KOALA-0831
+This marker belongs only to the child trajectory. The parent must receive the
+summarizer's canonical replacement and never this raw body.
+RETURN
+
 printf 'lab ready: %s\n' "$APPA_LAB_HOME"
-printf '  scenario files: %s/secret.txt, %s/report.txt\n' "$lab" "$lab"
+printf '  scenario files: %s/secret.txt, %s/report.txt, %s/return.txt\n' "$lab" "$lab" "$lab"
 printf '\n'
 
 # The policy names the scenario files by absolute path, so a lab directory

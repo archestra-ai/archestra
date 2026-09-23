@@ -2,6 +2,8 @@ import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
+  CompactedResponse,
+  ResponseCompactParams,
   ResponseCreateParamsNonStreaming,
   ResponseCreateParamsStreaming,
   ResponseFunctionCallArgumentsDeltaEvent,
@@ -13,6 +15,10 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
+import {
+  wrapCompactionItem,
+  wrapCompactionResponse,
+} from "@/openappa/compaction-carrier";
 import {
   decodeOpenAiCodexCredential,
   isOpenAiCodexCredential,
@@ -52,6 +58,7 @@ import {
   holdResponsesHostedOutput,
   namespaceOf,
   namespacesByCallId,
+  prependPrefixToResponse,
   responsesHostedToolCalls,
   rewriteResponsesOutput,
   toSse,
@@ -65,6 +72,10 @@ type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
 type OpenAiResponsesHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiResponsesStreamChunk = OpenAi.Types.ResponseChunk;
 type OpenAiResponseInput = string | ResponseInput | undefined;
+type OpenAiCompactRequest = Omit<ResponseCompactParams, "model" | "input"> & {
+  model: string;
+  input?: string | ResponseInput;
+};
 
 type OpenAiFunctionToolDefinition = {
   type: "function";
@@ -208,6 +219,49 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       get(error, "message") ??
       "Internal server error"
     );
+  },
+};
+
+export const openAiResponsesCompactAdapterFactory: LLMProvider<
+  OpenAiCompactRequest,
+  CompactedResponse,
+  OpenAiResponseInput,
+  never,
+  OpenAiResponsesHeaders
+> = {
+  ...openAiResponsesAdapterFactory,
+
+  createRequestAdapter(
+    request: OpenAiCompactRequest,
+  ): LLMRequestAdapter<OpenAiCompactRequest, OpenAiResponseInput> {
+    return new OpenAiResponsesCompactRequestAdapter(request);
+  },
+
+  createResponseAdapter(
+    response: CompactedResponse,
+  ): LLMResponseAdapter<CompactedResponse> {
+    return new OpenAiResponsesCompactResponseAdapter(response);
+  },
+
+  createStreamAdapter(): LLMStreamAdapter<never, CompactedResponse> {
+    return new OpenAiResponsesStreamAdapter() as unknown as LLMStreamAdapter<
+      never,
+      CompactedResponse
+    >;
+  },
+
+  async execute(
+    client: unknown,
+    request: OpenAiCompactRequest,
+  ): Promise<CompactedResponse> {
+    const openaiClient = client as OpenAIProvider;
+    return await openaiClient.responses.compact(
+      toCompactRequest(request) as ResponseCompactParams,
+    );
+  },
+
+  async executeStream(): Promise<AsyncIterable<never>> {
+    throw new ApiError(400, "OpenAI compaction does not support streaming");
   },
 };
 
@@ -358,6 +412,73 @@ class OpenAiResponsesRequestAdapter
         };
       }) as unknown as ResponseInput,
     };
+  }
+}
+
+class OpenAiResponsesCompactRequestAdapter
+  implements LLMRequestAdapter<OpenAiCompactRequest, OpenAiResponseInput>
+{
+  readonly provider = "openai" as const;
+  private readonly delegate: OpenAiResponsesRequestAdapter;
+
+  constructor(private readonly request: OpenAiCompactRequest) {
+    this.delegate = new OpenAiResponsesRequestAdapter(
+      request as OpenAiResponsesRequest,
+    );
+  }
+
+  getModel(): string {
+    return this.delegate.getModel();
+  }
+
+  isStreaming(): boolean {
+    return false;
+  }
+
+  getMessages(): CommonMessage[] {
+    return this.delegate.getMessages();
+  }
+
+  getToolResults(): CommonToolResult[] {
+    return this.delegate.getToolResults();
+  }
+
+  getTools(): CommonMcpToolDefinition[] {
+    return [];
+  }
+
+  hasTools(): boolean {
+    return false;
+  }
+
+  getProviderMessages(): OpenAiResponseInput {
+    return this.delegate.getProviderMessages();
+  }
+
+  getOriginalRequest(): OpenAiCompactRequest {
+    return this.request;
+  }
+
+  setModel(model: string): void {
+    this.delegate.setModel(model);
+  }
+
+  updateToolResult(toolCallId: string, newContent: string): void {
+    this.delegate.updateToolResult(toolCallId, newContent);
+  }
+
+  applyToolResultUpdates(updates: Record<string, string>): void {
+    this.delegate.applyToolResultUpdates(updates);
+  }
+
+  convertToolResultContent(input: OpenAiResponseInput): OpenAiResponseInput {
+    return this.delegate.convertToolResultContent(input);
+  }
+
+  toProviderRequest(): OpenAiCompactRequest {
+    return toCompactRequest(
+      this.delegate.toProviderRequest() as OpenAiCompactRequest,
+    );
   }
 }
 
@@ -516,6 +637,72 @@ class OpenAiResponsesResponseAdapter
       usage: this.response.usage,
     } as unknown as OpenAiResponsesResponse;
   }
+
+  withReplacedText(text: string): OpenAiResponsesResponse {
+    return {
+      ...this.response,
+      status: "completed",
+      // Replaces output_text so the completed envelope does not retain withheld text.
+      output_text: text,
+      output: [
+        {
+          id: `msg_${Date.now()}`,
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text, annotations: [] }],
+        },
+      ],
+    } as unknown as OpenAiResponsesResponse;
+  }
+}
+
+class OpenAiResponsesCompactResponseAdapter
+  implements LLMResponseAdapter<CompactedResponse>
+{
+  readonly provider = "openai" as const;
+
+  constructor(private readonly response: CompactedResponse) {}
+
+  getId(): string {
+    return this.response.id;
+  }
+
+  getModel(): string {
+    // The compact endpoint's native response deliberately carries no model.
+    return "";
+  }
+
+  getText(): string {
+    return "";
+  }
+
+  getToolCalls(): CommonToolCall[] {
+    return [];
+  }
+
+  hasToolCalls(): boolean {
+    return false;
+  }
+
+  getUsage(): UsageView {
+    return fromResponsesUsage(this.response.usage);
+  }
+
+  getOriginalResponse(): CompactedResponse {
+    return this.response;
+  }
+
+  getFinishReasons(): string[] {
+    return ["completed"];
+  }
+
+  toRefusalResponse(): CompactedResponse {
+    throw new ApiError(
+      500,
+      "OpenAI compaction response cannot contain tool calls",
+    );
+  }
 }
 
 class OpenAiResponsesStreamAdapter
@@ -525,8 +712,10 @@ class OpenAiResponsesStreamAdapter
   readonly provider = "openai" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: OpenAiResponsesResponse | null = null;
+  private compactionProof: string | null = null;
   private getTextSuffix: ((completedText: string) => string) | null = null;
-  private textSuffix = "";
+  private textPrefixIssued = false;
+  private issuedPrefix = "";
   private pendingTextTerminalEvents: OpenAiResponsesStreamChunk[] = [];
   private lastTextDelta: {
     itemId: string;
@@ -567,6 +756,10 @@ class OpenAiResponsesStreamAdapter
     this.getTextSuffix = getSuffix;
   }
 
+  setCompactionContext(proof: string): void {
+    this.compactionProof = proof;
+  }
+
   processChunk(chunk: OpenAiResponsesStreamChunk): ChunkProcessingResult {
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
@@ -580,6 +773,10 @@ class OpenAiResponsesStreamAdapter
       }
     }
 
+    const originalCompletedResponse =
+      chunk.type === "response.completed" ? chunk.response : null;
+    chunk = this.withCompactionContext(chunk);
+
     if (
       this.withholdsHosted &&
       this.hosted === null &&
@@ -592,7 +789,15 @@ class OpenAiResponsesStreamAdapter
         items: new Map(),
       };
     }
-    if (this.hosted) return this.withholdChunk(chunk, this.hosted);
+    if (this.hosted) {
+      const result = this.withholdChunk(chunk, this.hosted);
+      if (originalCompletedResponse) {
+        // Compaction context is a client-wire carrier, not persisted provider output.
+        this.completedResponse =
+          originalCompletedResponse as unknown as OpenAiResponsesResponse;
+      }
+      return result;
+    }
 
     if (chunk.type === "response.output_text.delta") {
       const pending = this.drainPendingTextTerminalEvents();
@@ -611,8 +816,19 @@ class OpenAiResponsesStreamAdapter
         outputIndex: chunk.output_index,
         contentIndex: chunk.content_index,
       };
+      let prefixSse = "";
+      let outbound = chunk;
+      if (!this.textPrefixIssued && this.getTextSuffix) {
+        const prefix = this.resolveTextPrefix(chunk.delta);
+        this.textPrefixIssued = true;
+        if (prefix) {
+          this.issuedPrefix = prefix;
+          prefixSse = toSse({ ...chunk, delta: prefix });
+          outbound = { ...chunk, delta: `\n\n${chunk.delta}` };
+        }
+      }
       return {
-        sseData: `${pending}${toSse(chunk)}`,
+        sseData: `${pending}${prefixSse}${toSse(outbound)}`,
         isToolCallChunk: false,
         isFinal: false,
       };
@@ -629,6 +845,16 @@ class OpenAiResponsesStreamAdapter
 
     if (isResponsesToolCallChunk(chunk)) {
       this.captureToolCallChunk(chunk);
+      // If a turn starts with tool calls, captures the prefix now
+      // so the completed response carries the trajectory banner.
+      if (!this.textPrefixIssued && this.getTextSuffix) {
+        const prefix = this.resolveTextPrefix("");
+        this.textPrefixIssued = true;
+        if (prefix) {
+          this.issuedPrefix = prefix;
+          this.state.text = prefix;
+        }
+      }
       this.state.rawToolCallEvents.push(chunk);
       return {
         sseData: null,
@@ -639,19 +865,9 @@ class OpenAiResponsesStreamAdapter
 
     if (chunk.type === "response.completed") {
       this.completedResponse =
-        chunk.response as unknown as OpenAiResponsesResponse;
+        originalCompletedResponse as unknown as OpenAiResponsesResponse;
       this.state.stopReason =
         this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
-      this.textSuffix = this.resolveTextSuffix();
-
-      if (this.textSuffix) {
-        return {
-          sseData: null,
-          isToolCallChunk: false,
-          isFinal: true,
-        };
-      }
-
       const pending = this.drainPendingTextTerminalEvents();
 
       // A Responses client treats this envelope as the end of the turn. When
@@ -668,8 +884,17 @@ class OpenAiResponsesStreamAdapter
         };
       }
 
+      const completed = this.issuedPrefix
+        ? {
+            ...chunk,
+            response: prependPrefixToResponse(
+              chunk.response as unknown as OpenAiResponsesResponse,
+              this.issuedPrefix,
+            ),
+          }
+        : chunk;
       return {
-        sseData: `${pending}${toSse(chunk)}`,
+        sseData: `${pending}${toSse(completed)}`,
         isToolCallChunk: false,
         isFinal: true,
       };
@@ -691,6 +916,9 @@ class OpenAiResponsesStreamAdapter
       sseData: `${this.drainPendingTextTerminalEvents()}${toSse(chunk)}`,
       isToolCallChunk: false,
       isFinal: false,
+      isResponsePreamble:
+        chunk.type === "response.created" ||
+        chunk.type === "response.in_progress",
     };
   }
 
@@ -847,21 +1075,36 @@ class OpenAiResponsesStreamAdapter
       ...base,
       usage: base.usage ?? toResponsesUsage(this.state.usage),
     } as unknown as OpenAiResponsesResponse;
-    this.completedResponse = held;
+    const completedResponse = this.issuedPrefix
+      ? prependPrefixToResponse(held, this.issuedPrefix)
+      : held;
+    this.completedResponse = completedResponse;
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
       toolCalls: notices,
-      firstOutputIndex: held.output.length - notices.length,
+      firstOutputIndex: completedResponse.output.length - notices.length,
       nextSequenceNumber: () => sequence++,
     });
     frames.push(
-      toSse({
-        type: "response.completed",
-        sequence_number: sequence++,
-        response: held,
-      }),
+      toSse(
+        this.withCompactionContext({
+          type: "response.completed",
+          sequence_number: sequence++,
+          response: completedResponse,
+        } as OpenAiResponsesStreamChunk),
+      ),
     );
     return frames;
+  }
+
+  prepareResponseReplacement(): void {
+    // Clears raw output state so the persisted turn contains only the approved replacement.
+    this.state.text = "";
+    this.state.toolCalls = [];
+    this.state.rawToolCallEvents = [];
+    this.customCallIds.clear();
+    this.hosted = null;
+    this.completedResponse = null;
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -878,13 +1121,13 @@ class OpenAiResponsesStreamAdapter
     // what the client reconstructs.
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
-    const callItems = upstreamOutput.filter(
+    // Removes omitted calls before rebuilding completion envelopes.
+    // This makes sure response.completed matches frames sent to the client.
+    const finalOutput = withoutOmittedToolCalls(upstreamOutput, toolCalls);
+    const callItems = finalOutput.filter(
       (item) =>
         item.type === "function_call" || item.type === "custom_tool_call",
     );
-    // Both kinds are calls: counting only function calls would place the
-    // rewritten frames at indexes the completed envelope disagrees with.
-    const firstOutputIndex = upstreamOutput.length - callItems.length;
     const itemIdByCallId = new Map(
       callItems.flatMap((item) => {
         const callId = (item as { call_id?: unknown }).call_id;
@@ -915,6 +1158,22 @@ class OpenAiResponsesStreamAdapter
       if (this.customCallIds.has(call.id) && streamed?.name === call.name)
         customCallIds.add(call.id);
     }
+    const rewritten = {
+      ...base,
+      output: rewriteResponsesOutput(finalOutput, toolCalls),
+      usage: base.usage ?? toResponsesUsage(this.state.usage),
+    } as unknown as OpenAiResponsesResponse;
+    const completedResponse = this.issuedPrefix
+      ? prependPrefixToResponse(rewritten, this.issuedPrefix)
+      : rewritten;
+    this.completedResponse = completedResponse;
+    // Both function calls and custom tool calls are counted.
+    // This places rewritten frames at indexes that match the completed envelope.
+    // The completed output also includes any synthesized prefix message.
+    const firstOutputIndex = completedResponse.output.filter(
+      (item) =>
+        item.type !== "function_call" && item.type !== "custom_tool_call",
+    ).length;
     let sequence = Date.now();
     // Released with the turn: what was withheld beside the calls goes first.
     const frames = (this.hosted?.events ?? []).map((event) => toSse(event));
@@ -932,47 +1191,20 @@ class OpenAiResponsesStreamAdapter
         customCallIds,
       }),
     );
-    const rewritten = {
-      ...base,
-      output: rewriteResponsesOutput(upstreamOutput, toolCalls),
-      usage: base.usage ?? toResponsesUsage(this.state.usage),
-    } as unknown as OpenAiResponsesResponse;
-    this.completedResponse = rewritten;
     frames.push(
-      toSse({
-        type: "response.completed",
-        sequence_number: sequence++,
-        response: rewritten,
-      }),
+      toSse(
+        this.withCompactionContext({
+          type: "response.completed",
+          sequence_number: sequence++,
+          response: completedResponse,
+        } as OpenAiResponsesStreamChunk),
+      ),
     );
     return frames;
   }
 
   formatEndSSE(): string {
-    if (!this.textSuffix || !this.lastTextDelta) {
-      return "data: [DONE]\n\n";
-    }
-    const textDelta = toSse({
-      type: "response.output_text.delta",
-      item_id: this.lastTextDelta.itemId,
-      output_index: this.lastTextDelta.outputIndex,
-      content_index: this.lastTextDelta.contentIndex,
-      sequence_number: Date.now(),
-      delta: this.textSuffix,
-      logprobs: [],
-    });
-    const terminalEvents = this.pendingTextTerminalEvents
-      .map((event) => toSse(this.appendSuffixToTerminalEvent(event)))
-      .join("");
-    this.pendingTextTerminalEvents = [];
-    const response = this.appendSuffixToCompletedResponse(
-      this.completedResponse ?? this.toProviderResponse(),
-    );
-    return `${textDelta}${terminalEvents}${toSse({
-      type: "response.completed",
-      sequence_number: Date.now() + 1,
-      response,
-    })}data: [DONE]\n\n`;
+    return "data: [DONE]\n\n";
   }
 
   toProviderResponse(): OpenAiResponsesResponse {
@@ -1060,17 +1292,31 @@ class OpenAiResponsesStreamAdapter
     } as unknown as OpenAiResponsesResponse;
   }
 
-  private resolveTextSuffix(): string {
-    if (
-      !this.getTextSuffix ||
-      this.replacedText !== null ||
-      this.state.toolCalls.length > 0 ||
-      !this.lastTextDelta
-    ) {
+  private resolveTextPrefix(firstText: string): string {
+    if (!this.getTextSuffix || this.replacedText !== null) {
       return "";
     }
-    const text = this.textByPart.get(this.textPartKey(this.lastTextDelta));
-    return text ? this.getTextSuffix(text) : "";
+    return this.getTextSuffix(firstText);
+  }
+
+  private withCompactionContext(
+    chunk: OpenAiResponsesStreamChunk,
+  ): OpenAiResponsesStreamChunk {
+    const proof = this.compactionProof;
+    if (!proof) return chunk;
+    if (chunk.type === "response.output_item.done") {
+      return {
+        ...chunk,
+        item: wrapCompactionItem(chunk.item, proof),
+      } as OpenAiResponsesStreamChunk;
+    }
+    if (chunk.type === "response.completed") {
+      return {
+        ...chunk,
+        response: wrapCompactionResponse(chunk.response, proof),
+      } as OpenAiResponsesStreamChunk;
+    }
+    return chunk;
   }
 
   private textPartKey(params: {
@@ -1109,75 +1355,15 @@ class OpenAiResponsesStreamAdapter
   }
 
   private drainPendingTextTerminalEvents(): string {
-    const events = this.pendingTextTerminalEvents.map((event) => toSse(event));
+    const events = this.pendingTextTerminalEvents.map((event) =>
+      toSse(
+        this.issuedPrefix
+          ? prependPrefixToTerminalEvent(event, this.issuedPrefix)
+          : event,
+      ),
+    );
     this.pendingTextTerminalEvents = [];
     return events.join("");
-  }
-
-  private appendSuffixToTerminalEvent(
-    event: OpenAiResponsesStreamChunk,
-  ): OpenAiResponsesStreamChunk {
-    if (event.type === "response.output_text.done") {
-      return { ...event, text: `${event.text}${this.textSuffix}` };
-    }
-    if (event.type === "response.content_part.done") {
-      return {
-        ...event,
-        part: {
-          ...(event.part as { type: string; text: string }),
-          text: `${(event.part as { text: string }).text}${this.textSuffix}`,
-        },
-      } as OpenAiResponsesStreamChunk;
-    }
-    if (event.type === "response.output_item.done") {
-      const contentIndex = this.lastTextDelta?.contentIndex;
-      const item = event.item as {
-        content: Array<{ type: string; text?: string }>;
-      };
-      return {
-        ...event,
-        item: {
-          ...item,
-          content: item.content.map((part, index) =>
-            index === contentIndex &&
-            part.type === "output_text" &&
-            part.text !== undefined
-              ? { ...part, text: `${part.text}${this.textSuffix}` }
-              : part,
-          ),
-        },
-      } as OpenAiResponsesStreamChunk;
-    }
-    return event;
-  }
-
-  private appendSuffixToCompletedResponse(
-    response: OpenAiResponsesResponse,
-  ): OpenAiResponsesResponse {
-    const itemId = this.lastTextDelta?.itemId;
-    const contentIndex = this.lastTextDelta?.contentIndex;
-    return {
-      ...response,
-      output: response.output.map((item) => {
-        if (item.type !== "message" || (itemId && item.id !== itemId)) {
-          return item;
-        }
-        const message = item as {
-          content: Array<{ type: string; text?: string }>;
-        };
-        return {
-          ...item,
-          content: message.content.map((part, index) =>
-            item.id === itemId &&
-            index === contentIndex &&
-            part.type === "output_text" &&
-            part.text !== undefined
-              ? { ...part, text: `${part.text}${this.textSuffix}` }
-              : part,
-          ),
-        };
-      }),
-    } as OpenAiResponsesResponse;
   }
 
   /** Accumulates a chunk of the provider-run part of the turn without forwarding it. */
@@ -1302,6 +1488,30 @@ class OpenAiResponsesStreamAdapter
     this.toolCallsByItemId.set(chunk.item_id, toolCall);
     this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
   }
+}
+
+function withoutOmittedToolCalls<TItem extends { type?: string }>(
+  output: readonly TItem[],
+  toolCalls: readonly { id: string }[],
+): TItem[] {
+  const releasedCallIds = new Set(toolCalls.map((call) => call.id));
+  return output.filter((item) => {
+    if (item.type !== "function_call" && item.type !== "custom_tool_call") {
+      return true;
+    }
+    const callId = (item as { call_id?: unknown }).call_id;
+    return typeof callId === "string" && releasedCallIds.has(callId);
+  });
+}
+
+function toCompactRequest(request: OpenAiCompactRequest): OpenAiCompactRequest {
+  return {
+    model: request.model,
+    input: request.input,
+    instructions: request.instructions,
+    previous_response_id: request.previous_response_id,
+    prompt_cache_key: request.prompt_cache_key,
+  };
 }
 
 function toCommonMessages(
@@ -1536,4 +1746,45 @@ function tryParseJsonObject(value: string): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function withLeadingPrefix(text: string, prefix: string): string {
+  return text.startsWith(prefix) ? text : `${prefix}\n\n${text}`;
+}
+
+function prependPrefixToTerminalEvent(
+  event: OpenAiResponsesStreamChunk,
+  prefix: string,
+): OpenAiResponsesStreamChunk {
+  if (event.type === "response.output_text.done") {
+    return { ...event, text: withLeadingPrefix(event.text, prefix) };
+  }
+  if (event.type === "response.content_part.done") {
+    const part = event.part as { type: string; text?: string };
+    if (part.type !== "output_text" || part.text === undefined) return event;
+    return {
+      ...event,
+      part: { ...part, text: withLeadingPrefix(part.text, prefix) },
+    } as OpenAiResponsesStreamChunk;
+  }
+  if (event.type === "response.output_item.done") {
+    const item = event.item as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    if (!item.content) return event;
+    let applied = false;
+    return {
+      ...event,
+      item: {
+        ...item,
+        content: item.content.map((part) => {
+          if (applied || part.type !== "output_text" || part.text === undefined)
+            return part;
+          applied = true;
+          return { ...part, text: withLeadingPrefix(part.text, prefix) };
+        }),
+      },
+    } as OpenAiResponsesStreamChunk;
+  }
+  return event;
 }

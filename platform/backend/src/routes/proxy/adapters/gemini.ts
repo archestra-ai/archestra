@@ -359,7 +359,7 @@ class GeminiRequestAdapter
                   ? functionResponse.id
                   : syntheticToolCallId(contentIndex, partIndex);
 
-              if (this.toolResultUpdates[id]) {
+              if (Object.hasOwn(this.toolResultUpdates, id)) {
                 // Update the function response with sanitized content
                 // Spread the original part to preserve top-level fields like
                 // thought and thoughtSignature which Gemini 3 requires
@@ -1259,8 +1259,11 @@ export function restToSdkGenerateContentParams(
   }
 
   if (body.generationConfig) {
-    params.config =
-      body.generationConfig as GenerateContentParameters["config"];
+    // Copied: the SDK config gains tools and systemInstruction below, which
+    // must not leak back into the request the interaction log records.
+    params.config = {
+      ...body.generationConfig,
+    } as GenerateContentParameters["config"];
   } else {
     const generationConfig: Record<string, unknown> = {};
     const configKeys = [

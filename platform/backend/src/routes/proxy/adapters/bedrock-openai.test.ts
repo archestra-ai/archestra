@@ -139,6 +139,40 @@ describe("BedrockOpenai response adapter", () => {
     );
   });
 
+  test("toRefusalResponse logs the Converse-shaped refusal, not the blocked tool call", () => {
+    const factory = makeBedrockOpenaiAdapterFactory(ctx);
+    const resp = factory.createResponseAdapter({
+      output: {
+        message: {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "t_1",
+                name: "get_weather",
+                input: { city: "SF" },
+              },
+            },
+          ],
+        },
+      },
+      stopReason: "tool_use",
+      usage: { inputTokens: 5, outputTokens: 3 },
+    } as Bedrock.Types.ConverseResponse);
+
+    resp.toRefusalResponse(
+      "blocked by policy",
+      "Sorry, that tool is disabled.",
+    );
+
+    // biome-ignore lint/suspicious/noExplicitAny: crossing typed boundary
+    const logged = resp.getLoggedResponse?.() as any;
+    expect(logged.output.message.content).toEqual([
+      { text: "Sorry, that tool is disabled." },
+    ]);
+    expect(logged.stopReason).toBe("end_turn");
+  });
+
   test("delegates telemetry reads to inner (Converse-shape tool call names)", () => {
     const factory = makeBedrockOpenaiAdapterFactory(ctx);
     const resp = factory.createResponseAdapter({

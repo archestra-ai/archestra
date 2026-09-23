@@ -3,6 +3,59 @@ import type { Gemini } from "@/types";
 import { makeGeminiOpenaiAdapterFactory } from "./gemini-openai";
 import { GeminiToolNameCodec } from "./gemini-tool-names";
 
+describe("GeminiOpenaiResponseAdapter", () => {
+  test("toRefusalResponse keeps the wire OpenAI-shaped but logs the native Gemini refusal", () => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "gemini:gemini-2.5-flash",
+    }).createResponseAdapter({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  id: "call-1",
+                  name: "lookup_secret",
+                  args: { query: "blocked" },
+                },
+              },
+            ],
+            role: "model",
+          },
+          finishReason: "STOP",
+          index: 0,
+        },
+      ],
+      modelVersion: "gemini-2.5-flash",
+      responseId: "gemini-response",
+      usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2 },
+    } as unknown as Gemini.Types.GenerateContentResponse);
+
+    const refusal = adapter.toRefusalResponse(
+      "blocked by policy",
+      "Sorry, that tool is disabled.",
+      // biome-ignore lint/suspicious/noExplicitAny: crossing typed boundary
+    ) as any;
+    expect(refusal.object).toBe("chat.completion");
+    expect(refusal.choices[0].finish_reason).toBe("stop");
+    expect(refusal.choices[0].message.content).toBe(
+      "Sorry, that tool is disabled.",
+    );
+
+    // The interaction log must store the refusal in the inner Gemini shape,
+    // not the blocked functionCall turn.
+    const logged = adapter.getLoggedResponse?.() as unknown as
+      | Gemini.Types.GenerateContentResponse
+      | undefined;
+    expect(logged?.candidates?.[0]?.content?.parts).toEqual([
+      { text: "Sorry, that tool is disabled." },
+    ]);
+    expect(logged?.candidates?.[0]?.finishReason).toBe("STOP");
+  });
+});
+
 describe("GeminiOpenaiStreamAdapter", () => {
   test("buffers OpenAI-shaped tool call events for policy evaluation", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
@@ -68,6 +121,44 @@ describe("GeminiOpenaiStreamAdapter", () => {
     expect(result.isToolCallChunk).toBe(false);
     expect(result.sseData).toContain('"content":"hello"');
     expect(adapter.getRawToolCallEvents()).toHaveLength(0);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("ends a function-calling turn with the client-visible finish reason (refused=%s)", (refused) => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "gemini:gemini-2.5-flash",
+    }).createStreamAdapter();
+
+    adapter.processChunk({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: { id: "call-1", name: "read", args: { p: "a" } },
+              },
+            ],
+            role: "model",
+          },
+          finishReason: "STOP",
+          index: 0,
+        },
+      ],
+      modelVersion: "gemini-2.5-flash",
+      responseId: "gemini-response",
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+    if (refused) {
+      adapter.formatCompleteTextSSE("blocked by policy");
+    } else {
+      adapter.formatToolCallsSSE?.(adapter.state.toolCalls);
+    }
+    expect(adapter.formatEndSSE()).toContain(
+      `"finish_reason":"${refused ? "stop" : "tool_calls"}"`,
+    );
   });
 
   test("restores client tool names in OpenAI-shaped stream events", () => {

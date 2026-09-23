@@ -486,6 +486,51 @@ describe("AnthropicRequestAdapter", () => {
       }>;
       expect(content[0].content).toBe('{"modified": "data", "extra": "field"}');
     });
+
+    test("an empty semantic update removes every raw tool-result content block", () => {
+      const messages = [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "spawn",
+              name: "wait_agent",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "spawn",
+              content: [
+                { type: "text", text: "RAW child return" },
+                { type: "text", text: "RAW unsigned sibling" },
+              ],
+              is_error: false,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages),
+      );
+
+      adapter.applyToolResultUpdates({ spawn: "" });
+      const forwarded = adapter.toProviderRequest();
+      const resultContent = forwarded.messages[1].content as Array<{
+        type: string;
+        content?: unknown;
+      }>;
+
+      expect(JSON.stringify(forwarded)).not.toContain("RAW");
+      expect(resultContent).toEqual([
+        expect.objectContaining({ type: "tool_result", content: "" }),
+      ]);
+    });
   });
 
   describe("toProviderRequest - MCP image handling", () => {
@@ -1282,6 +1327,49 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     ]);
   });
 
+  // A governed child return that never crossed must not survive into the
+  // persisted turn: the interaction record is part of what later requests
+  // and reviewers read back.
+  test("a replaced response drops the raw answer and its reasoning", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "raw deliberation" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig-abc" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 0 } as Chunk);
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "text_delta", text: "REPORT-RAW-KOALA-0831" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 1 } as Chunk);
+
+    adapter.prepareResponseReplacement?.();
+    adapter.formatCompleteTextSSE("SUMMARY(24 characters): safe");
+    const response = adapter.toProviderResponse();
+
+    expect(response.content).toEqual([
+      { type: "text", text: "SUMMARY(24 characters): safe", citations: null },
+    ]);
+  });
+
   test("toProviderResponse records a redacted thinking block", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
 
@@ -1308,6 +1396,27 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     expect(
       response.content.filter((block) => block.type === "tool_use"),
     ).toMatchObject([{ id: "toolu_1", name: "list" }]);
+  });
+
+  test("governed replacement clears released calls and raw stream state", () => {
+    const adapter = streamBlockedToolTurn();
+    expect(adapter.getRawToolCallEvents()).not.toHaveLength(0);
+
+    adapter.prepareResponseReplacement?.();
+    const replacement = adapter
+      .formatCompleteTextSSE("SUMMARY(24 characters): safe")
+      .join("");
+    const endEvents = adapter.formatEndSSE();
+    const response = adapter.toProviderResponse();
+
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+    expect(replacement).toContain('"index":0');
+    expect(endEvents).toContain('"stop_reason":"end_turn"');
+    expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+    expect(response.stop_reason).toBe("end_turn");
+    expect(response.content).toEqual([
+      { type: "text", text: "SUMMARY(24 characters): safe", citations: null },
+    ]);
   });
 
   // The record has to describe the turn the CLIENT saw. "let me check" was

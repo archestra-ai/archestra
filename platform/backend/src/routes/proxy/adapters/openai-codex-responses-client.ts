@@ -14,6 +14,8 @@
 import { randomUUID } from "node:crypto";
 import OpenAIProvider from "openai";
 import type {
+  CompactedResponse,
+  ResponseCompactParams,
   ResponseCreateParamsStreaming,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
@@ -38,7 +40,7 @@ type ResponsesResponse = OpenAi.Types.ResponsesResponse;
 /**
  * Builds the duck-typed Codex client the OpenAI Responses adapter hands back for
  * a ChatGPT-subscription credential. Returned as `OpenAIProvider` because the
- * factory only touches `responses.create`.
+ * factory only touches `responses.create` and `responses.compact`.
  */
 export function createOpenAiCodexResponsesClient(params: {
   credential: OpenAiCodexCredential;
@@ -76,6 +78,8 @@ class OpenAiCodexResponsesClient {
       request: ResponsesRequest & { stream?: boolean },
     ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> =>
       this.create(request),
+    compact: (request: ResponseCompactParams): Promise<CompactedResponse> =>
+      this.openai.responses.compact(request),
   };
 
   private openai: OpenAIProvider;
@@ -127,6 +131,8 @@ class OpenAiCodexPassthroughResponsesClient {
       request: ResponsesRequest & { stream?: boolean },
     ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> =>
       this.create(request),
+    compact: (request: ResponseCompactParams): Promise<CompactedResponse> =>
+      this.openai.responses.compact(request),
   };
 
   private openai: OpenAIProvider;

@@ -52,6 +52,12 @@ delta = { audience = ["insider"] }
 name = "leak_partial"
 effects = ["leak"]
 delta = { audience = ["insider"], trust = "suspicious" }
+[[policy.tool]]
+name = "spawn_worker"
+delta = {}
+[[policy.tool]]
+name = "read_return_only"
+delta = { audience = ["insider"] }
 [[policy.sanitizer]]
 name = "scrub"
 on = ["tool_output"]
@@ -138,6 +144,7 @@ builtin = "hitl"
       organization_id: session.organization_id,
       caller_id: session.caller_id,
       session_id: session.session_id,
+      parent_id: session.parent_id,
       owner_caller_id: session.owner_caller_id ?? session.caller_id,
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
@@ -551,6 +558,97 @@ builtin = "hitl"
     await assert.rejects(
       () => call({ ...own, fork_of: parent.session_id }, 'own-as-fork', 'write_public'),
       /governs its own trajectory/,
+    );
+  });
+
+  await t.test('a child return is sanitized, echoed, and replayed before parent exposure', async () => {
+    const parent = scope();
+    const spawnArguments = { prompt: 'Read the return-only report' };
+    const presentation = {
+      control_tool: 'archestra__execute_remedy_plan',
+      supports_delegation: true,
+    };
+    const proposeSpawn = (id) => hook(parent, {
+      event: 'tool_call',
+      operation_id: `call:${id}`,
+      tool: 'spawn_worker',
+      arguments: spawnArguments,
+      spawn: true,
+      presentation,
+    });
+
+    const held = await proposeSpawn('spawn-held');
+    assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+    const returnOffer = held.offers?.find((offer) => offer.returns?.sanitizer === 'scrub') ?? held.offers?.at(-1);
+    assert.ok(returnOffer?.offer_id, `the spawn offered a scrubbed return: ${JSON.stringify(held)}`);
+    const declaration = await byOffer(parent, {
+      tool_call_id: 'declare-return',
+      arguments: {
+        offer_id: returnOffer.offer_id,
+        label: { audience: ['insider'] },
+      },
+      presentation,
+    });
+    assert.notEqual(declaration.result?.isError, true, JSON.stringify(declaration));
+    const released = await proposeSpawn('spawn-retry');
+    assert.equal(released.decision, 'allow_call', JSON.stringify(released));
+
+    const child = {
+      ...parent,
+      session_id: `${parent.session_id}:child`,
+      parent_id: parent.session_id,
+    };
+    assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
+    const childRead = await call(child, 'return-read-held', 'read_return_only');
+    assert.equal(childRead.decision, 'deny_call', JSON.stringify(childRead));
+    await byOffer(child, {
+      tool_call_id: 'accept-return-read',
+      arguments: { offer_id: childRead.offers[0].offer_id },
+    });
+    const childReadRetry = await call(child, 'return-read', 'read_return_only');
+    assert.equal(childReadRetry.decision, 'allow_call', JSON.stringify(childReadRetry));
+    await result(child, 'return-read', 'REPORT-RAW-KOALA-0831');
+
+    const before = sanitizations;
+    const childEnd = {
+      event: 'child_end',
+      operation_id: 'child-end:return',
+      output: 'REPORT-RAW-KOALA-0831',
+    };
+    const staged = await hook(child, childEnd);
+    assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
+    assert.equal(staged.value, 'approved scrubbed output');
+    assert.equal(sanitizations, before + 1);
+    assert.deepEqual(await hook(child, childEnd), staged, 'transport replay returns the same staged decision');
+    assert.equal(sanitizations, before + 1, 'transport replay does not consult twice');
+
+    const crossed = await hook(child, {
+      event: 'child_end',
+      operation_id: 'child-end:return:echo',
+      output: staged.value,
+    });
+    assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
+    const spawnResult = await hook(parent, {
+      event: 'tool_result',
+      tool_call_id: 'spawn-retry',
+      spawned_id: child.session_id,
+      output: staged.value,
+      outcome: 'success',
+    });
+    assert.ok(
+      ['ack', 'child_return'].includes(spawnResult.decision),
+      JSON.stringify(spawnResult),
+    );
+    if (spawnResult.decision === 'child_return') {
+      assert.equal(spawnResult.value, staged.value);
+    }
+    await assert.rejects(
+      () => hook(parent, {
+        event: 'child_end',
+        operation_id: 'child-end:forged-root',
+        output: staged.value,
+      }),
+      /not a child session/,
     );
   });
 

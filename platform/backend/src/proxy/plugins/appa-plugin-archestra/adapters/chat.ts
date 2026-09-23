@@ -1,11 +1,12 @@
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import type { AppaClientAdapter } from "../types";
+import type { AppaClientAdapter, AppaMatchContext } from "../types";
 
 /** Maps the proxy-authenticated Chat call path without inferring client authority. */
 export class AppaChatAdapter implements AppaClientAdapter {
   readonly id = "archestra-chat" as const;
+  readonly trajectoryPrefix = "chat";
 
-  matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
+  matches(context: AppaMatchContext): boolean {
     return context.trustedContext?.chatSource !== undefined;
   }
 
@@ -18,4 +19,26 @@ export class AppaChatAdapter implements AppaClientAdapter {
   normalizeLocalToolName(name: string): string {
     return name;
   }
+
+  isSpawnTool(_name: string): boolean {
+    return false;
+  }
+
+  spawnPromptField(_name: string, _args?: Record<string, unknown>): undefined {
+    return undefined;
+  }
+
+  nativeConversationId(_context: AppaMatchContext): undefined {
+    return undefined;
+  }
+
+  namesChildren(_params: { rootId: string; arguments: unknown }): string[] {
+    return [];
+  }
+
+  bindChildTrajectory(_context: AppaMatchContext) {
+    return undefined;
+  }
+
+  stripCarrierMetadata(_request: unknown): void {}
 }

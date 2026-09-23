@@ -222,7 +222,7 @@ With OpenAPPA enabled, Claude Code, Codex, and OpenCode protect subagent returns
 
 Archestra verifies each completed child receipt before forwarding output to the parent model. The self-contained receipt binds admitted output to its parent, child, caller, and spawn call. Verification does not depend on a receipt cache or database lookup. This protection applies when one wait result returns multiple children. Loading a skill runs in the current session and does not create a child. OpenAPPA-protected Archestra Chat sessions do not support subagent delegation.
 
-The trusted client and executor must isolate raw child transcripts from model tools. Proxy checks for known transcript paths are defense in depth. They do not sandbox arbitrary shell commands or file access.
+The trusted client and executor must isolate raw child transcripts from model tools. Proxy checks for known transcript paths supply defense in depth. They do not isolate arbitrary shell commands or file access.
 
 Command execution tools (`bash`, `shell`, `exec_command`, `run_command`) normalize arguments across clients. This makes sure the same command policy applies across client parameter formats.
 

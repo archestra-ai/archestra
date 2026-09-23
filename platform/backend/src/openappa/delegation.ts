@@ -326,9 +326,9 @@ function stripMarkerLines(text: string): string {
 }
 
 /**
- * Removes empty text parts because providers reject empty blocks. If stripping
- * empties required user text, replaces it with inert non-secret text so the
- * provider still receives a valid turn without receiving the marker.
+ * Removes empty text parts because providers reject empty blocks.
+ * If removal clears required user text, replaces it with placeholder text
+ * so the provider receives a valid turn without the marker.
  */
 function stripTextContent(
   holder: Record<string, unknown>,
@@ -379,7 +379,7 @@ function spawnFields(name: unknown): readonly string[] {
   return [];
 }
 
-/** Mirrors the adapter normalization without importing its delegation-dependent helper. */
+/** Normalizes native tool names without importing adapter helpers. */
 function normalizedNativeToolName(name: unknown): string | undefined {
   if (typeof name !== "string") return undefined;
   const withoutFunctions = name.startsWith("functions.")

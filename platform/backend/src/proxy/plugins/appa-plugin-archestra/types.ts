@@ -60,7 +60,7 @@ export type AppaChildTrajectory = {
     nativeParentId: string;
     /** Actual client-native child ID, when the client reports one. */
     childNativeId?: string;
-    /** Signed spawn correlation; marker-only children use this without faking a native ID. */
+    /** Signed spawn correlation. Marker-only children use this without generating a fake native ID. */
     spawnCallId?: string;
   };
 };

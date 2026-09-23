@@ -73,8 +73,8 @@ export function namesChildrenFromArguments(params: {
 
 /**
  * Binds a child under verified trajectory evidence or trusted native metadata.
- * The signed child ID remains stable when native metadata appears after
- * compaction; an actual native child ID is optional correlation metadata.
+ * The signed child ID stays stable when native metadata appears after compaction.
+ * An actual native child ID is optional correlation metadata.
  */
 export function bindMintedChildTrajectory(params: {
   context: AppaMatchContext;
@@ -234,7 +234,7 @@ export function parseJsonHeader(
   }
 }
 
-/** Recovers a redundant client parent only from a verified full receipt. */
+/** Recovers a client parent only from a verified full receipt. */
 function recordedNativeParent(params: {
   context: AppaMatchContext;
   childNativeId: string | undefined;
@@ -259,7 +259,7 @@ function recordedNativeParent(params: {
   return undefined;
 }
 
-/** Reads a self-contained signed child binding preserved through compaction. */
+/** Reads a signed child binding preserved across compaction. */
 function recordedChild(params: {
   context: AppaMatchContext;
   parentNativeId: string;

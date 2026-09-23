@@ -81,9 +81,9 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
 
   /**
    * Extracts OpenCode session identity from request headers.
-   * Checks `X-Session-Id`, `x-session-affinity`, `session-id`, and `x-opencode-session`.
-   * Treats X-Session-Id as the parent when the hosted header names its child,
-   * while rejecting contradictions among headers that claim the same role.
+   * Checks X-Session-Id, x-session-affinity, session-id, and x-opencode-session.
+   * Treats X-Session-Id as the parent when x-opencode-session names a child.
+   * Rejects contradictory headers that claim the same role.
    */
   extractSessionIdentity(
     context: AppaMatchContext,

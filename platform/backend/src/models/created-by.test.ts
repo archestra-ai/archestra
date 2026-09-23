@@ -157,7 +157,6 @@ describe("service-account authorship across resource models", () => {
       organizationId,
       name: "Automation client",
       authorId: actorId,
-      scope: "org",
     });
     expect(client.oauthClient.createdBy).toEqual(expectedCreator());
   });

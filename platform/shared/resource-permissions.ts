@@ -18,6 +18,10 @@ export const ScopedResourceSchema = z.enum([
   "knowledgeFile",
   "llmVirtualKey",
   "llmProviderApiKey",
+  // An OAuth client registration. Its tokens never consult these grants: they
+  // decide who can see and manage the registration, not what it reaches.
+  "mcpOauthClient",
+  "llmOauthClient",
   // Deploying into a restricted environment is `use` on that environment.
   "environment",
   // A service account carries no audience of its own — the organization owns
@@ -163,6 +167,19 @@ export function resourcePermissionPresetsFor(
     return {
       view: resourcePermissionPresets.view,
       manage: { label: "Full access", actions: ["read", "manage-permissions"] },
+    };
+  }
+  // Nothing is done "with" an OAuth client registration: its tokens are
+  // checked against the client's own configuration, never against a grant.
+  // So there is no `use` to offer, only seeing, editing, and the rest.
+  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+    return {
+      view: resourcePermissionPresets.view,
+      edit: { label: "Can edit", actions: ["read", "update"] },
+      manage: {
+        label: "Full access",
+        actions: ["read", "update", "delete", "manage-permissions"],
+      },
     };
   }
   return resourcePermissionPresets;

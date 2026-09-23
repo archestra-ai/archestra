@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -12,17 +9,18 @@ import {
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import {
   GatewayGrantField,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
-import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import {
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -73,8 +71,9 @@ export function CreateOAuthClientDialog({
     {},
   );
   const [redirectUrisText, setRedirectUrisText] = useState("");
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
@@ -86,8 +85,7 @@ export function CreateOAuthClientDialog({
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
       setProviderApiKeyIds({});
       setRedirectUrisText("");
-      setScope("personal");
-      setTeamIds([]);
+      setInitialGrants([]);
       setLabels([]);
     }
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
@@ -98,7 +96,6 @@ export function CreateOAuthClientDialog({
   const isAuthorizationCode = grantType === "authorization_code";
   const canSubmit =
     name.trim().length > 0 &&
-    (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
       : isMcp
@@ -119,8 +116,9 @@ export function CreateOAuthClientDialog({
           const shared = {
             name: name.trim(),
             grantType,
-            scope,
-            teams: scope === "team" ? teamIds : [],
+            initialGrants: initialGrants.map(
+              ({ name: _name, ...grant }) => grant,
+            ),
             labels: finalLabels,
           };
           if (isMcp) {
@@ -153,11 +151,9 @@ export function CreateOAuthClientDialog({
               value={clientType}
               onChange={(next) => {
                 setClientType(next as OAuthClientType);
-                // Visibility permissions are per-resource (mcpOauthClient vs
-                // llmOauthClient), so a scope picked under one type may be
-                // forbidden under the other.
-                setScope("personal");
-                setTeamIds([]);
+                // The two kinds are separate permission namespaces, so a
+                // grant chosen under one type means nothing under the other.
+                setInitialGrants([]);
               }}
             />
           )}
@@ -219,13 +215,15 @@ export function CreateOAuthClientDialog({
             />
           )}
 
-          <OauthClientVisibilityField
+          {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          <ResourceAccessSection
             resource={isMcp ? "mcpOauthClient" : "llmOauthClient"}
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
+            grants={initialGrants}
+            onGrantsChange={setInitialGrants}
           />
+          {/* SPDX-SnippetEnd */}
 
           <AdvancedLabelsSection
             ref={labelsRef}

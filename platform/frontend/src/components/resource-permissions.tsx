@@ -784,6 +784,12 @@ export function actionDetail(
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {
+  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+    // Nothing is used "through" a registration, so the edit level has no use.
+    if (preset === "edit") return "View and edit the client, rotate its secret";
+    if (preset === "manage")
+      return "Also delete the client and manage permissions";
+  }
   if (
     preset === "manage" &&
     (resource === "conversation" || resource === "agentRun")
@@ -810,6 +816,8 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   knowledgeFile: "file",
   llmVirtualKey: "virtual key",
   llmProviderApiKey: "provider key",
+  mcpOauthClient: "OAuth client",
+  llmOauthClient: "OAuth client",
   environment: "environment",
   scheduledTask: "scheduled task",
   log: "log",
@@ -857,6 +865,8 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   knowledgeFile: "files",
   llmVirtualKey: "virtual keys",
   llmProviderApiKey: "provider keys",
+  mcpOauthClient: "MCP OAuth clients",
+  llmOauthClient: "LLM OAuth clients",
   environment: "environments",
   scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",

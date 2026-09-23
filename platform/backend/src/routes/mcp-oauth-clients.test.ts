@@ -11,10 +11,12 @@ describe("mcpOauthClientsRoutes", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    // A client is reached through its grants, which only a member holds.
+    await makeMember(user.id, organizationId, { role: "editor" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

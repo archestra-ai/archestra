@@ -3,6 +3,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_ID_PREFIX,
   OFFLINE_ACCESS_OAUTH_SCOPE,
+  type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, inArray, sql } from "drizzle-orm";
@@ -13,11 +14,10 @@ import {
   type McpOauthClientGrantType,
   McpOauthClientMetadataSchema,
 } from "@/types/mcp-oauth-client";
-import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
-import OauthClientTeamModel from "./oauth-client-team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import UserModel from "./user";
 
 class McpOauthClientModel {
@@ -25,11 +25,11 @@ class McpOauthClientModel {
     organizationId: string;
     search?: string;
     /**
-     * Restricts results to clients the user may see (org-scoped, own personal,
-     * teams they belong to). Omit only for internal callers that must see
-     * everything; admin viewers are unfiltered.
+     * Restricts results to clients the user holds `read` on, directly or
+     * through a team, role or `*` grant. Omit only for internal callers that
+     * must see everything.
      */
-    viewer?: { userId: string; isAdmin: boolean };
+    viewer?: { userId: string };
     labels?: Record<string, string[]>;
   }) {
     const labelFilteredIds = params.labels
@@ -50,11 +50,19 @@ class McpOauthClientModel {
                 `%${escapeLikePattern(params.search.trim())}%`,
               )
             : undefined,
-          params.viewer && !params.viewer.isAdmin
-            ? OauthClientTeamModel.accessibleScopeCondition(
-                params.viewer.userId,
-              )
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          params.viewer
+            ? ResourcePermissionPolicyModel.grantCondition({
+                organizationId: params.organizationId,
+                userId: params.viewer.userId,
+                resource: "mcpOauthClient",
+                scopeColumn: schema.oauthClientsTable.id,
+                action: "read",
+              })
             : undefined,
+          // SPDX-SnippetEnd
           labelFilteredIds
             ? inArray(schema.oauthClientsTable.id, labelFilteredIds)
             : undefined,
@@ -71,9 +79,9 @@ class McpOauthClientModel {
     grantType?: McpOauthClientGrantType;
     allowedGatewayIds?: string[];
     redirectUris?: string[];
-    scope?: ResourceVisibilityScope;
-    teams?: string[];
     authorId: string;
+    /** The starting audience beside the author, who always gets full access. */
+    initialGrants?: ResourcePermissionGrant[];
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
@@ -95,10 +103,8 @@ class McpOauthClientModel {
       organizationId: params.organizationId,
       grantType,
       allowedGatewayIds: params.allowedGatewayIds ?? [],
-      scope: params.scope ?? "personal",
       authorId: params.authorId,
     };
-    const teams = params.teams ?? [];
 
     const client = await withDbTransaction(async (tx) => {
       const [row] = await tx
@@ -129,9 +135,20 @@ class McpOauthClientModel {
         })
         .returning();
 
-      if (teams.length > 0) {
-        await OauthClientTeamModel.syncTeams(row.id, teams, tx);
-      }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Written with the row it governs, so a failure cannot leave a client
+      // nobody can manage.
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: params.organizationId,
+        resource: "mcpOauthClient",
+        scope: row.id,
+        grants: params.initialGrants ?? [],
+        authorId: params.authorId,
+      });
+      // SPDX-SnippetEnd
       return row;
     });
 
@@ -239,9 +256,6 @@ class McpOauthClientModel {
     name: string;
     allowedGatewayIds?: string[];
     redirectUris?: string[];
-    scope?: ResourceVisibilityScope;
-    /** `undefined` leaves team assignments untouched; `[]` clears them. */
-    teams?: string[];
   }) {
     // The grant type is fixed at creation; reload the client to preserve it and
     // to apply only the fields that grant type actually uses.
@@ -260,7 +274,6 @@ class McpOauthClientModel {
       organizationId: params.organizationId,
       grantType: existing.grantType,
       allowedGatewayIds: params.allowedGatewayIds ?? existing.allowedGatewayIds,
-      scope: params.scope ?? existing.scope,
       authorId: existing.authorId,
     };
 
@@ -269,7 +282,9 @@ class McpOauthClientModel {
         .update(schema.oauthClientsTable)
         .set({
           name: params.name,
-          metadata,
+          // Merged, so keys this model no longer writes (the retired `scope`)
+          // stay on the row as history rather than vanishing on first edit.
+          metadata: sql`${schema.oauthClientsTable.metadata} || ${JSON.stringify(metadata)}::jsonb`,
           ...(isAuthorizationCode
             ? { redirectUris: params.redirectUris ?? existing.redirectUris }
             : {}),
@@ -283,10 +298,6 @@ class McpOauthClientModel {
           ),
         )
         .returning();
-
-      if (row && params.teams !== undefined) {
-        await OauthClientTeamModel.syncTeams(row.id, params.teams, tx);
-      }
       return row;
     });
 
@@ -294,18 +305,31 @@ class McpOauthClientModel {
   }
 
   static async delete(params: { id: string; organizationId: string }) {
-    const result = await db
-      .delete(schema.oauthClientsTable)
-      .where(
-        and(
-          eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${MCP_OAUTH_CLIENT_METADATA_TYPE}`,
-          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
-        ),
-      )
-      .returning({ id: schema.oauthClientsTable.id });
-
-    return result.length > 0;
+    return withDbTransaction(async (tx) => {
+      const result = await tx
+        .delete(schema.oauthClientsTable)
+        .where(
+          and(
+            eq(schema.oauthClientsTable.id, params.id),
+            sql`${schema.oauthClientsTable.metadata}->>'type' = ${MCP_OAUTH_CLIENT_METADATA_TYPE}`,
+            sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          ),
+        )
+        .returning({ id: schema.oauthClientsTable.id });
+      if (result.length === 0) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The id is gone for good; a policy left behind would hand its grants
+      // to whatever row reused the id.
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["mcpOauthClient"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
+      return true;
+    });
   }
 
   static async findByIdForAudit(
@@ -324,9 +348,7 @@ class McpOauthClientModel {
       allowedGatewayIds: [...client.allowedGatewayIds].sort(),
       redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
-      scope: client.scope,
       authorId: client.authorId,
-      teamIds: client.teams.map((team) => team.id).sort(),
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     };
@@ -355,11 +377,6 @@ async function hydrateOauthClients(
     metadata: McpOauthClientMetadataSchema.safeParse(client.metadata).data,
   }));
 
-  // Only fetch what the rows actually reference so the runtime token paths
-  // (org-scoped, authorless clients) stay free of extra queries.
-  const teamScopedIds = parsed
-    .filter(({ metadata }) => metadata?.scope === "team")
-    .map(({ client }) => client.id);
   const authorIds = [
     ...new Set(
       parsed.flatMap(({ metadata }) =>
@@ -367,8 +384,7 @@ async function hydrateOauthClients(
       ),
     ),
   ];
-  const [teamsMap, authorNames, creators, labelsByClient] = await Promise.all([
-    OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
+  const [authorNames, creators, labelsByClient] = await Promise.all([
     UserModel.getNamesByIds(authorIds),
     CreatedByModel.resolve(authorIds),
     OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
@@ -386,7 +402,6 @@ async function hydrateOauthClients(
         allowedGatewayIds: metadata.allowedGatewayIds,
         redirectUris: client.redirectUris ?? [],
         disabled: client.disabled ?? false,
-        scope: metadata.scope,
         authorId: metadata.authorId,
         authorName: metadata.authorId
           ? (authorNames.get(metadata.authorId) ?? null)
@@ -395,7 +410,6 @@ async function hydrateOauthClients(
           creators,
           CreatedByModel.id(metadata, metadata.authorId),
         ),
-        teams: teamsMap.get(client.id) ?? [],
         labels: labelsByClient.get(client.id) ?? [],
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,

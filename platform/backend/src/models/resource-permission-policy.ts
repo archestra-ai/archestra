@@ -6,6 +6,7 @@ import {
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
   resourcePermissionPresets,
+  resourcePermissionPresetsFor,
   type ScopedResource,
   ScopedResourceSchema,
   widenToPreset,
@@ -162,13 +163,11 @@ export default class ResourcePermissionPolicyModel {
                 : ["admin", "platform_admin"]
               ).map((id) => ({
                 subject: { type: "role" as const, id },
-                actions:
-                  resource === "log" || resource === "auditLog"
-                    ? ([
-                        "read",
-                        "manage-permissions",
-                      ] as ResourcePermissionAction[])
-                    : resourcePermissionPresets.manage.actions,
+                // The top preset of each resource: for logs that is read plus
+                // managing access, for OAuth clients everything but `use`.
+                actions: [
+                  ...resourcePermissionPresetsFor(resource).manage.actions,
+                ],
               })),
               ...(resource === "llmModel"
                 ? [

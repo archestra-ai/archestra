@@ -73812,7 +73812,6 @@ export type GetLlmOauthClientsResponses = {
             }>;
             redirectUris: Array<string>;
             disabled: boolean;
-            scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             authorName: string | null;
             createdBy: {
@@ -73821,10 +73820,6 @@ export type GetLlmOauthClientsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -73856,8 +73851,6 @@ export type CreateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -73866,6 +73859,28 @@ export type CreateLlmOauthClientData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        /**
+         * Who else starts with access, beside the creator who always gets full access.
+         */
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -73955,7 +73970,6 @@ export type CreateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -73964,10 +73978,6 @@ export type CreateLlmOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -74076,8 +74086,6 @@ export type UpdateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -74177,7 +74185,6 @@ export type UpdateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -74186,10 +74193,6 @@ export type UpdateLlmOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -74294,7 +74297,6 @@ export type RotateLlmOauthClientSecretResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -74303,10 +74305,6 @@ export type RotateLlmOauthClientSecretResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -76205,7 +76203,6 @@ export type GetMcpOauthClientsResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -76214,10 +76211,6 @@ export type GetMcpOauthClientsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -76237,8 +76230,6 @@ export type CreateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -76247,6 +76238,28 @@ export type CreateMcpOauthClientData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        /**
+         * Who else starts with access, beside the creator who always gets full access.
+         */
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -76332,7 +76345,6 @@ export type CreateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -76341,10 +76353,6 @@ export type CreateMcpOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -76450,8 +76458,6 @@ export type UpdateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -76547,7 +76553,6 @@ export type UpdateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -76556,10 +76561,6 @@ export type UpdateMcpOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -76660,7 +76661,6 @@ export type RotateMcpOauthClientSecretResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -76669,10 +76669,6 @@ export type RotateMcpOauthClientSecretResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -110425,7 +110421,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
     };
     query?: {
         query?: string;
@@ -110604,7 +110600,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
     }>;
@@ -110615,7 +110611,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
     };
     query?: {
@@ -110720,7 +110716,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
     };
     query?: never;
@@ -110797,7 +110793,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -110872,7 +110868,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
     };
     query?: never;
@@ -110949,7 +110945,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
         scope: '*' | string;
         name: string;
         revision: number;

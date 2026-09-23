@@ -13,7 +13,10 @@ import { team } from "./team";
  * `virtual_api_key_team`. Shared by MCP gateway OAuth clients
  * (`metadata.type = "mcp_oauth_client"`) and LLM proxy OAuth clients
  * (`metadata.type = "llm_oauth_client"`), which both live in the
- * `oauth_client` table. Rows are only consulted for `team`-scoped clients.
+ * `oauth_client` table.
+ *
+ * Retired: nothing reads or writes it at runtime. The permission cutover
+ * reads it once to turn each team-scoped client's teams into grants.
  */
 const oauthClientTeamsTable = pgTable(
   "oauth_client_team",

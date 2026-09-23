@@ -287996,7 +287996,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "List LLM OAuth clients that can access LLM proxies\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: View LLM OAuth client registrations",
+        "description": "List LLM OAuth clients that can access LLM proxies\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -288152,14 +288152,6 @@
                           "disabled": {
                             "type": "boolean"
                           },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
                           "authorId": {
                             "nullable": true,
                             "type": "string"
@@ -288197,25 +288189,6 @@
                               "email"
                             ],
                             "additionalProperties": false
-                          },
-                          "teams": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "name": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
                           },
                           "labels": {
                             "type": "array",
@@ -288266,11 +288239,9 @@
                           "providerApiKeys",
                           "redirectUris",
                           "disabled",
-                          "scope",
                           "authorId",
                           "authorName",
                           "createdBy",
-                          "teams",
                           "labels",
                           "createdAt",
                           "updatedAt"
@@ -288558,10 +288529,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmOauthClient:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -288642,20 +288612,6 @@
                       "format": "uri"
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "labels": {
                     "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
                     "type": "array",
@@ -288686,11 +288642,143 @@
                         "value"
                       ]
                     }
+                  },
+                  "initialGrants": {
+                    "description": "Who else starts with access, beside the creator who always gets full access.",
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
                   }
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -288781,14 +288869,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -288826,25 +288906,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -288898,11 +288959,9 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt",
@@ -289156,7 +289215,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Update an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:update`: Modify LLM OAuth client registrations",
+        "description": "Update an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -289229,20 +289288,6 @@
                       "format": "uri"
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "labels": {
                     "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
                     "type": "array",
@@ -289277,7 +289322,8 @@
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -289378,14 +289424,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -289423,25 +289461,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -289492,11 +289511,9 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt"
@@ -289736,10 +289753,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmOauthClient:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -289747,7 +289763,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Delete an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:delete`: Delete LLM OAuth client registrations",
+        "description": "Delete an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -290008,10 +290024,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmOauthClient:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -290021,7 +290036,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Rotate an LLM OAuth client's client secret\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:update`: Modify LLM OAuth client registrations",
+        "description": "Rotate an LLM OAuth client's client secret\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -290118,14 +290133,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -290163,25 +290170,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -290235,11 +290223,9 @@
                     "providerApiKeys",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt",
@@ -290480,10 +290466,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmOauthClient:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -290493,7 +290478,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Delete several LLM OAuth clients in one request. Each id is authorized exactly as the single-client delete authorizes its own, so a client the caller cannot see or manage is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:delete`: Delete LLM OAuth client registrations",
+        "description": "Delete several LLM OAuth clients in one request. Each id is authorized exactly as the single-client delete authorizes its own, so a client the caller cannot see or manage is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -290812,10 +290797,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmOauthClient:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -297000,7 +296984,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "List MCP OAuth clients that can access MCP gateways\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:read`: View MCP OAuth client registrations",
+        "description": "List MCP OAuth clients that can access MCP gateways\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -297065,14 +297049,6 @@
                       "disabled": {
                         "type": "boolean"
                       },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
                       "authorId": {
                         "nullable": true,
                         "type": "string"
@@ -297110,25 +297086,6 @@
                           "email"
                         ],
                         "additionalProperties": false
-                      },
-                      "teams": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
                       },
                       "labels": {
                         "type": "array",
@@ -297179,11 +297136,9 @@
                       "allowedGatewayIds",
                       "redirectUris",
                       "disabled",
-                      "scope",
                       "authorId",
                       "authorName",
                       "createdBy",
-                      "teams",
                       "labels",
                       "createdAt",
                       "updatedAt"
@@ -297424,10 +297379,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpOauthClient:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -297471,20 +297425,6 @@
                       "format": "uri"
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "labels": {
                     "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
                     "type": "array",
@@ -297515,11 +297455,143 @@
                         "value"
                       ]
                     }
+                  },
+                  "initialGrants": {
+                    "description": "Who else starts with access, beside the creator who always gets full access.",
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
                   }
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -297566,14 +297638,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -297611,25 +297675,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -297683,11 +297728,9 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt",
@@ -297941,7 +297984,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "Update an MCP OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:update`: Modify MCP OAuth client registrations",
+        "description": "Update an MCP OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -297975,20 +298018,6 @@
                     "items": {
                       "type": "string",
                       "format": "uri"
-                    }
-                  },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
                     }
                   },
                   "labels": {
@@ -298025,7 +298054,8 @@
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -298082,14 +298112,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -298127,25 +298149,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -298196,11 +298199,9 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt"
@@ -298440,10 +298441,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpOauthClient:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -298451,7 +298451,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "Delete an MCP OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:delete`: Delete MCP OAuth client registrations",
+        "description": "Delete an MCP OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -298712,10 +298712,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpOauthClient:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -298725,7 +298724,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "Rotate an MCP OAuth client's client secret\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:update`: Modify MCP OAuth client registrations",
+        "description": "Rotate an MCP OAuth client's client secret\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -298778,14 +298777,6 @@
                     "disabled": {
                       "type": "boolean"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "authorId": {
                       "nullable": true,
                       "type": "string"
@@ -298823,25 +298814,6 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
                     },
                     "labels": {
                       "type": "array",
@@ -298895,11 +298867,9 @@
                     "allowedGatewayIds",
                     "redirectUris",
                     "disabled",
-                    "scope",
                     "authorId",
                     "authorName",
                     "createdBy",
-                    "teams",
                     "labels",
                     "createdAt",
                     "updatedAt",
@@ -299140,10 +299110,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpOauthClient:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -422698,6 +422667,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "mcpOauthClient",
+                "llmOauthClient",
                 "environment",
                 "serviceAccount",
                 "scheduledTask",
@@ -423119,6 +423090,8 @@
                           "knowledgeFile",
                           "llmVirtualKey",
                           "llmProviderApiKey",
+                          "mcpOauthClient",
+                          "llmOauthClient",
                           "environment",
                           "serviceAccount",
                           "scheduledTask",
@@ -423436,6 +423409,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "mcpOauthClient",
+                "llmOauthClient",
                 "environment",
                 "serviceAccount",
                 "scheduledTask",
@@ -423866,6 +423841,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "mcpOauthClient",
+                "llmOauthClient",
                 "environment",
                 "serviceAccount",
                 "scheduledTask",
@@ -423924,6 +423901,8 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "mcpOauthClient",
+                        "llmOauthClient",
                         "environment",
                         "serviceAccount",
                         "scheduledTask",
@@ -424687,6 +424666,8 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "mcpOauthClient",
+                "llmOauthClient",
                 "environment",
                 "serviceAccount",
                 "scheduledTask",
@@ -424745,6 +424726,8 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "mcpOauthClient",
+                        "llmOauthClient",
                         "environment",
                         "serviceAccount",
                         "scheduledTask",

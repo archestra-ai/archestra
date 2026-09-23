@@ -113,6 +113,18 @@ WITH candidates AS (
   SELECT k.organization_id, 'llmProviderApiKey', k.id::text, k.scope, k.user_id, k.id
   FROM chat_api_keys k
   UNION ALL
+  -- An OAuth client keeps its owner and audience in its metadata, because the
+  -- row belongs to the OAuth provider's table. Only the two kinds Archestra
+  -- registers convert; a client that registered itself (dynamic registration,
+  -- a client metadata document) is nobody's to share. A row written before
+  -- scoping existed has no scope and was visible organization-wide.
+  SELECT o.id,
+    CASE c.metadata->>'type' WHEN 'mcp_oauth_client' THEN 'mcpOauthClient' ELSE 'llmOauthClient' END,
+    c.id, COALESCE(c.metadata->>'scope', 'org'), c.metadata->>'authorId', c.id::uuid
+  FROM oauth_client c JOIN organization o ON o.id = c.metadata->>'organizationId'
+  WHERE c.metadata->>'type' IN ('mcp_oauth_client', 'llm_oauth_client')
+    AND c.id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  UNION ALL
   -- Knowledge objects carry no author column, so a private one converts to an
   -- object only an administrator reaches. The documents inside keep their own
   -- ACLs: an auto-sync connector resolves access from external groups per
@@ -252,6 +264,14 @@ WITH candidates AS (
   JOIN team tm ON tm.id = vt.team_id AND tm.organization_id = t.organization_id
   WHERE t.resource = 'llmVirtualKey'
   UNION ALL
+  -- Team members could see a team's OAuth clients; managing one took the
+  -- retired team-admin action, which the team-relative statement below turns
+  -- into grants for the people who held it.
+  SELECT t.organization_id, t.resource, t.scope, 'team', ct.team_id, ARRAY['read']::text[]
+  FROM targets t JOIN oauth_client_team ct ON ct.oauth_client_id = t.source_id::text
+  JOIN team tm ON tm.id = ct.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource IN ('mcpOauthClient', 'llmOauthClient') AND t.visibility = 'team'
+  UNION ALL
   -- A provider key carries its own recipient columns rather than a junction.
   SELECT t.organization_id, t.resource, t.scope, 'team', k.team_id, ARRAY['read', 'use']::text[]
   FROM targets t JOIN chat_api_keys k ON k.id = t.source_id
@@ -342,7 +362,9 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
     ON custom.organization_id = r.organization_id AND custom.role = r.identifier
 ), legacy_resources AS (
   SELECT o.id AS organization_id, r.resource
-  FROM organization o CROSS JOIN (VALUES ('agent'), ('mcpGateway'), ('skill'), ('app')) r(resource)
+  -- The built-in editor held team-admin on these, OAuth clients included.
+  FROM organization o CROSS JOIN (VALUES ('agent'), ('mcpGateway'), ('skill'), ('app'),
+    ('mcpOauthClient'), ('llmOauthClient')) r(resource)
   WHERE NOT EXISTS (
     SELECT 1 FROM resource_permission_policies p
     WHERE p.organization_id = o.id AND p.resource = r.resource
@@ -398,6 +420,9 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
   UNION SELECT organization_id, 'knowledgeFile', id::text FROM kb_files
   UNION SELECT organization_id, 'environment', id::text FROM environments
   UNION SELECT organization_id, 'serviceAccount', id::text FROM service_accounts
+  UNION SELECT metadata->>'organizationId',
+    CASE metadata->>'type' WHEN 'mcp_oauth_client' THEN 'mcpOauthClient' ELSE 'llmOauthClient' END, id
+  FROM oauth_client WHERE metadata->>'type' IN ('mcp_oauth_client', 'llm_oauth_client')
 ), anchored AS (
   SELECT DISTINCT p.organization_id, p.resource, p.scope, et.user_id
   FROM resource_permission_policies p JOIN objects o USING (organization_id, resource, scope)
@@ -625,7 +650,8 @@ WITH holders AS (
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog')
+    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog'),
+    ('mcpOauthClient'), ('llmOauthClient')
   ) AS source(role_action)
   JOIN LATERAL (
     -- The built-in roles keep their permissions in code, not in this table,
@@ -900,7 +926,7 @@ WITH converted AS (
         'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
         'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
         'knowledgeSource', 'scheduledTask', 'log', 'auditLog',
-        'mcpServerInstallation'
+        'mcpServerInstallation', 'mcpOauthClient', 'llmOauthClient'
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
           FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)

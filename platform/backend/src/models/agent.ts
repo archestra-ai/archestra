@@ -2724,9 +2724,8 @@ class AgentModel {
    * the permission checks, without a second round-trip per target.
    *
    * `organizationId` is an OPTIONAL tenant fence. The scope checks downstream
-   * cannot supply one: `requireScopedModifyPermission` returns early for an
-   * admin, and that admin flag is the caller's role in the caller's OWN org, so
-   * nothing ever compares the target's tenant. Callers that accept agent ids
+   * cannot supply one: an admin check reads the caller's role in the caller's
+   * OWN org, so nothing ever compares the target's tenant. Callers that accept agent ids
    * straight from a request body should pass it, which drops foreign-org agents
    * from the map and makes them indistinguishable from ids that do not exist.
    */

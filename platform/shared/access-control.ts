@@ -1248,43 +1248,28 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateVirtualApiKey]: {},
   [RouteId.DeleteVirtualApiKey]: {},
   [RouteId.BulkDeleteVirtualApiKeys]: {},
-  [RouteId.GetLlmOauthClients]: {
-    llmOauthClient: ["read"],
-  },
+  // Which OAuth clients a caller reaches, and what they may do to each, is a
+  // grant on the client. Creating one still takes the role action: there is
+  // no client to hold a grant yet.
+  [RouteId.GetLlmOauthClients]: {},
   [RouteId.GetLlmOauthClientLabelKeys]: { llmOauthClient: ["read"] },
   [RouteId.GetLlmOauthClientLabelValues]: { llmOauthClient: ["read"] },
   [RouteId.CreateLlmOauthClient]: {
     llmOauthClient: ["create"],
   },
-  [RouteId.UpdateLlmOauthClient]: {
-    llmOauthClient: ["update"],
-  },
-  [RouteId.RotateLlmOauthClientSecret]: {
-    llmOauthClient: ["update"],
-  },
-  [RouteId.DeleteLlmOauthClient]: {
-    llmOauthClient: ["delete"],
-  },
-  [RouteId.BulkDeleteLlmOauthClients]: {
-    llmOauthClient: ["delete"],
-  },
-  [RouteId.GetMcpOauthClients]: {
-    mcpOauthClient: ["read"],
-  },
+  [RouteId.UpdateLlmOauthClient]: {},
+  [RouteId.RotateLlmOauthClientSecret]: {},
+  [RouteId.DeleteLlmOauthClient]: {},
+  [RouteId.BulkDeleteLlmOauthClients]: {},
+  [RouteId.GetMcpOauthClients]: {},
   [RouteId.GetMcpOauthClientLabelKeys]: { mcpOauthClient: ["read"] },
   [RouteId.GetMcpOauthClientLabelValues]: { mcpOauthClient: ["read"] },
   [RouteId.CreateMcpOauthClient]: {
     mcpOauthClient: ["create"],
   },
-  [RouteId.UpdateMcpOauthClient]: {
-    mcpOauthClient: ["update"],
-  },
-  [RouteId.RotateMcpOauthClientSecret]: {
-    mcpOauthClient: ["update"],
-  },
-  [RouteId.DeleteMcpOauthClient]: {
-    mcpOauthClient: ["delete"],
-  },
+  [RouteId.UpdateMcpOauthClient]: {},
+  [RouteId.RotateMcpOauthClientSecret]: {},
+  [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},

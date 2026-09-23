@@ -6,11 +6,14 @@ import {
   useAppearanceSettings,
   useOrganization,
 } from "@/lib/organization.query";
-import { useAssignableTeams } from "@/lib/teams/team.query";
 import { CreateOAuthClientDialog } from "./create-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/teams/team.query");
+// The permissions section reads the organization policy over the network;
+// what it submits is covered by the resource-permissions tests.
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => null,
+}));
 vi.mock("sonner");
 vi.mock("@/lib/organization.query");
 
@@ -55,9 +58,6 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: false,
   } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useAssignableTeams).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useAssignableTeams>);
 });
 
 describe("deep-link defaults", () => {
@@ -128,8 +128,7 @@ describe("deep-link defaults", () => {
           name: "marketing-bot",
           grantType: "client_credentials",
           allowedGatewayIds: ["ag-1"],
-          scope: "personal",
-          teams: [],
+          initialGrants: [],
           labels: [],
         },
       }),

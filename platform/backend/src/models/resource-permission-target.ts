@@ -284,6 +284,41 @@ export default class ResourcePermissionTargetModel {
       // audience of its own. Its whole access story is the grants below.
       return { ...target, authorId: null };
     }
+    if (
+      params.resource === "mcpOauthClient" ||
+      params.resource === "llmOauthClient"
+    ) {
+      // Both kinds share the OAuth provider's table; the registration's
+      // organization, kind and author live in its metadata.
+      const table = schema.oauthClientsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          clientId: table.clientId,
+          authorId: sql<string | null>`${table.metadata}->>'authorId'`,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            sql`${table.metadata}->>'type' = ${
+              params.resource === "mcpOauthClient"
+                ? "mcp_oauth_client"
+                : "llm_oauth_client"
+            }`,
+            sql`${table.metadata}->>'organizationId' = ${params.organizationId}`,
+          ),
+        );
+      if (!target) return null;
+      // Who can reach a registration is decided by its grants alone; the
+      // retired `scope` in its metadata no longer means anything.
+      return {
+        id: target.id,
+        name: target.name ?? target.clientId,
+        authorId: target.authorId,
+      };
+    }
     if (params.resource === "mcpRegistry" && isBuiltInCatalogId(params.id))
       return null;
     const catalog = schema.internalMcpCatalogTable;

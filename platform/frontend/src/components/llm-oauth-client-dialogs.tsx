@@ -1,10 +1,7 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
-import { useEffect, useRef, useState } from "react";
+import type { archestraApiTypes } from "@archestra/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
@@ -14,13 +11,13 @@ import {
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
-import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import {
   type ProviderApiKeyMap,
   providerApiKeyArrayToMap,
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -54,18 +51,23 @@ export function EditOAuthClientDialog({
     {},
   );
   const [redirectUrisText, setRedirectUrisText] = useState("");
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
     setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
-    setScope(oauthClient.scope);
-    setTeamIds(oauthClient.teams.map((team) => team.id));
     setLabels(oauthClient.labels);
   }, [oauthClient]);
 
@@ -76,7 +78,6 @@ export function EditOAuthClientDialog({
   const canSubmit =
     !!oauthClient &&
     name.trim().length > 0 &&
-    (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
       : mappedProviderApiKeys.length > 0);
@@ -97,14 +98,13 @@ export function EditOAuthClientDialog({
           event.preventDefault();
           if (!oauthClient) return;
           const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+          await permissionsSave.current?.();
           await onSubmit(oauthClient.id, {
             name: name.trim(),
             grantType: oauthClient.grantType,
             ...(isAuthorizationCode
               ? { redirectUris }
               : { providerApiKeys: mappedProviderApiKeys }),
-            scope,
-            teams: scope === "team" ? teamIds : [],
             labels: finalLabels,
           });
         }}
@@ -123,15 +123,6 @@ export function EditOAuthClientDialog({
             />
           </div>
 
-          <OauthClientVisibilityField
-            resource="llmOauthClient"
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            initialScope={oauthClient?.scope}
-          />
-
           {isAuthorizationCode ? (
             <RedirectUrisField
               value={redirectUrisText}
@@ -144,6 +135,18 @@ export function EditOAuthClientDialog({
               providerApiKeys={providerApiKeys}
             />
           )}
+
+          {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          {oauthClient && (
+            <ResourceAccessSection
+              resource="llmOauthClient"
+              id={oauthClient.id}
+              registerSave={registerPermissionsSave}
+            />
+          )}
+          {/* SPDX-SnippetEnd */}
 
           <AdvancedLabelsSection
             ref={labelsRef}

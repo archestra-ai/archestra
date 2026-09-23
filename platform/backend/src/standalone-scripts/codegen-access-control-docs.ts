@@ -121,7 +121,7 @@ function generateCustomRolesPermissionsTable(): string {
 function generateScopedResourcesSection(): string {
   return `## Granular Access Control
 
-Agents, MCP gateways, MCP registry entries, skills, apps, models, and service accounts support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
+Agents, MCP gateways, MCP registry entries, skills, apps, models, service accounts, and OAuth clients support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
 
 | Where you are | Manage permissions |
 | --- | --- |
@@ -130,6 +130,7 @@ Agents, MCP gateways, MCP registry entries, skills, apps, models, and service ac
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
 | Service account detail page | Open **Permissions** |
+| Creating or editing an OAuth client | Use the **Permissions** section of the dialog |
 | All objects of a resource type | Open the resource list’s **More actions** menu beside **Create** or **Add**, then choose **Permissions** |
 
 Permissions selected during creation are saved with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional \`initialGrants\` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
@@ -164,7 +165,7 @@ Viewing a resource does not by itself grant execution. Uncatalogued model IDs re
 
 For example, a service account can have \`read\` on all MCP registry entries and \`update\` on one entry. Those grants allow it to view every entry and edit only that one. The evaluator does not combine the wildcard from the first grant with the update action from the second.
 
-The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Each recipient can have a different permission level.
+The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Each recipient can have a different permission level. OAuth clients have no **Can use** level, because nothing is used through a client registration.
 
 Public marketplace link management remains organization-wide. Creating, listing, rotating, or revoking skill marketplace links requires skill \`read\`, \`use\`, and \`manage-permissions\` on \`*\`. Editing a skill alone does not authorize public distribution. A link contains the skills selected when it is created; it does not automatically include future skills.
 
@@ -256,6 +257,16 @@ One grant covers every kind of resource deployed there.
 Unrestricted environments stay open to anyone who can create the resource.
 The organization's implicit Default environment has no object to grant on, so deploying into a restricted Default requires \`use\` on every environment.
 Creating, editing, and deleting environments remain role permissions.
+
+### OAuth Clients
+
+MCP OAuth clients (\`mcpOauthClient\`) and LLM OAuth clients (\`llmOauthClient\`) are separate grant namespaces.
+The creator of a client gets full access, and the built-in admin roles hold full access on \`*\`.
+Share a client by adding a grant for a user, team, role, or the organization.
+**Can edit** allows renaming, reconfiguring, and rotating the secret. **Full access** also allows deletion and permission management.
+Grants govern management only. A client's tokens reach exactly what its own configuration allows.
+
+The conversion turns existing clients into grants. A personal client gives its creator full access. A team client gives each selected team **Can view**. An organization client gives **Can view** to every role that could read it. Built-in editors and custom roles with team administration keep full access to the team clients they could manage.
 
 ### Visibility-Scoped Credentials
 

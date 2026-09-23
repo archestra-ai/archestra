@@ -69,7 +69,7 @@ When the caller is an application — a backend service, automation job, or anot
 
 Register one in **Settings > OAuth Clients**, which lists every OAuth client in the deployment — those for MCP gateways and agents alongside those for the LLM Proxy. Each client is scoped to an explicit list of Agents and gateways. Creation returns a `client_id` and a one-time `client_secret`, which you can rotate later. A client can only mint tokens for resources on its list.
 
-Each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients are Personal. No role can share a client with teams or the organization today. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
+Who can see, edit, rotate, and delete a client is set in its **Permissions** section. The creator gets full access, and admins reach every client. Share a client with a person, a team, a role, or the whole organization — the platform team, for example. Permissions only govern management access. They do not change which gateways the client's tokens can reach. See [Access Control](/docs/platform-access-control#oauth-clients).
 
 The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
 

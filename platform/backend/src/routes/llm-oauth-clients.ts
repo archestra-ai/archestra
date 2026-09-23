@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   createPaginatedResponseSchema,
   credentialRequiresPerUserScope,
@@ -5,28 +6,20 @@ import {
   parseLabelsParam,
   perUserCredentialLabel,
   providerRequiresPerUserCredential,
-  ResourceVisibilityScopeSchema,
+  ResourcePermissionGrantSchema,
   RouteId,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  assertOauthClientTeams,
-  authorizeOauthClientCreateScope,
-  getOauthClientPermissionChecker,
-  type OauthClientPermissionChecker,
-  requireOauthClientModifyPermission,
-  resolveOauthClientScopeUpdate,
-  withOauthClientTeamFkErrorMapped,
-} from "@/auth/oauth-client-permissions";
+import { requireOauthClientAccess } from "@/auth/oauth-client-permissions";
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
   OauthClientLabelModel,
-  TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -35,7 +28,6 @@ import {
   LlmOauthClientSchema,
   LlmOauthClientWithSecretSchema,
 } from "@/types";
-import type { LlmOauthClient } from "@/types/llm-oauth-client";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
@@ -54,18 +46,15 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
  *   policies. `providerApiKeys` never apply — the acting user's own keys
  *   resolve at call time.
  *
- * `scope`/`teams` control who can see and manage the client (3-tier visibility
- * like agents), not what its tokens can reach at runtime. Create defaults to
- * `personal`; on update, omitted values leave the current scope/teams untouched.
+ * Who can see and manage the client is its grants, edited on its Permissions
+ * tab; they never change what its tokens can reach.
  */
-const LlmOauthClientBodySchema = z
+const LlmOauthClientFields = z
   .object({
     name: z.string().min(1).max(256),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
     redirectUris: z.array(z.string().url()).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teams: z.array(z.string()).optional(),
     labels: z
       .array(LabelWithDetailsSchema)
       .optional()
@@ -74,30 +63,49 @@ const LlmOauthClientBodySchema = z
           "to clear them.",
       ),
   })
-  .superRefine((value, ctx) => {
-    if (value.grantType === "authorization_code") {
-      if (!value.redirectUris || value.redirectUris.length === 0) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["redirectUris"],
-          message:
-            "At least one redirect URI is required for authorization_code clients",
-        });
-      }
-      return;
-    }
-    if (!value.providerApiKeys || value.providerApiKeys.length === 0) {
+  .strict();
+
+const validateLlmOauthClientBody = (
+  value: z.infer<typeof LlmOauthClientFields>,
+  ctx: z.RefinementCtx,
+) => {
+  if (value.grantType === "authorization_code") {
+    if (!value.redirectUris || value.redirectUris.length === 0) {
       ctx.addIssue({
         code: "custom",
-        path: ["providerApiKeys"],
+        path: ["redirectUris"],
         message:
-          "At least one provider API key is required for client_credentials clients",
+          "At least one redirect URI is required for authorization_code clients",
       });
     }
-  });
+    return;
+  }
+  if (!value.providerApiKeys || value.providerApiKeys.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["providerApiKeys"],
+      message:
+        "At least one provider API key is required for client_credentials clients",
+    });
+  }
+};
 
-const CreateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
-const UpdateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
+const CreateLlmOauthClientBodySchema = LlmOauthClientFields.extend({
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  initialGrants: z
+    .array(ResourcePermissionGrantSchema)
+    .max(200)
+    .optional()
+    .describe(
+      "Who else starts with access, beside the creator who always gets full access.",
+    ),
+  // SPDX-SnippetEnd
+}).superRefine(validateLlmOauthClientBody);
+const UpdateLlmOauthClientBodySchema = LlmOauthClientFields.superRefine(
+  validateLlmOauthClientBody,
+);
 
 const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
@@ -133,11 +141,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId, query }, reply) => {
-      const checker = await getOauthClientPermissionChecker({
-        userId: user.id,
-        organizationId,
-        resource: "llmOauthClient",
-      });
       const result = await LlmOauthClientModel.findPageByOrganization({
         organizationId,
         pagination: { limit: query.limit, offset: query.offset },
@@ -145,7 +148,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         providerApiKeyId: query.providerApiKeyId,
         grantType: query.grantType,
         labels: parseLabelsParam(query.labels),
-        viewer: { userId: user.id, isAdmin: checker.isAdmin },
+        viewer: { userId: user.id },
       });
       return reply.send(result);
     },
@@ -164,25 +167,23 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const checker = await getOauthClientPermissionChecker({
-        userId: user.id,
-        organizationId,
-        resource: "llmOauthClient",
-      });
-      const scope = body.scope ?? "personal";
-      const requestedTeams = body.teams ?? [];
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      authorizeOauthClientCreateScope({
-        checker,
-        scope,
-        teamIds: requestedTeams,
-        userTeamIds,
-      });
-      // Omit teams if scope is not 'team' — scope takes precedence
-      const teams = scope === "team" ? requestedTeams : [];
-      await assertOauthClientTeams({ scope, teamIds: teams, organizationId });
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "llmOauthClient",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: user.id,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
 
       await validateLlmOauthClientConfig({
         organizationId,
@@ -192,19 +193,15 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? (body.providerApiKeys ?? [])
             : [],
       });
-      const { oauthClient, clientSecret } =
-        await withOauthClientTeamFkErrorMapped(() =>
-          LlmOauthClientModel.create({
-            organizationId,
-            name: body.name,
-            grantType: body.grantType,
-            providerApiKeys: body.providerApiKeys,
-            redirectUris: body.redirectUris,
-            scope,
-            teams,
-            authorId: user.id,
-          }),
-        );
+      const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+        organizationId,
+        name: body.name,
+        grantType: body.grantType,
+        providerApiKeys: body.providerApiKeys,
+        redirectUris: body.redirectUris,
+        authorId: user.id,
+        initialGrants: body.initialGrants,
+      });
       if (body.labels?.length) {
         await OauthClientLabelModel.syncLabels(oauthClient.id, body.labels);
       }
@@ -229,33 +226,12 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, user, organizationId }, reply) => {
-      const { existing, checker, userTeamIds } =
-        await authorizeLlmOauthClientModify({
-          id: params.id,
-          userId: user.id,
-          organizationId,
-        });
-
-      const resolvedTeams = resolveOauthClientScopeUpdate({
-        checker,
-        existingScope: existing.scope,
-        existingTeamIds: existing.teams.map((team) => team.id),
-        requestedScope: body.scope,
-        requestedTeamIds: body.teams,
-        userTeamIds,
-      });
-      // Omit teams if the final scope is not 'team' — scope takes precedence
-      const finalScope = body.scope ?? existing.scope;
-      const teams =
-        finalScope === "team"
-          ? resolvedTeams
-          : resolvedTeams !== undefined
-            ? []
-            : undefined;
-      await assertOauthClientTeams({
-        scope: finalScope,
-        teamIds: teams ?? existing.teams.map((team) => team.id),
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "llmOauthClient",
+        id: params.id,
+        action: "update",
       });
 
       await validateLlmOauthClientConfig({
@@ -266,17 +242,13 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? (body.providerApiKeys ?? [])
             : [],
       });
-      const oauthClient = await withOauthClientTeamFkErrorMapped(() =>
-        LlmOauthClientModel.update({
-          id: params.id,
-          organizationId,
-          name: body.name,
-          providerApiKeys: body.providerApiKeys,
-          redirectUris: body.redirectUris,
-          scope: body.scope,
-          teams,
-        }),
-      );
+      const oauthClient = await LlmOauthClientModel.update({
+        id: params.id,
+        organizationId,
+        name: body.name,
+        providerApiKeys: body.providerApiKeys,
+        redirectUris: body.redirectUris,
+      });
       if (!oauthClient) {
         throw new ApiError(404, "LLM OAuth client not found");
       }
@@ -305,10 +277,12 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user, organizationId }, reply) => {
-      await authorizeLlmOauthClientModify({
-        id: params.id,
-        userId: user.id,
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "llmOauthClient",
+        id: params.id,
+        action: "update",
       });
       const result = await LlmOauthClientModel.rotateSecret({
         id: params.id,
@@ -336,10 +310,12 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user, organizationId }, reply) => {
-      await authorizeLlmOauthClientModify({
-        id: params.id,
-        userId: user.id,
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "llmOauthClient",
+        id: params.id,
+        action: "delete",
       });
       const success = await LlmOauthClientModel.delete({
         id: params.id,
@@ -369,14 +345,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      const checker = await getOauthClientPermissionChecker({
-        userId: user.id,
-        organizationId,
-        resource: "llmOauthClient",
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
 
       const snapshot = async (ids: string[]) => {
         const clients = await LlmOauthClientModel.findByIds({
@@ -401,19 +369,18 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await LlmOauthClientModel.findByIds({
                 ids,
                 organizationId,
-                viewer: { userId: user.id, isAdmin: checker.isAdmin },
+                viewer: { userId: user.id },
               })
             ).map((client) => [client.id, client]),
           ),
         describe: (client) => client.name,
-        authorize: (client) => {
-          requireOauthClientModifyPermission({
-            checker,
-            scope: client.scope,
-            authorId: client.authorId,
-            clientTeamIds: client.teams.map((team) => team.id),
-            userTeamIds,
+        authorize: async (client) => {
+          await requireOauthClientAccess({
+            organizationId,
             userId: user.id,
+            resource: "llmOauthClient",
+            id: client.id,
+            action: "delete",
           });
         },
         applyEach: async (_client, id) => {
@@ -434,46 +401,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default llmOauthClientsRoutes;
-
-/**
- * Load the client and enforce 3-tier scope authorization for
- * update/rotate-secret/delete. Returns the client plus the checker/team
- * context so update can run its scope-change validation without re-fetching.
- */
-async function authorizeLlmOauthClientModify(params: {
-  id: string;
-  userId: string;
-  organizationId: string;
-}): Promise<{
-  existing: LlmOauthClient;
-  checker: OauthClientPermissionChecker;
-  userTeamIds: string[];
-}> {
-  const existing = await LlmOauthClientModel.findById({
-    id: params.id,
-    organizationId: params.organizationId,
-  });
-  if (!existing) {
-    throw new ApiError(404, "LLM OAuth client not found");
-  }
-  const checker = await getOauthClientPermissionChecker({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    resource: "llmOauthClient",
-  });
-  const userTeamIds = checker.isAdmin
-    ? []
-    : await TeamModel.getUserTeamIds(params.userId);
-  requireOauthClientModifyPermission({
-    checker,
-    scope: existing.scope,
-    authorId: existing.authorId,
-    clientTeamIds: existing.teams.map((team) => team.id),
-    userTeamIds,
-    userId: params.userId,
-  });
-  return { existing, checker, userTeamIds };
-}
 
 async function validateLlmOauthClientConfig(params: {
   organizationId: string;

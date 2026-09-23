@@ -6341,7 +6341,7 @@ export const llmOauthClientLabelValues = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `llmOauthClient:read`: View LLM OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const getLlmOauthClients = <ThrowOnError extends boolean = false>(options?: Options<GetLlmOauthClientsData, ThrowOnError>) => (options?.client ?? client).get<GetLlmOauthClientsResponses, GetLlmOauthClientsErrors, ThrowOnError>({ url: '/api/llm-oauth-clients', ...options });
 
@@ -6374,7 +6374,7 @@ export const createLlmOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `llmOauthClient:delete`: Delete LLM OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const deleteLlmOauthClient = <ThrowOnError extends boolean = false>(options: Options<DeleteLlmOauthClientData, ThrowOnError>) => (options.client ?? client).delete<DeleteLlmOauthClientResponses, DeleteLlmOauthClientErrors, ThrowOnError>({ url: '/api/llm-oauth-clients/{id}', ...options });
 
@@ -6387,7 +6387,7 @@ export const deleteLlmOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `llmOauthClient:update`: Modify LLM OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const updateLlmOauthClient = <ThrowOnError extends boolean = false>(options: Options<UpdateLlmOauthClientData, ThrowOnError>) => (options.client ?? client).put<UpdateLlmOauthClientResponses, UpdateLlmOauthClientErrors, ThrowOnError>({
     url: '/api/llm-oauth-clients/{id}',
@@ -6407,7 +6407,7 @@ export const updateLlmOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `llmOauthClient:update`: Modify LLM OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const rotateLlmOauthClientSecret = <ThrowOnError extends boolean = false>(options: Options<RotateLlmOauthClientSecretData, ThrowOnError>) => (options.client ?? client).post<RotateLlmOauthClientSecretResponses, RotateLlmOauthClientSecretErrors, ThrowOnError>({ url: '/api/llm-oauth-clients/{id}/rotate-secret', ...options });
 
@@ -6420,7 +6420,7 @@ export const rotateLlmOauthClientSecret = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `llmOauthClient:delete`: Delete LLM OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const bulkDeleteLlmOauthClients = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteLlmOauthClientsData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteLlmOauthClientsResponses, BulkDeleteLlmOauthClientsErrors, ThrowOnError>({
     url: '/api/llm-oauth-clients/bulk',
@@ -6714,7 +6714,7 @@ export const mcpOauthClientLabelValues = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `mcpOauthClient:read`: View MCP OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const getMcpOauthClients = <ThrowOnError extends boolean = false>(options?: Options<GetMcpOauthClientsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpOauthClientsResponses, GetMcpOauthClientsErrors, ThrowOnError>({ url: '/api/mcp-oauth-clients', ...options });
 
@@ -6747,7 +6747,7 @@ export const createMcpOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `mcpOauthClient:delete`: Delete MCP OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const deleteMcpOauthClient = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpOauthClientData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpOauthClientResponses, DeleteMcpOauthClientErrors, ThrowOnError>({ url: '/api/mcp-oauth-clients/{id}', ...options });
 
@@ -6760,7 +6760,7 @@ export const deleteMcpOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `mcpOauthClient:update`: Modify MCP OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const updateMcpOauthClient = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpOauthClientData, ThrowOnError>) => (options.client ?? client).put<UpdateMcpOauthClientResponses, UpdateMcpOauthClientErrors, ThrowOnError>({
     url: '/api/mcp-oauth-clients/{id}',
@@ -6780,7 +6780,7 @@ export const updateMcpOauthClient = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `mcpOauthClient:update`: Modify MCP OAuth client registrations
+ * None (no additional RBAC permission required)
  */
 export const rotateMcpOauthClientSecret = <ThrowOnError extends boolean = false>(options: Options<RotateMcpOauthClientSecretData, ThrowOnError>) => (options.client ?? client).post<RotateMcpOauthClientSecretResponses, RotateMcpOauthClientSecretErrors, ThrowOnError>({ url: '/api/mcp-oauth-clients/{id}/rotate-secret', ...options });
 

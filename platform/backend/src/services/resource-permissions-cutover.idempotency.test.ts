@@ -160,6 +160,8 @@ describe("cutover idempotency", () => {
         log: ["read", "admin"],
         auditLog: ["read", "admin"],
         serviceAccount: ["read", "update", "delete"],
+        mcpOauthClient: ["read", "update", "admin"],
+        llmOauthClient: ["read", "team-admin"],
       },
     });
 
@@ -269,6 +271,24 @@ describe("cutover idempotency", () => {
       runtimeScope: "test",
     });
 
+    // OAuth clients keep their audience in the provider's metadata column.
+    for (const [type, scope] of [
+      ["mcp_oauth_client", "personal"],
+      ["llm_oauth_client", "team"],
+    ] as const) {
+      const id = crypto.randomUUID();
+      await db.insert(schema.oauthClientsTable).values({
+        id,
+        clientId: `replay_${id}`,
+        redirectUris: [],
+        metadata: { type, organizationId: org.id, scope, authorId: owner.id },
+      });
+      if (scope === "team")
+        await db
+          .insert(schema.oauthClientTeamsTable)
+          .values({ oauthClientId: id, teamId: team.id });
+    }
+
     await runScopedResourcePermissionCutover();
     const converted = await readPolicies();
     // Every kind produced a policy, so the comparison below is not vacuous.
@@ -291,6 +311,8 @@ describe("cutover idempotency", () => {
         "agentRun",
         "environment",
         "serviceAccount",
+        "mcpOauthClient",
+        "llmOauthClient",
         "scheduledTask",
         "log",
         "auditLog",

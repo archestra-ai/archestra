@@ -78,7 +78,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     expect(result?.authenticatedApp?.clientId).toBe(oauthClient.clientId);
   });
 
-  test("authorizes an allowed proxy for a TEAM-visibility-scoped client_credentials client (scoping is management-plane only)", async ({
+  test("authorizes an allowed proxy for a client_credentials client shared with a team (grants are management-plane only)", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -105,8 +105,9 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
-      scope: "team",
-      teams: [team.id],
+      initialGrants: [
+        { subject: { type: "team", id: team.id }, actions: ["read"] },
+      ],
     });
 
     // client_credentials tokens carry no user.

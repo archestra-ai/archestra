@@ -3410,6 +3410,13 @@
       "when": 1790168804351,
       "tag": "0486_lonely_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 487,
+      "version": "7",
+      "when": 1790181834243,
+      "tag": "0487_slim_scalphunter",
+      "breakpoints": true
     }
   ]
 }

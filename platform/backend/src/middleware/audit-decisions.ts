@@ -988,6 +988,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "authenticated adapter identity mapping",
   },
+  openappaExternalConsultsTable: {
+    audited: false,
+    reason: "external consult dataset the native runtime appends",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

@@ -2105,7 +2105,7 @@ The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one
 
 Automatic deletion of content-bearing records after a configurable number of days. All windows are **disabled by default** — records are kept indefinitely until an operator opts in. Startup fails when a window is configured without an active enterprise license, so a deployment relying on retention can never run with it silently disabled. When enabled, a sweep runs once every 24 hours as a background task and deletes in small batches.
 
-- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) before automatic deletion.
+- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) and Guardrails external consult records before automatic deletion.
   - Default: `0` (disabled).
   - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
   - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.

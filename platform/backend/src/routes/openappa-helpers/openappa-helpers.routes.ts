@@ -1,7 +1,11 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { openappaHelperBridge } from "@/openappa/helper-bridge";
+import {
+  type HelperConsultOutcome,
+  type HelperDiagnostics,
+  openappaHelperBridge,
+} from "@/openappa/helper-bridge";
 import { openappaEnabled } from "@/openappa/service";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -16,6 +20,7 @@ const HelperParamsSchema = z.object({
     .regex(/^[A-Za-z0-9._-]+$/),
 });
 const ConsultSchema = z.record(z.string(), z.unknown());
+const DIAGNOSTICS_HEADER = "X-Appa-Diagnostics";
 
 /**
  * The battery helper bridge the APPA runtime consults in place of a battery's
@@ -57,12 +62,15 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           throw new ApiError(401, "Unauthorized");
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const outcome = await openappaHelperBridge.consult({
         installId: request.params.installId,
         externalName: request.params.externalName,
         request: JSON.stringify(request.body),
       });
+      // The runtime records this header beside the consult, errors included.
+      const diagnostics = diagnosticsOf(outcome);
+      if (diagnostics) reply.header(DIAGNOSTICS_HEADER, diagnostics);
       switch (outcome.kind) {
         case "answered":
           return outcome.answer;
@@ -79,3 +87,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
   );
 };
 export default routes;
+
+// === Internal ===
+
+function diagnosticsOf(
+  outcome: HelperConsultOutcome,
+): HelperDiagnostics | undefined {
+  switch (outcome.kind) {
+    case "answered":
+    case "failed":
+    case "timed_out":
+      return outcome.diagnostics;
+    case "not_found":
+    case "busy":
+      return undefined;
+  }
+}

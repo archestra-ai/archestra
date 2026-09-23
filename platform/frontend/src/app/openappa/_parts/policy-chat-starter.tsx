@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ChatLandingLayout } from "@/app/chat/chat-landing-layout";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { SuggestedPromptPills } from "@/app/chat/suggested-prompt-pills";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -263,17 +264,15 @@ export function PolicyChatStarter({
           </div>
         </>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col justify-center gap-5">
-          <div className="mx-auto w-full max-w-4xl">
-            <h2 className="text-xl font-semibold tracking-tight">
-              What should the policy do?
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+        <ChatLandingLayout
+          title="What should the policy do?"
+          description={
+            <>
               Describe a change. The agent will show you a diff before it{" "}
               {usesGitHub ? "opens a GitHub pull request" : "saves a revision"}.
-            </p>
-          </div>
-          <div className="mx-auto w-full max-w-4xl">
+            </>
+          }
+          suggestions={
             <SuggestedPromptPills
               prompts={[...OPENAPPA_CONFIG_SUGGESTED_PROMPTS]}
               align="start"
@@ -281,11 +280,12 @@ export function PolicyChatStarter({
               onPreviewChange={setSuggestionPreview}
               onSelect={({ prompt }) => void submit(prompt)}
             />
-          </div>
+          }
+        >
           <div className="transition-[transform,opacity] duration-300">
-            <div className="mx-auto w-full max-w-4xl">{composer(false)}</div>
+            {composer(false)}
           </div>
-        </div>
+        </ChatLandingLayout>
       )}
       {error && (
         <p role="alert" className="text-sm text-destructive">

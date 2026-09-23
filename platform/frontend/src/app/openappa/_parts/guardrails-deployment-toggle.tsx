@@ -36,7 +36,6 @@ export function GuardrailsDeploymentToggle() {
             disabled={!canToggle}
             onClick={() => update.mutate(!enabled)}
             className={cn(
-              "group-data-[collapsible=icon]:justify-center",
               !enabled && "text-destructive hover:text-destructive",
             )}
           >

@@ -3595,14 +3595,9 @@ async function handleNonStreaming<
   return reply.send(outboundResponse);
 }
 
-// Adapters flag a frame `isResponsePreamble` on its type alone, so the flag is
-// only as trustworthy as the upstream that filled the frame in. A
-// message_start or response.created/response.in_progress envelope whose
-// content/output arrays carry text would otherwise bypass the buffered
-// admission gate, releasing unapproved model output before
-// onBufferedModelResponse rules. Anything that cannot be proven content-free
-// is treated as content: buffering a true preamble only delays it, while
-// content released early cannot be taken back.
+// Verifies that preamble frames carry no content before release without buffering.
+// Envelopes like message_start or response.created can contain text.
+// Any frame that cannot be proven content-free is treated as content.
 function preambleSseCarriesContent(data: string | Uint8Array): boolean {
   const text =
     typeof data === "string" ? data : Buffer.from(data).toString("utf8");

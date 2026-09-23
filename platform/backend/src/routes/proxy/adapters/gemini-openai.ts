@@ -107,9 +107,8 @@ class GeminiOpenaiResponseAdapter
     refusalMessage: string,
     contentMessage: string,
   ): GeminiResponse {
-    // The wire refusal is built in OpenAI shape directly, but the interaction
-    // log must store the refusal in the inner Gemini shape — otherwise the
-    // blocked tool-call turn is persisted instead.
+    // Stores the refusal in the inner Gemini format for interaction logging.
+    // This prevents logging the blocked tool call payload.
     this.rewrittenInner = this.inner.toRefusalResponse(
       refusalMessage,
       contentMessage,

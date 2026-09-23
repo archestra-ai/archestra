@@ -1050,8 +1050,8 @@ class AnthropicStreamAdapter
     this.outIndexByUpstream.clear();
     this.nextOutIndex = 0;
     // A governed replacement is the only assistant content for this turn.
-    // Clear raw output, calls, block state, and stop reason because none of it
-    // crossed the child-return boundary.
+    // Clears raw output, tool calls, block state, and stop reason.
+    // Unadmitted content must not cross the child return boundary.
     this.reasoningBlocks.clear();
     this.state.text = "";
     this.state.toolCalls = [];

@@ -117,11 +117,8 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   isSpawnTool(name: string, namespace?: string): boolean {
-    // OpenCode declares its native tools without a wire namespace, so any
-    // namespace is foreign (it also speaks the Responses wire, where MCP
-    // servers declare `mcp__<server>` namespaces). Other clients' spellings
-    // (`functions.`, `host/claude-code/`, bare `host/`) are foreign too: only
-    // OpenCode's own decorations reduce to the native name.
+    // OpenCode declares native tools without a wire namespace.
+    // Rejects foreign namespaces and tool prefixes from other clients.
     return (
       namespace === undefined &&
       CHILD_SPAWN_TOOLS.has(nativeOpenCodeToolName(name))
@@ -189,10 +186,8 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
 }
 
 /**
- * Reduces OpenCode's own spellings of a local tool to the bare name: the
- * undecorated wire name, its `builtin:` decoration, and the embedded
- * runtime's `host/archestra/` derivation. Unlike the shared localToolName,
- * no other client's namespace strips to an OpenCode-native name.
+ * Normalizes OpenCode tool names by removing builtin: and host/archestra/ prefixes.
+ * Leaves other tool prefixes unchanged.
  */
 function nativeOpenCodeToolName(name: string): string {
   for (const prefix of ["builtin:", "host/archestra/"] as const) {

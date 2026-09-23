@@ -398,10 +398,9 @@ async function startSession(
     policyContent,
   );
   if (decision.decision === "context") {
-    // The runtime hands the session's start context — a child's return
-    // contract — to the harness for delivery before inference. The proxy has
-    // no channel that carries it to the model, so refuse rather than silently
-    // govern the session without the contract it was opened under.
+    // The runtime returns start context (the child return contract) before inference.
+    // The proxy cannot send this contract to the model.
+    // Refuses the session instead of running without the return contract.
     throw new ApiError(
       409,
       "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",

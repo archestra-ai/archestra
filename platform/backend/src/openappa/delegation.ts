@@ -199,8 +199,8 @@ const NONCE_BYTES = 8;
 const TAG_HEX_LENGTH = 24;
 const DELEGATION_KEY_LABEL = "archestra.appa.delegation.v1";
 const MARKER_TOKEN = String.raw`(?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40})`;
-// Clients may pass the line on with CRLF endings, so both regexes tolerate
-// a carriage return at the end of the line.
+// Clients can send lines with CRLF endings.
+// Both regular expressions permit a carriage return at the end of the line.
 const MARKER_LINE = new RegExp(
   String.raw`^\[appa\] delegated trajectory (${MARKER_TOKEN}) — child of ([^\n]+)\.\r?$`,
 );

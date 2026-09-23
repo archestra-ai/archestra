@@ -1332,10 +1332,8 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
 }
 
 /**
- * A whole text that is one child-return notification, in whichever role the
- * client carried it — the child-return collector recognizes the same envelope
- * in assistant-authored history too. A proof inside it is that return's
- * transport metadata, never this conversation's lineage.
+ * Identifies child-return notifications across message roles.
+ * Proofs inside return envelopes are transport metadata, not conversation lineage.
  */
 function isChildReturnEnvelopeSite(text: string): boolean {
   const trimmed = text.trim();

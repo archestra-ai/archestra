@@ -88,9 +88,9 @@ type AppaPluginBinding = {
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
   /**
-   * Admitted return of a completed native handback when it was the whole
-   * batch. A buffered streamed release replaces the response with it so the
-   * queued start proof does not ride alongside the authenticated return.
+   * Admitted return text when a native handback is the only call in the batch.
+   * A buffered stream replacement prevents the start proof from accompanying
+   * the return.
    */
   completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */

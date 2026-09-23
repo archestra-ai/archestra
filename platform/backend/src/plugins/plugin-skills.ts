@@ -18,19 +18,17 @@ import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
  * portable by design — a SKILL.md written for one coding client reads the
  * same in another — so a plugin shipped for a different client or platform
  * can still lend its skills. The projection derives everything from the
- * approved plugin bytes; nothing is stored, and plugin scope decides who
- * sees what (plugin:admin sees all).
+ * approved plugin bytes; nothing is stored, and plugin grants decide who
+ * sees what.
  */
 export async function listPluginSkills(params: {
   organizationId: string;
   userId?: string;
 }): Promise<PluginSkillListItem[]> {
-  const { accessiblePluginIds, orgScopeOnly } =
-    await resolvePluginAccess(params);
+  const accessiblePluginIds = await resolvePluginAccess(params);
   const candidates = await PluginModel.findSkillManifestCandidates({
     organizationId: params.organizationId,
     accessiblePluginIds,
-    orgScopeOnly,
   });
   const items: PluginSkillListItem[] = [];
   for (const { plugin, manifests, filePaths } of candidates) {
@@ -82,8 +80,7 @@ export async function getPluginSkill(params: {
   organizationId: string;
   userId?: string;
 }): Promise<PluginSkillDetail | null> {
-  const { accessiblePluginIds, orgScopeOnly } =
-    await resolvePluginAccess(params);
+  const accessiblePluginIds = await resolvePluginAccess(params);
   if (
     accessiblePluginIds !== undefined &&
     !accessiblePluginIds.includes(params.pluginId)
@@ -94,7 +91,7 @@ export async function getPluginSkill(params: {
     id: params.pluginId,
     organizationId: params.organizationId,
   });
-  if (!plugin || (orgScopeOnly && plugin.scope !== "org")) return null;
+  if (!plugin) return null;
 
   const manifestPath =
     params.skillPath === ""
@@ -165,12 +162,11 @@ export async function getPluginSkill(params: {
 async function resolvePluginAccess(params: {
   organizationId: string;
   userId?: string;
-}): Promise<{
-  accessiblePluginIds: string[] | undefined;
-  orgScopeOnly: boolean;
-}> {
+}): Promise<string[] | undefined> {
   if (!params.userId) {
-    return { accessiblePluginIds: undefined, orgScopeOnly: true };
+    return PluginTeamModel.getUserAccessiblePluginIds({
+      organizationId: params.organizationId,
+    });
   }
   const canRead = await userHasPermission(
     params.userId,
@@ -178,9 +174,7 @@ async function resolvePluginAccess(params: {
     "plugin",
     "read",
   );
-  if (!canRead) {
-    return { accessiblePluginIds: [], orgScopeOnly: false };
-  }
+  if (!canRead) return [];
   const isAdmin = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
@@ -188,15 +182,12 @@ async function resolvePluginAccess(params: {
     scope: "*",
     action: "update",
   });
-  return {
-    accessiblePluginIds: isAdmin
-      ? undefined
-      : await PluginTeamModel.getUserAccessiblePluginIds({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        }),
-    orgScopeOnly: false,
-  };
+  return isAdmin
+    ? undefined
+    : PluginTeamModel.getUserAccessiblePluginIds({
+        organizationId: params.organizationId,
+        userId: params.userId,
+      });
 }
 
 function tryParse(content: string) {

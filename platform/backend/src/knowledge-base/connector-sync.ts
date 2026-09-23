@@ -416,8 +416,7 @@ class ConnectorSyncService {
         }
         const documentAcl =
           this.buildDocumentAccessControlList(currentConnector);
-        const isAutoSync =
-          currentConnector.visibility === "auto-sync-permissions";
+        const isAutoSync = currentConnector.syncPermissionsFromSource;
 
         const ingestedDocumentIds: string[] = [];
         const failedSourceIds = new Set<string>();

@@ -79,6 +79,8 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
         name: params.name,
         connectorType: "github",
         visibility: params.visibility,
+        syncPermissionsFromSource:
+          params.visibility === "auto-sync-permissions",
         teamIds: params.teamIds ?? [],
         config: {
           type: "github",

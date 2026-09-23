@@ -1308,6 +1308,7 @@ async function makeKnowledgeBaseConnector(
       | "description"
       | "visibility"
       | "teamIds"
+      | "syncPermissionsFromSource"
       | "connectorType"
       | "config"
       | "schedule"
@@ -1330,6 +1331,10 @@ async function makeKnowledgeBaseConnector(
         projectKey: "TEST",
       },
       ...overrides,
+      // Like the model: the auto-sync visibility input turns the switch on.
+      syncPermissionsFromSource:
+        overrides.syncPermissionsFromSource ??
+        overrides.visibility === "auto-sync-permissions",
     })
     .returning();
 

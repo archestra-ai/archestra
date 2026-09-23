@@ -1214,6 +1214,7 @@ async function handleGetKnowledgeConnectors(params: {
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
+      canManageAutoSync: access?.canManageAutoSync,
       viewerTeamIds: access?.teamIds,
       viewerUserId: access?.userId,
       environmentId: agentEnvironmentId,
@@ -1325,6 +1326,12 @@ async function handleUpdateKnowledgeConnector(params: {
       return knowledgeConnectorNotFound(args.id);
     }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
+    // The permission-sync switch after this update. The request still names it
+    // through the visibility input; the stored switch is the column.
+    const nextSync =
+      updates.visibility !== undefined
+        ? updates.visibility === "auto-sync-permissions"
+        : existingConnector.syncPermissionsFromSource;
     const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
     if (
       isTeamScopedWithoutTeams({
@@ -1336,10 +1343,7 @@ async function handleUpdateKnowledgeConnector(params: {
         "At least one team must be selected for team-scoped connectors",
       );
     }
-    if (
-      existingConnector.visibility !== "auto-sync-permissions" &&
-      nextVisibility === "auto-sync-permissions"
-    ) {
+    if (!existingConnector.syncPermissionsFromSource && nextSync) {
       // Same transition gate as the REST update route: beta flag + enterprise
       // license + connector-type support + knowledgeSourceAutoSync:update.
       const violation = context.userId
@@ -1355,7 +1359,7 @@ async function handleUpdateKnowledgeConnector(params: {
           violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
         );
       }
-    } else if (existingConnector.visibility === "auto-sync-permissions") {
+    } else if (existingConnector.syncPermissionsFromSource) {
       // Mutating a connector that already carries the auto-sync visibility
       // (or switching it away): mirrors the REST update route's dedicated
       // permission check.
@@ -1371,7 +1375,7 @@ async function handleUpdateKnowledgeConnector(params: {
           violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
         );
       }
-      if (nextVisibility === "auto-sync-permissions") {
+      if (nextSync) {
         const unsupported = checkAutoSyncPermissionSyncSupported(
           existingConnector.connectorType,
         );
@@ -1414,16 +1418,16 @@ async function handleUpdateKnowledgeConnector(params: {
     }
     const nextEnabled = updates.enabled ?? existingConnector.enabled;
     if (
-      existingConnector.visibility === "auto-sync-permissions" &&
+      existingConnector.syncPermissionsFromSource &&
       (updates.config !== undefined ||
-        nextVisibility !== "auto-sync-permissions" ||
+        !nextSync ||
         nextEnabled !== existingConnector.enabled)
     ) {
       // Mirrors the REST update route: a pass computed against the settings
       // this update replaced must not finish against them.
       await supersedePermissionSyncAfterSettingsChange({
         connectorId: args.id,
-        visibility: nextVisibility,
+        syncPermissionsFromSource: nextSync,
         enabled: nextEnabled,
       });
     }
@@ -1473,7 +1477,7 @@ async function handleDeleteKnowledgeConnector(params: {
     ) {
       return knowledgeConnectorNotFound(args.id);
     }
-    if (existing.visibility === "auto-sync-permissions") {
+    if (existing.syncPermissionsFromSource) {
       // Mirrors the REST delete route's dedicated permission check.
       const violation = context.userId
         ? await checkHasAutoSyncConnectorPermission({

@@ -53,7 +53,7 @@ export default class KbDocumentAccessModel {
         WHERE permission_file.kb_document_id = ${params.documentId}
           AND ${access(fileContext)}
       )
-      WHEN EXISTS (SELECT 1 FROM knowledge_base_connectors permission_connector WHERE permission_connector.id = ${params.connectorId} AND permission_connector.visibility = 'auto-sync-permissions')
+      WHEN EXISTS (SELECT 1 FROM knowledge_base_connectors permission_connector WHERE permission_connector.id = ${params.connectorId} AND permission_connector.sync_permissions_from_source)
         THEN ${upstream}
       ELSE ${access(connectorContext)}
     END`;

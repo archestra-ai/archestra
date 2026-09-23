@@ -197,6 +197,7 @@ describe("permission-sync pass (containers / epoch / resume / groups)", () => {
         name: "auto-sync",
         connectorType: "github",
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         config: {
           type: "github",
           githubUrl: "https://api.github.com",

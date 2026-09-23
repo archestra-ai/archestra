@@ -409,6 +409,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await Promise.all([
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
           }),
@@ -940,6 +941,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           knowledgeBaseId,
           {
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
           },
@@ -960,6 +962,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // it. Managed at /knowledge/files instead.
             excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
             status,
@@ -1727,6 +1730,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // connector column update below.
       const { credentials: _, labels: bodyLabels, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
+      // The permission-sync switch after this update. The request still names it
+      // through the visibility input; the stored switch is the column.
+      const nextSync =
+        updateData.visibility !== undefined
+          ? updateData.visibility === "auto-sync-permissions"
+          : connector.syncPermissionsFromSource;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
 
       // validate everything that can reject the request BEFORE touching any
@@ -1756,10 +1765,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
-      if (
-        connector.visibility !== "auto-sync-permissions" &&
-        nextVisibility === "auto-sync-permissions"
-      ) {
+      if (!connector.syncPermissionsFromSource && nextSync) {
         // Transition INTO auto-sync: beta flag + enterprise license +
         // connector-type support + knowledgeSourceAutoSync:update. An
         // existing auto-sync connector is exempt from the transition-only
@@ -1774,7 +1780,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (violation) {
           throw violation;
         }
-      } else if (connector.visibility === "auto-sync-permissions") {
+      } else if (connector.syncPermissionsFromSource) {
         // Mutating a connector that already carries the auto-sync visibility
         // (settings, credentials, or switching AWAY from it): viewing rights
         // (findConnectorOrThrow above) are not enough — require the dedicated
@@ -1787,7 +1793,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (violation) {
           throw violation;
         }
-        if (nextVisibility === "auto-sync-permissions") {
+        if (nextSync) {
           const unsupported = checkAutoSyncPermissionSyncSupported(
             connector.connectorType,
           );
@@ -1911,10 +1917,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id,
         );
 
-        if (
-          nextVisibility === "auto-sync-permissions" &&
-          connector.visibility !== "auto-sync-permissions"
-        ) {
+        if (nextSync && !connector.syncPermissionsFromSource) {
           // Switching TO auto-sync fail-closes the whole corpus; run the first
           // pass now instead of leaving everything invisible until the next
           // content ingest or interval tick. De-duplicated like every other
@@ -1944,17 +1947,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // fenced out by the bump it raced.
       const nextEnabled = updateData.enabled ?? connector.enabled;
       if (
-        connector.visibility === "auto-sync-permissions" &&
+        connector.syncPermissionsFromSource &&
         (updateData.config !== undefined ||
           body.credentials !== undefined ||
-          nextVisibility !== "auto-sync-permissions" ||
+          !nextSync ||
           nextEnabled !== connector.enabled)
       ) {
         // A submitted config counts as changed without a field-by-field
         // comparison, matching the checkpoint reset above.
         await supersedePermissionSyncAfterSettingsChange({
           connectorId: id,
-          visibility: nextVisibility,
+          syncPermissionsFromSource: nextSync,
           enabled: nextEnabled,
         });
       }
@@ -2080,7 +2083,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Moving a connector AWAY from auto-sync is a mutation of an
           // auto-sync connector, so it needs the dedicated grant — viewing
           // rights are not enough, exactly as on the single update.
-          if (connector.visibility === "auto-sync-permissions") {
+          if (connector.syncPermissionsFromSource) {
             const violation = await checkHasAutoSyncConnectorPermission({
               userId: user.id,
               organizationId,
@@ -2188,7 +2191,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          if (connector.visibility === "auto-sync-permissions") {
+          if (connector.syncPermissionsFromSource) {
             const violation = await checkHasAutoSyncConnectorPermission({
               userId: user.id,
               organizationId,
@@ -2234,7 +2237,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (connector.visibility === "auto-sync-permissions") {
+      if (connector.syncPermissionsFromSource) {
         const violation = await checkHasAutoSyncConnectorPermission({
           userId: user.id,
           organizationId,
@@ -2416,7 +2419,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Permission sync only applies to auto-sync-permissions connectors",
@@ -2485,7 +2488,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Permission coverage only applies to auto-sync-permissions connectors",
@@ -2594,7 +2597,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "User groups only apply to auto-sync-permissions connectors",
@@ -2741,7 +2744,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Member overrides only apply to auto-sync-permissions connectors",
@@ -2903,7 +2906,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const credentials = await resolveConnectorCredentials(connector, {
         uncached:
           connector.connectorType === "perforce" &&
-          connector.visibility === "auto-sync-permissions",
+          connector.syncPermissionsFromSource,
       });
 
       // Get the connector implementation and test

@@ -134,7 +134,7 @@ class PermissionSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    if (connector.visibility !== "auto-sync-permissions") {
+    if (!connector.syncPermissionsFromSource) {
       log.debug(
         { connectorId, visibility: connector.visibility },
         "Connector is not auto-sync-permissions; skipping permission pass",
@@ -1165,8 +1165,9 @@ class PermissionSyncService {
         connectorId: connector.id,
         containerKey,
         acl: buildDocumentAccessControlList({
-          visibility: "auto-sync-permissions",
+          visibility: connector.visibility,
           teamIds: connector.teamIds,
+          syncPermissionsFromSource: true,
           connectorType: connector.connectorType,
           permissions: permissions as
             | { users?: string[]; groups?: string[]; isPublic?: boolean }

@@ -101,6 +101,7 @@ describe("permission-sync end-to-end (GitHub, auto-sync-permissions)", () => {
         name: "GitHub auto-sync",
         connectorType: "github",
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         secretId: secret.id,
         config: {
           type: "github",

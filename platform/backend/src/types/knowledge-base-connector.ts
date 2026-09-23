@@ -102,6 +102,7 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   ftsLanguage: true,
   visibility: true,
   teamIds: true,
+  syncPermissionsFromSource: true,
   config: true,
   secretId: true,
   environmentId: true,

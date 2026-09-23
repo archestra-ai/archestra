@@ -1,4 +1,8 @@
-import { KbChunkModel, KbDocumentModel } from "@/models";
+import {
+  KbChunkModel,
+  KbDocumentModel,
+  KnowledgeBaseConnectorModel,
+} from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { buildGroupToken, normalizeEmail } from "./acl-tokens";
@@ -152,6 +156,109 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toEqual([connector]);
   });
 
+  test("managing a permission-sync connector takes the auto-sync permission on top of its read grant", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const syncConnector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { connectorType: "github", syncPermissionsFromSource: true },
+    );
+    const plainConnector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+    );
+    for (const connector of [syncConnector, plainConnector]) {
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: org.id,
+        resource: "knowledgeConnector",
+        scope: connector.id,
+        revision: 0,
+        grants: [
+          {
+            subject: { type: "user", id: member.id },
+            actions: ["read", "use"],
+          },
+          {
+            subject: { type: "user", id: admin.id },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+    }
+    const context = (userId: string) =>
+      knowledgeSourceAccessControlService.buildAccessControlContext({
+        userId,
+        organizationId: org.id,
+      });
+
+    const memberAccess = await context(member.id);
+    expect(memberAccess.canManageAutoSync).toBe(false);
+    expect(
+      knowledgeSourceAccessControlService.canAccessConnector(
+        memberAccess,
+        syncConnector,
+      ),
+    ).toBe(false);
+    expect(
+      knowledgeSourceAccessControlService.canAccessConnector(
+        memberAccess,
+        plainConnector,
+      ),
+    ).toBe(true);
+    const memberList = await KnowledgeBaseConnectorModel.findByOrganization({
+      organizationId: org.id,
+      canReadAll: memberAccess.canReadAll,
+      canManageAutoSync: memberAccess.canManageAutoSync,
+      viewerTeamIds: memberAccess.teamIds,
+      viewerUserId: member.id,
+    });
+    expect(memberList.map((connector) => connector.id)).toEqual([
+      plainConnector.id,
+    ]);
+    // Queries still span the sync connector for the member.
+    const memberQueryable =
+      await KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId: org.id,
+        canReadAll: memberAccess.canReadAll,
+        viewerTeamIds: memberAccess.teamIds,
+        viewerUserId: member.id,
+        visibilityScope: "query",
+      });
+    expect(memberQueryable.map((connector) => connector.id).sort()).toEqual(
+      [syncConnector.id, plainConnector.id].sort(),
+    );
+
+    const adminAccess = await context(admin.id);
+    expect(adminAccess.canManageAutoSync).toBe(true);
+    expect(
+      knowledgeSourceAccessControlService.canAccessConnector(
+        adminAccess,
+        syncConnector,
+      ),
+    ).toBe(true);
+    const adminList = await KnowledgeBaseConnectorModel.findByOrganization({
+      organizationId: org.id,
+      canReadAll: adminAccess.canReadAll,
+      canManageAutoSync: adminAccess.canManageAutoSync,
+      viewerTeamIds: adminAccess.teamIds,
+      viewerUserId: admin.id,
+    });
+    expect(adminList.map((connector) => connector.id).sort()).toEqual(
+      [syncConnector.id, plainConnector.id].sort(),
+    );
+  });
+
   test("filterQueryableConnectors still excludes team-scoped connectors for non-members", async ({
     makeOrganization,
     makeUser,
@@ -297,6 +404,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
   test("builds public ∪ user ∪ group tokens and normalizes emails", () => {
     const acl = buildDocumentAccessControlList({
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "github",
       permissions: {
@@ -318,6 +426,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
     expect(
       buildDocumentAccessControlList({
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         teamIds: [],
         connectorType: "github",
         permissions: {},
@@ -326,6 +435,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
     expect(
       buildDocumentAccessControlList({
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         teamIds: [],
         connectorType: "github",
       }),
@@ -335,6 +445,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
   test("dedupes repeated principals", () => {
     const acl = buildDocumentAccessControlList({
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "jira",
       permissions: {
@@ -349,6 +460,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
   test("drops groups when connector type is unknown", () => {
     const acl = buildDocumentAccessControlList({
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       permissions: { users: ["a@example.com"], groups: ["eng"] },
     });
@@ -360,6 +472,7 @@ describe("buildDocumentAccessControlList (auto-sync-permissions)", () => {
     const users = Array.from({ length: 1001 }, (_, i) => `u${i}@example.com`);
     const acl = buildDocumentAccessControlList({
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "github",
       permissions: { users },

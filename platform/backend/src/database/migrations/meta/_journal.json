@@ -3424,6 +3424,13 @@
       "when": 1790069107334,
       "tag": "0488_complete_scoped_rbac_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 489,
+      "version": "7",
+      "when": 1790180951810,
+      "tag": "0489_military_colossus",
+      "breakpoints": true
     }
   ]
 }

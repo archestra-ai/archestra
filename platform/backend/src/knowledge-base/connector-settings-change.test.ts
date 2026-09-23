@@ -54,7 +54,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
 
@@ -82,7 +82,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
 
@@ -101,7 +101,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: edited.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
 
@@ -118,7 +118,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
 
@@ -135,12 +135,12 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: true,
     });
 
@@ -160,7 +160,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "org-wide",
+      syncPermissionsFromSource: false,
       enabled: true,
     });
 
@@ -181,7 +181,7 @@ describe("supersedePermissionSyncAfterSettingsChange", () => {
 
     await supersedePermissionSyncAfterSettingsChange({
       connectorId: connector.id,
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: false,
     });
 
@@ -218,7 +218,7 @@ test("clears the stopped pass's `running` stamp off the connector", async ({
 
   await supersedePermissionSyncAfterSettingsChange({
     connectorId: connector.id,
-    visibility: "auto-sync-permissions",
+    syncPermissionsFromSource: true,
     enabled: true,
   });
 

@@ -63,9 +63,21 @@ interface KnowledgeSourceAccessControlContext {
 export function buildDocumentAccessControlList(params: {
   visibility: KnowledgeSourceVisibility;
   teamIds: string[];
+  /** A permission-sync connector: the ACL comes from the upstream audience. */
+  syncPermissionsFromSource?: boolean;
   connectorType?: ConnectorType;
   permissions?: DocumentPermissions;
 }): AclEntry[] {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (params.syncPermissionsFromSource) {
+    return buildAutoSyncDocumentAccessControlList({
+      connectorType: params.connectorType,
+      permissions: params.permissions,
+    });
+  }
+  // SPDX-SnippetEnd
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];
@@ -75,10 +87,10 @@ export function buildDocumentAccessControlList(params: {
     case "team-scoped":
       return params.teamIds.map((id): AclEntry => `team:${id}`);
     case "auto-sync-permissions":
-      return buildAutoSyncDocumentAccessControlList({
-        connectorType: params.connectorType,
-        permissions: params.permissions,
-      });
+      // The mode is read from `syncPermissionsFromSource` above. A connector
+      // whose visibility still says so without the switch set syncs nothing,
+      // so its documents stay fail-closed.
+      return [];
     // SPDX-SnippetEnd
   }
 }
@@ -283,8 +295,24 @@ class KnowledgeSourceAccessControlService {
 
   canAccessConnector(
     accessControl: KnowledgeSourceAccessControlContext,
-    connector: KnowledgeBaseConnector,
+    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
   ) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // A permission-sync connector mirrors upstream ACLs and exposes audience
+    // and membership details, so managing it also takes the dedicated
+    // `knowledgeSourceAutoSync:read` permission (admin-only by default), on
+    // top of the connector's own read grant. Members still QUERY its
+    // documents (`filterQueryableConnectors`); the per-chunk ACL decides what
+    // each of them retrieves.
+    if (
+      connector.syncPermissionsFromSource &&
+      !accessControl.canManageAutoSync
+    ) {
+      return false;
+    }
+    // SPDX-SnippetEnd
     return this.hasScopedAccess({
       accessControl,
       resource: "knowledgeConnector",
@@ -352,7 +380,7 @@ class KnowledgeSourceAccessControlService {
   ) {
     return connectors.filter(
       (connector) =>
-        connector.visibility === "auto-sync-permissions" ||
+        connector.syncPermissionsFromSource ||
         this.hasScopedAccess({
           accessControl,
           resource: "knowledgeConnector",
@@ -368,6 +396,7 @@ class KnowledgeSourceAccessControlService {
     return buildDocumentAccessControlList({
       visibility: params.connector.visibility,
       teamIds: params.connector.teamIds,
+      syncPermissionsFromSource: params.connector.syncPermissionsFromSource,
     });
   }
 
@@ -385,7 +414,7 @@ class KnowledgeSourceAccessControlService {
     // Auto-sync connectors own their per-document ACLs via the permission-sync
     // pass; never bulk-overwrite them with a single connector-level ACL. The
     // next scheduled (epoch-fenced) permission pass is the authoritative writer.
-    if (connector.visibility === "auto-sync-permissions") {
+    if (connector.syncPermissionsFromSource) {
       return;
     }
     // SPDX-SnippetEnd

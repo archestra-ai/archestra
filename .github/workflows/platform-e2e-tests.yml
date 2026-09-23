@@ -109,8 +109,9 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # Merge-queue critical path. 12-13 min on 4 vcpu vs ~30s with a
-            # warm local layer cache, which a persistent box keeps.
+            # Merge-queue critical path, and it needs the box's warm local
+            # layer cache: the registry cache-from misses the compile-heavy
+            # layers on every source change.
             runner: hetzner-amd64
             context: ./platform
             dockerfile: ""
@@ -502,8 +503,6 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    # The 4m15s baseline spent 171s in Kind/Helm setup and only 51s in tests.
-    # More CPU targets that setup bottleneck without duplicating the cluster.
     runs-on: hetzner-amd64
     timeout-minutes: 60
     permissions:
@@ -808,8 +807,6 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    # Each leg boots the full lite stack and runs Playwright next to it:
-    # 6.9 min on 8 vcpu, 8-9 min per leg on 4.
     runs-on: hetzner-amd64
     timeout-minutes: 30
     strategy:
@@ -997,9 +994,6 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    # The test step is only ~1m40s; image load and platform startup dominate
-    # this 5-6 minute job. Same fleet box as the other E2E legs so image
-    # extraction and first-run initialization are not CPU-bound.
     runs-on: hetzner-amd64
     timeout-minutes: 30
     permissions:

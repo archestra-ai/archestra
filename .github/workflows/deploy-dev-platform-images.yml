@@ -98,9 +98,7 @@ jobs:
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
-      # 11m36s cold on 4 vCPU vs 3m26s on 16.
       amd64_runner: hetzner-amd64
-      # Apple Silicon. ubuntu-24.04-arm is 4 vCPU; 16-vCPU ARM took 5m11s.
       arm64_runner: mac-mini-1
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.

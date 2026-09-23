@@ -59,7 +59,6 @@ jobs:
       auth_provider: dockerhub
       checkout_fetch_depth: 0
       checkout_ref: ${{ inputs.checkout_ref }}
-      # Same runners as deploy-dev-platform-images.yml.
       amd64_runner: hetzner-amd64
       arm64_runner: mac-mini-1
       # supply-chain-policy: allow-latest internal release channel

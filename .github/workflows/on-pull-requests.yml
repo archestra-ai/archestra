@@ -269,6 +269,8 @@ jobs:
   # commit the merge_group codegen check fails and the release cannot merge.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
+    # fork-guard (see hetzner routing comment below)
+    if: github.event.pull_request.head.repo.fork != true
     # Back on a 16-vcpu Blacksmith runner: this job is the PR workflow's
     # wall-clock and its work is embarrassingly parallel — turbo fans out six
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
@@ -281,12 +283,13 @@ jobs:
     # runner per box, so a job owns the whole machine: the e2e legs bind
     # fixed host ports and share one kind cluster name, and would collide
     # otherwise. The fleet is persistent hardware and must never run code
-    # from outside the maintainer group. That is enforced upstream of this
-    # file, not here: fork PRs need maintainer approval before any workflow
-    # starts (repo setting "Require approval for all external contributors")
-    # and close-external-prs.yml closes them within five minutes. So every
-    # run that reaches a fleet job is a maintainer's. Jobs that exist to
-    # handle external PRs stay on ubuntu-latest.
+    # from outside the maintainer group. Two layers stop that. Upstream:
+    # fork PRs need maintainer approval before any workflow starts (repo
+    # setting "Require approval for all external contributors") and
+    # close-external-prs.yml closes them within five minutes. Here: every
+    # fleet job carries the fork-guard `if` clause, so even an approved fork
+    # PR skips these jobs instead of running on the fleet. Jobs that exist
+    # to handle external PRs stay on ubuntu-latest.
     runs-on: hetzner-amd64
     # Backstop: on a turbo remote-cache hit every check here finishes well
     # under 10m, but leaked test-runner processes (vitest fork workers /
@@ -624,8 +627,8 @@ jobs:
   # quietly passing again.
   openappa-native-tests:
     name: OpenAPPA Native Tests
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    # bot-pr-guard and fork-guard (see comments above platform-lint-and-unit-tests)
+    if: github.event.pull_request.head.repo.fork != true && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     # hetzner routing (see comment above platform-lint-and-unit-tests)
     runs-on: hetzner-amd64
     # The napi build dominates: ~3 min cold, an incremental no-op against the
@@ -764,8 +767,8 @@ jobs:
   # times. A full suite run is ~4 min on comparable hardware.
   backend-unit-tests:
     name: Backend Unit Tests
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    # bot-pr-guard and fork-guard (see comments above platform-lint-and-unit-tests)
+    if: github.event.pull_request.head.repo.fork != true && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     # hetzner routing (see comment above platform-lint-and-unit-tests)
     runs-on: hetzner-amd64
     # ~4 min suite + setup + cargo on the fleet. The fork fallback runs the
@@ -859,8 +862,8 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    # bot-pr-guard and fork-guard (see comments above platform-lint-and-unit-tests)
+    if: github.event.pull_request.head.repo.fork != true && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     # mac-mini routing (see comment above platform-rust-checks), then
     # hetzner routing (see comment above platform-lint-and-unit-tests)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'hetzner-amd64' }}

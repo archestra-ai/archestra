@@ -1,10 +1,42 @@
-ALTER TABLE "knowledge_base_connectors" ADD COLUMN "sync_permissions_from_source" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=primary provider keys move from scope partitions to owner partitions; the old partitions have no reader left
+DROP INDEX "chat_api_keys_primary_personal_unique";
+--> statement-breakpoint
+DROP INDEX "chat_api_keys_primary_team_unique";
+--> statement-breakpoint
+DROP INDEX "chat_api_keys_primary_org_unique";
+--> statement-breakpoint
+ALTER TABLE "knowledge_base_connectors" ADD COLUMN "sync_permissions_from_source" boolean DEFAULT false NOT NULL;
+--> statement-breakpoint
 -- Connector permission sync gets its own switch. It used to be one value of
 -- `visibility`, which also carried the retired org/team audience. Idempotent.
 UPDATE "knowledge_base_connectors"
 SET "sync_permissions_from_source" = true
 WHERE "visibility" = 'auto-sync-permissions'
-  AND "sync_permissions_from_source" = false;--> statement-breakpoint
+  AND "sync_permissions_from_source" = false;
+--> statement-breakpoint
+-- Primary provider keys are now partitioned by owner: one per provider for
+-- each owner's own keys, and one per provider among the shared keys (no
+-- owner). Before the new unique indexes, demote every primary that a partition
+-- would hold twice. A shared key that was the organization primary wins, then
+-- the oldest key. Idempotent.
+UPDATE "chat_api_keys" api_key
+SET "is_primary" = false
+FROM (
+  SELECT "id", row_number() OVER (
+    PARTITION BY "organization_id", "provider", "user_id"
+    ORDER BY ("scope" = 'org') DESC, "created_at", "id"
+  ) AS "rank"
+  FROM "chat_api_keys"
+  WHERE "is_primary" = true
+) ranked
+WHERE api_key."id" = ranked."id"
+  AND ranked."rank" > 1;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "chat_api_keys_primary_owner_unique" ON "chat_api_keys" USING btree ("organization_id","provider","user_id") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."user_id" IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "chat_api_keys_primary_shared_unique" ON "chat_api_keys" USING btree ("organization_id","provider") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."user_id" IS NULL;
+--> statement-breakpoint
 -- Retire the old non-default LLM proxy rows. Every proxy request already
 -- resolves to the organization's single default proxy, so these rows are
 -- aliases. Per organization, and only where that organization has a live
@@ -28,7 +60,8 @@ FROM (
   WHERE old_proxy."agent_type" = 'llm_proxy'
     AND old_proxy."is_default" = false
 ) retired
-WHERE setup."llm_proxy_id" = retired."old_id";--> statement-breakpoint
+WHERE setup."llm_proxy_id" = retired."old_id";
+--> statement-breakpoint
 INSERT INTO "virtual_api_key_llm_proxy" ("virtual_api_key_id", "llm_proxy_id", "created_at")
 SELECT binding."virtual_api_key_id", retired."default_id", min(binding."created_at")
 FROM "virtual_api_key_llm_proxy" binding
@@ -44,7 +77,8 @@ JOIN (
     AND old_proxy."is_default" = false
 ) retired ON retired."old_id" = binding."llm_proxy_id"
 GROUP BY binding."virtual_api_key_id", retired."default_id"
-ON CONFLICT DO NOTHING;--> statement-breakpoint
+ON CONFLICT DO NOTHING;
+--> statement-breakpoint
 -- Row-level locks only, through the profile_id index; inserts keep flowing.
 UPDATE "interactions" interaction
 SET "profile_id" = retired."default_id"
@@ -59,7 +93,8 @@ FROM (
   WHERE old_proxy."agent_type" = 'llm_proxy'
     AND old_proxy."is_default" = false
 ) retired
-WHERE interaction."profile_id" = retired."old_id";--> statement-breakpoint
+WHERE interaction."profile_id" = retired."old_id";
+--> statement-breakpoint
 UPDATE "organization" org
 SET "connection_default_llm_proxy_id" = retired."default_id"
 FROM (
@@ -73,7 +108,8 @@ FROM (
   WHERE old_proxy."agent_type" = 'llm_proxy'
     AND old_proxy."is_default" = false
 ) retired
-WHERE org."connection_default_llm_proxy_id" = retired."old_id";--> statement-breakpoint
+WHERE org."connection_default_llm_proxy_id" = retired."old_id";
+--> statement-breakpoint
 DELETE FROM "resource_permission_policies" policy
 USING (
   SELECT old_proxy."id" AS "old_id", default_proxy."id" AS "default_id"
@@ -87,7 +123,8 @@ USING (
     AND old_proxy."is_default" = false
 ) retired
 WHERE policy."resource" IN ('agent', 'mcpGateway')
-  AND policy."scope" = retired."old_id"::text;--> statement-breakpoint
+  AND policy."scope" = retired."old_id"::text;
+--> statement-breakpoint
 DELETE FROM "agents" agent
 USING (
   SELECT old_proxy."id" AS "old_id", default_proxy."id" AS "default_id"

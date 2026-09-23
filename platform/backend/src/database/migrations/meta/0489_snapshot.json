@@ -1,5 +1,5 @@
 {
-  "id": "6a7d338a-de57-43f7-ac0a-b2bf5a9f7ea0",
+  "id": "d028d0bc-fb6e-4c95-b00b-3588cc34c6cc",
   "prevId": "158b80e8-3669-4e07-8b86-f9bdcec52dc6",
   "version": "7",
   "dialect": "postgresql",
@@ -14653,8 +14653,8 @@
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_primary_personal_unique": {
-          "name": "chat_api_keys_primary_personal_unique",
+        "chat_api_keys_primary_owner_unique": {
+          "name": "chat_api_keys_primary_owner_unique",
           "columns": [
             {
               "expression": "organization_id",
@@ -14664,12 +14664,6 @@
             },
             {
               "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "scope",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -14682,13 +14676,13 @@
             }
           ],
           "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'personal'",
+          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"user_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_primary_team_unique": {
-          "name": "chat_api_keys_primary_team_unique",
+        "chat_api_keys_primary_shared_unique": {
+          "name": "chat_api_keys_primary_shared_unique",
           "columns": [
             {
               "expression": "organization_id",
@@ -14701,50 +14695,10 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
-            {
-              "expression": "scope",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'team'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "chat_api_keys_primary_org_unique": {
-          "name": "chat_api_keys_primary_org_unique",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "scope",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'org'",
+          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"user_id\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -11,7 +11,18 @@ import {
   type SupportedProvider,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
-import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
@@ -23,7 +34,6 @@ import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfo,
-  ResourceVisibilityScope,
   SecretStorageType,
   SecretValue,
   UpdateLlmProviderApiKey,
@@ -76,8 +86,9 @@ class LlmProviderApiKeyModel {
   /**
    * Create a new LLM provider API key.
    *
-   * "Primary" is exclusive per (organization, provider, scope[, user/team]) —
-   * enforced by partial unique indexes. Creating a new primary demotes the
+   * "Primary" is exclusive per (organization, provider, owner) for own keys
+   * and per (organization, provider) for shared keys — enforced by partial
+   * unique indexes. Creating a new primary demotes the
    * current one in the same transaction, so callers can mark a key primary
    * without first hunting down and unsetting the old one.
    */
@@ -91,9 +102,7 @@ class LlmProviderApiKeyModel {
         await demoteCurrentPrimary(tx, {
           organizationId: data.organizationId,
           provider: data.provider,
-          scope: data.scope,
           userId: data.userId ?? null,
-          teamId: data.teamId ?? null,
         });
       }
 
@@ -966,9 +975,7 @@ class LlmProviderApiKeyModel {
           await demoteCurrentPrimary(tx, {
             organizationId: existing.organizationId,
             provider: existing.provider as SupportedProvider,
-            scope: (data.scope ?? existing.scope) as ResourceVisibilityScope,
             userId: data.userId !== undefined ? data.userId : existing.userId,
-            teamId: data.teamId !== undefined ? data.teamId : existing.teamId,
             excludeId: id,
           });
         }
@@ -1305,37 +1312,28 @@ function parseVaultReferenceFromApiKey(
 
 /**
  * Unset is_primary on the current primary key of the given partition, matching
- * the partial unique indexes (chat_api_keys_primary_{org,personal,team}_unique):
- * org scope is exclusive per (organization, provider); personal and team scopes
- * additionally key on the user / team.
+ * the partial unique indexes (chat_api_keys_primary_{owner,shared}_unique): an
+ * owner's own keys are exclusive per (organization, provider, owner), and the
+ * shared keys (no owner) per (organization, provider).
  */
 async function demoteCurrentPrimary(
   tx: Transaction,
   partition: {
     organizationId: string;
     provider: SupportedProvider;
-    scope: ResourceVisibilityScope;
+    /** The key's owner; null for a shared key. */
     userId: string | null;
-    teamId: string | null;
     excludeId?: string;
   },
 ): Promise<void> {
   const conditions = [
     eq(schema.llmProviderApiKeysTable.organizationId, partition.organizationId),
     eq(schema.llmProviderApiKeysTable.provider, partition.provider),
-    eq(schema.llmProviderApiKeysTable.scope, partition.scope),
     eq(schema.llmProviderApiKeysTable.isPrimary, true),
+    partition.userId === null
+      ? isNull(schema.llmProviderApiKeysTable.userId)
+      : eq(schema.llmProviderApiKeysTable.userId, partition.userId),
   ];
-  if (partition.scope === "personal" && partition.userId) {
-    conditions.push(
-      eq(schema.llmProviderApiKeysTable.userId, partition.userId),
-    );
-  }
-  if (partition.scope === "team" && partition.teamId) {
-    conditions.push(
-      eq(schema.llmProviderApiKeysTable.teamId, partition.teamId),
-    );
-  }
   if (partition.excludeId) {
     conditions.push(ne(schema.llmProviderApiKeysTable.id, partition.excludeId));
   }

@@ -215,6 +215,72 @@ describe("LlmProviderApiKeyModel", () => {
       ).toBe(true);
     });
 
+    test("own keys and shared keys are separate primary partitions, decided by the owner column", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const alice = await makeUser();
+      const bob = await makeUser();
+      const team = await makeTeam(org.id, alice.id);
+
+      const aliceOwn = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Alice own",
+        provider: "openai",
+        scope: "personal",
+        userId: alice.id,
+        isPrimary: true,
+      });
+      const bobOwn = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Bob own",
+        provider: "openai",
+        scope: "personal",
+        userId: bob.id,
+        isPrimary: true,
+      });
+      const teamShared = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Team shared",
+        provider: "openai",
+        scope: "team",
+        teamId: team.id,
+        isPrimary: true,
+      });
+      // A second shared key (no owner) takes the one shared primary, whatever
+      // audience its grants give it. The own keys keep theirs.
+      const orgShared = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org shared",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      const primaryOf = async (id: string) =>
+        (await LlmProviderApiKeyModel.findById(id))?.isPrimary;
+      expect(await primaryOf(aliceOwn.id)).toBe(true);
+      expect(await primaryOf(bobOwn.id)).toBe(true);
+      expect(await primaryOf(teamShared.id)).toBe(false);
+      expect(await primaryOf(orgShared.id)).toBe(true);
+
+      // A second own key for Alice demotes only her first one.
+      const aliceSecond = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Alice second",
+        provider: "openai",
+        scope: "personal",
+        userId: alice.id,
+        isPrimary: true,
+      });
+      expect(await primaryOf(aliceSecond.id)).toBe(true);
+      expect(await primaryOf(aliceOwn.id)).toBe(false);
+      expect(await primaryOf(bobOwn.id)).toBe(true);
+      expect(await primaryOf(orgShared.id)).toBe(true);
+    });
+
     test("allows personal keys for different providers", async ({
       makeOrganization,
       makeUser,

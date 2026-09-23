@@ -299,3 +299,85 @@ describe("0489 retire non-default LLM proxy rows", () => {
     expect(setupRow.llmProxyId).not.toBe(defaultA.id);
   });
 });
+
+describe("0489 primary provider keys by owner", () => {
+  test("keeps one primary per owner and one per shared provider, preferring the organization primary", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const alice = await makeUser();
+    // Under the old scope partitions each of these was a legal primary.
+    const insertKey = async (values: {
+      name: string;
+      scope: "personal" | "team" | "org";
+      userId?: string;
+      createdAt: Date;
+    }) => {
+      const [row] = await db
+        .insert(schema.llmProviderApiKeysTable)
+        .values({
+          organizationId: org.id,
+          provider: "openai",
+          isPrimary: false,
+          ...values,
+        })
+        .returning();
+      return row;
+    };
+    const oldPersonalNoOwner = await insertKey({
+      name: "personal without owner",
+      scope: "personal",
+      createdAt: new Date("2024-01-01"),
+    });
+    const orgPrimary = await insertKey({
+      name: "org",
+      scope: "org",
+      createdAt: new Date("2024-02-01"),
+    });
+    const teamPrimary = await insertKey({
+      name: "team",
+      scope: "team",
+      createdAt: new Date("2024-03-01"),
+    });
+    const alicePrimary = await insertKey({
+      name: "alice",
+      scope: "personal",
+      userId: alice.id,
+      createdAt: new Date("2024-04-01"),
+    });
+    // The new indexes forbid the old states, so the test sets the flags
+    // one partition at a time on rows the indexes cannot see yet.
+    await db.execute(
+      sql`DROP INDEX IF EXISTS "chat_api_keys_primary_shared_unique"`,
+    );
+    try {
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ isPrimary: true })
+        .where(
+          sql`${schema.llmProviderApiKeysTable.id} IN (${oldPersonalNoOwner.id}, ${orgPrimary.id}, ${teamPrimary.id}, ${alicePrimary.id})`,
+        );
+
+      await runDataMigration();
+      await runDataMigration();
+    } finally {
+      await db.execute(
+        sql`CREATE UNIQUE INDEX IF NOT EXISTS "chat_api_keys_primary_shared_unique" ON "chat_api_keys" ("organization_id", "provider") WHERE "is_primary" = true AND "user_id" IS NULL`,
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        isPrimary: schema.llmProviderApiKeysTable.isPrimary,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .where(eq(schema.llmProviderApiKeysTable.organizationId, org.id));
+    const primary = new Map(rows.map((row) => [row.id, row.isPrimary]));
+    expect(primary.get(orgPrimary.id)).toBe(true);
+    expect(primary.get(oldPersonalNoOwner.id)).toBe(false);
+    expect(primary.get(teamPrimary.id)).toBe(false);
+    expect(primary.get(alicePrimary.id)).toBe(true);
+  });
+});

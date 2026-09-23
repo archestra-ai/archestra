@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, RouteId } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  RouteId,
+} from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
@@ -103,13 +108,43 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?outcome=timeout")).json().data).toHaveLength(1);
   });
 
-  test("a caller without log:admin is refused", async ({
+  test("a log:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
   }) => {
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: EDITOR_ROLE_NAME });
-    await seedConsult({ organizationId });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId, { role: EDITOR_ROLE_NAME });
+    const mine = await seedConsult({
+      organizationId,
+      callerId: `user:${caller.id}`,
+    });
+    await seedConsult({ organizationId, callerId: `user:${colleague.id}` });
+
+    const json = await list();
+    expect(json.statusCode).toBe(200);
+    expect(json.json().data.map((row: { id: string }) => row.id)).toEqual([
+      mine,
+    ]);
+
+    const jsonl = await list("?format=jsonl");
+    expect(jsonl.statusCode).toBe(200);
+    expect(
+      jsonl.body
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line).id),
+    ).toEqual([mine]);
+  });
+
+  test("a caller without log:read is refused", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await seedConsult({ organizationId, callerId: `user:${caller.id}` });
 
     expect((await list()).statusCode).toBe(403);
     expect((await list("?format=jsonl")).statusCode).toBe(403);
@@ -144,6 +179,7 @@ async function seedConsult(params: {
   outcome?: "answered" | "timeout";
   rawResponse?: Buffer;
   diagnostics?: Buffer;
+  callerId?: string;
 }): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date(Date.now() - (params.secondsAgo ?? 0) * 1000);
@@ -151,7 +187,7 @@ async function seedConsult(params: {
     id,
     organizationId: params.organizationId,
     sessionId: "session",
-    callerId: "user:caller",
+    callerId: params.callerId ?? "user:caller",
     createdAt,
     startedAt: createdAt,
     durationMs: 12,

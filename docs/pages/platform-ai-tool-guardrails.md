@@ -97,7 +97,7 @@ Later the team moves the policy into a GitHub repository. A pull request points 
 
 ### External Consult Records
 
-APPA records every consult it makes to an annotator, authority, sanitizer, or other external. A record holds the request, the answer or no-answer outcome, the raw response, and the timing. It also holds the session, trajectory, and tool call the consult served. A helper script's last stderr line is kept as diagnostics. Only users with `log:admin` can read the records. Export them from `GET /api/openappa/external-consults` — add `?format=jsonl` for one record per line. Records expire with `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
+APPA records every consult it makes to an annotator, authority, sanitizer, or other external. A record holds the request, the answer or no-answer outcome, the raw response, and the timing. It also holds the session, trajectory, and tool call the consult served. A helper script's last stderr line is kept as diagnostics. With `log:read`, you see the consults from your own sessions. With `log:admin`, you see every consult in the organization. Export the records from `GET /api/openappa/external-consults` — add `?format=jsonl` for one record per line. Records expire with `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
 
 ## The Lethal Trifecta
 

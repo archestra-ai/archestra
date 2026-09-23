@@ -8134,7 +8134,7 @@ export const uploadOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
 export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryPackageData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryPackageResponses, DeleteOpenappaBatteryPackageErrors, ThrowOnError>({ url: '/api/openappa/battery-packages/{contentHash}', ...options });
 
 /**
- * Export the external consults Guardrails recorded in the active organization, newest first. Requires `log:admin`. Byte fields are base64.
+ * Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. Byte fields are base64.
  *
  * Authentication:
  *
@@ -8142,7 +8142,7 @@ export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `log:admin`: View every LLM proxy and MCP tool call log in the active organization
+ * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  */
 export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaExternalConsultsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaExternalConsultsResponses, GetOpenappaExternalConsultsErrors, ThrowOnError>({ url: '/api/openappa/external-consults', ...options });
 

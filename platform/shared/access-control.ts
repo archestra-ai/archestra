@@ -1958,8 +1958,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
-  // log:admin, not log:read: the dataset spans every caller in the organization.
-  [RouteId.GetOpenappaExternalConsults]: { log: ["admin"] },
+  // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
+  [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

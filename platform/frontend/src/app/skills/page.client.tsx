@@ -1322,6 +1322,19 @@ function ListedSkillName({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="truncate font-medium">{item.skill.name}</span>
+          {compatibility && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="shrink-0 gap-1">
+                  <Info className="h-3 w-3" />
+                  compatibility
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {compatibility}
+              </TooltipContent>
+            </Tooltip>
+          )}
           <ListedSkillSourceBadge item={item} appName={appName} />
           {standalone?.labels ? <LabelTags labels={standalone.labels} /> : null}
           {standalone?.githubSyncInterval && (
@@ -1374,17 +1387,6 @@ function ListedSkillName({
         <Badge variant="outline" className="shrink-0">
           Disabled
         </Badge>
-      )}
-      {compatibility && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="outline" className="gap-1">
-              <Info className="h-3 w-3" />
-              compatibility
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{compatibility}</TooltipContent>
-        </Tooltip>
       )}
     </div>
   );

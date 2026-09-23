@@ -262,6 +262,33 @@ describe("SkillsPage rows", () => {
     ).toBeDisabled();
   });
 
+  it("shows a compact compatibility indicator beside the name with a width-capped tooltip", async () => {
+    mockSkills([
+      {
+        ...MINE,
+        compatibility:
+          "requires an external review tool — nitpicker, codex, or opencode — configured for this workspace before the skill can run",
+      },
+    ]);
+
+    render(<SkillsPage />);
+
+    const nameRow = screen.getByText("pdf-tools").closest("div");
+    const badge = screen.getByText("compatibility");
+    // The indicator lives in the name's own row, not trailing after the
+    // description as a separate block competing for the row's width.
+    expect(nameRow).toContainElement(badge);
+
+    await userEvent.hover(badge);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("requires an external review tool");
+    // The accessible "tooltip" role lands on Radix's visually-hidden
+    // description span; the visible bubble carrying the width cap is the
+    // sibling `data-slot="tooltip-content"` element.
+    const bubble = document.querySelector('[data-slot="tooltip-content"]');
+    expect(bubble).toHaveClass("max-w-xs");
+  });
+
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {
     mockUseFeature.mockImplementation(
       (name: string) =>

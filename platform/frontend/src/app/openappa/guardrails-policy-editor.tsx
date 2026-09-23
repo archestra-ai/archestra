@@ -201,7 +201,7 @@ function PolicyForm({
                 <a
                   href={getDocsUrl(
                     DocsPage.PlatformAiToolGuardrails,
-                    "guardrails-v2-preview",
+                    "configure-with-the-agent",
                   )}
                   target="_blank"
                   rel="noreferrer"

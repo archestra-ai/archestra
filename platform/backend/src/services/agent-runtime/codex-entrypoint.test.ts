@@ -301,7 +301,11 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
         config.model_providers.archestra.http_headers,
         config.mcp_servers.archestra.http_headers,
       ])
-        expect(headers["X-Appa-Session-ID"]).toBe("agent-run-codex-first");
+        expect(headers).toMatchObject({
+          "X-Archestra-Run-Id": "follow-up-task",
+          "X-Archestra-Session-Id": "agent-run-codex-first",
+          "X-Appa-Session-ID": "agent-run-codex-first",
+        });
 
       if (!openappa) {
         expect(config.web_search).toBeUndefined();

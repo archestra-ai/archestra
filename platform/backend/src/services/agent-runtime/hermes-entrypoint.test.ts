@@ -161,7 +161,10 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         config.model.default_headers,
         config.mcp_servers.archestra.headers,
       ])
-        expect(headers["X-Appa-Session-ID"]).toBe("agent-run-hermes-12345678");
+        expect(headers).toMatchObject({
+          "X-Archestra-Session-Id": "agent-run-hermes-12345678",
+          "X-Appa-Session-ID": "agent-run-hermes-12345678",
+        });
       expect(config.hooks).toEqual({
         on_session_start: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
         post_llm_call: [{ command: `${runtime}/hermes-runtime-hook.sh` }],

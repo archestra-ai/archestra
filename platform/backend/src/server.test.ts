@@ -195,6 +195,76 @@ describe("createFastifyInstance", () => {
       captureSpy.mockRestore();
     });
 
+    test.each([
+      "/v1/ollama",
+      "/v1/ollama-native",
+    ])("returns 503 when the real passthrough proxy at %s cannot connect", async (prefix) => {
+      const fastifyHttpProxy = (await import("@fastify/http-proxy")).default;
+      const { errors } = await import("undici");
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+      const app = createFastifyInstance();
+      try {
+        await app.register(fastifyHttpProxy, {
+          upstream: "http://provider.example",
+          prefix,
+          undici: {
+            connect: (_options, callback) => {
+              queueMicrotask(() =>
+                callback(new errors.ConnectTimeoutError(), null),
+              );
+            },
+          },
+        });
+        const response = await app.inject({
+          method: "GET",
+          url: `${prefix}/models`,
+        });
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toEqual({
+          error: {
+            message:
+              "Could not connect to the model provider. Check its base URL and network access, then retry.",
+            type: "api_service_unavailable_error",
+          },
+        });
+        expect(captureSpy).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+        captureSpy.mockRestore();
+      }
+    });
+
+    test.each([
+      [
+        "/test-connect-timeout",
+        "UND_ERR_CONNECT_TIMEOUT",
+        "Connect Timeout Error",
+      ],
+      [
+        "/v1/ollama/models",
+        "FST_REPLY_FROM_INTERNAL_SERVER_ERROR",
+        "Unexpected failure",
+      ],
+    ])("keeps unrelated errors as internal failures at %s", async (url, code, message) => {
+      const app = createFastifyInstance();
+      try {
+        app.get(url, async () => {
+          throw Object.assign(new Error(message), { code, statusCode: 500 });
+        });
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode).toBe(500);
+        expect(response.json().error.type).toBe("api_internal_server_error");
+      } finally {
+        await app.close();
+      }
+    });
+
     test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
       const { posthogErrorTrackingService } = await import(
         "@/services/error-tracking"

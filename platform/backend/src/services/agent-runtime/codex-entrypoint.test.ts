@@ -247,6 +247,86 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
     }
   });
 
+  test.each([
+    true,
+    false,
+  ])("declares its tools inline only under OpenAPPA (%s)", async (openappa) => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-openappa-"));
+    try {
+      const bin = path.join(root, "bin");
+      const runtime = path.join(root, "runtime");
+      await mkdir(bin);
+      // Codex's bundled catalog hides tools behind a tool search or code mode.
+      await writeExecutable(
+        path.join(bin, "codex"),
+        `#!/bin/sh
+if [ "$1" = "debug" ]; then
+  printf '%s' '{"models":[{"slug":"gpt-5.5","tool_mode":null,"supports_search_tool":true},{"slug":"gpt-5.6-luna","tool_mode":"code_mode_only","supports_search_tool":true}]}'
+  exit 0
+fi
+printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
+`,
+      );
+      await execFileAsync("bash", [ENTRYPOINT], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_MODE: "interactive",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "gpt-5.5",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "follow-up-task",
+          ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-codex-first",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
+          ARCHESTRA_AGENT_RUNTIME_OPENAPPA: openappa ? "1" : "",
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
+          OPENAI_API_KEY: "test-key",
+          OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
+        },
+      });
+
+      const config = JSON.parse(
+        (
+          await execFileAsync("python3", [
+            "-c",
+            "import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))",
+            path.join(runtime, "codex", "config.toml"),
+          ])
+        ).stdout,
+      );
+      // A follow-up keeps the conversation's OpenAPPA root on both wires.
+      for (const headers of [
+        config.model_providers.archestra.http_headers,
+        config.mcp_servers.archestra.http_headers,
+      ])
+        expect(headers["X-Appa-Session-ID"]).toBe("agent-run-codex-first");
+
+      if (!openappa) {
+        expect(config.web_search).toBeUndefined();
+        expect(config.features).toBeUndefined();
+        expect(config.model_catalog_json).toBeUndefined();
+        return;
+      }
+      expect(config.web_search).toBe("disabled");
+      expect(config.features).toEqual({ code_mode_host: false });
+      const catalog = JSON.parse(
+        await readFile(config.model_catalog_json, "utf8"),
+      );
+      expect(catalog.models).toEqual([
+        { slug: "gpt-5.5", tool_mode: "direct", supports_search_tool: false },
+        {
+          slug: "gpt-5.6-luna",
+          tool_mode: "direct",
+          supports_search_tool: false,
+        },
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a non-Responses protocol before starting Codex", async () => {
     await expect(
       execFileAsync("bash", [ENTRYPOINT], {

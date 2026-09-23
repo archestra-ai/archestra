@@ -1,94 +1,47 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import TeamModel from "./team";
 
 /**
- * Team assignments and scope-based access for skills.
- *
- * Mirrors {@link AgentTeamModel}: a skill is accessible when it is org-scoped,
- * authored by the user (personal scope), or team-scoped and assigned to one of
- * the user's teams. Skill admins bypass these checks.
+ * Grant-based access checks for skills, plus the retired `skill_team`
+ * junction's readers that the cutover and the edit forms still use.
  */
 class SkillTeamModel {
   /**
-   * Skill IDs a user can access within an organization: org-scoped skills,
-   * their own personal skills, and team-scoped skills assigned to one of their
-   * teams. Without a `userId` (org/team-token sessions) only org-scoped skills
-   * are returned.
-   *
-   * Admins bypass scope filtering entirely, so callers should skip this for
-   * them rather than passing a flag.
+   * Skill IDs a user can read within an organization: a grant on the skill, or
+   * at `*`, decides. Without a `userId` (org/team-token sessions) only a skill
+   * published to the organization at large is returned.
    */
   static async getUserAccessibleSkillIds(params: {
     organizationId: string;
     userId?: string;
-    onlyExplicitGrants?: boolean;
-    isSkillAdmin?: boolean;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
-    if (userId === undefined) {
-      const result = await db.execute<{ id: string }>(sql`
-        SELECT id FROM skills
-        WHERE organization_id = ${organizationId}
-          AND ${ResourcePermissionPolicyModel.organizationAccessCondition({
-            organizationId,
-            resource: "skill",
-            scopeColumn: schema.skillsTable.id,
-            action: "read",
-            legacyCondition: eq(schema.skillsTable.scope, "org"),
-          })}
-      `);
-      return result.rows.map((r) => r.id);
-    }
-
-    const explicit = ResourcePermissionPolicyModel.grantCondition({
-      organizationId,
-      userId,
-      resource: "skill",
-      action: "read",
-      scopeColumn: schema.skillsTable.id,
-    });
-    if (params.onlyExplicitGrants) {
-      const rows = await db
-        .select({ id: schema.skillsTable.id })
-        .from(schema.skillsTable)
-        .where(
-          and(eq(schema.skillsTable.organizationId, organizationId), explicit),
-        );
-      return rows.map((row) => row.id);
-    }
-    const result = await db.execute<{ id: string }>(sql`
-      WITH visible AS (
-      SELECT id FROM skills WHERE organization_id = ${organizationId} AND ${params.isSkillAdmin ?? false}
-      UNION
-      SELECT id FROM skills
-        WHERE scope = 'org' AND organization_id = ${organizationId}
-      UNION
-      SELECT id FROM skills
-        WHERE author_id = ${userId} AND scope = 'personal'
-          AND organization_id = ${organizationId}
-      UNION
-      -- Shared with this person by name. The grant sits beside the scope, so a
-      -- personal skill can reach a colleague without being published wider.
-      SELECT su.skill_id AS id
-        FROM skill_user su
-        INNER JOIN skills s ON su.skill_id = s.id
-        WHERE su.user_id = ${userId} AND s.organization_id = ${organizationId}
-      UNION
-      SELECT skill_team.skill_id AS id
-        FROM skill_team
-        INNER JOIN skills s ON skill_team.skill_id = s.id
-        WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.skillTeamsTable.teamId })}
-          AND s.scope = 'team'
-          AND s.organization_id = ${organizationId}
-      UNION
-      SELECT id FROM skills WHERE organization_id = ${organizationId} AND ${explicit}
-      ) SELECT skills.id FROM skills JOIN visible ON visible.id = skills.id
-      WHERE ${ResourcePermissionPolicyModel.migratedAccessCondition({ organizationId, userId, resource: "skill", scopeColumn: schema.skillsTable.id, action: "read" })}
-    `);
-    return result.rows.map((r) => r.id);
+    const rows = await db
+      .select({ id: schema.skillsTable.id })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organizationId),
+          userId === undefined
+            ? ResourcePermissionPolicyModel.organizationAccessCondition({
+                organizationId,
+                resource: "skill",
+                scopeColumn: schema.skillsTable.id,
+                action: "read",
+                legacyCondition: eq(schema.skillsTable.scope, "org"),
+              })
+            : ResourcePermissionPolicyModel.grantCondition({
+                organizationId,
+                userId,
+                resource: "skill",
+                action: "read",
+                scopeColumn: schema.skillsTable.id,
+              }),
+        ),
+      );
+    return rows.map((row) => row.id);
   }
 
   /**

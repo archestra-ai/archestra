@@ -413,15 +413,18 @@ describe("upgrade access preservation", () => {
         }
         // List filtering has its own query, so a matching single check is not
         // enough: a resource missing from the list is just as inaccessible.
-        const listed = await AgentTeamModel.getUserAccessibleAgentIds(
-          principal.id,
-          await isAdminFor("agent"),
-        );
+        // The list reads grants alone, so before the conversion it has nothing
+        // to read; the frozen single-object read rule is its "before".
+        const listed = converted
+          ? await AgentTeamModel.getUserAccessibleAgentIds(
+              principal.id,
+              await isAdminFor("agent"),
+            )
+          : [];
         for (const [what, agent] of Object.entries(agents)) {
-          rows[`agentList:${what}:${who}`] = await reachable(
-            "agent",
-            listed.includes(agent.id),
-          );
+          rows[`agentList:${what}:${who}`] = converted
+            ? await reachable("agent", listed.includes(agent.id))
+            : rows[`agent:${what}:${who}:read`];
         }
       }
       return rows;

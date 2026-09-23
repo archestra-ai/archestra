@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import type { ResourcePermissionAction } from "@archestra/shared";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  type ResourcePermissionAction,
+} from "@archestra/shared";
+import { and, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -10,7 +14,6 @@ import {
   normalizeCatalogTeamInput,
 } from "@/types/catalog-team-level";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import TeamModel from "./team";
 
 interface CatalogTeamDetail {
   id: string;
@@ -20,54 +23,97 @@ interface CatalogTeamDetail {
 
 class McpCatalogTeamModel {
   /**
-   * Get all catalog IDs that a user has access to.
-   * Three sources of access:
-   * 1. Org-scoped catalogs (visible to all)
-   * 2. Author's own personal catalogs
-   * 3. Team-scoped catalogs where user is a team member
+   * Catalog IDs a user can see in the registry: every catalog in the
+   * organization for an administrator, otherwise the ones
+   * {@link McpCatalogTeamModel.readCondition} admits.
    */
   static async getUserAccessibleCatalogIds(
     userId: string,
     isAdmin: boolean,
     organizationId: string,
   ): Promise<string[]> {
-    if (isAdmin) {
-      const allCatalogs = await db
-        .select({ id: schema.internalMcpCatalogTable.id })
-        .from(schema.internalMcpCatalogTable)
-        .where(
+    const catalog = schema.internalMcpCatalogTable;
+    const rows = await db
+      .select({ id: catalog.id })
+      .from(catalog)
+      .where(
+        and(
           or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-            isNull(schema.internalMcpCatalogTable.organizationId),
+            eq(catalog.organizationId, organizationId),
+            isNull(catalog.organizationId),
           ),
-        );
-      return allCatalogs.map((c) => c.id);
-    }
+          isAdmin
+            ? undefined
+            : McpCatalogTeamModel.readCondition({ organizationId, userId }),
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
 
-    // Mirrors the agent (profile) access control approach: org-visible + personal + team-based
-    const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM internal_mcp_catalog
-        WHERE scope = 'org'
-          AND (organization_id = ${organizationId} OR organization_id IS NULL)
-      UNION
-      SELECT id FROM internal_mcp_catalog
-        WHERE author_id = ${userId}
-          AND scope = 'personal'
-          AND organization_id = ${organizationId}
-      UNION
-      SELECT mcp_catalog_team.catalog_id AS id
-        FROM mcp_catalog_team
-        INNER JOIN internal_mcp_catalog c ON mcp_catalog_team.catalog_id = c.id
-        WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.mcpCatalogTeamsTable.teamId })}
-          AND c.scope = 'team'
-          AND c.organization_id = ${organizationId}
-      UNION
-      SELECT id FROM internal_mcp_catalog
-        WHERE (organization_id = ${organizationId} OR organization_id IS NULL)
-          AND ${ResourcePermissionPolicyModel.grantCondition({ organizationId, userId, resource: "mcpRegistry", scopeColumn: sql`internal_mcp_catalog.id`, action: "read" })}
-    `);
-
-    return result.rows.map((r) => r.id);
+  /**
+   * Whether a user can see a catalog row in a registry list, as SQL over
+   * `internal_mcp_catalog`. Grants decide, with three kinds of row that have
+   * no policy of their own:
+   *
+   * - The two built-in catalogs ship with the platform. Every member has
+   *   always seen them in the registry, and they carry no per-object policy,
+   *   so they stay visible to any member.
+   * - A hidden runtime variant is part of its parent, so it follows the
+   *   parent's grants.
+   * - An app's backing catalog is the app's own, so it follows the app's
+   *   grants rather than a registry policy it never had. A registry-wide grant
+   *   still reaches it, as it did before.
+   */
+  static readCondition(params: { organizationId: string; userId: string }) {
+    const catalog = schema.internalMcpCatalogTable;
+    const { organizationId, userId } = params;
+    return or(
+      and(
+        inArray(catalog.id, [
+          ARCHESTRA_MCP_CATALOG_ID,
+          PLAYWRIGHT_MCP_CATALOG_ID,
+        ]),
+        sql`EXISTS (SELECT 1 FROM member builtin_member WHERE builtin_member.organization_id = ${organizationId} AND builtin_member.user_id = ${userId})`,
+      ),
+      and(
+        sql`${catalog.serverType} <> 'app'`,
+        ResourcePermissionPolicyModel.grantCondition({
+          organizationId,
+          userId,
+          resource: "mcpRegistry",
+          scopeColumn: sql`coalesce(${catalog.parentCatalogItemId}, ${catalog.id})`,
+          action: "read",
+        }),
+      ),
+      and(
+        eq(catalog.serverType, "app"),
+        or(
+          // Whoever manages the whole registry reaches app backing catalogs
+          // as before; they held that reach through the registry, not the app.
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId,
+            userId,
+            resource: "mcpRegistry",
+            scopeColumn: catalog.id,
+            action: "read",
+          }),
+          sql`EXISTS (
+          SELECT 1 FROM apps backing_app
+          JOIN mcp_server backing_server ON backing_server.id = backing_app.mcp_server_id
+          WHERE backing_server.catalog_id = ${catalog.id}
+            AND backing_app.organization_id = ${organizationId}
+            AND backing_app.deleted_at IS NULL
+            AND ${ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "app",
+              scopeColumn: sql`backing_app.id`,
+              action: "read",
+            })}
+          )`,
+        ),
+      ),
+    ) as SQL;
   }
 
   /**

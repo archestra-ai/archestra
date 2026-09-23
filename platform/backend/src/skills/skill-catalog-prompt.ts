@@ -4,7 +4,6 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
 import type { Skill } from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
@@ -95,16 +94,9 @@ export async function listAccessibleCatalogSkills(
 ): Promise<Skill[]> {
   const { organizationId, userId, agentId } = params;
 
-  const checker =
-    userId !== undefined
-      ? await getSkillPermissionChecker({ userId, organizationId })
-      : null;
-  const isSkillAdmin = !!checker?.isAdmin && !!checker.canRead;
   const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
     organizationId,
     userId,
-    isSkillAdmin,
-    onlyExplicitGrants: checker?.canRead === false,
   });
 
   // Skills are environment-scoped like tools and connectors: the catalog only

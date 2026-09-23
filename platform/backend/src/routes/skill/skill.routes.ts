@@ -571,8 +571,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
         organizationId,
         userId: user.id,
-        onlyExplicitGrants: !checker.canRead,
-        isSkillAdmin: checker.isAdmin && checker.canRead,
       });
       if (allowedSkillIds !== undefined) {
         const accessibleSet = new Set(accessibleSkillIds);
@@ -1027,16 +1025,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user }, reply) => {
-      const checker = await getSkillPermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
       const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds(
-        {
-          organizationId,
-          userId: user.id,
-          isSkillAdmin: checker.isAdmin,
-        },
+        { organizationId, userId: user.id },
       );
 
       const repos = await SkillModel.findDistinctSourceRepos({
@@ -2052,7 +2042,6 @@ async function loadBulkSkillContext(params: {
     SkillTeamModel.getUserAccessibleSkillIds({
       organizationId,
       userId,
-      isSkillAdmin: checker.isAdmin,
     }),
   ]);
 

@@ -936,7 +936,7 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
-      ...(userId ? [migratedAgentReadCondition(userId) as SQL] : []),
+      ...(userId ? [agentListFence(userId)] : []),
     ];
     if (options?.authorization) {
       if (!userId) return [];
@@ -2009,7 +2009,7 @@ class AgentModel {
     const { filters, userId, isAgentAdmin } = params;
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
-      ...(userId ? [migratedAgentReadCondition(userId) as SQL] : []),
+      ...(userId ? [agentListFence(userId)] : []),
     ];
 
     if (filters?.organizationId) {
@@ -2561,7 +2561,7 @@ class AgentModel {
       .where(
         and(
           notDeleted(schema.agentsTable),
-          migratedAgentReadCondition(userId),
+          agentListFence(userId),
           or(
             explicitAgentReadCondition(userId),
             isAgentAdmin ? sql`true` : undefined,
@@ -4775,32 +4775,18 @@ function explicitAgentReadCondition(userId: string) {
   // SPDX-SnippetEnd
 }
 
-function migratedAgentReadCondition(userId: string) {
-  const table = schema.agentsTable;
+/**
+ * The list fence for every agent kind: agents and MCP gateways by their read
+ * grants, and LLM proxies unfenced here because they have no grant namespace
+ * of their own — the caller's own conditions decide those.
+ */
+function agentListFence(userId: string): SQL {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  return and(
-    or(
-      notInArray(table.agentType, ["agent", "profile"]),
-      ResourcePermissionPolicyModel.migratedAccessCondition({
-        organizationId: table.organizationId,
-        userId,
-        resource: "agent",
-        scopeColumn: table.id,
-        action: "read",
-      }),
-    ),
-    or(
-      ne(table.agentType, "mcp_gateway"),
-      ResourcePermissionPolicyModel.migratedAccessCondition({
-        organizationId: table.organizationId,
-        userId,
-        resource: "mcpGateway",
-        scopeColumn: table.id,
-        action: "read",
-      }),
-    ),
-  );
+  return or(
+    eq(schema.agentsTable.agentType, "llm_proxy"),
+    explicitAgentReadCondition(userId),
+  ) as SQL;
   // SPDX-SnippetEnd
 }

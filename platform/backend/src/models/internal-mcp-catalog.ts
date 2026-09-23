@@ -378,13 +378,7 @@ class InternalMcpCatalogModel {
     const searchCondition = and(
       baseSearchCondition,
       userId && organizationId
-        ? ResourcePermissionPolicyModel.migratedAccessCondition({
-            organizationId,
-            userId,
-            resource: "mcpRegistry",
-            scopeColumn: schema.internalMcpCatalogTable.id,
-            action: "read",
-          })
+        ? McpCatalogTeamModel.readCondition({ organizationId, userId })
         : undefined,
       ...(options?.readGrantContext
         ? [
@@ -1715,13 +1709,10 @@ class InternalMcpCatalogModel {
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       listConditions.push(
-        ResourcePermissionPolicyModel.migratedAccessCondition({
+        McpCatalogTeamModel.readCondition({
           organizationId: options.organizationId,
           userId,
-          resource: "mcpRegistry",
-          scopeColumn: schema.internalMcpCatalogTable.id,
-          action: "read",
-        }) as SQL,
+        }),
       );
       // SPDX-SnippetEnd
     }

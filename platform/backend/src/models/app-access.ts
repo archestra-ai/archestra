@@ -3,79 +3,30 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import TeamModel from "./team";
 
 /**
- * Read-side accessibility + team loaders for apps. An app's visibility (scope +
- * teams) lives on its backing catalog (serverType "app"), so these resolve
- * through `apps → mcp_server → internal_mcp_catalog` and the `mcp_catalog_team`
- * junction — the same model the MCP server registry uses.
+ * Read-side accessibility for apps, decided by grants on the app, plus the
+ * loaders for the retired team and user assignments on its backing catalog
+ * (`apps → mcp_server → internal_mcp_catalog`).
  */
 class AppAccessModel {
   /**
-   * IDs of (non-deleted) apps a user can see, by the backing catalog's scope:
-   * every `org` app, their own `personal` apps, and `team` apps whose backing
-   * catalog is assigned to a team they belong to. `userId: undefined` → an
-   * org-context principal (org apps only). `isAppAdmin: true` bypasses scope
-   * and returns every app in the org — mirroring `userHasAppAccess`, so an app
-   * admin's list matches what they can already view one-by-one.
-   *
-   * A disabled app is author-only regardless of its scope, and this overrides
-   * the app:admin bypass — an admin sees every *enabled* app plus only their
-   * own disabled ones, never someone else's work-in-progress.
+   * IDs of (non-deleted) apps a user can see: a read grant on the app, or at
+   * `*`, decides. A disabled app is author-only regardless of grants — an
+   * administrator sees every *enabled* app plus only their own disabled ones,
+   * never someone else's work-in-progress. `userId: undefined` (a principal
+   * with no user of its own) sees no apps; no grant names such a caller.
    */
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
     userId?: string;
-    isAppAdmin?: boolean;
-    onlyExplicitGrants?: boolean;
   }): Promise<string[]> {
-    const { organizationId, userId, isAppAdmin } = params;
-    const isEnabled = eq(schema.appsTable.enabled, true);
-    // Visibility of an *enabled* app: scope-based, with the admin bypass.
-    const enabledVisibility = isAppAdmin
-      ? isEnabled
-      : userId === undefined
-        ? and(isEnabled, eq(schema.internalMcpCatalogTable.scope, "org"))
-        : and(
-            isEnabled,
-            or(
-              eq(schema.internalMcpCatalogTable.scope, "org"),
-              // A personal app reaches its author, and anyone it has been
-              // shared with individually. The grant sits alongside the scope
-              // rather than replacing it: "personal + named grants" is how an
-              // app follows a chat shared with specific people, without
-              // widening the app to a whole team or organization.
-              and(
-                eq(schema.internalMcpCatalogTable.scope, "personal"),
-                or(
-                  eq(schema.appsTable.authorId, userId),
-                  eq(schema.mcpCatalogUsersTable.userId, userId),
-                ),
-              ),
-              and(
-                eq(schema.internalMcpCatalogTable.scope, "team"),
-                TeamModel.effectiveMembershipCondition({
-                  userId,
-                  teamIdColumn: schema.mcpCatalogTeamsTable.teamId,
-                }),
-              ),
-            ),
-          );
-    // A disabled app is visible only to its author (no admin/scope path reaches it).
-    const disabledVisibility =
-      userId === undefined
-        ? undefined
-        : and(
-            eq(schema.appsTable.enabled, false),
-            eq(schema.appsTable.authorId, userId),
-          );
-    const scopeCondition = disabledVisibility
-      ? or(enabledVisibility, disabledVisibility)
-      : enabledVisibility;
+    const { organizationId, userId } = params;
+    if (userId === undefined) return [];
     const rows = await db
       .selectDistinct({ id: schema.appsTable.id })
       .from(schema.appsTable)
+      // Only an app with its backing server is listed, as before.
       .innerJoin(
         schema.mcpServersTable,
         eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
@@ -84,53 +35,21 @@ class AppAccessModel {
         schema.internalMcpCatalogTable,
         eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
-      .leftJoin(
-        schema.mcpCatalogTeamsTable,
-        eq(
-          schema.internalMcpCatalogTable.id,
-          schema.mcpCatalogTeamsTable.catalogId,
-        ),
-      )
-      .leftJoin(
-        schema.mcpCatalogUsersTable,
-        and(
-          eq(
-            schema.internalMcpCatalogTable.id,
-            schema.mcpCatalogUsersTable.catalogId,
-          ),
-          userId === undefined
-            ? undefined
-            : eq(schema.mcpCatalogUsersTable.userId, userId),
-        ),
-      )
       .where(
         and(
           eq(schema.appsTable.organizationId, organizationId),
           notDeleted(schema.appsTable),
           or(
-            params.onlyExplicitGrants
-              ? undefined
-              : and(
-                  scopeCondition,
-                  ResourcePermissionPolicyModel.legacySharingCondition({
-                    organizationId,
-                    resource: "app",
-                    scopeColumn: schema.appsTable.id,
-                  }),
-                ),
-            userId
-              ? and(
-                  or(isEnabled, disabledVisibility),
-                  ResourcePermissionPolicyModel.grantCondition({
-                    organizationId,
-                    userId,
-                    resource: "app",
-                    scopeColumn: schema.appsTable.id,
-                    action: "read",
-                  }),
-                )
-              : undefined,
+            eq(schema.appsTable.enabled, true),
+            eq(schema.appsTable.authorId, userId),
           ),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId,
+            userId,
+            resource: "app",
+            scopeColumn: schema.appsTable.id,
+            action: "read",
+          }),
         ),
       );
     return rows.map((row) => row.id);

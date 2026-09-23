@@ -1,6 +1,6 @@
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
-import { grantEverywhere } from "@/test/wildcard-grants";
 import { buildGroupToken, normalizeEmail } from "./acl-tokens";
 import {
   buildDocumentAccessControlList,
@@ -53,75 +53,62 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toBe(true);
   });
 
-  test("allows org-wide knowledge sources for users with read access", async ({
+  test("a knowledge source is reached through its grants alone", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
+    // Organization-wide by the retired visibility field, and no policy.
     const knowledgeBase = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
       org.id,
     );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
+    const context = () =>
+      knowledgeSourceAccessControlService.buildAccessControlContext({
         userId: user.id,
         organizationId: org.id,
       });
 
+    let access = await context();
     expect(
       knowledgeSourceAccessControlService.canAccessKnowledgeBase(
         access,
         knowledgeBase,
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
+    ).toBe(false);
+
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: org.id,
+      resource: "knowledgeConnector",
+      scope: connector.id,
+      revision: 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    access = await context();
     expect(
       knowledgeSourceAccessControlService.canAccessConnector(access, connector),
     ).toBe(true);
-  });
-
-  test("blocks team-scoped knowledge sources when user is not in the team", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeTeam,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "member" });
-    const team = await makeTeam(org.id, user.id);
-    const knowledgeBase = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      },
-    );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: user.id,
-        organizationId: org.id,
-      });
-
+    expect(
+      knowledgeSourceAccessControlService.filterQueryableConnectors(access, [
+        connector,
+      ]),
+    ).toEqual([connector]);
     expect(
       knowledgeSourceAccessControlService.canAccessKnowledgeBase(
         access,
         knowledgeBase,
       ),
-    ).toBe(true);
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
     ).toBe(false);
   });
 
@@ -165,134 +152,6 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toEqual([connector]);
   });
 
-  test("allows admins to manage auto-sync-permissions connectors (the role carries knowledgeSourceAutoSync by default)", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
-    const admin = await makeUser();
-    await makeMember(admin.id, org.id, { role: "admin" });
-    const knowledgeBase = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        connectorType: "github",
-        visibility: "auto-sync-permissions",
-      },
-    );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: admin.id,
-        organizationId: org.id,
-      });
-
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
-    ).toBe(true);
-  });
-
-  test("a custom role with knowledgeSourceAutoSync:read can access auto-sync connectors without knowledgeSource:admin", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: {
-        knowledgeSource: ["read"],
-        knowledgeSourceAutoSync: ["read"],
-      },
-    });
-    await makeMember(user.id, org.id, { role: role.role });
-    const knowledgeBase = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        connectorType: "github",
-        visibility: "auto-sync-permissions",
-      },
-    );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: user.id,
-        organizationId: org.id,
-      });
-
-    expect(access.canReadAll).toBe(false);
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
-    ).toBe(true);
-  });
-
-  test("managing every knowledge base alone does NOT grant access to auto-sync connectors", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: { knowledgeSource: ["read"] },
-    });
-    // What the retired knowledgeSource:admin became: `update` at `*`.
-    grantEverywhere(["knowledgeBase"]);
-    await makeMember(user.id, org.id, { role: role.role });
-    const knowledgeBase = await makeKnowledgeBase(org.id);
-    const autoSyncConnector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        connectorType: "github",
-        visibility: "auto-sync-permissions",
-      },
-    );
-    const teamScopedConnector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        visibility: "team-scoped",
-        teamIds: [crypto.randomUUID()],
-      },
-    );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: user.id,
-        organizationId: org.id,
-      });
-
-    // The view-all bypass still covers org-wide and team-scoped sources...
-    expect(access.canReadAll).toBe(true);
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(
-        access,
-        teamScopedConnector,
-      ),
-    ).toBe(true);
-    // ...but auto-sync surfaces expose upstream identities, so they require
-    // the dedicated permission.
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(
-        access,
-        autoSyncConnector,
-      ),
-    ).toBe(false);
-  });
-
   test("filterQueryableConnectors still excludes team-scoped connectors for non-members", async ({
     makeOrganization,
     makeUser,
@@ -326,48 +185,6 @@ describe("knowledgeSourceAccessControlService", () => {
         connector,
       ]),
     ).toEqual([]);
-  });
-
-  test("managing every knowledge base bypasses source visibility restrictions", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeTeam,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization({ legacyPermissions: true });
-    // What the retired knowledgeSource:admin became: `update` at `*`.
-    grantEverywhere(["knowledgeBase"]);
-    const admin = await makeUser();
-    await makeMember(admin.id, org.id, { role: "admin" });
-    const team = await makeTeam(org.id, admin.id);
-    const knowledgeBase = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(
-      knowledgeBase.id,
-      org.id,
-      {
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      },
-    );
-
-    const access =
-      await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: admin.id,
-        organizationId: org.id,
-      });
-
-    expect(access.canReadAll).toBe(true);
-    expect(
-      knowledgeSourceAccessControlService.canAccessKnowledgeBase(
-        access,
-        knowledgeBase,
-      ),
-    ).toBe(true);
-    expect(
-      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
-    ).toBe(true);
   });
 
   test("builds connector document ACL from connector and assigned knowledge bases", async ({

@@ -725,7 +725,12 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Upstream ACL tokens decide only for an auto-sync connector; any other
+    // connector is reached through its grants.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      visibility: "auto-sync-permissions",
+    });
 
     const docs = [
       { spaceKey: "DEV", labels: ["release-2.0", "runbook"] },
@@ -771,7 +776,12 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Upstream ACL tokens decide only for an auto-sync connector; any other
+    // connector is reached through its grants.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      visibility: "auto-sync-permissions",
+    });
 
     const readable = await KbDocumentModel.create(
       createDocumentData(connector.id, org.id, {
@@ -814,7 +824,12 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Upstream ACL tokens decide only for an auto-sync connector; any other
+    // connector is reached through its grants.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      visibility: "auto-sync-permissions",
+    });
 
     for (let i = 0; i < 8; i++) {
       const doc = await KbDocumentModel.create(

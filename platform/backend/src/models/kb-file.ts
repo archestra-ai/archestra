@@ -360,43 +360,13 @@ class KbFileModel {
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           viewer
-            ? or(
-                ResourcePermissionPolicyModel.grantCondition({
-                  organizationId: schema.knowledgeBasesTable.organizationId,
-                  resource: "knowledgeBase",
-                  scopeColumn: schema.knowledgeBasesTable.id,
-                  userId: viewer.userId,
-                  action: "read",
-                }),
-                and(
-                  ResourcePermissionPolicyModel.legacySharingCondition({
-                    organizationId: schema.knowledgeBasesTable.organizationId,
-                    resource: "knowledgeBase",
-                    scopeColumn: schema.knowledgeBasesTable.id,
-                  }),
-                  viewer.canManageAll
-                    ? sql`true`
-                    : or(
-                        eq(schema.knowledgeBasesTable.visibility, "org-wide"),
-                        and(
-                          eq(schema.knowledgeBasesTable.visibility, "private"),
-                          eq(
-                            schema.knowledgeBasesTable.createdBy,
-                            viewer.userId,
-                          ),
-                        ),
-                        ...viewer.teamIds.map((id) =>
-                          and(
-                            eq(
-                              schema.knowledgeBasesTable.visibility,
-                              "team-scoped",
-                            ),
-                            sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-                          ),
-                        ),
-                      ),
-                ),
-              )
+            ? ResourcePermissionPolicyModel.grantCondition({
+                organizationId: schema.knowledgeBasesTable.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+                userId: viewer.userId,
+                action: "read",
+              })
             : undefined,
           // SPDX-SnippetEnd
         ),
@@ -544,52 +514,19 @@ class KbFileModel {
   // ===== Internal =====
 
   /**
-   * Row-level visibility filter. `private` means the uploader only; a
-   * `team-scoped` file needs the caller to share one of its teams. Written as
-   * a WHERE fragment rather than a post-filter so pagination counts stay
+   * Row-level visibility filter: a read grant on the file, or at `*`. Written
+   * as a WHERE fragment rather than a post-filter so pagination counts stay
    * truthful.
    */
   private static visibleTo(viewer: KbFileViewer) {
     const table = schema.kbFilesTable;
-    const context = {
+    return ResourcePermissionPolicyModel.grantCondition({
       organizationId: table.organizationId,
-      resource: "knowledgeFile" as const,
+      resource: "knowledgeFile",
       scopeColumn: table.id,
-    };
-    const explicit = ResourcePermissionPolicyModel.grantCondition({
-      ...context,
       userId: viewer.userId,
       action: "read",
     });
-    const legacy =
-      ResourcePermissionPolicyModel.legacySharingCondition(context);
-    if (viewer.canManageAll) return or(legacy, explicit);
-
-    const teamClause = viewer.teamIds.length
-      ? and(
-          eq(schema.kbFilesTable.visibility, "team-scoped"),
-          sql`EXISTS (
-            SELECT 1 FROM ${schema.kbFileTeamsTable}
-            WHERE ${schema.kbFileTeamsTable.kbFileId} = ${schema.kbFilesTable.id}
-              AND ${schema.kbFileTeamsTable.teamId} IN ${viewer.teamIds}
-          )`,
-        )
-      : undefined;
-
-    return or(
-      explicit,
-      and(
-        legacy,
-        or(
-          eq(schema.kbFilesTable.visibility, "org-wide"),
-          and(
-            eq(schema.kbFilesTable.visibility, "private"),
-            eq(schema.kbFilesTable.uploadedBy, viewer.userId),
-          ),
-          ...(teamClause ? [teamClause] : []),
-        ),
-      ),
-    );
   }
 }
 

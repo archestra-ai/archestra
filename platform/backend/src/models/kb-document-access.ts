@@ -52,11 +52,11 @@ export default class KbDocumentAccessModel {
       THEN EXISTS (
         SELECT 1 FROM kb_file_document permission_file
         WHERE permission_file.kb_document_id = ${params.documentId}
-          AND ((${ResourcePermissionPolicyModel.legacySharingCondition(fileContext)} AND ${upstream}) OR ${access(fileContext)})
+          AND ${access(fileContext)}
       )
       WHEN EXISTS (SELECT 1 FROM knowledge_base_connectors permission_connector WHERE permission_connector.id = ${params.connectorId} AND permission_connector.visibility = 'auto-sync-permissions')
         THEN ${upstream}
-      ELSE ((${ResourcePermissionPolicyModel.legacySharingCondition(connectorContext)} AND ${upstream}) OR ${access(connectorContext)})
+      ELSE ${access(connectorContext)}
     END`;
   }
 }

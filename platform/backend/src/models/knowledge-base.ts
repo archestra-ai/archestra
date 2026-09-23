@@ -56,50 +56,13 @@ function buildOrgFilters(params: {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     ...(params.viewerUserId
       ? [
-          or(
-            ResourcePermissionPolicyModel.grantCondition({
-              organizationId: params.organizationId,
-              resource: "knowledgeBase",
-              scopeColumn: schema.knowledgeBasesTable.id,
-              userId: params.viewerUserId,
-              action: "read",
-            }),
-            and(
-              ResourcePermissionPolicyModel.legacySharingCondition({
-                organizationId: params.organizationId,
-                resource: "knowledgeBase",
-                scopeColumn: schema.knowledgeBasesTable.id,
-              }),
-              params.canReadAll
-                ? sql`true`
-                : or(
-                    eq(schema.knowledgeBasesTable.visibility, "org-wide"),
-                    ...(params.viewerUserId
-                      ? [
-                          and(
-                            eq(
-                              schema.knowledgeBasesTable.visibility,
-                              "private",
-                            ),
-                            eq(
-                              schema.knowledgeBasesTable.createdBy,
-                              params.viewerUserId,
-                            ),
-                          ),
-                        ]
-                      : []),
-                    ...(params.viewerTeamIds ?? []).map((id) =>
-                      and(
-                        eq(
-                          schema.knowledgeBasesTable.visibility,
-                          "team-scoped",
-                        ),
-                        sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-                      ),
-                    ),
-                  ),
-            ),
-          ),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: params.organizationId,
+            resource: "knowledgeBase",
+            scopeColumn: schema.knowledgeBasesTable.id,
+            userId: params.viewerUserId,
+            action: "read",
+          }),
         ]
       : params.canReadAll === false
         ? [

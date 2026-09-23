@@ -210,15 +210,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         userId: user.id,
-        getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
-        getIsAdmin: () =>
-          ResourcePermissions.allows({
-            userId: user.id,
-            organizationId: organizationId,
-            resource: "llmVirtualKey",
-            scope: "*",
-            action: "update",
-          }),
       });
       if (!virtualKey) {
         throw new ApiError(404, "Virtual API key not found");
@@ -247,15 +238,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         userId: user.id,
-        getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
-        getIsAdmin: () =>
-          ResourcePermissions.allows({
-            userId: user.id,
-            organizationId: organizationId,
-            resource: "llmVirtualKey",
-            scope: "*",
-            action: "update",
-          }),
       });
       if (!virtualKey) {
         throw new ApiError(404, "Virtual API key not found");

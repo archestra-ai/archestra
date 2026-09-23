@@ -65,20 +65,13 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const permissions = await getPermissionsForUserContext({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-      });
       const serviceAccounts = await ServiceAccountModel.listByOrganizationId(
         request.organizationId,
         parseLabelsParam(request.query.labels),
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        {
-          userId: request.user.id,
-          legacyRead: !!permissions.serviceAccount?.includes("read"),
-        },
+        { userId: request.user.id },
         // SPDX-SnippetEnd
       );
       return reply.send(serviceAccounts);

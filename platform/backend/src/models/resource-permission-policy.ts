@@ -413,23 +413,6 @@ export default class ResourcePermissionPolicyModel {
     });
   }
 
-  static async findMigratedScopes(params: {
-    organizationId: string;
-    resources: ScopedResource[];
-  }) {
-    const table = schema.resourcePermissionPoliciesTable;
-    return db
-      .select({ resource: table.resource, scope: table.scope })
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          inArray(table.resource, params.resources),
-          eq(table.legacySharingMigrated, true),
-        ),
-      );
-  }
-
   static async findForSubjects(params: {
     organizationId: string;
     subjects: PermissionSubject[];

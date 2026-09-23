@@ -40,19 +40,13 @@ class ServiceAccountModel {
     organizationId: string,
     labels?: Record<string, string[]>,
     /**
-     * Restrict the page to the accounts this caller may read. Omitted lists
-     * the organization's accounts unfiltered, which is what the bulk handlers
-     * want: they load a batch and then check each id on its own, so filtering
-     * here would report a refused id as "not found" instead.
-     *
-     * `legacyRead` is the caller's `serviceAccount:read` role action, and it
-     * decides this query only while no policy has been written yet. The
-     * single-object gate no longer has that fallback: it reads the stored
-     * grants alone, so in that state this list is the more permissive of the
-     * two. The startup conversion writes the policy before anything is
-     * served, and the legacy half below goes with the SQL read-path cleanup.
+     * Restrict the page to the accounts this caller may read: a read grant on
+     * the account, or at `*`. Omitted lists the organization's accounts
+     * unfiltered, which is what the bulk handlers want: they load a batch and
+     * then check each id on its own, so filtering here would report a refused
+     * id as "not found" instead.
      */
-    viewer?: { userId: string; legacyRead: boolean },
+    viewer?: { userId: string },
   ): Promise<ServiceAccountResponse[]> {
     const labelFilteredIds = labels
       ? await ServiceAccountLabelModel.getIdsMatchingLabels(labels)
@@ -101,31 +95,13 @@ class ServiceAccountModel {
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           ...(viewer
             ? [
-                (() => {
-                  const key = {
-                    organizationId,
-                    resource: "serviceAccount" as const,
-                    scopeColumn: schema.serviceAccountsTable.id,
-                    userId: viewer.userId,
-                    action: "read" as const,
-                  };
-                  // Deliberately not `migratedAccessCondition`. That helper
-                  // lets every row through while no policy exists, because for
-                  // the resources it was written for the route's own role
-                  // check was still standing in front of it. This route has no
-                  // such check any more, so the unconverted branch has to
-                  // carry the role action itself or the list is open to
-                  // everyone for as long as the policies are missing. Dropping
-                  // the legacy half must drop `legacyRead` with it, never the
-                  // whole `or` arm on its own terms.
-                  return or(
-                    and(
-                      ResourcePermissionPolicyModel.legacySharingCondition(key),
-                      sql`${viewer.legacyRead}`,
-                    ),
-                    ResourcePermissionPolicyModel.grantCondition(key),
-                  );
-                })(),
+                ResourcePermissionPolicyModel.grantCondition({
+                  organizationId,
+                  resource: "serviceAccount",
+                  scopeColumn: schema.serviceAccountsTable.id,
+                  userId: viewer.userId,
+                  action: "read",
+                }),
               ]
             : []),
           // SPDX-SnippetEnd

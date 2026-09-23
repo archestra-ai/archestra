@@ -365,8 +365,6 @@ class VirtualApiKeyModel {
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId: params.organizationId,
       userId: params.userId,
-      userTeamIds: params.userTeamIds,
-      isAdmin: params.isAdmin,
       providerApiKeyId: params.providerApiKeyId,
     });
 
@@ -530,10 +528,7 @@ class VirtualApiKeyModel {
    * Find a virtual key by ID with teams, author, and provider key mappings,
    * returning it only when it is visible to the given user. Visibility follows
    * the same predicate as {@link findAllByOrganization} (via
-   * {@link getAccessibleIds}): org-scoped keys are visible to every member,
-   * personal keys only to their owner, team keys only to members of an
-   * assigned team, and admins see everything. The team and admin lookups are
-   * lazy so they are only paid when the key's scope requires them.
+   * {@link getAccessibleIds}): a read grant on the key, or at `*`.
    */
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -542,10 +537,8 @@ class VirtualApiKeyModel {
     id: string;
     organizationId: string;
     userId: string;
-    getUserTeamIds: () => Promise<string[]>;
-    getIsAdmin: () => Promise<boolean>;
   }): Promise<VirtualApiKeyWithParentInfo | null> {
-    const { id, organizationId, userId, getUserTeamIds, getIsAdmin } = params;
+    const { id, organizationId, userId } = params;
 
     const virtualKey = await VirtualApiKeyModel.findByIdWithParentInfo(
       id,
@@ -558,8 +551,6 @@ class VirtualApiKeyModel {
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
       userId,
-      userTeamIds: await getUserTeamIds(),
-      isAdmin: await getIsAdmin(),
     });
     return accessibleIds.includes(id) ? virtualKey : null;
   }
@@ -649,8 +640,6 @@ class VirtualApiKeyModel {
         await VirtualApiKeyModel.getAccessibleIds({
           organizationId: params.organizationId,
           userId: params.viewer.userId,
-          userTeamIds: params.viewer.userTeamIds,
-          isAdmin: false,
         }),
       );
       visibleRows = rows.filter((row) => accessible.has(row.id));
@@ -762,7 +751,9 @@ class VirtualApiKeyModel {
     organizationId: string;
     pagination: PaginationQuery;
     userId?: string;
+    /** No longer consulted: grants decide, and they resolve teams in SQL. */
     userTeamIds?: string[];
+    /** No longer consulted: an administrator's reach is its `*` grant. */
     isAdmin?: boolean;
     search?: string;
     providerApiKeyId?: string;
@@ -774,8 +765,6 @@ class VirtualApiKeyModel {
       organizationId,
       pagination,
       userId = "",
-      userTeamIds = [],
-      isAdmin = true,
       search,
       providerApiKeyId,
       keyType,
@@ -795,8 +784,6 @@ class VirtualApiKeyModel {
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
       userId,
-      userTeamIds,
-      isAdmin,
       providerApiKeyId,
     });
 
@@ -1102,49 +1089,24 @@ class VirtualApiKeyModel {
   private static async getAccessibleIds(params: {
     organizationId: string | null;
     userId: string;
-    userTeamIds: string[];
-    isAdmin: boolean;
     providerApiKeyId?: string;
   }): Promise<string[]> {
-    const { organizationId, userId, userTeamIds, isAdmin, providerApiKeyId } =
-      params;
+    const { organizationId, userId, providerApiKeyId } = params;
 
     const table = schema.virtualApiKeysTable;
-    const context = {
-      organizationId: organizationId ?? table.organizationId,
-      resource: "llmVirtualKey" as const,
-      scopeColumn: table.id,
-      userId,
-      action: "read" as const,
-    };
-    const legacy = isAdmin
-      ? sql`true`
-      : or(
-          eq(table.scope, "org"),
-          and(eq(table.scope, "personal"), eq(table.authorId, userId)),
-          userTeamIds.length
-            ? sql`${table.scope} = 'team' AND EXISTS (
-        SELECT 1 FROM virtual_api_key_team vat WHERE vat.virtual_api_key_id = ${table.id}
-        AND vat.team_id IN (${sql.join(
-          userTeamIds.map((id) => sql`${id}`),
-          sql`, `,
-        )})
-      )`
-            : sql`false`,
-        );
     const rows = await db
       .select({ id: table.id })
       .from(table)
       .where(
         and(
           organizationId ? eq(table.organizationId, organizationId) : undefined,
-          or(
-            and(
-              ResourcePermissionPolicyModel.legacySharingCondition(context),
-              legacy,
-            ),
-            ResourcePermissionPolicyModel.grantCondition(context),
-          ),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: organizationId ?? table.organizationId,
+            resource: "llmVirtualKey",
+            scopeColumn: table.id,
+            userId,
+            action: "read",
+          }),
           providerApiKeyId
             ? sql`EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key mapping
         WHERE mapping.virtual_api_key_id = ${table.id} AND mapping.provider_api_key_id = ${providerApiKeyId})`

@@ -12,7 +12,6 @@ import {
   KnowledgeBaseConnectorModel,
   TeamModel,
 } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import * as metrics from "@/observability/metrics";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -49,7 +48,6 @@ type VisibilityScopedKnowledgeSourceUpdates = Partial<{
 interface KnowledgeSourceAccessControlContext {
   organizationId?: string;
   grants?: ScopedPermission[];
-  migratedScopes?: Set<string>;
   userId?: string;
   canReadAll: boolean;
   canManageAutoSync: boolean;
@@ -242,36 +240,28 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, canManageAutoSync, teamIds, grants, migratedScopes] =
-      await Promise.all([
-        ResourcePermissions.allows({
-          userId: params.userId,
-          organizationId: params.organizationId,
-          resource: "knowledgeBase",
-          scope: "*",
-          action: "update",
-        }),
-        userHasPermission(
-          params.userId,
-          params.organizationId,
-          "knowledgeSourceAutoSync",
-          "read",
-        ),
-        TeamModel.getUserTeamIds(params.userId),
-        ResourcePermissions.resolveAll(params),
-        ResourcePermissionPolicyModel.findMigratedScopes({
-          ...params,
-          resources: ["knowledgeBase", "knowledgeConnector"],
-        }),
-      ]);
+    const [canReadAll, canManageAutoSync, teamIds, grants] = await Promise.all([
+      ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "knowledgeBase",
+        scope: "*",
+        action: "update",
+      }),
+      userHasPermission(
+        params.userId,
+        params.organizationId,
+        "knowledgeSourceAutoSync",
+        "read",
+      ),
+      TeamModel.getUserTeamIds(params.userId),
+      ResourcePermissions.resolveAll(params),
+    ]);
 
     return {
       userId: params.userId,
       organizationId: params.organizationId,
       grants,
-      migratedScopes: new Set(
-        migratedScopes.map((policy) => `${policy.resource}:${policy.scope}`),
-      ),
       canReadAll,
       canManageAutoSync,
       teamIds,
@@ -282,27 +272,11 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     knowledgeBase: KnowledgeBase,
   ) {
-    if (
-      accessControl.migratedScopes?.has(`knowledgeBase:${knowledgeBase.id}`) ||
-      accessControl.migratedScopes?.has("knowledgeBase:*")
-    ) {
-      return this.hasScopedAccess({
-        accessControl,
-        resource: "knowledgeBase",
-        id: knowledgeBase.id,
-        action: "read",
-      });
-    }
-    if (knowledgeBase.visibility === "private") {
-      return (
-        accessControl.canReadAll ||
-        (!!accessControl.userId &&
-          knowledgeBase.createdBy === accessControl.userId)
-      );
-    }
-    return this.canAccessSource(accessControl, {
-      ...knowledgeBase,
-      visibility: knowledgeBase.visibility,
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeBase",
+      id: knowledgeBase.id,
+      action: "read",
     });
   }
 
@@ -310,36 +284,24 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     connector: KnowledgeBaseConnector,
   ) {
-    if (
-      accessControl.migratedScopes?.has(`knowledgeConnector:${connector.id}`) ||
-      accessControl.migratedScopes?.has("knowledgeConnector:*")
-    ) {
-      return this.hasScopedAccess({
-        accessControl,
-        resource: "knowledgeConnector",
-        id: connector.id,
-        action: "read",
-      });
-    }
-    return this.canAccessSource(accessControl, connector);
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeConnector",
+      id: connector.id,
+      action: "read",
+    });
   }
 
   canQueryKnowledgeBase(
     accessControl: KnowledgeSourceAccessControlContext,
     knowledgeBase: KnowledgeBase,
   ) {
-    if (
-      accessControl.migratedScopes?.has(`knowledgeBase:${knowledgeBase.id}`) ||
-      accessControl.migratedScopes?.has("knowledgeBase:*")
-    ) {
-      return this.hasScopedAccess({
-        accessControl,
-        resource: "knowledgeBase",
-        id: knowledgeBase.id,
-        action: "use",
-      });
-    }
-    return this.canAccessKnowledgeBase(accessControl, knowledgeBase);
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeBase",
+      id: knowledgeBase.id,
+      action: "use",
+    });
   }
 
   filterKnowledgeBases(
@@ -361,20 +323,15 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     connectors: KnowledgeBaseConnector[],
   ) {
-    return connectors.filter((connector) =>
-      connector.visibility !== "auto-sync-permissions" &&
-      connector.connectorType !== "file_upload" &&
-      (accessControl.migratedScopes?.has(
-        `knowledgeConnector:${connector.id}`,
-      ) ||
-        accessControl.migratedScopes?.has("knowledgeConnector:*"))
-        ? this.hasScopedAccess({
-            accessControl,
-            resource: "knowledgeConnector",
-            id: connector.id,
-            action: "use",
-          })
-        : this.canQuerySource(accessControl, connector),
+    return connectors.filter(
+      (connector) =>
+        connector.visibility === "auto-sync-permissions" ||
+        this.hasScopedAccess({
+          accessControl,
+          resource: "knowledgeConnector",
+          id: connector.id,
+          action: "use",
+        }),
     );
   }
 
@@ -437,7 +394,7 @@ class KnowledgeSourceAccessControlService {
   /**
    * MANAGEMENT visibility: whether the viewer may see/edit the source itself
    * (its config, documents, runs, overrides — everything behind the connector
-   * detail surfaces). Query reach is the separate, wider `canQuerySource`.
+   * detail surfaces), from the viewer's stored grants.
    */
   private hasScopedAccess(params: {
     accessControl: KnowledgeSourceAccessControlContext;
@@ -456,62 +413,6 @@ class KnowledgeSourceAccessControlService {
         action: params.action,
       },
     });
-  }
-
-  private canAccessSource(
-    accessControl: KnowledgeSourceAccessControlContext,
-    source: VisibilityScopedKnowledgeSource,
-  ) {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Auto-sync-permissions connectors mirror upstream ACLs and expose
-    // audience/membership details, so seeing them requires the dedicated
-    // knowledgeSourceAutoSync permission (admin-only by default) — the
-    // knowledgeSource:admin view-all bypass deliberately does NOT extend
-    // here. Members still QUERY their documents (canQuerySource); the
-    // per-chunk ACL decides what each user retrieves.
-    if (source.visibility === "auto-sync-permissions") {
-      return accessControl.canManageAutoSync;
-    }
-    // SPDX-SnippetEnd
-
-    if (accessControl.canReadAll) {
-      return true;
-    }
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (source.visibility !== "team-scoped") {
-      return true;
-    }
-
-    return source.teamIds.some((teamId) =>
-      accessControl.teamIds.includes(teamId),
-    );
-    // SPDX-SnippetEnd
-  }
-
-  private canQuerySource(
-    accessControl: KnowledgeSourceAccessControlContext,
-    source: VisibilityScopedKnowledgeSource,
-  ) {
-    if (accessControl.canReadAll) {
-      return true;
-    }
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (source.visibility !== "team-scoped") {
-      return true;
-    }
-
-    return source.teamIds.some((teamId) =>
-      accessControl.teamIds.includes(teamId),
-    );
-    // SPDX-SnippetEnd
   }
 }
 

@@ -530,7 +530,6 @@ describe("resource sharing grant backfill", () => {
       await AppAccessModel.getUserAccessibleAppIds({
         ...context,
         userId: other.id,
-        isAppAdmin: true,
       }),
     ).not.toContain(app.id);
     const key = {
@@ -718,12 +717,7 @@ describe("resource sharing grant backfill", () => {
         action: "use",
       }),
     ).toBe(false);
-    expect(
-      await AppAccessModel.getUserAccessibleAppIds({
-        ...context,
-        isAppAdmin: false,
-      }),
-    ).toEqual([]);
+    expect(await AppAccessModel.getUserAccessibleAppIds(context)).toEqual([]);
   });
   test("use and write teams stay distinct, all members receive the grant, and existing service-account grants survive replay", async ({
     makeOrganization,

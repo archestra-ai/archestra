@@ -202,8 +202,6 @@ test("virtual key discovery uses explicit recipients and revocation instead of p
         id: virtualKey.id,
         organizationId: org.id,
         userId,
-        getUserTeamIds: async () => [],
-        getIsAdmin: async () => false,
       });
     const list = (userId: string) =>
       VirtualApiKeyModel.findAllByOrganization({

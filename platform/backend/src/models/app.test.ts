@@ -298,14 +298,7 @@ describe("AppAccessModel accessibility", () => {
     });
     expect(outsiderIds).toEqual([orgApp.id]);
 
-    // A legacy admin hint cannot expand scoped access.
-    const adminIds = await AppAccessModel.getUserAccessibleAppIds({
-      organizationId: org.id,
-      userId: outsider.id,
-      isAppAdmin: true,
-    });
-    expect(adminIds).toEqual([orgApp.id]);
-    expect(adminIds).not.toContain(deletedApp.id);
+    expect(outsiderIds).not.toContain(deletedApp.id);
   });
 
   test("userHasAppAccess honors grants", async ({

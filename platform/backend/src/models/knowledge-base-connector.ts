@@ -1122,10 +1122,6 @@ function buildVisibilityFilter(params: {
       userId: params.userId,
       action: params.scope === "query" ? "use" : "read",
     }),
-    and(
-      ResourcePermissionPolicyModel.legacySharingCondition(context),
-      params.canReadAll ? sql`true` : and(...conditions),
-    ),
     params.scope === "query"
       ? or(
           eq(table.visibility, "auto-sync-permissions"),

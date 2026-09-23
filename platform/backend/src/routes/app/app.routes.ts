@@ -228,23 +228,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "read",
       );
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
-        onlyExplicitGrants: !hasBaseRead,
         organizationId,
         userId: user.id,
-        isAppAdmin,
       });
-      // Apps the caller reaches WITHOUT the admin bypass. Distinguishes a
-      // genuinely-accessible app ("shared") from one seen only through oversight
-      // ("admin"), so the card can label the latter and the "All" view can hide
-      // it. For a non-admin this is just the accessible set (no extra query).
-      const nonAdminAccessibleIds = new Set(
-        isAppAdmin
-          ? await AppAccessModel.getUserAccessibleAppIds({
-              organizationId,
-              userId: user.id,
-            })
-          : accessibleAppIds,
-      );
+      // Grants are the only way to reach an app, so there is no longer a set
+      // an administrator sees only through oversight.
+      const nonAdminAccessibleIds = new Set(accessibleAppIds);
       const ownedFilters = {
         organizationId,
         accessibleAppIds,

@@ -42,7 +42,8 @@ class LlmProviderApiKeyModel {
   static async canUseKey(
     apiKey: LlmProviderApiKey,
     userId: string,
-    userTeamIds: string[],
+    /** No longer consulted: grants decide, and they resolve teams in SQL. */
+    _userTeamIds: string[],
   ): Promise<boolean> {
     const secret = apiKey.secretId
       ? await getSecretValueForLlmProviderApiKey(apiKey.secretId)
@@ -64,8 +65,6 @@ class LlmProviderApiKeyModel {
           LlmProviderApiKeyModel.accessCondition({
             organizationId: apiKey.organizationId,
             userId,
-            userTeamIds,
-            isAdmin: false,
             action: "use",
           }),
         ),
@@ -227,8 +226,10 @@ class LlmProviderApiKeyModel {
   static async getVisibleKeys(
     organizationId: string,
     userId: string,
-    userTeamIds: string[],
-    isAgentAdmin: boolean,
+    /** No longer consulted: grants decide, and they resolve teams in SQL. */
+    _userTeamIds: string[],
+    /** No longer consulted: an administrator's reach is its `*` grant. */
+    _isAgentAdmin: boolean,
     filters?: {
       search?: string;
       provider?: SupportedProvider;
@@ -246,8 +247,6 @@ class LlmProviderApiKeyModel {
       LlmProviderApiKeyModel.accessCondition({
         organizationId,
         userId,
-        userTeamIds,
-        isAdmin: isAgentAdmin,
         action: "read",
       }),
     );
@@ -374,7 +373,8 @@ class LlmProviderApiKeyModel {
   static async getAvailableKeysForUser(
     organizationId: string,
     userId: string,
-    userTeamIds: string[],
+    /** No longer consulted: grants decide, and they resolve teams in SQL. */
+    _userTeamIds: string[],
     provider?: SupportedProvider,
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
@@ -387,8 +387,6 @@ class LlmProviderApiKeyModel {
       LlmProviderApiKeyModel.accessCondition({
         organizationId,
         userId,
-        userTeamIds,
-        isAdmin: false,
         action: "use",
       }),
     );
@@ -741,8 +739,6 @@ class LlmProviderApiKeyModel {
           LlmProviderApiKeyModel.accessCondition({
             organizationId,
             userId,
-            userTeamIds: [],
-            isAdmin: false,
             action: "use",
           }),
           // SPDX-SnippetEnd
@@ -785,43 +781,20 @@ class LlmProviderApiKeyModel {
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.
    */
-  /** Scoped access is authoritative after migration; old installations retain their audience. */
+  /** Grants alone decide who reads or uses a key. */
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   private static accessCondition(params: {
     organizationId: string;
     userId: string;
-    userTeamIds: string[];
-    isAdmin: boolean;
     action: "read" | "use";
   }) {
-    const table = schema.llmProviderApiKeysTable;
-    const context = {
+    return ResourcePermissionPolicyModel.grantCondition({
       ...params,
-      resource: "llmProviderApiKey" as const,
-      scopeColumn: table.id,
-    };
-    return (
-      or(
-        and(
-          ResourcePermissionPolicyModel.legacySharingCondition(context),
-          or(
-            and(eq(table.scope, "personal"), eq(table.userId, params.userId)),
-            eq(table.scope, "org"),
-            and(
-              eq(table.scope, "team"),
-              params.isAdmin
-                ? sql`true`
-                : params.userTeamIds.length
-                  ? inArray(table.teamId, params.userTeamIds)
-                  : sql`false`,
-            ),
-          ),
-        ),
-        ResourcePermissionPolicyModel.grantCondition(context),
-      ) ?? sql`false`
-    );
+      resource: "llmProviderApiKey",
+      scopeColumn: schema.llmProviderApiKeysTable.id,
+    });
   }
   // SPDX-SnippetEnd
 
@@ -857,8 +830,6 @@ class LlmProviderApiKeyModel {
           LlmProviderApiKeyModel.accessCondition({
             organizationId,
             userId,
-            userTeamIds: [],
-            isAdmin: false,
             action: "use",
           }),
           // SPDX-SnippetEnd

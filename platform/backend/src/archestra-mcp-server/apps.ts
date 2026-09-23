@@ -893,15 +893,8 @@ const registry = defineArchestraTools([
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
-        onlyExplicitGrants: !(await userHasPermission(
-          auth.userId,
-          auth.organizationId,
-          "app",
-          "read",
-        )),
         organizationId: auth.organizationId,
         userId: auth.userId,
-        isAppAdmin: await callerIsAppAdmin(auth.userId, auth.organizationId),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,

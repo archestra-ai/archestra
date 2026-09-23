@@ -531,7 +531,7 @@ importers:
         specifier: 0.35.4
         version: 0.35.4(@types/node@25.5.0)
       smol-toml:
-        specifier: 1.8.0
+        specifier: '>=1.6.1'
         version: 1.8.0
       tiktoken:
         specifier: ^1.0.22

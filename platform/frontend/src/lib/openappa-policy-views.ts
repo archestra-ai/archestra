@@ -12,7 +12,7 @@ export const batteriesQueryKey = ["openappa-batteries"];
 export const policyDeclarationsQueryKey = ["openappa-policy-declarations"];
 export const effectivePolicyQueryKey = ["openappa-effective-policy"];
 export const batteryMatchesPrefix = "openappa-battery-matches";
-/** Every coverage read: the summary and the paged servers, tools and agents. */
+/** Every coverage read: visible policy targets and their tools. */
 export const coverageQueryPrefix = "openappa-coverage";
 
 export function invalidatePolicyViews(client: QueryClient) {

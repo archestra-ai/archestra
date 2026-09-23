@@ -521,4 +521,45 @@ describe("azureResponsesAdapterFactory", () => {
     expect(persisted.output).toHaveLength(1);
     expect(JSON.stringify(persisted.output)).toContain("the answer");
   });
+
+  test("adds the stream prefix when the completed response has no text block", () => {
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+    const prefix = "started subagent ABC-1234";
+    adapter.setTextSuffix?.(() => prefix);
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: "msg_1",
+      output_index: 0,
+      content_index: 0,
+      sequence_number: 1,
+      delta: "answer",
+    } as never);
+
+    const completed = adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_1",
+        object: "response",
+        created_at: 1,
+        model: "gpt-4.1",
+        status: "completed",
+        output: [
+          {
+            id: "msg_1",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [],
+          },
+        ],
+      },
+    } as never);
+    const completion = JSON.parse(
+      String(completed.sseData).replace(/^data: /, ""),
+    ) as { response: { output: unknown[] } };
+
+    expect(JSON.stringify(completion.response.output)).toContain(prefix);
+    expect(completion.response.output).toHaveLength(2);
+  });
 });

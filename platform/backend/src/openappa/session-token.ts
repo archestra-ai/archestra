@@ -5,7 +5,7 @@ const MARK_BOTTOM = "██▄█▄██";
 const RECEIPT_CODE = "([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})";
 
 const SESSION_RECEIPT_PATTERN = new RegExp(
-  `${MARK_TOP}\\n${MARK_BOTTOM} {2}(?:started )?protected session ${RECEIPT_CODE}|${MARK_TOP} {2}(?:started )?protected session ${RECEIPT_CODE}\\n${MARK_BOTTOM}`,
+  `${MARK_TOP}\\r?\\n${MARK_BOTTOM} {2}(?:started )?protected session ${RECEIPT_CODE}|${MARK_TOP} {2}(?:started )?protected session ${RECEIPT_CODE}\\r?\\n${MARK_BOTTOM}`,
   "g",
 );
 
@@ -94,11 +94,15 @@ function adjacentNewlines(
   index: number,
   direction: -1 | 1,
 ): number {
-  let count = 0;
-  for (let offset = 0; offset < 2; offset++) {
-    const at = index + direction * (direction < 0 ? offset + 1 : offset);
-    if (text[at] !== "\n") break;
-    count += 1;
+  let at = index;
+  for (let count = 0; count < 2; count++) {
+    if (direction < 0 && text[at - 1] === "\n") {
+      at -= text[at - 2] === "\r" ? 2 : 1;
+    } else if (direction > 0 && text[at] === "\r" && text[at + 1] === "\n") {
+      at += 2;
+    } else if (direction > 0 && text[at] === "\n") {
+      at++;
+    } else break;
   }
-  return count;
+  return Math.abs(at - index);
 }

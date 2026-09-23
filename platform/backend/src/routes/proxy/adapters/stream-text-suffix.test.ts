@@ -347,6 +347,26 @@ describe("stream text suffix seam", () => {
       } as never);
       expect(held.isToolCallChunk).toBe(true);
       expect(adapter.state.text).toContain("started subagent ABC-1234");
+      adapter.processChunk({
+        type: "response.completed",
+        sequence_number: 2,
+        response: {
+          id: "resp_1",
+          object: "response",
+          status: "completed",
+          model: "test-model",
+          output: [
+            {
+              id: "fc_1",
+              call_id: "call_spawn",
+              type: "function_call",
+              name: "spawn_agent",
+              arguments: "{}",
+              status: "completed",
+            },
+          ],
+        },
+      } as never);
 
       const released =
         adapter.formatToolCallsSSE?.([
@@ -356,15 +376,47 @@ describe("stream text suffix seam", () => {
             arguments: "{}",
           },
         ]) ?? [];
-      const completed = released
-        .map((frame) =>
-          typeof frame === "string" && frame.includes('"response.completed"')
-            ? frame
-            : undefined,
-        )
-        .filter((frame): frame is string => frame !== undefined)
-        .at(-1);
-      expect(completed, name).toContain("started subagent ABC-1234");
+      const events = released.map(
+        (frame) =>
+          JSON.parse(String(frame).replace(/^data: /, "")) as {
+            type: string;
+            output_index?: number;
+            item_id?: string;
+            item?: { id?: string; call_id?: string };
+            response?: {
+              output: Array<{
+                id?: string;
+                call_id?: string;
+                type: string;
+              }>;
+            };
+          },
+      );
+      const completed = events.find(
+        (event) => event.type === "response.completed",
+      );
+      const completedCallIndex = completed?.response?.output.findIndex(
+        (item) => item.type === "function_call",
+      );
+      const completedCall =
+        completed?.response?.output[completedCallIndex ?? -1];
+      const callFrames = events.filter(
+        (event) => event.type !== "response.completed",
+      );
+
+      expect(JSON.stringify(completed), name).toContain(
+        "started subagent ABC-1234",
+      );
+      expect(completedCallIndex, name).toBe(1);
+      if (!completedCall) throw new Error(`${name} omitted the completed call`);
+      expect(completedCall.id, name).toBe("fc_1");
+      for (const frame of callFrames) {
+        expect(frame.output_index, name).toBe(completedCallIndex);
+        expect(frame.item_id ?? frame.item?.id, name).toBe(completedCall.id);
+        if (frame.item?.call_id) {
+          expect(frame.item.call_id, name).toBe(completedCall.call_id);
+        }
+      }
     }
   });
 

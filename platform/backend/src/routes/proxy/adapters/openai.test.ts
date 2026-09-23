@@ -1119,7 +1119,7 @@ describe("OpenAIStreamAdapter", () => {
     ).choices?.[0]?.finish_reason;
   }
 
-  test("closes a refused stream as stop, not the upstream tool_calls", () => {
+  test("clears held calls and closes a replaced stream as stop", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({
       id: "chatcmpl-3",
@@ -1144,8 +1144,18 @@ describe("OpenAIStreamAdapter", () => {
       ],
     } as Chunk);
 
-    adapter.formatCompleteTextSSE("blocked");
+    expect(adapter.state.toolCalls).toHaveLength(1);
+    expect(adapter.getRawToolCallEvents()).toHaveLength(1);
 
+    adapter.prepareResponseReplacement?.();
+    const replacementWire = [
+      ...adapter.formatCompleteTextSSE("blocked"),
+      adapter.formatEndSSE(),
+    ].join("");
+
+    expect(adapter.state.toolCalls).toEqual([]);
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+    expect(replacementWire).not.toContain("call_1");
     expect(finishReasonOf(adapter.formatEndSSE())).toBe("stop");
 
     const response = adapter.toProviderResponse();

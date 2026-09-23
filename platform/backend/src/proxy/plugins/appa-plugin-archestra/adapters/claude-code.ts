@@ -18,7 +18,6 @@ import {
   stripRecordFields,
 } from "./trajectory";
 
-const SPAWN_TOOLS = new Set(["Agent", "Task"]);
 /** A skill runs in the spawner's trajectory. An agent opens a new child trajectory. */
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const HANDBACK_TOOLS = new Set(["SubagentHandback"]);
@@ -93,7 +92,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   isSpawnTool(name: string): boolean {
-    return SPAWN_TOOLS.has(localToolName(name));
+    return CHILD_SPAWN_TOOLS.has(localToolName(name));
   }
 
   isChildHandbackTool(name: string): boolean {

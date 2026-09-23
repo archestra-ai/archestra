@@ -598,7 +598,7 @@ class AzureResponsesStreamAdapter
       const completed = this.issuedPrefix
         ? {
             ...chunk,
-            response: prependPrefixToAzureResponse(
+            response: prependPrefixToResponse(
               chunk.response as unknown as AzureResponsesResponse,
               this.issuedPrefix,
             ),
@@ -778,7 +778,29 @@ class AzureResponsesStreamAdapter
     // what the client reconstructs.
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
-    const firstOutputIndex = upstreamOutput.filter(
+    const callItems = upstreamOutput.filter(
+      (item) =>
+        item.type === "function_call" || item.type === "custom_tool_call",
+    );
+    const itemIdByCallId = new Map(
+      callItems.flatMap((item) => {
+        const callId = (item as { call_id?: unknown }).call_id;
+        const itemId = (item as { id?: unknown }).id;
+        return typeof callId === "string" && typeof itemId === "string"
+          ? [[callId, itemId] as const]
+          : [];
+      }),
+    );
+    const rewritten = {
+      ...base,
+      output: rewriteResponsesOutput(upstreamOutput, toolCalls),
+      usage: base.usage ?? toResponsesUsage(this.state.usage),
+    } as unknown as AzureResponsesResponse;
+    const completedResponse = this.issuedPrefix
+      ? prependPrefixToResponse(rewritten, this.issuedPrefix)
+      : rewritten;
+    this.completedResponse = completedResponse;
+    const firstOutputIndex = completedResponse.output.filter(
       (item) =>
         item.type !== "function_call" && item.type !== "custom_tool_call",
     ).length;
@@ -787,25 +809,18 @@ class AzureResponsesStreamAdapter
       toolCalls,
       firstOutputIndex,
       nextSequenceNumber: () => sequence++,
+      itemIdByCallId,
       // Codex routes a namespaced call by the namespace its item names.
       namespaceByCallId: namespacesByCallId({
         items: upstreamOutput,
         streamed: this.toolCallsByItemId.values(),
       }),
     });
-    const rewritten = {
-      ...base,
-      output: rewriteResponsesOutput(upstreamOutput, toolCalls),
-      usage: base.usage ?? toResponsesUsage(this.state.usage),
-    } as unknown as AzureResponsesResponse;
-    this.completedResponse = this.issuedPrefix
-      ? prependPrefixToResponse(rewritten, this.issuedPrefix)
-      : rewritten;
     frames.push(
       toSse({
         type: "response.completed",
         sequence_number: sequence++,
-        response: this.completedResponse,
+        response: completedResponse,
       }),
     );
     return frames;
@@ -1174,33 +1189,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function withLeadingPrefix(text: string, prefix: string): string {
   return text.startsWith(prefix) ? text : `${prefix}\n\n${text}`;
-}
-
-function prependPrefixToAzureResponse(
-  response: AzureResponsesResponse,
-  prefix: string,
-): AzureResponsesResponse {
-  let applied = false;
-  return {
-    ...response,
-    output: response.output.map((item) => {
-      if (applied || (item as { type?: string }).type !== "message") {
-        return item;
-      }
-      const message = item as {
-        content: Array<{ type: string; text?: string }>;
-      };
-      return {
-        ...item,
-        content: message.content.map((part) => {
-          if (applied || part.type !== "output_text" || part.text === undefined)
-            return part;
-          applied = true;
-          return { ...part, text: withLeadingPrefix(part.text, prefix) };
-        }),
-      };
-    }),
-  } as AzureResponsesResponse;
 }
 
 function prependPrefixToAzureTerminalEvent(

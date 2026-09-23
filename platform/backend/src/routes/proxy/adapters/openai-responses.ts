@@ -787,7 +787,15 @@ class OpenAiResponsesStreamAdapter
         items: new Map(),
       };
     }
-    if (this.hosted) return this.withholdChunk(chunk, this.hosted);
+    if (this.hosted) {
+      const result = this.withholdChunk(chunk, this.hosted);
+      if (originalCompletedResponse) {
+        // Compaction context is a client-wire carrier, not persisted provider output.
+        this.completedResponse =
+          originalCompletedResponse as unknown as OpenAiResponsesResponse;
+      }
+      return result;
+    }
 
     if (chunk.type === "response.output_text.delta") {
       const pending = this.drainPendingTextTerminalEvents();
@@ -1065,21 +1073,24 @@ class OpenAiResponsesStreamAdapter
       ...base,
       usage: base.usage ?? toResponsesUsage(this.state.usage),
     } as unknown as OpenAiResponsesResponse;
-    this.completedResponse = this.issuedPrefix
+    const completedResponse = this.issuedPrefix
       ? prependPrefixToResponse(held, this.issuedPrefix)
       : held;
+    this.completedResponse = completedResponse;
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
       toolCalls: notices,
-      firstOutputIndex: held.output.length - notices.length,
+      firstOutputIndex: completedResponse.output.length - notices.length,
       nextSequenceNumber: () => sequence++,
     });
     frames.push(
-      toSse({
-        type: "response.completed",
-        sequence_number: sequence++,
-        response: held,
-      }),
+      toSse(
+        this.withCompactionContext({
+          type: "response.completed",
+          sequence_number: sequence++,
+          response: completedResponse,
+        } as OpenAiResponsesStreamChunk),
+      ),
     );
     return frames;
   }
@@ -1115,9 +1126,6 @@ class OpenAiResponsesStreamAdapter
       (item) =>
         item.type === "function_call" || item.type === "custom_tool_call",
     );
-    // Both kinds are calls: counting only function calls would place the
-    // rewritten frames at indexes the completed envelope disagrees with.
-    const firstOutputIndex = finalOutput.length - callItems.length;
     const itemIdByCallId = new Map(
       callItems.flatMap((item) => {
         const callId = (item as { call_id?: unknown }).call_id;
@@ -1148,6 +1156,22 @@ class OpenAiResponsesStreamAdapter
       if (this.customCallIds.has(call.id) && streamed?.name === call.name)
         customCallIds.add(call.id);
     }
+    const rewritten = {
+      ...base,
+      output: rewriteResponsesOutput(finalOutput, toolCalls),
+      usage: base.usage ?? toResponsesUsage(this.state.usage),
+    } as unknown as OpenAiResponsesResponse;
+    const completedResponse = this.issuedPrefix
+      ? prependPrefixToResponse(rewritten, this.issuedPrefix)
+      : rewritten;
+    this.completedResponse = completedResponse;
+    // Both kinds are calls: counting only function calls would place the
+    // rewritten frames at indexes the completed envelope disagrees with. The
+    // completed output also includes any synthesized prefix message.
+    const firstOutputIndex = completedResponse.output.filter(
+      (item) =>
+        item.type !== "function_call" && item.type !== "custom_tool_call",
+    ).length;
     let sequence = Date.now();
     // Released with the turn: what was withheld beside the calls goes first.
     const frames = (this.hosted?.events ?? []).map((event) => toSse(event));
@@ -1165,20 +1189,14 @@ class OpenAiResponsesStreamAdapter
         customCallIds,
       }),
     );
-    const rewritten = {
-      ...base,
-      output: rewriteResponsesOutput(finalOutput, toolCalls),
-      usage: base.usage ?? toResponsesUsage(this.state.usage),
-    } as unknown as OpenAiResponsesResponse;
-    this.completedResponse = this.issuedPrefix
-      ? prependPrefixToResponse(rewritten, this.issuedPrefix)
-      : rewritten;
     frames.push(
-      toSse({
-        type: "response.completed",
-        sequence_number: sequence++,
-        response: this.completedResponse,
-      }),
+      toSse(
+        this.withCompactionContext({
+          type: "response.completed",
+          sequence_number: sequence++,
+          response: completedResponse,
+        } as OpenAiResponsesStreamChunk),
+      ),
     );
     return frames;
   }

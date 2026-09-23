@@ -292,6 +292,59 @@ describe("client trajectory identity", () => {
       ).toBe(CODEX_THREAD);
     });
 
+    test("spawn parent detection uses every Codex parent metadata form", () => {
+      const cases = [
+        {
+          headers: {
+            ...codexHeaders,
+            "x-codex-turn-metadata": JSON.stringify({
+              parent_thread_id: CODEX_THREAD,
+            }),
+          },
+          body: {},
+        },
+        {
+          headers: codexHeaders,
+          body: { client_metadata: { parent_thread_id: CODEX_THREAD } },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            metadata: { "x-codex-parent-thread-id": CODEX_THREAD },
+          },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            client_metadata: {
+              "x-codex-turn-metadata": {
+                parent_thread_id: CODEX_THREAD,
+              },
+            },
+          },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            client_metadata: {
+              "x-codex-turn-metadata": JSON.stringify({
+                parent_thread_id: CODEX_THREAD,
+              }),
+            },
+          },
+        },
+      ];
+      for (const { headers, body } of cases) {
+        expect(
+          nativeSpawnParentId({
+            headers,
+            body,
+            sessionId: CODEX_FORK_THREAD,
+          }),
+        ).toBe(CODEX_THREAD);
+      }
+    });
+
     test("a compaction turn stays on the thread's root", () => {
       const before = extractAppaSessionIdentity({
         family: "openai:responses",
@@ -625,20 +678,28 @@ describe("client trajectory identity", () => {
     });
 
     test("accepts the explicit parent and hosted child header pair", () => {
+      const headers = {
+        ...openCodeHeaders,
+        "x-session-id": OPENCODE_SESSION,
+        "x-opencode-session": OPENCODE_FORK_SESSION,
+      };
       expect(
         extractAppaSessionIdentity({
           family: "openai:chatCompletions",
           body: {},
-          headers: {
-            ...openCodeHeaders,
-            "x-session-id": OPENCODE_SESSION,
-            "x-opencode-session": OPENCODE_FORK_SESSION,
-          },
+          headers,
         }),
       ).toMatchObject({
         sessionId: OPENCODE_FORK_SESSION,
         provenance: "opencode-hosted-header",
       });
+      expect(
+        nativeSpawnParentId({
+          headers,
+          body: {},
+          sessionId: OPENCODE_FORK_SESSION,
+        }),
+      ).toBe(OPENCODE_SESSION);
     });
 
     test("refuses a hosted child beside a non-parent affinity claim", () => {

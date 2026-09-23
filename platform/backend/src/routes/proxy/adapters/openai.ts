@@ -1276,6 +1276,9 @@ export class OpenAIStreamAdapter
   prepareResponseReplacement(): void {
     // Clears raw output state so the persisted turn contains only the approved replacement.
     this.state.text = "";
+    this.state.toolCalls = [];
+    this.state.rawToolCallEvents = [];
+    this.state.stopReason = "stop";
     this.reasoningText = "";
     this.currentToolCallIndices.clear();
   }

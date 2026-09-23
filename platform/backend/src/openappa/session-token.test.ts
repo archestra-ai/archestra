@@ -40,6 +40,19 @@ async function started(params: {
 }
 
 describe("session receipt minting", () => {
+  test("strips CRLF receipts and their transport separators", () => {
+    const code = "ABC-1234";
+    const marker = formatSessionReceipt(code).replaceAll("\n", "\r\n");
+    expect(stripSessionReceipts(`${marker}\r\n\r\nhello`)).toEqual({
+      text: "hello",
+      codes: [code],
+    });
+    expect(stripSessionReceipts(`hello\r\n\r\n${marker}`)).toEqual({
+      text: "hello",
+      codes: [code],
+    });
+  });
+
   test("is deterministic and Crockford XXX-XXXX", () => {
     const first = mintReceiptCode({
       secret,

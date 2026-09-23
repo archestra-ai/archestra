@@ -705,6 +705,90 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     });
   });
 
+  test("recovers Codex and OpenCode parents only from signed compacted proofs", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const codexFooter = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "t0",
+      childId: "t0:t1",
+      childNativeId: "t1",
+      spawnerNativeId: "t0",
+      spawnCallId: "spawn-codex",
+    });
+    const codexContext = delegated({
+      headers: { "user-agent": "codex_cli_rs/0.99.0" },
+      interactionType: "openai:responses",
+      body: {
+        client_metadata: { agent_id: "t1" },
+        input: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: `${codexFooter}\n\nok` }],
+          },
+          {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Summary of the conversation so far.",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(codexContext.requestBody)).not.toContain("appact2-");
+    expect(codex.bindChildTrajectory(codexContext)).toEqual({
+      sessionId: "t0:t1",
+      parentId: "t0",
+      lineage: {
+        source: "receipt",
+        nativeParentId: "t0",
+        childNativeId: "t1",
+        spawnCallId: "spawn-codex",
+      },
+    });
+
+    const openCodeFooter = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "p",
+      childId: "p:c",
+      childNativeId: "c",
+      spawnerNativeId: "p",
+      spawnCallId: "spawn-opencode",
+    });
+    const openCodeContext = delegated({
+      headers: {
+        "user-agent": "opencode/1.18.31",
+        "x-opencode-session": "c",
+      },
+      interactionType: "openai:chatCompletions",
+      body: {
+        messages: [
+          { role: "assistant", content: `${openCodeFooter}\n\nok` },
+          { role: "user", content: "Summary of the conversation so far." },
+        ],
+      },
+    });
+    expect(JSON.stringify(openCodeContext.requestBody)).not.toContain(
+      "appact2-",
+    );
+    expect(openCode.bindChildTrajectory(openCodeContext)).toEqual({
+      sessionId: "p:c",
+      parentId: "p",
+      lineage: {
+        source: "receipt",
+        nativeParentId: "p",
+        childNativeId: "c",
+        spawnCallId: "spawn-opencode",
+      },
+    });
+  });
+
   test("preserves a marker-only Claude child across compaction and later native metadata", () => {
     config.openappa.offerSigningSecret = SECRET;
     const started = claudeCode.bindChildTrajectory(

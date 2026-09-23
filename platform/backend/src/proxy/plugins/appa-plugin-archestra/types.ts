@@ -115,6 +115,11 @@ export type AppaClientAdapter = {
   extractSessionIdentity?(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined;
+  /** Native parent named by a spawn-prepared child request, if any. */
+  nativeSpawnParentId?(
+    context: AppaMatchContext,
+    sessionId: string,
+  ): string | undefined;
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string): boolean;
   /**

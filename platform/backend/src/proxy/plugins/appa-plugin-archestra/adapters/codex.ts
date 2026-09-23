@@ -220,6 +220,14 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     );
   }
 
+  nativeSpawnParentId(
+    context: AppaMatchContext,
+    sessionId: string,
+  ): string | undefined {
+    const parent = parentThreadId(context);
+    return parent && parent !== sessionId ? parent : undefined;
+  }
+
   namesChildren(params: { rootId: string; arguments: unknown }): string[] {
     return namesChildrenFromArguments({
       rootId: params.rootId,
@@ -231,7 +239,6 @@ export class AppaCodexAdapter implements AppaClientAdapter {
 
   bindChildTrajectory(context: AppaMatchContext) {
     const parentNativeId = parentThreadId(context);
-    if (!parentNativeId) return undefined;
     const childNativeId = childThreadId(context, parentNativeId);
     return bindMintedChildTrajectory({
       context,

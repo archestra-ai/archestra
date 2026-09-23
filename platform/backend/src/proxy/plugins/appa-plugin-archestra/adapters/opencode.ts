@@ -23,7 +23,6 @@ import {
   stripRecordFields,
 } from "./trajectory";
 
-const SPAWN_TOOLS = new Set(["task"]);
 /** A skill runs in the current session. A task opens a child session. */
 const CHILD_SPAWN_TOOLS = new Set(["task"]);
 const CHILD_ID_KEYS = ["task_id", "session_id", "sessionID"] as const;
@@ -119,7 +118,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   isSpawnTool(name: string): boolean {
-    return SPAWN_TOOLS.has(localToolName(name));
+    return CHILD_SPAWN_TOOLS.has(localToolName(name));
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
@@ -144,6 +143,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     );
   }
 
+  nativeSpawnParentId(
+    context: AppaMatchContext,
+    sessionId: string,
+  ): string | undefined {
+    const parent = parentSessionId(context);
+    return parent && parent !== sessionId ? parent : undefined;
+  }
+
   namesChildren(params: { rootId: string; arguments: unknown }): string[] {
     return namesChildrenFromArguments({
       rootId: params.rootId,
@@ -155,7 +162,6 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
 
   bindChildTrajectory(context: AppaMatchContext) {
     const parentNativeId = parentSessionId(context);
-    if (!parentNativeId) return undefined;
     const childNativeId = childSessionId(context, parentNativeId);
     return bindMintedChildTrajectory({
       context,

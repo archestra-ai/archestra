@@ -358,10 +358,10 @@ export function appendSessionReceiptToResponse(params: {
 }
 
 /**
- * Removes child-trajectory carriers before forwarding requests. Returns only
- * proofs carried as the current conversation's context. A proof nested inside
- * a native child-return notification is transport metadata for that returned
- * value, not lineage evidence for the parent processing the notification.
+ * Removes child-trajectory carriers before forwarding requests.
+ * Returns only proofs from the current conversation context.
+ * Proofs inside child-return notifications are transport metadata,
+ * not lineage evidence for the parent.
  */
 export function stripChildTrajectoryReceiptsFromRequest(params: {
   family: AppaWireFamily;

@@ -1165,9 +1165,9 @@ class OpenAiResponsesStreamAdapter
       ? prependPrefixToResponse(rewritten, this.issuedPrefix)
       : rewritten;
     this.completedResponse = completedResponse;
-    // Both kinds are calls: counting only function calls would place the
-    // rewritten frames at indexes the completed envelope disagrees with. The
-    // completed output also includes any synthesized prefix message.
+    // Both function calls and custom tool calls are counted.
+    // This places rewritten frames at indexes that match the completed envelope.
+    // The completed output also includes any synthesized prefix message.
     const firstOutputIndex = completedResponse.output.filter(
       (item) =>
         item.type !== "function_call" && item.type !== "custom_tool_call",

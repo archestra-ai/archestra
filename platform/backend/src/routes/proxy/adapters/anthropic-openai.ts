@@ -32,8 +32,8 @@ class AnthropicOpenaiResponseAdapter
 {
   readonly provider = "anthropic" as const;
   private inner: LLMResponseAdapter<AnthropicResponse>;
-  // The inner provider-native response after a policy mutation. Client output
-  // is translated separately, while interaction logs retain this native view.
+  // The inner provider-native response after a policy change. Client output
+  // is translated separately, while interaction logs keep this native view.
   private modifiedInner: AnthropicResponse | null = null;
   private ctx: AnthropicOpenaiContext;
 

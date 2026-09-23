@@ -350,9 +350,9 @@ function stripReceipt(
     throw new ApiError(400, "OpenAPPA child-return carrier exceeds its limit");
   }
 
-  // A complete child reply can carry its own trajectory proof before the
-  // signed return. That proof is transport metadata, not part of the admitted
-  // value and never lineage evidence for the parent processing this return.
+  // A complete child reply can carry its trajectory proof before the signed return.
+  // That proof is transport metadata. It is not part of the admitted value
+  // and is not lineage evidence for the parent.
   const returnValue = stripChildTrajectoryReceipts(value).text;
   const pattern = new RegExp(MARKER.source, "g");
   const matches = [...returnValue.matchAll(pattern)];

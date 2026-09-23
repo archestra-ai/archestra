@@ -25,7 +25,7 @@ class ResponsesFromChatAdapter<TResponse>
 {
   readonly provider: SupportedProvider;
   private inner: LLMResponseAdapter<TResponse>;
-  // The inner logged-domain response after a policy mutation. For nested
+  // The inner logged-domain response after a policy change. For nested
   // translators this stays provider-native, not OpenAI Chat or Responses.
   private modifiedInner: TResponse | null = null;
   private ctx: OpenaiResponsesContext;

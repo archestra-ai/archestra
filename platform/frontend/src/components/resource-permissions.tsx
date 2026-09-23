@@ -37,6 +37,7 @@ import {
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { FloatingActionBar } from "@/components/settings/settings-block";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -397,9 +398,7 @@ function PermissionsEditor({
   // its own. The host's footer already says there are unsaved changes.
   const actions =
     canManage && dirty && !registerSave && !(dialog && addOpen) ? (
-      <div
-        className={`flex w-full items-center justify-between gap-3 ${footerContainer === undefined ? "border-t pt-3" : ""}`}
-      >
+      <div className="flex w-full items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">Unsaved changes</span>
         <div className="flex items-center gap-2">
           <Button
@@ -648,7 +647,11 @@ function PermissionsEditor({
           </div>
 
           {footerContainer === undefined
-            ? actions
+            ? actions && (
+                // A detail page saves through the same floating bar as every
+                // settings page, so the save stays in reach while scrolling.
+                <FloatingActionBar className="p-3">{actions}</FloatingActionBar>
+              )
             : footerContainer && createPortal(actions, footerContainer)}
           {allPermissionsOpen && (
             <ResourcePermissionsDialog

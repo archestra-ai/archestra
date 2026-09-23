@@ -270,9 +270,9 @@ class KnowledgeBaseModel {
         resource: "knowledgeBase",
         scope: result.id,
         grants: options?.initialPermissionGrants,
-        // Knowledge carries no author column, so a base shared with nobody
-        // belongs to no one and is reached by administrators alone.
-        authorId: null,
+        // The creator gets full access, like the author of every other
+        // resource. A base a system caller creates has no creator.
+        authorId: CreatedByModel.id(result, result.createdBy) ?? null,
         publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd

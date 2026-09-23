@@ -1504,7 +1504,6 @@ export function LlmProviderApiKeyForm({
             {shared && (
               <ResourceAccessSection
                 resource="llmProviderApiKey"
-                authorless
                 grants={form.watch("initialGrants") ?? []}
                 onGrantsChange={(grants) =>
                   form.setValue("initialGrants", grants, { shouldDirty: true })

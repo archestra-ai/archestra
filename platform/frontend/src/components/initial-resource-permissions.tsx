@@ -42,19 +42,12 @@ export function InitialResourcePermissions({
   resource,
   scope,
   ownerName,
-  authorless = false,
   grants,
   onChange,
 }: {
   resource: ScopedResource;
   scope?: string;
   ownerName?: string;
-  /**
-   * The object gets no grant for its creator (a knowledge base, a connector,
-   * a shared provider key): only the grants added here, and organization
-   * permissions, reach it.
-   */
-  authorless?: boolean;
   grants: InitialPermissionGrant[];
   onChange: (grants: InitialPermissionGrant[]) => void;
 }) {
@@ -76,19 +69,10 @@ export function InitialResourcePermissions({
         <div className="min-w-0">
           <h3 className="text-sm font-medium">Permissions</h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            {authorless ? (
-              <span>
-                Only the people and teams you add here reach it, plus
-                organization permissions.
-              </span>
-            ) : (
-              <>
-                {!ownerName && !scope && <span>You’ll have full access. </span>}
-                <span>
-                  Add others now or later. Organization permissions also apply.
-                </span>
-              </>
-            )}
+            {!ownerName && !scope && <span>You’ll have full access. </span>}
+            <span>
+              Add others now or later. Organization permissions also apply.
+            </span>
           </p>
         </div>
         <Button

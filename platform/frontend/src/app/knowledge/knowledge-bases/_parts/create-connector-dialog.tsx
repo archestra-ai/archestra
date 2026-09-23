@@ -509,7 +509,6 @@ export function CreateConnectorDialog({
 
         <InitialResourcePermissions
           resource="knowledgeConnector"
-          authorless
           grants={initialGrants}
           onChange={setInitialGrants}
         />

@@ -74,6 +74,71 @@ describe("knowledge base routes", () => {
     await app.close();
   });
 
+  // Like the author of every other resource, the creator of a knowledge base
+  // or connector gets full access with no `initialGrants`. A non-admin who
+  // made one could not reach it before.
+  describe("creator access", () => {
+    test("a non-admin creator reaches the knowledge base and connector they create, and others do not", async ({
+      makeMember,
+      makeUser,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "editor" });
+      const creator = user;
+      const knowledgeBase = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-bases",
+        payload: { name: "Creator notes" },
+      });
+      expect(knowledgeBase.statusCode, knowledgeBase.body).toBe(200);
+      const connector = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Creator Jira",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: { email: "user@example.com", apiToken: "token" },
+        },
+      });
+      expect(connector.statusCode, connector.body).toBe(200);
+      const urls = [
+        `/api/knowledge-bases/${knowledgeBase.json().id}`,
+        `/api/connectors/${connector.json().id}`,
+      ];
+
+      for (const url of urls) {
+        expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+      }
+      for (const [resource, scope] of [
+        ["knowledgeBase", knowledgeBase.json().id],
+        ["knowledgeConnector", connector.json().id],
+      ] as const) {
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource,
+          scope,
+        });
+        expect(policy?.grants).toEqual([
+          expect.objectContaining({
+            subject: { type: "user", id: creator.id },
+            actions: expect.arrayContaining(["manage-permissions", "delete"]),
+          }),
+        ]);
+      }
+
+      user = await makeUser();
+      await makeMember(user.id, organizationId, { role: "editor" });
+      for (const url of urls) {
+        expect((await app.inject({ method: "GET", url })).statusCode).toBe(404);
+      }
+    });
+  });
+
   describe("knowledge base team access", () => {
     test("personal knowledge bases belong to their creator and stay hidden from other members", async ({
       makeMember,

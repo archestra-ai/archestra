@@ -21,7 +21,6 @@ export function KnowledgeBaseAccessFields({
   return (
     <InitialResourcePermissions
       resource="knowledgeBase"
-      authorless
       grants={form.watch("initialGrants")}
       onChange={(grants) =>
         form.setValue("initialGrants", grants, { shouldDirty: true })

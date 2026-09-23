@@ -1127,6 +1127,8 @@ async function handleCreateKnowledgeConnector(params: {
         description: args.description ?? null,
         syncPermissionsFromSource: args.sync_permissions_from_source ?? false,
         environmentId: agentEnvironmentId,
+        // The creator gets full access to the new connector.
+        createdBy: context.userId ?? null,
       }),
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

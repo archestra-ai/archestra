@@ -1397,6 +1397,61 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
     expect(response.statusCode).toBe(403);
   });
 
+  // A shared key has no owner, but its creator gets full access, like the
+  // author of every other resource. Before, a non-admin creator had to add
+  // themselves to reach the key they had just made.
+  test("a non-admin creator of a shared key gets full access to it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const creator = await makeUser();
+    await makeMember(creator.id, organizationId, { role: "editor" });
+    // An editor holds llmProviderApiKey:create.
+    mockUserHasPermission.mockResolvedValue(true);
+    mockHasPermission.mockResolvedValue({ success: true } as never);
+    const creatorApp = await createApp(organizationId, creator);
+    try {
+      const created = await creatorApp.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: "Shared by editor",
+          provider: "anthropic",
+          apiKey: "sk-ant-editor-shared",
+          shared: true,
+        },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      const key = created.json();
+      expect(key.userId).toBeNull();
+
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "llmProviderApiKey",
+        scope: key.id,
+      });
+      expect(policy?.grants).toEqual([
+        expect.objectContaining({
+          subject: { type: "user", id: creator.id },
+          actions: expect.arrayContaining(["manage-permissions", "delete"]),
+        }),
+      ]);
+      const read = await creatorApp.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${key.id}`,
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      // Someone else the grants do not name still cannot reach it.
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${key.id}`,
+      });
+      expect(other.statusCode).toBe(404);
+    } finally {
+      await creatorApp.close();
+    }
+  });
+
   test("a basic team member cannot share a key with their team without create permission", async ({
     makeTeam,
     makeTeamMember,
@@ -2168,8 +2223,8 @@ describe("scoped provider key grants", () => {
     expect(response.statusCode, response.body).toBe(200);
     const id = response.json().id;
 
-    // A shared key has no owner, so its grants are exactly the audience the
-    // creator named: no author grant is added beside them.
+    // A shared key has no owner, but its creator gets full access beside
+    // the audience they named.
     expect(
       (
         await ResourcePermissionPolicyModel.find({
@@ -2178,7 +2233,13 @@ describe("scoped provider key grants", () => {
           scope: id,
         })
       )?.grants,
-    ).toEqual(grants);
+    ).toEqual([
+      ...grants,
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
 
     const scoped = {
       organizationId,

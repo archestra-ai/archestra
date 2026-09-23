@@ -129,8 +129,11 @@ class LlmProviderApiKeyModel {
         resource: "llmProviderApiKey",
         scope: apiKey.id,
         grants: options?.initialPermissionGrants,
-        // A provider key names its owner in `user_id`, not `created_by`.
-        authorId: apiKey.userId,
+        // A key of its own belongs to its owner (`user_id`). A shared key has
+        // no owner: its creator gets full access, like the author of every
+        // other resource, and no one else unless the grants name them.
+        authorId:
+          apiKey.userId ?? CreatedByModel.id(apiKey, apiKey.createdBy) ?? null,
         publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd

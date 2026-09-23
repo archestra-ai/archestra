@@ -6,6 +6,15 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
+// The creator's own grant, beside the audience they named.
+const CREATOR_ACTIONS = [
+  "read",
+  "use",
+  "update",
+  "delete",
+  "manage-permissions",
+];
+
 describe("scoped knowledge grants", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -63,7 +72,10 @@ describe("scoped knowledge grants", () => {
           scope: id,
         })
       )?.grants,
-    ).toEqual(grants);
+    ).toEqual([
+      ...grants,
+      { subject: { type: "user", id: user.id }, actions: CREATOR_ACTIONS },
+    ]);
 
     const scoped = {
       organizationId,
@@ -130,7 +142,10 @@ describe("scoped knowledge grants", () => {
           scope: id,
         })
       )?.grants,
-    ).toEqual(grants);
+    ).toEqual([
+      ...grants,
+      { subject: { type: "user", id: user.id }, actions: CREATOR_ACTIONS },
+    ]);
 
     const scoped = {
       organizationId,

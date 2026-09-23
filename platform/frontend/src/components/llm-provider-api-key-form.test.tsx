@@ -298,10 +298,8 @@ describe("LlmProviderApiKeyForm", () => {
 
     expect(screen.getByText(/No one owns a shared key/)).toBeInTheDocument();
     expect(screen.getByText("Permissions")).toBeInTheDocument();
-    // The creator gets no grant of their own on a shared key.
-    expect(
-      screen.queryByText(/You’ll have full access/),
-    ).not.toBeInTheDocument();
+    // A shared key has no owner, but its creator gets full access.
+    expect(screen.getByText(/You’ll have full access/)).toBeInTheDocument();
     expect(form.getValues("shared")).toBe(true);
   });
 

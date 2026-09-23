@@ -63,8 +63,7 @@ pub(crate) fn store(pg: &PostgresStore, attribution: Attribution, buffer: &Consu
         return;
     }
     let count = records.len();
-    let rows: Vec<Row> = records.into_iter().map(Row::from).collect();
-    if let Err(error) = insert(pg, attribution, rows) {
+    if let Err(error) = insert(pg, attribution, records.into_iter().collect()) {
         eprintln!("OpenAPPA: {count} external consult records were not stored: {error}");
     }
 }
@@ -72,43 +71,41 @@ pub(crate) fn store(pg: &PostgresStore, attribution: Attribution, buffer: &Consu
 fn insert(
     pg: &PostgresStore,
     attribution: Attribution,
-    rows: Vec<Row>,
+    columns: Columns,
 ) -> Result<(), PostgresError> {
     pg.with_client(move |client| {
-        let mut transaction = client.transaction().map_err(described)?;
-        let statement = transaction.prepare(
-            "INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
-             VALUES ($1::text::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)",
-        ).map_err(described)?;
-        for row in &rows {
-            transaction.execute(
-                &statement,
+        client
+            .execute(
+                "INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
+                 SELECT c.id::uuid, $2::text, $3::text, $4::text, c.started_at, c.duration_ms, c.role, c.external_name, c.backend, c.request, c.outcome, c.answer, c.raw_response, c.http_status, c.diagnostics, c.diagnostics_truncated, c.root, c.trajectory, c.call_id, c.offer_id, c.call_digest \
+                 FROM UNNEST($1::text[], $5::timestamptz[], $6::int8[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::text[], $12::jsonb[], $13::bytea[], $14::int4[], $15::bytea[], $16::bool[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[]) \
+                 AS c(id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest)",
                 &[
-                    &row.id,
+                    &columns.id,
                     &attribution.organization_id,
                     &attribution.session_id,
                     &attribution.caller_id,
-                    &row.started_at,
-                    &row.duration_ms,
-                    &row.role,
-                    &row.external_name,
-                    &row.backend,
-                    &row.request,
-                    &row.outcome,
-                    &row.answer,
-                    &row.raw_response,
-                    &row.http_status,
-                    &row.diagnostics,
-                    &row.diagnostics_truncated,
-                    &row.root,
-                    &row.trajectory,
-                    &row.call_id,
-                    &row.offer_id,
-                    &row.call_digest,
+                    &columns.started_at,
+                    &columns.duration_ms,
+                    &columns.role,
+                    &columns.external_name,
+                    &columns.backend,
+                    &columns.request,
+                    &columns.outcome,
+                    &columns.answer,
+                    &columns.raw_response,
+                    &columns.http_status,
+                    &columns.diagnostics,
+                    &columns.diagnostics_truncated,
+                    &columns.root,
+                    &columns.trajectory,
+                    &columns.call_id,
+                    &columns.offer_id,
+                    &columns.call_digest,
                 ],
-            ).map_err(described)?;
-        }
-        transaction.commit().map_err(described)
+            )
+            .map(drop)
+            .map_err(described)
     })
 }
 
@@ -120,54 +117,60 @@ fn described(error: impl std::error::Error) -> PostgresError {
     }
 }
 
-/// One record in the column types the table declares.
-struct Row {
-    id: String,
-    started_at: SystemTime,
-    duration_ms: i64,
-    role: &'static str,
-    external_name: String,
-    backend: &'static str,
-    request: Value,
-    outcome: &'static str,
-    answer: Option<Value>,
-    raw_response: Option<Vec<u8>>,
-    http_status: Option<i32>,
-    diagnostics: Option<Vec<u8>>,
-    diagnostics_truncated: bool,
-    root: String,
-    trajectory: String,
-    call_id: Option<String>,
-    offer_id: Option<String>,
-    call_digest: Option<String>,
+/// The records in the column types the table declares, one array per column:
+/// one statement stores a whole dispatch.
+#[derive(Default)]
+struct Columns {
+    id: Vec<String>,
+    started_at: Vec<SystemTime>,
+    duration_ms: Vec<i64>,
+    role: Vec<&'static str>,
+    external_name: Vec<String>,
+    backend: Vec<&'static str>,
+    request: Vec<Value>,
+    outcome: Vec<&'static str>,
+    answer: Vec<Option<Value>>,
+    raw_response: Vec<Option<Vec<u8>>>,
+    http_status: Vec<Option<i32>>,
+    diagnostics: Vec<Option<Vec<u8>>>,
+    diagnostics_truncated: Vec<bool>,
+    root: Vec<String>,
+    trajectory: Vec<String>,
+    call_id: Vec<Option<String>>,
+    offer_id: Vec<Option<String>>,
+    call_digest: Vec<Option<String>>,
 }
 
-impl From<ConsultRecord> for Row {
-    fn from(record: ConsultRecord) -> Self {
-        let (diagnostics, diagnostics_truncated) = match record.diagnostics {
-            Some(diagnostics) => (Some(diagnostics.bytes), diagnostics.truncated),
-            None => (None, false),
-        };
-        Row {
-            id: record.id.to_string(),
-            started_at: record.started_at.into(),
-            duration_ms: i64::try_from(record.duration_ms).unwrap_or(i64::MAX),
-            role: role_name(record.role),
-            external_name: record.external_name,
-            backend: backend_name(record.backend),
-            request: record.request,
-            outcome: outcome_name(record.outcome),
-            answer: record.answer,
-            raw_response: record.raw_response,
-            http_status: record.http_status.map(i32::from),
-            diagnostics,
-            diagnostics_truncated,
-            root: record.context.root,
-            trajectory: record.context.trajectory,
-            call_id: record.context.call_id,
-            offer_id: record.context.offer_id,
-            call_digest: record.context.call_digest,
+impl FromIterator<ConsultRecord> for Columns {
+    fn from_iter<I: IntoIterator<Item = ConsultRecord>>(records: I) -> Self {
+        let mut columns = Columns::default();
+        for record in records {
+            let (diagnostics, diagnostics_truncated) = match record.diagnostics {
+                Some(diagnostics) => (Some(diagnostics.bytes), diagnostics.truncated),
+                None => (None, false),
+            };
+            columns.id.push(record.id.to_string());
+            columns.started_at.push(record.started_at.into());
+            columns
+                .duration_ms
+                .push(i64::try_from(record.duration_ms).unwrap_or(i64::MAX));
+            columns.role.push(role_name(record.role));
+            columns.external_name.push(record.external_name);
+            columns.backend.push(backend_name(record.backend));
+            columns.request.push(record.request);
+            columns.outcome.push(outcome_name(record.outcome));
+            columns.answer.push(record.answer);
+            columns.raw_response.push(record.raw_response);
+            columns.http_status.push(record.http_status.map(i32::from));
+            columns.diagnostics.push(diagnostics);
+            columns.diagnostics_truncated.push(diagnostics_truncated);
+            columns.root.push(record.context.root);
+            columns.trajectory.push(record.context.trajectory);
+            columns.call_id.push(record.context.call_id);
+            columns.offer_id.push(record.context.offer_id);
+            columns.call_digest.push(record.context.call_digest);
         }
+        columns
     }
 }
 

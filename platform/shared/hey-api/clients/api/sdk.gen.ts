@@ -8142,7 +8142,7 @@ export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `log:admin`: View every LLM proxy and MCP tool call log in the active organization
  */
 export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaExternalConsultsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaExternalConsultsResponses, GetOpenappaExternalConsultsErrors, ThrowOnError>({ url: '/api/openappa/external-consults', ...options });
 

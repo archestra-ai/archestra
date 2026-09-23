@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
+import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { ApiError, type User } from "@/types";
 import routes from "./openappa-external-consults.routes";
 
 describe("GET /api/openappa/external-consults", () => {
@@ -15,6 +17,20 @@ describe("GET /api/openappa/external-consults", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user: caller, organizationId });
+    });
+    // The auth middleware's authorization step, minus session resolution:
+    // the route's declared permissions against the caller's real role.
+    app.addHook("preHandler", async (request) => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.GetOpenappaExternalConsults];
+      if (!required) throw new ApiError(403, "route not in permissions map");
+      const { success } = await hasPermission(
+        required,
+        request.headers,
+        undefined,
+        { userId: caller.id, organizationId },
+      );
+      if (!success) throw new ApiError(403, "Forbidden");
     });
     await app.register(routes);
   });

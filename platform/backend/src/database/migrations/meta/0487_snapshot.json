@@ -1,5 +1,5 @@
 {
-  "id": "88cde118-aa02-4f30-830b-27a244f287b6",
+  "id": "5161fcef-5958-4ce9-9aa9-c6f3cd753846",
   "prevId": "7f1c613b-3f8a-4971-8ee3-aa752b616e20",
   "version": "7",
   "dialect": "postgresql",
@@ -26529,6 +26529,27 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_external_consults_created_idx": {
+          "name": "openappa_external_consults_created_idx",
+          "columns": [
             {
               "expression": "created_at",
               "isExpression": false,

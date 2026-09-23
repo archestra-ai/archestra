@@ -6,9 +6,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { OpenappaExternalConsultModel } from "@/models";
-import { ApiError, constructResponseSchema } from "@/types";
+import { constructResponseSchema } from "@/types";
 import {
   type ExternalConsult,
   type ExternalConsultExport,
@@ -56,15 +55,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         ),
       },
     },
-    async ({ query, user, organizationId }, reply) => {
-      // The dataset spans every caller in the organization, so the
-      // own-rows view log:read grants elsewhere has no meaning here.
-      if (!(await userHasPermission(user.id, organizationId, "log", "admin")))
-        throw new ApiError(
-          403,
-          "log:admin permission is required to export external consults",
-        );
-
+    async ({ query, organizationId }, reply) => {
       const { format, limit, cursor, from, to, ...rest } = query;
       const filters = {
         ...rest,

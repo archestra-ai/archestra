@@ -193,7 +193,9 @@ export const openappaExternalConsultsTable = pgTable(
     index("openappa_external_consults_org_created_idx").on(
       table.organizationId,
       table.createdAt,
+      table.id,
     ),
+    index("openappa_external_consults_created_idx").on(table.createdAt),
     index("openappa_external_consults_root_idx").on(table.root),
   ],
 );

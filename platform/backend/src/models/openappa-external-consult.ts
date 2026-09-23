@@ -145,7 +145,7 @@ interface ExternalConsultFilters {
   sessionId?: string;
 }
 
-const EXPORT_PAGE_SIZE = 100;
+const EXPORT_PAGE_SIZE = 500;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default OpenappaExternalConsultModel;

@@ -26,5 +26,6 @@ CREATE TABLE "openappa_external_consults" (
 );
 --> statement-breakpoint
 ALTER TABLE "openappa_external_consults" ADD CONSTRAINT "openappa_external_consults_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "openappa_external_consults_org_created_idx" ON "openappa_external_consults" USING btree ("organization_id","created_at");--> statement-breakpoint
+CREATE INDEX "openappa_external_consults_org_created_idx" ON "openappa_external_consults" USING btree ("organization_id","created_at","id");--> statement-breakpoint
+CREATE INDEX "openappa_external_consults_created_idx" ON "openappa_external_consults" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "openappa_external_consults_root_idx" ON "openappa_external_consults" USING btree ("root");

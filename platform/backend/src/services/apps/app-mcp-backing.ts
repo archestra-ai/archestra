@@ -11,6 +11,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { appLaunchToolDescription } from "@/services/apps/app-run-link";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";
@@ -59,9 +60,10 @@ export async function createAppBacking(params: {
       name: app.name,
       catalogId: catalog.id,
       serverType: "app",
-      scope,
+      // The app's grants, written with the app row, decide the install.
+      scope: await appBackingInstallScope({ appId: app.id, organizationId }),
       ownerId: userId,
-      teamId: scope === "team" ? (teamIds[0] ?? null) : null,
+      teamId: null,
       userId,
       localInstallationStatus: "success",
     });
@@ -134,9 +136,11 @@ export async function syncAppBacking(app: App): Promise<void> {
     if (!server) return;
     const teamIds =
       app.scope === "team" ? await AppAccessModel.getTeamsForApp(app.id) : [];
-    if (server.scope !== app.scope) {
-      await McpServerModel.setScope(server.id, app.scope);
-    }
+    await syncServerInstallScope({
+      server,
+      appId: app.id,
+      organizationId: app.organizationId,
+    });
     // A rename is the only edit that can leave the persisted backing name stale;
     // the launch tool's derived description depends solely on the app name, so
     // both the server-name update and that refresh gate on this one signal — no
@@ -148,7 +152,6 @@ export async function syncAppBacking(app: App): Promise<void> {
     if (nameChanged) {
       await McpServerModel.update(server.id, { name: app.name });
     }
-    await McpServerModel.setTeam(server.id, teamIds[0] ?? null);
     if (server.catalogId) {
       // The registry card and tool isolation read the catalog's name/scope/
       // environment, so the catalog is the one that must track the app. Team
@@ -186,6 +189,37 @@ export async function syncAppBacking(app: App): Promise<void> {
 }
 
 /**
+ * Re-derive the install scope of an app's backing server from the app's
+ * grants. Runs after the app's permissions are edited, so the install follows
+ * the audience: grants that reach the whole organization or a role make one
+ * shared install whose launch tool can be pinned; any narrower audience makes
+ * per-user installs. Best-effort; a missing app or server is a no-op.
+ */
+export async function resyncAppBackingInstallScope(params: {
+  appId: string;
+  organizationId: string;
+}): Promise<void> {
+  try {
+    const app = await AppModel.findById(params.appId);
+    if (!app?.mcpServerId || app.organizationId !== params.organizationId) {
+      return;
+    }
+    const server = await McpServerModel.findById(app.mcpServerId);
+    if (!server) return;
+    await syncServerInstallScope({
+      server,
+      appId: app.id,
+      organizationId: app.organizationId,
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, appId: params.appId },
+      "Failed to re-derive the install scope of an app's backing server",
+    );
+  }
+}
+
+/**
  * Propagate a visibility/environment edit made through the MCP catalog form
  * (the app's Configuration tab) back to the linked app row and backing server,
  * so the app, its catalog, and its server stay consistent regardless of which
@@ -204,9 +238,6 @@ export async function propagateAppCatalogChange(
       (s) => s.serverType === "app",
     );
     if (!server) return;
-    if (server.scope !== changes.scope) {
-      await McpServerModel.setScope(server.id, changes.scope);
-    }
     const app = await AppModel.findByMcpServerId(server.id);
     if (app) {
       // Mirror the catalog edit onto the app's description and re-assert the
@@ -295,5 +326,42 @@ export async function deleteAppBacking(
       { err: error, appId: app.id, mcpServerId: app.mcpServerId },
       "Failed to delete MCP backing for app",
     );
+  }
+}
+
+// ===== Internal =====
+
+/**
+ * The install scope an app's backing server takes from the app's own grants:
+ * `org` (one shared install, pinnable launch tool) when they reach the whole
+ * organization or a role, `personal` (per-user installs) otherwise.
+ */
+async function appBackingInstallScope(params: {
+  appId: string;
+  organizationId: string;
+}): Promise<"org" | "personal"> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const { audience } = await ResourcePermissionPolicyModel.findAudience({
+    organizationId: params.organizationId,
+    resource: "app",
+    scope: params.appId,
+  });
+  return audience === "org" ? "org" : "personal";
+  // SPDX-SnippetEnd
+}
+
+async function syncServerInstallScope(params: {
+  server: { id: string; scope: ResourceVisibilityScope; teamId: string | null };
+  appId: string;
+  organizationId: string;
+}): Promise<void> {
+  const scope = await appBackingInstallScope(params);
+  if (params.server.scope !== scope) {
+    await McpServerModel.setScope(params.server.id, scope);
+  }
+  if (params.server.teamId !== null) {
+    await McpServerModel.setTeam(params.server.id, null);
   }
 }

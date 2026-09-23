@@ -381,3 +381,69 @@ describe("0489 primary provider keys by owner", () => {
     expect(primary.get(alicePrimary.id)).toBe(true);
   });
 });
+
+describe("0489 app backing install scope", () => {
+  test("re-derives the install scope of every app backing server from the app's grants", async ({
+    makeApp,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const orgApp = await makeApp({ scope: "org", organizationId: org.id });
+    const teamApp = await makeApp({
+      scope: "team",
+      teamIds: [team.id],
+      authorId: author.id,
+      organizationId: org.id,
+    });
+    const personalApp = await makeApp({
+      scope: "personal",
+      authorId: author.id,
+      organizationId: org.id,
+    });
+    // The copies of the retired app scope that the servers held before.
+    const setServer = async (
+      serverId: string | null,
+      values: { scope: "personal" | "team" | "org"; teamId: string | null },
+    ) => {
+      if (!serverId) throw new Error("app has no backing server");
+      await db
+        .update(schema.mcpServersTable)
+        .set(values)
+        .where(eq(schema.mcpServersTable.id, serverId));
+    };
+    await setServer(orgApp.mcpServerId, { scope: "personal", teamId: null });
+    await setServer(teamApp.mcpServerId, { scope: "team", teamId: team.id });
+    await setServer(personalApp.mcpServerId, { scope: "org", teamId: null });
+
+    await runDataMigration();
+    await runDataMigration();
+
+    const servers = await db
+      .select({
+        id: schema.mcpServersTable.id,
+        scope: schema.mcpServersTable.scope,
+        teamId: schema.mcpServersTable.teamId,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        sql`${schema.mcpServersTable.id} IN (${orgApp.mcpServerId}, ${teamApp.mcpServerId}, ${personalApp.mcpServerId})`,
+      );
+    const byId = new Map(servers.map((row) => [row.id, row]));
+    expect(byId.get(orgApp.mcpServerId as string)).toMatchObject({
+      scope: "org",
+      teamId: null,
+    });
+    expect(byId.get(teamApp.mcpServerId as string)).toMatchObject({
+      scope: "personal",
+      teamId: null,
+    });
+    expect(byId.get(personalApp.mcpServerId as string)).toMatchObject({
+      scope: "personal",
+      teamId: null,
+    });
+  });
+});

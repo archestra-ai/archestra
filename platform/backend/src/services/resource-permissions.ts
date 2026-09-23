@@ -29,6 +29,7 @@ import ResourcePermissionTargetModel from "@/models/resource-permission-target";
 import RoleCompositionModel from "@/models/role-composition";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
+import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
@@ -391,6 +392,13 @@ export class ResourcePermissions {
       ...params,
       authority: effective.grants,
     });
+    // An app's backing install follows the app's audience.
+    if (params.resource === "app" && params.scope !== "*") {
+      await resyncAppBackingInstallScope({
+        appId: params.scope,
+        organizationId: params.organizationId,
+      });
+    }
     const updated = await ResourcePermissions.getEffective(params);
     return {
       resource: params.resource,

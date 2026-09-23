@@ -138,3 +138,31 @@ USING (
     AND old_proxy."is_default" = false
 ) retired
 WHERE agent."id" = retired."old_id";
+--> statement-breakpoint
+-- An app's backing server takes its install scope from the app's own grants:
+-- one shared install (`org`) when they grant read to the whole organization
+-- or to a role, per-user installs (`personal`) otherwise. The server kept a
+-- copy of the retired app scope. Idempotent.
+UPDATE "mcp_server" backing_server
+SET "scope" = derived."scope", "team_id" = NULL
+FROM (
+  SELECT app."mcp_server_id" AS "server_id",
+    CASE WHEN EXISTS (
+      SELECT 1
+      FROM "resource_permission_policies" app_policy,
+        jsonb_array_elements(app_policy."grants") app_grant
+      WHERE app_policy."organization_id" = app."organization_id"
+        AND app_policy."resource" = 'app'
+        AND app_policy."scope" = app."id"::text
+        AND (app_grant->'actions') ? 'read'
+        AND app_grant->'subject'->>'type' IN ('organization', 'role')
+    ) THEN 'org' ELSE 'personal' END AS "scope"
+  FROM "apps" app
+  WHERE app."mcp_server_id" IS NOT NULL
+) derived
+WHERE backing_server."id" = derived."server_id"
+  AND backing_server."server_type" = 'app'
+  AND (
+    backing_server."scope" IS DISTINCT FROM derived."scope"
+    OR backing_server."team_id" IS NOT NULL
+  );

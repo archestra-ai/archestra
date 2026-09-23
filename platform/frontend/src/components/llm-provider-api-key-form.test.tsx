@@ -9,7 +9,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/organization.query");
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -34,7 +34,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "personal",
+  shared: false,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -49,6 +49,19 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
 // The form receives `form` as a prop; the harness owns a real react-hook-form
 // instance so the test can drive provider changes the way the Select does
 // (`form.setValue("provider", ...)`) without wrestling the Radix combobox.
+const BASE_KEY = {
+  organizationId: "org-1",
+  secretId: "secret-1",
+  scope: "personal",
+  teamId: null,
+  baseUrl: null,
+  inferenceBaseUrl: null,
+  extraHeaders: null,
+  isSystem: false,
+  createdAt: "2026-07-16T00:00:00.000Z",
+  updatedAt: "2026-07-16T00:00:00.000Z",
+};
+
 let form: UseFormReturn<LlmProviderApiKeyFormValues>;
 
 function Harness({
@@ -122,6 +135,9 @@ function renderForm(options?: {
 }
 
 beforeEach(() => {
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as unknown as ReturnType<typeof useSession>);
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(false);
   vi.mocked(useProviderBaseUrls).mockReturnValue({
@@ -252,7 +268,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     expect(screen.getByLabelText("Provider")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
-    expect(screen.getByText("Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Who uses this key")).toBeInTheDocument();
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
     expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
     expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
@@ -263,6 +279,64 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.getByText("Primary key")).toBeInTheDocument();
     expect(screen.getByText("Base URL")).toBeInTheDocument();
     expect(screen.getByText("Extra HTTP headers")).toBeInTheDocument();
+  });
+
+  it("asks whether a new key is just for the creator or shared", async () => {
+    const user = userEvent.setup();
+    renderForm({ credentialMode: "api-key" });
+
+    // Just for me by default: the key is the creator's alone, so there is no
+    // one to grant it to.
+    expect(screen.getByRole("tab", { name: "Just for me" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText(/Only you use this key/)).toBeInTheDocument();
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Shared" }));
+
+    expect(screen.getByText(/No one owns a shared key/)).toBeInTheDocument();
+    expect(screen.getByText("Permissions")).toBeInTheDocument();
+    // The creator gets no grant of their own on a shared key.
+    expect(
+      screen.queryByText(/You’ll have full access/),
+    ).not.toBeInTheDocument();
+    expect(form.getValues("shared")).toBe(true);
+  });
+
+  it("offers no sharing for a per-user credential", () => {
+    renderForm({ defaults: { provider: "github-copilot" } });
+
+    expect(
+      screen.queryByRole("tab", { name: "Shared" }),
+    ).not.toBeInTheDocument();
+    expect(form.getValues("shared")).toBe(false);
+  });
+
+  it("names the primary key among the creator's own keys, not another owner's", () => {
+    const ownPrimary = {
+      ...BASE_KEY,
+      id: "own",
+      name: "My OpenAI",
+      provider: "openai",
+      userId: "user-1",
+      isPrimary: true,
+    } as LlmProviderApiKeyResponse;
+    const someoneElsesPrimary = {
+      ...ownPrimary,
+      id: "theirs",
+      name: "Their OpenAI",
+      userId: "user-2",
+    } as LlmProviderApiKeyResponse;
+    renderForm({
+      existingKeys: [someoneElsesPrimary, ownPrimary],
+      defaults: { provider: "openai" },
+    });
+
+    expect(
+      screen.getByText(/"My OpenAI" is already the primary own key/),
+    ).toBeInTheDocument();
   });
 
   it("excludes subscription-only providers from the API key flow", async () => {

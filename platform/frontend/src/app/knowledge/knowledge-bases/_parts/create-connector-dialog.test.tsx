@@ -728,7 +728,7 @@ describe("CreateConnectorDialog", () => {
     });
   });
 
-  describe("auto-sync default visibility", () => {
+  describe("permission sync default", () => {
     beforeEach(() => {
       mockUseEnterpriseFeature.mockReturnValue(true);
       mockHasPermissions.mockReturnValue({ data: true });
@@ -747,7 +747,37 @@ describe("CreateConnectorDialog", () => {
       ).toBeChecked();
     });
 
-    it("keeps org-wide for a type without permission-sync support", async () => {
+    it("creates the connector with permission sync on when the switch is on", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText("SharePoint"));
+      for (const [label, value] of [
+        [/^Name$/, "Team handbook"],
+        [/^Site URL$/, "https://tenant.sharepoint.com"],
+        [/^Tenant ID$/, "test-tenant"],
+        [/^Client ID$/, "test-client"],
+        [/^Client Secret$/, "test-secret"],
+      ] as const) {
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      }
+      expect(
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).toBeChecked();
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      const body = mockMutateAsync.mock.calls[0][0];
+      expect(body.syncPermissionsFromSource).toBe(true);
+      expect(body).not.toHaveProperty("visibility");
+    });
+
+    it("keeps permission sync off for a type without support for it", async () => {
       const user = userEvent.setup();
       renderDialog();
       await user.click(screen.getByText("Web Crawler"));
@@ -762,7 +792,7 @@ describe("CreateConnectorDialog", () => {
       ).not.toBeChecked();
     });
 
-    it("keeps org-wide when the auto-sync feature flag is off", async () => {
+    it("offers no permission sync when the feature flag is off", async () => {
       mockUseFeature.mockImplementation(
         (key) => key !== "kbAutoSyncPermissionsEnabled",
       );
@@ -1141,7 +1171,7 @@ describe("CreateConnectorDialog", () => {
         expect.objectContaining({
           name: "Engineering M-Files",
           connectorType: "mfiles",
-          visibility: "org-wide",
+          syncPermissionsFromSource: false,
           credentials: {
             email: "00000000-0000-0000-0000-000000000042",
             apiToken: "oauth-client-secret",

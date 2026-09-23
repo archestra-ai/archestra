@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
@@ -70,6 +70,9 @@ vi.mock("@/lib/organization.query");
 
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({ id: "created-key-id" });
     reconnectMutateAsync.mockReset();
@@ -110,9 +113,8 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       baseUrl: undefined,
       inferenceBaseUrl: undefined,
       extraHeaders: undefined,
-      scope: "personal",
+      shared: false,
       initialGrants: [],
-      teamId: undefined,
       isPrimary: false,
       vaultSecretPath: undefined,
       vaultSecretKey: undefined,
@@ -245,7 +247,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: /test & create/i }));
 
     expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: "personal", initialGrants: [] }),
+      expect.objectContaining({ shared: false, initialGrants: [] }),
     );
   });
 
@@ -260,6 +262,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         defaultValues={{
           name: "Build service",
           apiKey: "test-key",
+          shared: true,
           initialGrants: [
             {
               subject: { type: "team", id: "support" },
@@ -278,6 +281,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: /test & create/i }));
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
+        shared: true,
         initialGrants: [
           {
             subject: { type: "team", id: "support" },
@@ -305,7 +309,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         defaultValues={{
           name: "ChatGPT Subscription",
           provider: "openai",
-          scope: "personal",
+          shared: false,
           authMethod: "subscription",
         }}
       />,
@@ -326,16 +330,16 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         name: "ChatGPT Subscription",
         provider: "openai",
         apiKey: "subscription-token",
-        scope: "personal",
+        shared: false,
       }),
     );
     expect(onSuccess).toHaveBeenCalledWith("created-key-id");
   });
 
-  it("forces personal scope for a subscription sign-in even when the form holds a shared scope", async () => {
-    // Scope coercion in the form is deferred until sign-in completes, and the
-    // sign-in callback reads form values in the same tick the credential
-    // lands — so the payload must resolve the scope itself.
+  it("keeps a subscription sign-in just for the user even when the form says shared", async () => {
+    // Ownership coercion in the form is deferred until sign-in completes, and
+    // the sign-in callback reads form values in the same tick the credential
+    // lands — so the payload must resolve it itself.
     const user = userEvent.setup();
 
     render(
@@ -349,7 +353,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         defaultValues={{
           name: "ChatGPT Subscription",
           provider: "openai",
-          scope: "org",
+          shared: true,
           authMethod: "subscription",
         }}
       />,
@@ -358,7 +362,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: "personal", teamId: undefined }),
+      expect.objectContaining({ shared: false, initialGrants: [] }),
     );
   });
 
@@ -380,7 +384,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         defaultValues={{
           name: "ChatGPT Subscription",
           provider: "openai",
-          scope: "personal",
+          shared: false,
           authMethod: "subscription",
         }}
       />,
@@ -416,7 +420,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         defaultValues={{
           name: "ChatGPT Subscription",
           provider: "openai",
-          scope: "personal",
+          shared: false,
           authMethod: "subscription",
         }}
       />,

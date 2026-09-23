@@ -171,7 +171,7 @@ function offers(
       defaultValues: {
         name: "GitHub Copilot",
         provider: "github-copilot",
-        scope: "personal",
+        shared: false,
       },
     },
   ];

@@ -327,7 +327,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     createProfile.mutate(
       {
         name: `Copy ${cloningAgent.name}`,
-        scope: "personal",
         agentType: "agent",
         description: cloningAgent.description,
         systemPrompt: cloningAgent.systemPrompt,

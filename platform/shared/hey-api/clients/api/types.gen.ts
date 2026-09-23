@@ -14651,7 +14651,6 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
         isPersonalProxy?: boolean;
@@ -14726,8 +14725,6 @@ export type CreateAgentData = {
             name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
-        teams?: Array<string>;
-        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -14840,6 +14837,9 @@ export type CreateAgentData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     };
     path?: never;
     query?: never;
@@ -25369,7 +25369,6 @@ export type CreateAppData = {
         name: string;
         slug?: string;
         description?: string;
-        scope?: 'personal' | 'team' | 'org';
         html?: string;
         uiPermissions?: {
             camera?: {
@@ -25393,7 +25392,6 @@ export type CreateAppData = {
             keyId?: string;
             valueId?: string;
         }>;
-        teamIds?: Array<string>;
         openInChat?: boolean;
     };
     path?: never;
@@ -61261,7 +61259,6 @@ export type CreateInternalMcpCatalogItemData = {
             cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         clonedFrom?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
@@ -61269,10 +61266,8 @@ export type CreateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
-        teams?: Array<string | {
-            id: string;
-            level?: 'use' | 'write';
-        }>;
+        scope?: unknown;
+        teams?: unknown;
         initialGrants?: Array<{
             subject: {
                 type: 'user';
@@ -65480,8 +65475,6 @@ export type CreateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
-        visibility?: 'private' | 'org-wide' | 'team-scoped';
-        teamIds?: Array<string>;
         initialGrants?: Array<{
             subject: {
                 type: 'user';
@@ -66344,6 +66337,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
+            syncPermissionsFromSource: boolean;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
             config: {
                 type: 'jira';
@@ -66572,8 +66566,10 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
+        /**
+         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.
+         */
+        syncPermissionsFromSource?: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
@@ -66877,6 +66873,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -67255,6 +67252,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -67756,6 +67754,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -74728,8 +74727,10 @@ export type CreateLlmProviderApiKeyData = {
         extraHeaders?: {
             [key: string]: string;
         } | null;
-        scope?: 'personal' | 'team' | 'org';
-        teamId?: string;
+        /**
+         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.
+         */
+        shared?: boolean;
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
@@ -90804,9 +90805,6 @@ export type CreatePluginData = {
         description?: string;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         files: Array<{
             path: string;
             content: string;
@@ -91118,9 +91116,6 @@ export type ImportGithubPluginMarketplaceData = {
             approvedSourceSha: string;
             exclude?: Array<string>;
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         initialGrants?: Array<{
             subject: {
                 type: 'user';
@@ -91410,9 +91405,25 @@ export type ImportGithubPluginData = {
         description?: string;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
     };
@@ -92299,9 +92310,6 @@ export type UpdatePluginData = {
         description?: string;
         enabled?: boolean;
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -99596,9 +99604,6 @@ export type CreateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -101660,9 +101665,6 @@ export type ImportGithubSkillsData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
          */
@@ -106868,8 +106870,6 @@ export type CreateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
@@ -107224,8 +107224,6 @@ export type UpdateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;

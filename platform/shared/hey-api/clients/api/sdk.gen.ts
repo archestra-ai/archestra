@@ -8862,7 +8862,7 @@ export const deletePlugin = <ThrowOnError extends boolean = false>(options: Opti
 export const getPlugin = <ThrowOnError extends boolean = false>(options: Options<GetPluginData, ThrowOnError>) => (options.client ?? client).get<GetPluginResponses, GetPluginErrors, ThrowOnError>({ url: '/api/plugins/{id}', ...options });
 
 /**
- * Update plugin metadata, visibility, GitHub source settings, or files
+ * Update plugin metadata, GitHub source settings, or files. Access is edited through the resource permissions API.
  *
  * Authentication:
  *

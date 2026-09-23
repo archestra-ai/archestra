@@ -2456,7 +2456,6 @@ export function AgentForm({
           accessAllTools,
           ...(supportsSubagents && { accessAllSubagents }),
           labels: updatedLabels,
-          scope: "personal",
           ...(showSecurity && { considerContextUntrusted }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:

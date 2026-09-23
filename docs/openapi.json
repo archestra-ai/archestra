@@ -50278,14 +50278,6 @@
                   "organizationId": {
                     "type": "string"
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
                   "name": {
                     "type": "string"
                   },
@@ -50697,20 +50689,6 @@
                   "deletedAt": {
                     "nullable": true
                   },
-                  "teams": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "users": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -51094,10 +51072,18 @@
                         "actions"
                       ]
                     }
+                  },
+                  "scope": {
+                    "not": {}
+                  },
+                  "teams": {
+                    "not": {}
+                  },
+                  "users": {
+                    "not": {}
                   }
                 },
                 "required": [
-                  "scope",
                   "name"
                 ]
               }
@@ -90175,14 +90161,6 @@
                     "type": "string",
                     "maxLength": 500
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
                   "html": {
                     "type": "string",
                     "minLength": 1
@@ -90250,21 +90228,14 @@
                       ]
                     }
                   },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    }
-                  },
                   "openInChat": {
                     "type": "boolean"
                   }
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -240224,14 +240195,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
                   "clonedFrom": {
                     "nullable": true,
                     "type": "string",
@@ -240267,35 +240230,11 @@
                       ]
                     }
                   },
+                  "scope": {
+                    "not": {}
+                  },
                   "teams": {
-                    "type": "array",
-                    "items": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "level": {
-                              "type": "string",
-                              "enum": [
-                                "use",
-                                "write"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id"
-                          ]
-                        }
-                      ]
-                    }
+                    "not": {}
                   },
                   "initialGrants": {
                     "maxItems": 200,
@@ -255667,20 +255606,6 @@
                       ]
                     }
                   },
-                  "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "private",
-                      "org-wide",
-                      "team-scoped"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "initialGrants": {
                     "maxItems": 200,
                     "type": "array",
@@ -255814,7 +255739,8 @@
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -258618,6 +258544,9 @@
                               "type": "string"
                             }
                           },
+                          "syncPermissionsFromSource": {
+                            "type": "boolean"
+                          },
                           "connectorType": {
                             "anyOf": [
                               {
@@ -259816,6 +259745,7 @@
                           "description",
                           "visibility",
                           "teamIds",
+                          "syncPermissionsFromSource",
                           "connectorType",
                           "config",
                           "secretId",
@@ -260149,19 +260079,9 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "org-wide",
-                      "team-scoped",
-                      "auto-sync-permissions"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
+                  "syncPermissionsFromSource": {
+                    "description": "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.",
+                    "type": "boolean"
                   },
                   "connectorType": {
                     "anyOf": [
@@ -261383,7 +261303,8 @@
                   "name",
                   "connectorType",
                   "config"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -261424,6 +261345,9 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "syncPermissionsFromSource": {
+                      "type": "boolean"
                     },
                     "connectorType": {
                       "anyOf": [
@@ -262592,6 +262516,7 @@
                     "description",
                     "visibility",
                     "teamIds",
+                    "syncPermissionsFromSource",
                     "connectorType",
                     "config",
                     "secretId",
@@ -262911,6 +262836,9 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "syncPermissionsFromSource": {
+                      "type": "boolean"
                     },
                     "connectorType": {
                       "anyOf": [
@@ -264090,6 +264018,7 @@
                     "description",
                     "visibility",
                     "teamIds",
+                    "syncPermissionsFromSource",
                     "connectorType",
                     "config",
                     "secretId",
@@ -265413,6 +265342,9 @@
                         "type": "string"
                       }
                     },
+                    "syncPermissionsFromSource": {
+                      "type": "boolean"
+                    },
                     "connectorType": {
                       "anyOf": [
                         {
@@ -266580,6 +266512,7 @@
                     "description",
                     "visibility",
                     "teamIds",
+                    "syncPermissionsFromSource",
                     "connectorType",
                     "config",
                     "secretId",
@@ -292042,17 +291975,10 @@
                       "type": "string"
                     }
                   },
-                  "scope": {
-                    "default": "personal",
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teamId": {
-                    "type": "string"
+                  "shared": {
+                    "default": false,
+                    "description": "Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.",
+                    "type": "boolean"
                   },
                   "isPrimary": {
                     "type": "boolean"
@@ -292242,7 +292168,8 @@
                 "required": [
                   "name",
                   "provider"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -351647,30 +351574,6 @@
                       ]
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teamIds": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "userIds": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
                   "files": {
                     "minItems": 1,
                     "maxItems": 100,
@@ -351875,7 +351778,8 @@
                   "displayName",
                   "clientType",
                   "files"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -353074,33 +352978,6 @@
                             "sourceSubdir",
                             "approvedSourceSha"
                           ]
-                        }
-                      },
-                      "scope": {
-                        "default": "personal",
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "teamIds": {
-                        "default": [],
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "userIds": {
-                        "default": [],
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
                         }
                       },
                       "initialGrants": {
@@ -354397,28 +354274,134 @@
                           ]
                         }
                       },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "teamIds": {
-                        "maxItems": 100,
+                      "initialGrants": {
+                        "maxItems": 200,
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "userIds": {
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
+                          "type": "object",
+                          "properties": {
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "team"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "serviceAccount"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "role"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "organization"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "enum": [
+                                        "*"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            },
+                            "actions": {
+                              "minItems": 1,
+                              "maxItems": 5,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "read",
+                                  "use",
+                                  "update",
+                                  "delete",
+                                  "manage-permissions"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "subject",
+                            "actions"
+                          ]
                         }
                       },
                       "approvedCommitSha": {
@@ -357765,7 +357748,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Update plugin metadata, visibility, GitHub source settings, or files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Update plugin metadata, GitHub source settings, or files. Access is edited through the resource permissions API.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -357794,30 +357777,6 @@
                         "posix",
                         "windows"
                       ]
-                    }
-                  },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teamIds": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "userIds": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
                     }
                   },
                   "labels": {
@@ -357960,7 +357919,8 @@
                       ]
                     }
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -384361,26 +384321,6 @@
                       ]
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "userIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "environmentIds": {
                     "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
                     "type": "array",
@@ -384561,7 +384501,8 @@
                 },
                 "required": [
                   "content"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -392289,26 +392230,6 @@
                       ]
                     }
                   },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "userIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "sync": {
                     "default": {
                       "interval": "1d"
@@ -392333,7 +392254,8 @@
                 "required": [
                   "repoUrl",
                   "skillPaths"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -410821,22 +410743,6 @@
                   "expiresAt": {
                     "nullable": true
                   },
-                  "scope": {
-                    "default": "org",
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "providerApiKeys": {
                     "default": [],
                     "type": "array",
@@ -411049,7 +410955,8 @@
                 },
                 "required": [
                   "name"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -412031,22 +411938,6 @@
                   },
                   "expiresAt": {
                     "nullable": true
-                  },
-                  "scope": {
-                    "default": "org",
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
                   },
                   "providerApiKeys": {
                     "default": [],

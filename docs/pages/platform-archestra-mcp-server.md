@@ -141,11 +141,9 @@ Required RBAC permission: `agent:create`
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name for the new resource. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided. |
 | `labels` | `object[]` | No | Optional key-value labels for organization and categorization. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
-| `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
@@ -425,11 +423,9 @@ Required RBAC permission: `mcpGateway:create`
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name for the new resource. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided. |
 | `labels` | `object[]` | No | Optional key-value labels for organization and categorization. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
-| `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
@@ -593,11 +589,9 @@ Required RBAC permission: `mcpRegistry:update`
 | `repository` | `string \| null` | No | Source code repository URL. |
 | `version` | `string \| null` | No | Version string. |
 | `instructions` | `string \| null` | No | Setup or usage instructions. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. |
 | `labels` | `object[]` | No | Key-value labels for organization/categorization. |
 | `labels[].key` | `string` | Yes | Label key. |
 | `labels[].value` | `string` | Yes | Label value. |
-| `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 
 
 #### edit_mcp_config
@@ -663,11 +657,9 @@ Required RBAC permission: `mcpRegistry:create`
 | `repository` | `string \| null` | No | Source code repository URL. |
 | `version` | `string \| null` | No | Version string. |
 | `instructions` | `string \| null` | No | Setup or usage instructions. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. |
 | `labels` | `object[]` | No | Key-value labels for organization/categorization. |
 | `labels[].key` | `string` | Yes | Label key. |
 | `labels[].value` | `string` | Yes | Label value. |
-| `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 | `environmentId` | `string \| null` | No | ID of the environment this server belongs to. Pass null for the default environment. Omit it to use your own environment, or the organization's landing environment for new MCP servers when you have none. |
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
@@ -1710,8 +1702,6 @@ Required RBAC permission: `knowledgeSource:create`
 | `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
-| `visibility` | `"private" \| "org-wide" \| "team-scoped"` | No |  |
-| `teamIds` | `string[]` | No |  |
 | `name` | `string` | Yes | Name of the knowledge base. |
 | `description` | `string \| null` | No | Description of the knowledge base. |
 
@@ -1817,8 +1807,7 @@ Required RBAC permission: `knowledgeSource:create`
 | `connector_type` | `string` | Yes | Type of the knowledge connector (for example jira, confluence, or google_drive). |
 | `config` | `object` | Yes | Provider-specific configuration object. |
 | `description` | `string \| null` | No | Description of the knowledge connector. |
-| `visibility` | `"org-wide" \| "team-scoped" \| "auto-sync-permissions"` | No | Visibility for the knowledge connector. |
-| `team_ids` | `string[]` | No | Team IDs allowed to access a team-scoped connector. |
+| `sync_permissions_from_source` | `boolean` | No | Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync connectors permission and a connector type that supports it. |
 
 ##### Output
 
@@ -2323,9 +2312,6 @@ Required RBAC permission: `plugin:create`
 | `description` | `string` | No | What the plugin does. |
 | `clientType` | `"claude-code" \| "copilot-cli" \| "codex" \| "cursor"` | Yes | The coding client the payload targets: claude-code, codex, copilot-cli, or cursor. |
 | `supportedPlatforms` | `string[]` | No | Operating systems the payload supports. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Who can discover the plugin: personal (author plus named users), team, or org. |
-| `teamIds` | `string[]` | No | Teams a team-scoped plugin is shared with. |
-| `userIds` | `string[]` | No | Organization members a personal plugin is shared with. |
 | `files` | `object[]` | Yes | The plugin's files as { path, content, encoding?, mode? }. Hook configuration bytes are stored verbatim — review them as code, they execute on developer machines. |
 | `files[].path` | `string` | Yes |  |
 | `files[].content` | `string` | Yes |  |
@@ -2346,9 +2332,6 @@ Required RBAC permission: `plugin:update`
 | `description` | `string` | No | What the plugin does. |
 | `enabled` | `boolean` | No | Disabled plugins are left out of future setup commands; already-installed copies are unaffected. |
 | `supportedPlatforms` | `string[]` | No | Operating systems the payload supports. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Who can discover the plugin: personal (author plus named users), team, or org. |
-| `teamIds` | `string[]` | No | Teams a team-scoped plugin is shared with. |
-| `userIds` | `string[]` | No | Organization members a personal plugin is shared with. |
 | `baseContentHash` | `string` | No | Required when files is provided. Use the current contentHash from get_plugin; the replacement is rejected if newer bytes landed first. |
 | `files` | `object[]` | No | WHEN PROVIDED, REPLACES THE PLUGIN'S ENTIRE file set. Omit it to edit only metadata/visibility. Manual plugins only — GitHub-sourced files are read-only. For a small change to one file, prefer edit_plugin over resending every file. |
 | `files[].path` | `string` | Yes |  |
@@ -2969,7 +2952,6 @@ Required RBAC permission: `app:create`
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | App name. |
 | `description` | `string` | No | Optional description. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned. |
 | `uiPermissions` | `object` | No | Optional iframe permissions (camera/microphone/geolocation/clipboardWrite). |
 | `uiPermissions.camera` | `object` | No |  |
 | `uiPermissions.microphone` | `object` | No |  |

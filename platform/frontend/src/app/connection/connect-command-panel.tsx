@@ -1226,7 +1226,6 @@ export function ConnectCommandPanel({
                       name: providerCatalog.label(provider),
                       provider,
                       apiKey: token,
-                      scope: "personal",
                     });
                     // availableKeys invalidates → the command auto-generates.
                   } catch {

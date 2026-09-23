@@ -48,7 +48,6 @@ export function CreateKnowledgeBaseDialog({
       name: values.name,
       ...(values.description && { description: values.description }),
       labels: finalLabels,
-      visibility: "private",
       initialGrants: values.initialGrants.map(({ subject, actions }) => ({
         subject,
         actions,

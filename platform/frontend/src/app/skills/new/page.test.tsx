@@ -174,7 +174,9 @@ describe("NewSkillPage wizard", () => {
     expect(createMutateAsync).toHaveBeenCalledTimes(1);
     const body = createMutateAsync.mock.calls[0][0];
     expect(body).not.toHaveProperty("baseVersion");
-    expect(body).toMatchObject({ scope: "personal", files: [] });
+    expect(body).toMatchObject({ files: [] });
+    // Access is the initial grants alone; the retired scope is not sent.
+    expect(body).not.toHaveProperty("scope");
     expect(body.content).toContain('name: "release-checklist"');
     expect(body.content).toContain(
       'description: "Verify a release before shipping."',

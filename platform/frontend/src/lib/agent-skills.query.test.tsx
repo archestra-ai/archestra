@@ -144,9 +144,6 @@ describe("useAgentActivationSkills", () => {
       create.result.current.mutateAsync({
         content: "---\nname: new-skill\ndescription: Just created\n---\n",
         files: [],
-        scope: "org",
-        teamIds: [],
-        userIds: [],
         environmentIds: [],
         labels: [],
       }),

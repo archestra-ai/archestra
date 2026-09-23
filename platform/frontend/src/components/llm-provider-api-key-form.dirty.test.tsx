@@ -9,7 +9,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/organization.query");
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -28,7 +28,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "personal",
+  shared: false,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -82,6 +82,9 @@ function renderForm(
 }
 
 beforeEach(() => {
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as unknown as ReturnType<typeof useSession>);
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(false);
   vi.mocked(useProviderBaseUrls).mockReturnValue({
@@ -105,6 +108,7 @@ describe("LlmProviderApiKeyForm dirty tracking", () => {
   it("marks permission changes dirty so closing cannot silently discard them", async () => {
     const user = userEvent.setup();
     renderForm({
+      shared: true,
       initialGrants: [
         {
           subject: { type: "team", id: "support" },

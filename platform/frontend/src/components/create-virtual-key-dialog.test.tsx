@@ -122,7 +122,6 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Self Admin's virtual key (2)",
         keyType: "standard",
         expiresAt: undefined,
-        scope: "personal",
         initialGrants: [],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },

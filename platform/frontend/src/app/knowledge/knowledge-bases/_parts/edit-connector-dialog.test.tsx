@@ -74,6 +74,7 @@ function makeAsanaConnector(
     name: "Engineering Asana",
     description: "",
     visibility: "org-wide",
+    syncPermissionsFromSource: false,
     teamIds: [],
     connectorType: "asana",
     environmentId: null,
@@ -220,6 +221,7 @@ describe("EditConnectorDialog - Jira admin API key", () => {
       name: "Engineering Jira",
       description: "",
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "jira",
       environmentId: null,
@@ -320,6 +322,7 @@ describe("EditConnectorDialog - Perforce permission sync", () => {
       name: "Docs Depot",
       description: "",
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "perforce",
       environmentId: null,
@@ -467,6 +470,7 @@ describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
       name: "Engineering GitHub",
       description: "",
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "github",
       environmentId: null,
@@ -529,6 +533,7 @@ describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
       name: "Company Notion",
       description: "",
       visibility,
+      syncPermissionsFromSource: visibility === "auto-sync-permissions",
       teamIds: [],
       connectorType: "notion",
       environmentId: null,
@@ -567,6 +572,7 @@ describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
       name: "Engineering GitHub",
       description: "",
       visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       teamIds: [],
       connectorType: "github",
       environmentId: null,
@@ -608,6 +614,7 @@ describe("EditConnectorDialog - permission sync capability", () => {
       name: "Engineering Jira",
       description: "",
       visibility,
+      syncPermissionsFromSource: visibility === "auto-sync-permissions",
       teamIds,
       connectorType: "jira",
       environmentId: null,
@@ -634,6 +641,25 @@ describe("EditConnectorDialog - permission sync capability", () => {
     const { body } = mockMutateAsync.mock.calls[0][0];
     expect(body.visibility).toBe("auto-sync-permissions");
     expect(body.permissionSyncIntervalSeconds).toBe(1800);
+  });
+
+  it("reads permission sync from its own column, not the visibility value", async () => {
+    // A connector created since the create API dropped `visibility` carries
+    // the switch alone; the dialog must show it on and keep it on.
+    const user = userEvent.setup();
+    renderDialog({
+      ...makeJiraConnector("org-wide"),
+      syncPermissionsFromSource: true,
+    });
+
+    expect(
+      screen.getByRole("switch", { name: /Sync permissions from the source/ }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const { body } = mockMutateAsync.mock.calls[0][0];
+    expect(body.visibility).toBe("auto-sync-permissions");
   });
 
   it("stops syncing permissions when the capability is switched off", async () => {

@@ -1,7 +1,4 @@
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ProfileLabel } from "@/components/agent-labels";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { composeManifest } from "@/lib/skills/manifest-compose";
@@ -24,10 +21,6 @@ export interface SkillDraft {
   initialGrants?: InitialPermissionGrant[];
   manifest: string;
   files: ResourceFile[];
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-  /** People the skill is shared with by name; only meaningful with `personal`. */
-  userIds: string[];
   /** empty = not restricted (available to agents in every environment). */
   environmentIds: string[];
   /** Key/value labels, edited in the form like any other field. */
@@ -59,9 +52,6 @@ export function blankSkillDraft(): SkillDraft {
   return {
     manifest: BLANK_SKILL_TEMPLATE,
     files: [],
-    scope: "personal",
-    teamIds: [],
-    userIds: [],
     environmentIds: [],
     labels: [],
   };
@@ -79,9 +69,6 @@ export function skillDraftFromSkill(skill: SkillDetail): SkillDraft {
   return {
     manifest: composeManifest(skill),
     files: stripFileKinds(skill.files),
-    scope: skill.scope,
-    teamIds: skill.teams.map((team) => team.id),
-    userIds: skill.users.map((user) => user.id),
     environmentIds: skill.environments.map((environment) => environment.id),
     labels: skill.labels ?? [],
   };
@@ -97,7 +84,7 @@ export function skillDraftFromPreview(preview: SkillPreview): SkillDraft {
 }
 
 /** True when the skill is pulled from GitHub on a schedule: its manifest and
- * files are repo-owned and read-only here; scope/teams/environments stay
+ * files are repo-owned and read-only here; environments and labels stay
  * editable. */
 export function isSyncedGithubSkill(skill: SkillDetail | null | undefined) {
   return skill?.sourceType === "github" && skill.githubSyncInterval != null;
@@ -113,7 +100,7 @@ export function isSyncedGithubSkill(skill: SkillDetail | null | undefined) {
  * anything written since: an `edit_skill` call, a sync pull, another user. A
  * synced skill is exempt: its save carries no files and the backend rejects
  * any content change, so there is nothing to bury — anchoring it would only
- * let the sync worker's own pulls reject a scope edit.
+ * let the sync worker's own pulls reject an environment edit.
  */
 export function buildSkillSaveBody(
   draft: SkillDraft,
@@ -134,7 +121,6 @@ export function buildSkillSaveBody(
       : {}),
     content: draft.manifest,
     ...(synced ? {} : { files: draft.files }),
-    ...(!skill ? { scope: "personal" as const } : {}),
     environmentIds: draft.environmentIds,
     labels: draft.labels,
     ...(skill && !synced && baseVersion !== undefined ? { baseVersion } : {}),
@@ -150,9 +136,6 @@ export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
     JSON.stringify(draft.initialGrants ?? []) !==
       JSON.stringify(seed.initialGrants ?? []) ||
     draft.manifest !== seed.manifest ||
-    draft.scope !== seed.scope ||
-    !sameIds(draft.teamIds, seed.teamIds) ||
-    !sameIds(draft.userIds, seed.userIds) ||
     !sameIds(draft.environmentIds, seed.environmentIds) ||
     draft.labels.length !== seed.labels.length ||
     draft.labels.some(

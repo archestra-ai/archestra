@@ -260,7 +260,6 @@ export function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "standard",
               expiresAt: expiresAt ?? undefined,
-              scope: "personal",
               initialGrants: initialGrants.map(
                 ({ name: _name, ...grant }) => grant,
               ),

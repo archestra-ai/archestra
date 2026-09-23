@@ -91,10 +91,6 @@ type CreateConnectorFormValues = {
   environmentId: string | null;
 };
 
-type ConnectorVisibility = NonNullable<
-  archestraApiTypes.CreateConnectorData["body"]["visibility"]
->;
-
 export function CreateConnectorDialog({
   knowledgeBaseId,
   open,
@@ -111,7 +107,8 @@ export function CreateConnectorDialog({
   const startGoogleDriveOAuth = useStartGoogleDriveOAuth();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
-  const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
+  const [syncPermissionsFromSource, setSyncPermissionsFromSource] =
+    useState(false);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
     [],
   );
@@ -131,22 +128,22 @@ export function CreateConnectorDialog({
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // Auto-sync permissions is the preferred visibility: whenever the feature
-  // is enabled, the chosen type supports it, and this user may select it, a
-  // NEW connector defaults to it (any type in the allowlist, current or
-  // future). The user can still switch to Organization or Teams.
+  // Permission sync is the preferred mode: whenever the feature is enabled,
+  // the chosen type supports it, and this user may turn it on, a NEW
+  // connector defaults to it (any type in the allowlist, current or future).
+  // The user can still switch it off.
   const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
   const { data: hasAutoSyncCreate } = useHasPermissions({
     knowledgeSourceAutoSync: ["create"],
   });
-  const defaultVisibilityFor = (type: ConnectorType): ConnectorVisibility =>
-    autoSyncBeta &&
-    knowledgeBaseEnterprise &&
-    hasAutoSyncCreate &&
-    connectorSupportsAutoSync(type, orchestratorK8sRuntime)
-      ? "auto-sync-permissions"
-      : "org-wide";
+  const defaultSyncPermissionsFor = (type: ConnectorType): boolean =>
+    Boolean(
+      autoSyncBeta &&
+        knowledgeBaseEnterprise &&
+        hasAutoSyncCreate &&
+        connectorSupportsAutoSync(type, orchestratorK8sRuntime),
+    );
   // SPDX-SnippetEnd
   // Connector types the organization's admins turned off are never offered —
   // the create API refuses them too.
@@ -189,9 +186,9 @@ export function CreateConnectorDialog({
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
-    // Picking a type re-establishes that type's default visibility (which
-    // also clears an auto-sync selection a new type can't support).
-    setVisibility(defaultVisibilityFor(type));
+    // Picking a type re-establishes that type's default (which also clears
+    // a permission-sync selection a new type can't support).
+    setSyncPermissionsFromSource(defaultSyncPermissionsFor(type));
     setStep("configure");
   };
 
@@ -227,7 +224,7 @@ export function CreateConnectorDialog({
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
-      visibility,
+      syncPermissionsFromSource,
       initialGrants: initialGrants.map(({ subject, actions }) => ({
         subject,
         actions,
@@ -246,7 +243,7 @@ export function CreateConnectorDialog({
           }),
       schedule: values.schedule,
       ftsLanguage: values.ftsLanguage,
-      ...(visibility === "auto-sync-permissions" && {
+      ...(syncPermissionsFromSource && {
         permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
       }),
       ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
@@ -256,7 +253,7 @@ export function CreateConnectorDialog({
       form.reset();
       setStep("select");
       setSelectedType(null);
-      setVisibility("org-wide");
+      setSyncPermissionsFromSource(false);
       setInitialGrants([]);
       setLabels([]);
       onOpenChange(false);
@@ -280,7 +277,7 @@ export function CreateConnectorDialog({
       setStep("select");
       setSelectedType(null);
       setLabels([]);
-      setVisibility("org-wide");
+      setSyncPermissionsFromSource(false);
       setInitialGrants([]);
     }
     onOpenChange(isOpen);
@@ -301,12 +298,11 @@ export function CreateConnectorDialog({
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
     : null;
-  // Only the auto-sync visibility mirrors the source's access control, so the
-  // upstream-permission requirement is noise on any other visibility.
-  const autoSyncRequirement =
-    visibility === "auto-sync-permissions" ? (
-      <AutoSyncCredentialRequirement type={connectorType} />
-    ) : undefined;
+  // Only permission sync mirrors the source's access control, so the
+  // upstream-permission requirement is noise otherwise.
+  const autoSyncRequirement = syncPermissionsFromSource ? (
+    <AutoSyncCredentialRequirement type={connectorType} />
+  ) : undefined;
   // Sources whose credential is minted inside the customer's own workspace
   // link to that workspace, taken from the URL field above.
   const connectorInstanceUrl = form.watch("config.outlineUrl") as
@@ -513,14 +509,13 @@ export function CreateConnectorDialog({
 
         <InitialResourcePermissions
           resource="knowledgeConnector"
+          authorless
           grants={initialGrants}
           onChange={setInitialGrants}
         />
         <AutoSyncPermissionsToggle
-          enabled={visibility === "auto-sync-permissions"}
-          onEnabledChange={(enabled) =>
-            setVisibility(enabled ? "auto-sync-permissions" : "org-wide")
-          }
+          enabled={syncPermissionsFromSource}
+          onEnabledChange={(enabled) => setSyncPermissionsFromSource(enabled)}
           supported={connectorSupportsAutoSync(
             connectorType,
             orchestratorK8sRuntime,
@@ -528,8 +523,9 @@ export function CreateConnectorDialog({
           permissionAction="create"
         />
 
-        {visibility === "auto-sync-permissions" &&
-          connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
+        {syncPermissionsFromSource && connectorType === "notion" && (
+          <NotionAutoSyncPermissionsNote />
+        )}
 
         <div className="border-t" />
 
@@ -594,7 +590,7 @@ export function CreateConnectorDialog({
           />
         )}
 
-        {visibility === "auto-sync-permissions" &&
+        {syncPermissionsFromSource &&
           connectorSupportsAdminApiKey(connectorType) && (
             <FormField
               control={form.control}
@@ -617,14 +613,13 @@ export function CreateConnectorDialog({
             />
           )}
 
-        {visibility === "auto-sync-permissions" &&
-          connectorType === "perforce" && (
-            <PerforcePermissionSyncFields
-              form={form}
-              mode="create"
-              adminCredentialDescription={permissionSyncRequirement}
-            />
-          )}
+        {syncPermissionsFromSource && connectorType === "perforce" && (
+          <PerforcePermissionSyncFields
+            form={form}
+            mode="create"
+            adminCredentialDescription={permissionSyncRequirement}
+          />
+        )}
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">
         <SchedulePicker
@@ -632,7 +627,7 @@ export function CreateConnectorDialog({
           name="schedule"
           connectorTypeLabel={getConnectorTypeLabel(connectorType)}
         />
-        {visibility === "auto-sync-permissions" && (
+        {syncPermissionsFromSource && (
           <PermissionSyncIntervalPicker
             form={form}
             name="permissionSyncIntervalSeconds"

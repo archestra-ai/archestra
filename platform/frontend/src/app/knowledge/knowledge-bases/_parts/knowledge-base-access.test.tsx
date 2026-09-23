@@ -112,7 +112,6 @@ it("creates a knowledge base with different permissions for selected teams", asy
   await waitFor(() =>
     expect(submitted).toMatchObject({
       name: "Shared handbook",
-      visibility: "private",
       initialGrants: [
         {
           subject: { type: "team", id: "engineering" },
@@ -192,8 +191,9 @@ it("creates a personal knowledge base without requiring a team", async () => {
   await waitFor(() =>
     expect(submitted).toMatchObject({
       name: "Research notes",
-      visibility: "private",
       initialGrants: [],
     }),
   );
+  // Access is the initial grants alone; the retired visibility is not sent.
+  expect(submitted).not.toHaveProperty("visibility");
 });

@@ -25,6 +25,7 @@ export function ResourceAccessSection({
   id,
   grants,
   onGrantsChange,
+  authorless,
   onDirtyChange,
   registerSave,
   standalone,
@@ -34,6 +35,8 @@ export function ResourceAccessSection({
   id?: string;
   grants?: InitialPermissionGrant[];
   onGrantsChange?: (grants: InitialPermissionGrant[]) => void;
+  /** See `InitialResourcePermissions`: the creator gets no grant of its own. */
+  authorless?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   /**
    * Pass this from a form that has its own Save. The section then hides its
@@ -49,6 +52,7 @@ export function ResourceAccessSection({
       <InitialResourcePermissions
         resource={resource}
         grants={grants ?? []}
+        authorless={authorless}
         onChange={onGrantsChange ?? (() => {})}
       />
     );

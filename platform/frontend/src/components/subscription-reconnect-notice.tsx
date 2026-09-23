@@ -81,7 +81,7 @@ export function SubscriptionReconnectNotice({
           defaultValues={{
             name: credential.name,
             provider: credential.provider,
-            scope: "personal",
+            shared: false,
             ...(subscription.marker !== null
               ? { authMethod: "subscription" }
               : {}),

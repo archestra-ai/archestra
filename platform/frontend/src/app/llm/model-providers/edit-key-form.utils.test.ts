@@ -15,7 +15,7 @@ function makeValues(
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    scope: "personal",
+    shared: false,
     teamId: null,
     vaultSecretPath: null,
     vaultSecretKey: null,
@@ -30,30 +30,13 @@ function makeValues(
 }
 
 describe("isEditApiKeyFormValid", () => {
-  it("accepts a personal-scoped key with no team", () => {
-    expect(isEditApiKeyFormValid(makeValues({ scope: "personal" }))).toBe(true);
-  });
-
-  it("accepts an org-scoped key with no team", () => {
-    expect(isEditApiKeyFormValid(makeValues({ scope: "org" }))).toBe(true);
-  });
-
-  it("rejects a team-scoped key with no team selected", () => {
-    expect(
-      isEditApiKeyFormValid(makeValues({ scope: "team", teamId: null })),
-    ).toBe(false);
-  });
-
-  it("accepts a team-scoped key once a team is selected", () => {
-    expect(
-      isEditApiKeyFormValid(makeValues({ scope: "team", teamId: "team-1" })),
-    ).toBe(true);
+  it("accepts an own key and a shared key alike", () => {
+    expect(isEditApiKeyFormValid(makeValues({ shared: false }))).toBe(true);
+    expect(isEditApiKeyFormValid(makeValues({ shared: true }))).toBe(true);
   });
 
   it("does not require an API key (the existing secret is kept on edit)", () => {
-    expect(
-      isEditApiKeyFormValid(makeValues({ scope: "personal", apiKey: null })),
-    ).toBe(true);
+    expect(isEditApiKeyFormValid(makeValues({ apiKey: null }))).toBe(true);
   });
 
   it("requires AWS credentials when Bedrock SigV4 is selected", () => {
@@ -94,21 +77,6 @@ describe("isEditApiKeyFormValid", () => {
       ),
     ).toBe(true);
   });
-
-  it("still enforces team scope for Bedrock SigV4", () => {
-    expect(
-      isEditApiKeyFormValid(
-        makeValues({
-          provider: "bedrock",
-          bedrockAuthMethod: "sigv4",
-          awsAccessKeyId: "AKIA...",
-          awsSecretAccessKey: "secret",
-          scope: "team",
-          teamId: null,
-        }),
-      ),
-    ).toBe(false);
-  });
 });
 
 describe("subscriptionSignInRequired", () => {
@@ -118,7 +86,7 @@ describe("subscriptionSignInRequired", () => {
     // Submitting here would privatize the shared key (subscription keys are
     // personal-only) while silently keeping its old shared secret.
     const values = makeValues({
-      scope: "org",
+      shared: true,
       authMethod: "subscription",
       apiKey: null,
     });

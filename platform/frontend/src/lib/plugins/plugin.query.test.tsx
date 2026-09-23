@@ -4,7 +4,6 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
-  updatePlugin: vi.fn(),
   deletePlugin: vi.fn(),
   importGithubPluginMarketplace: vi.fn(),
 }));
@@ -18,7 +17,6 @@ import { toast } from "sonner";
 import {
   type ImportGithubPluginMarketplaceBody,
   useBulkDeletePlugins,
-  useBulkUpdatePluginVisibility,
   useImportGithubPluginMarketplace,
 } from "./plugin.query";
 
@@ -36,31 +34,6 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe("Plugin bulk mutations", () => {
   beforeEach(() => vi.clearAllMocks());
-
-  it("applies one visibility change through each existing Plugin endpoint", async () => {
-    sdk.updatePlugin.mockResolvedValue({ data: {}, error: undefined });
-    const { result } = renderHook(() => useBulkUpdatePluginVisibility(), {
-      wrapper,
-    });
-
-    await act(() =>
-      result.current.mutateAsync({
-        plugins: [
-          { id: "p1", name: "One" },
-          { id: "p2", name: "Two" },
-        ],
-        scope: "org",
-        teamIds: [],
-        userIds: [],
-      }),
-    );
-
-    expect(sdk.updatePlugin).toHaveBeenCalledTimes(2);
-    expect(sdk.updatePlugin).toHaveBeenCalledWith({
-      path: { id: "p1" },
-      body: { scope: "org", teamIds: [], userIds: [] },
-    });
-  });
 
   it("reports partial delete outcomes without stranding successful rows", async () => {
     sdk.deletePlugin

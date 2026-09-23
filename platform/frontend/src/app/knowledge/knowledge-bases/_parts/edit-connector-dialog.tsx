@@ -61,6 +61,7 @@ type ConnectorItem = Pick<
   | "description"
   | "visibility"
   | "teamIds"
+  | "syncPermissionsFromSource"
   | "connectorType"
   | "config"
   | "schedule"
@@ -111,7 +112,7 @@ export function EditConnectorDialog({
   // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
   const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
   const [autoSyncPermissions, setAutoSyncPermissions] = useState(
-    connector.visibility === "auto-sync-permissions",
+    connector.syncPermissionsFromSource,
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
@@ -138,7 +139,7 @@ export function EditConnectorDialog({
   useEffect(() => {
     if (open) {
       setActiveSection("general");
-      setAutoSyncPermissions(connector.visibility === "auto-sync-permissions");
+      setAutoSyncPermissions(connector.syncPermissionsFromSource);
       setLabels(connector.labels ?? []);
       form.reset({
         name: connector.name,
@@ -218,10 +219,9 @@ export function EditConnectorDialog({
     instanceUrl: connectorInstanceUrl,
   });
 
-  // `visibility` still carries the permission-sync capability, which is real
-  // behaviour: the sync pass, the container ACLs and the group snapshots all
-  // key off `auto-sync-permissions`. Its other values are the retired sharing
-  // modes, so turning the capability off falls back to the plainest of them.
+  // The update body still switches permission sync through `visibility`
+  // (`auto-sync-permissions` turns it on). Its other values are the retired
+  // sharing modes, so turning sync off falls back to the plainest of them.
   const nextVisibility = autoSyncPermissions
     ? ("auto-sync-permissions" as const)
     : connector.visibility === "auto-sync-permissions"

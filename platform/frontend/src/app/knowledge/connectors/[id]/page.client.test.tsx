@@ -156,7 +156,10 @@ describe("ConnectorDetailPage", () => {
   describe("Permission Sync Runs tab visibility", () => {
     it("shows one merged Sync Runs tab with a run-family filter for auto-sync connectors", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -196,7 +199,10 @@ describe("ConnectorDetailPage", () => {
 
     it("renders the Users table on the Users tab and the Groups table on the Groups tab", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -218,7 +224,10 @@ describe("ConnectorDetailPage", () => {
 
     it("shows the unassigned-users alert on every tab of an auto-sync connector", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -239,7 +248,10 @@ describe("ConnectorDetailPage", () => {
 
     it("lands legacy Permissions-tab deep links on the Users tab", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -254,7 +266,10 @@ describe("ConnectorDetailPage", () => {
     it("hides the Users and Groups tabs for an auto-sync connector when the beta flag is off", () => {
       mockUseFeature.mockReturnValue(false);
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -303,7 +318,10 @@ describe("ConnectorDetailPage", () => {
 
     it("requests permission runs on the Permission Sync Runs tab", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -562,7 +580,10 @@ describe("ConnectorDetailPage", () => {
 
     it("summarizes permission-run stats and the during-content-sync badge via the legacy permission-runs link", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -623,7 +644,10 @@ describe("ConnectorDetailPage", () => {
 
     it("renders a clean delta permission run as 'No changes'", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -669,7 +693,10 @@ describe("ConnectorDetailPage", () => {
 
     it("a RUNNING permission run renders live counters, never a premature 'no changes' verdict", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -720,7 +747,10 @@ describe("ConnectorDetailPage", () => {
 
     it("surfaces a membership-only change — an upstream group removal must not read as 'no changes'", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -770,7 +800,10 @@ describe("ConnectorDetailPage", () => {
 
     it("surfaces a container-audience-only change — one audience row rewritten, zero document ACL writes", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -825,7 +858,10 @@ describe("ConnectorDetailPage", () => {
         (m) => ({ userEvent: m.default.setup() }),
       );
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -866,7 +902,10 @@ describe("ConnectorDetailPage", () => {
 
     it("renders no coverage item at all when no documents are fail-closed (exception-only)", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -895,7 +934,10 @@ describe("ConnectorDetailPage", () => {
         (m) => ({ userEvent: m.default.setup() }),
       );
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -958,7 +1000,10 @@ describe("ConnectorDetailPage", () => {
 
     it("shows the permission-specific empty state on the Permission Sync Runs tab", () => {
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),
@@ -1010,7 +1055,10 @@ describe("ConnectorDetailPage", () => {
         (m) => ({ userEvent: m.default.setup() }),
       );
       mockUseConnector.mockReturnValue({
-        data: makeConnector({ visibility: "auto-sync-permissions" }),
+        data: makeConnector({
+          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
+        }),
         isPending: false,
         isLoadingError: false,
         refetch: vi.fn(),

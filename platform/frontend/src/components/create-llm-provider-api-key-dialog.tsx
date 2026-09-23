@@ -161,7 +161,7 @@ export function CreateLlmProviderApiKeyDialog({
     // deferred until a sign-in completes (so switching tabs can't silently
     // privatize anything), and the sign-in callback reads form values in the
     // same tick the credential lands — before any effect has run.
-    const scope = subscriptionKind ? "personal" : values.scope;
+    const shared = subscriptionKind ? false : values.shared;
     try {
       const createdKey = await createMutation.mutateAsync({
         name:
@@ -174,18 +174,19 @@ export function CreateLlmProviderApiKeyDialog({
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
-        scope,
+        shared,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         initialGrants:
-          subscriptionKind || providerRequiresPerUserCredential(values.provider)
+          !shared ||
+          subscriptionKind ||
+          providerRequiresPerUserCredential(values.provider)
             ? []
             : (values.initialGrants ?? []).map(
                 ({ name: _name, ...grant }) => grant,
               ),
         // SPDX-SnippetEnd
-        teamId: scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -344,7 +345,7 @@ function getDefaultFormValues(params: {
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    scope: "personal",
+    shared: false,
     initialGrants: [],
     teamId: null,
     vaultSecretPath: null,
@@ -375,16 +376,11 @@ function getIsCreateFormValid(params: {
   } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
-    return Boolean(
-      values.awsAccessKeyId &&
-        values.awsSecretAccessKey &&
-        (values.scope !== "team" || values.teamId),
-    );
+    return Boolean(values.awsAccessKeyId && values.awsSecretAccessKey);
   }
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-      (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
         : isProviderApiKeyOptional({

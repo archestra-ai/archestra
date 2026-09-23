@@ -46,10 +46,6 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
     refetch: vi.fn(),
   }),
   useBulkDeletePlugins: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useBulkUpdatePluginVisibility: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
   useDeletePlugin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/entity-labels.query");

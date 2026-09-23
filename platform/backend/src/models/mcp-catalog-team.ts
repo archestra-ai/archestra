@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isBuiltInCatalogId,
   PLAYWRIGHT_MCP_CATALOG_ID,
   type ResourcePermissionAction,
 } from "@archestra/shared";
@@ -114,6 +115,28 @@ class McpCatalogTeamModel {
         ),
       ),
     ) as SQL;
+  }
+
+  /**
+   * Whether a catalog item is in front of the whole organization: a built-in
+   * catalog always is, and any other item is when its own grants reach the
+   * organization or a role (a runtime variant answers for its parent). A
+   * shared installation of an item that is not makes the installer's
+   * connection something other members resolve through, which is a write on
+   * the item.
+   */
+  static async isPublishedToOrganization(params: {
+    organizationId: string;
+    catalog: { id: string; parentCatalogItemId?: string | null };
+  }): Promise<boolean> {
+    const { catalog } = params;
+    if (isBuiltInCatalogId(catalog.id)) return true;
+    const { audience } = await ResourcePermissionPolicyModel.findAudience({
+      organizationId: params.organizationId,
+      resource: "mcpRegistry",
+      scope: catalog.parentCatalogItemId ?? catalog.id,
+    });
+    return audience === "org";
   }
 
   /**

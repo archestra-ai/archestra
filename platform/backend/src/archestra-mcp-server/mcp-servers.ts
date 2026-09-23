@@ -35,6 +35,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import {
@@ -1383,10 +1384,16 @@ async function handleDeployMcpServer(
       return errorResult(authError);
     }
 
-    // A shared install of a team-scoped item becomes the connection other
-    // members resolve through, so creating one is a write on the item (mirrors
-    // the REST install route).
-    if (catalogItem.scope === "team" && scope !== "personal") {
+    // A shared install of an item that is not in front of the whole
+    // organization becomes the connection other members resolve through, so
+    // creating one is a write on the item (mirrors the REST install route).
+    if (
+      scope !== "personal" &&
+      !(await McpCatalogTeamModel.isPublishedToOrganization({
+        organizationId,
+        catalog: catalogItem,
+      }))
+    ) {
       try {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

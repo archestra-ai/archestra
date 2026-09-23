@@ -375,3 +375,55 @@ test("syncCatalogTeams honors a mixed list, preserving each team's stored level"
   );
   expect(levels).toEqual({ [keep.id]: "use", [added.id]: "write" });
 });
+
+test("a catalog item is in front of the organization by its grants, not its retired scope", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeInternalMcpCatalog,
+}) => {
+  const org = await makeOrganization();
+  const author = await makeUser();
+  await makeMember(author.id, org.id);
+  const item = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    authorId: author.id,
+    scope: "org",
+  });
+  const key = {
+    organizationId: org.id,
+    resource: "mcpRegistry" as const,
+    scope: item.id,
+  };
+  const published = () =>
+    McpCatalogTeamModel.isPublishedToOrganization({
+      organizationId: org.id,
+      catalog: item,
+    });
+
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  const authorOnly = await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: policy?.revision ?? 0,
+    grants: (policy?.grants ?? []).filter(
+      (grant) => grant.subject.type === "user",
+    ),
+  });
+  expect(await published()).toBe(false);
+
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: authorOnly?.revision ?? 0,
+    grants: [
+      ...(authorOnly?.grants ?? []),
+      { subject: { type: "role", id: "member" }, actions: ["read", "use"] },
+    ],
+  });
+  expect(await published()).toBe(true);
+  expect(
+    await McpCatalogTeamModel.isPublishedToOrganization({
+      organizationId: org.id,
+      catalog: { id: "00000000-0000-4000-8000-000000000002" },
+    }),
+  ).toBe(true);
+});

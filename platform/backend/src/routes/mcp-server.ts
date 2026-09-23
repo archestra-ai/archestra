@@ -42,6 +42,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
@@ -427,10 +428,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers,
         });
 
-        // A shared install of a team-scoped item becomes the connection other
-        // members resolve through, so creating one is a write on the item —
-        // `use` alone installs only for oneself.
-        if (catalogItem.scope === "team" && serverData.scope !== "personal") {
+        // A shared install of an item that is not in front of the whole
+        // organization becomes the connection other members resolve through,
+        // so creating one is a write on the item — `use` alone installs only
+        // for oneself.
+        if (
+          serverData.scope !== "personal" &&
+          !(await McpCatalogTeamModel.isPublishedToOrganization({
+            organizationId,
+            catalog: catalogItem,
+          }))
+        ) {
           await ResourcePermissions.require({
             organizationId: organizationId,
             userId: user.id,

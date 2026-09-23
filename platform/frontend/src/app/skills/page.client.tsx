@@ -33,6 +33,7 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -1443,13 +1444,11 @@ function ListedSkillSourceBadge({
     );
   }
   if (item.skill.sourceType === "built_in") {
+    const label =
+      item.skill.sourceRef === "builtin:appa-guide" ? "OpenAPPA" : appName;
     return (
-      <Badge
-        variant="secondary"
-        title={appName}
-        className="shrink-0 font-normal"
-      >
-        <span>{appName}</span>
+      <Badge variant="secondary" title={label} className="shrink-0 font-normal">
+        <span>{label}</span>
       </Badge>
     );
   }
@@ -1487,7 +1486,32 @@ function ListedSkillIcon({
     );
   }
   if (item.source === "plugin") {
+    const repo =
+      item.skill.sourceMarketplaceRepo ?? item.skill.sourceRepo ?? null;
+    if (
+      item.skill.pluginName.toLowerCase() === "openappa" &&
+      repo?.toLowerCase() === "archestra-ai/openappa"
+    ) {
+      return (
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+          aria-hidden
+        >
+          <OpenAppaSolidIcon className="size-6" />
+        </span>
+      );
+    }
     return <PluginSourceIcon plugin={item.skill} />;
+  }
+  if (item.skill.sourceRef === "builtin:appa-guide") {
+    return (
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+        aria-hidden
+      >
+        <OpenAppaSolidIcon className="size-6" />
+      </span>
+    );
   }
   return (
     <SkillSourceIcon

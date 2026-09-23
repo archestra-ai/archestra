@@ -44,7 +44,11 @@ import {
   policyAnnotations,
 } from "./_parts/policy-decorations";
 
-export function GuardrailsPolicyEditor() {
+export function GuardrailsPolicyEditor({
+  readOnly = false,
+}: {
+  readOnly?: boolean;
+}) {
   const policy = useGuardrailsPolicy();
   const sync = useAppaGithubSync();
   const [tab, setTab] = useState<"policy" | "effective">("policy");
@@ -61,31 +65,42 @@ export function GuardrailsPolicyEditor() {
       />
     );
   return (
-    // Both panels stay mounted: switching tabs must not throw away an unsaved
-    // draft, and the composed view pays for itself only once it is asked for,
-    // which is what its `enabled` flag carries.
+    // Editable drafts stay mounted while switching; the read-only details page
+    // shows only the selected document so it never presents two editors.
     <Tabs
+      className={readOnly ? "gap-0" : "-mt-4 gap-0"}
       value={tab}
       onValueChange={(next) => setTab(next === "effective" ? next : "policy")}
     >
-      <TabsList>
-        <TabsTrigger value="policy">Policy</TabsTrigger>
-        <TabsTrigger value="effective">Effective policy</TabsTrigger>
+      <TabsList className="h-auto w-full justify-start gap-0 rounded-none border-b bg-transparent p-0">
+        <TabsTrigger
+          className="h-10 flex-none rounded-none border-0 border-b-2 border-transparent px-4 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent"
+          value="policy"
+        >
+          Policy
+        </TabsTrigger>
+        <TabsTrigger
+          className="h-10 flex-none rounded-none border-0 border-b-2 border-transparent px-4 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent"
+          value="effective"
+        >
+          Effective policy
+        </TabsTrigger>
       </TabsList>
       {/* A force-mounted panel is never hidden by Radix, so the inactive one is hidden here. */}
       <TabsContent
         value="policy"
-        forceMount
+        forceMount={readOnly ? undefined : true}
         className="data-[state=inactive]:hidden"
       >
         <PolicyForm
           policy={policy.data}
           synced={!!sync.data?.source?.interval}
+          readOnly={readOnly}
         />
       </TabsContent>
       <TabsContent
         value="effective"
-        forceMount
+        forceMount={readOnly ? undefined : true}
         className="data-[state=inactive]:hidden"
       >
         <EffectivePolicyView enabled={tab === "effective"} />
@@ -97,14 +112,16 @@ export function GuardrailsPolicyEditor() {
 function PolicyForm({
   policy,
   synced,
+  readOnly,
 }: {
   policy: GuardrailsPolicy;
   synced: boolean;
+  readOnly: boolean;
 }) {
   const { data: hasEditPermission } = useHasPermissions({
     toolPolicy: ["update"],
   });
-  const canEdit = hasEditPermission && !synced;
+  const canEdit = hasEditPermission && !synced && !readOnly;
   const form = useForm({
     defaultValues: {
       content: policy.content,
@@ -173,7 +190,7 @@ function PolicyForm({
             <div className="flex items-center gap-3">
               <FileCode2 className="size-4 text-muted-foreground" />
               <div>
-                <h2 className="text-sm font-medium">Policy editor</h2>
+                <h2 className="text-sm font-medium">Policy source</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   organization.appa.toml
                 </p>
@@ -184,7 +201,7 @@ function PolicyForm({
                 <a
                   href={getDocsUrl(
                     DocsPage.PlatformAiToolGuardrails,
-                    "guardrails-v2-preview",
+                    "configure-with-the-agent",
                   )}
                   target="_blank"
                   rel="noreferrer"

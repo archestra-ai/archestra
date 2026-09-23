@@ -1,5 +1,6 @@
 /** Discriminator values for builtInAgentConfig.name */
 export const BUILT_IN_AGENT_IDS = {
+  OPENAPPA_CONFIG: "openappa-configuration-agent",
   POLICY_CONFIG: "policy-configuration-subagent",
   DUAL_LLM_MAIN: "dual-llm-main-agent",
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",

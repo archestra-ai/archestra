@@ -22,6 +22,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import {
   type ChatMcpElicitationRequest,
@@ -459,11 +460,18 @@ export function McpElicitationCard({
   };
 
   const header = (
-    <div className="flex items-center gap-3 px-4 pt-3">
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        <span className="sr-only">Question </span>
-        {activeIndex + 1} of {questions.length}
-      </span>
+    <div
+      className={cn(
+        "flex items-center gap-3",
+        isMultiple ? "px-4 pt-3" : "absolute right-2 top-2 z-10",
+      )}
+    >
+      {isMultiple ? (
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          <span className="sr-only">Question </span>
+          {activeIndex + 1} of {questions.length}
+        </span>
+      ) : null}
       {isMultiple ? (
         <TabsList
           size="sm"
@@ -516,7 +524,12 @@ export function McpElicitationCard({
           ? undefined
           : questionMessageId(activeQuestion.request.id)
       }
-      className="not-prose mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+      className={cn(
+        "not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm",
+        isMultiple || activeQuestion?.request.kind === "openappa_review"
+          ? "max-w-4xl"
+          : "max-w-2xl",
+      )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";
       }}
@@ -563,7 +576,7 @@ export function McpElicitationCard({
           {settledMembers.length > 0 && !shouldHoldSubmissionSnapshot ? (
             <AnswerSummary members={settledMembers} label="Saved answers" />
           ) : null}
-          <div className="flex min-w-0 flex-col gap-4 p-4">
+          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:pr-8 [&>p:first-child]:font-medium">
             <ElicitationMessage request={activeQuestion.request} />
             {renderFields(activeQuestion)}
           </div>
@@ -572,7 +585,10 @@ export function McpElicitationCard({
       {!allMembersSettled ? (
         <div
           data-testid="mcp-elicitation-footer"
-          className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-2"
+          className={cn(
+            "flex items-center justify-end gap-1 px-3 pb-3",
+            isMultiple && "border-t border-border/60 py-2",
+          )}
         >
           {isMultiple && activeIndex > 0 ? (
             <Button

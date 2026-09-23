@@ -26,6 +26,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
         "/settings/apps",
         "/settings/skills",
         "/settings/security",
+        "/settings/openappa",
         "/settings/knowledge",
         "/settings/environments",
         "/settings/users",
@@ -43,6 +44,10 @@ vi.mock("@/lib/secrets.query", () => ({
 }));
 
 vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
+
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({ data: { enabled: false } }),
+}));
 
 describe("settings navigation", () => {
   it("lists the same tabs, in the same order, as the settings page renders", () => {

@@ -223,7 +223,9 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   "get_guardrails_policy",
   "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
   "update_guardrails_policy",
+  "get_guardrails_policy_change_status",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -374,6 +376,7 @@ export type ArchestraToolFullName<
  */
 export const ARCHESTRA_TOOL_GROUPS = [
   { id: "identity", label: "Identity" },
+  { id: "openappa", label: "OpenAPPA" },
   { id: "agents", label: "Agents" },
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
@@ -412,12 +415,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   ArchestraToolGroupId
 > = {
   whoami: "identity",
-  execute_remedy_plan: "identity",
-  yell: "identity",
-  get_remedy_plans: "identity",
-  get_guardrails_policy: "policies",
-  validate_guardrails_policy: "policies",
-  update_guardrails_policy: "policies",
+  execute_remedy_plan: "openappa",
+  yell: "openappa",
+  get_remedy_plans: "openappa",
+  get_guardrails_policy: "openappa",
+  validate_guardrails_policy: "openappa",
+  preview_guardrails_policy_change: "openappa",
+  update_guardrails_policy: "openappa",
+  get_guardrails_policy_change_status: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",

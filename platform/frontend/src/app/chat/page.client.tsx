@@ -490,6 +490,7 @@ export function ChatPageContent({
     chatApiKeys,
     memberDefault: memberDefault ?? null,
     urlAgentId: searchParams.get("agentId"),
+    urlModelId: searchParams.get("modelId"),
     projectDefaultAgentId: newChatProject?.defaultAgent?.id ?? null,
     canUseSavedAgent: canSeeAgentPicker === true,
     isPermissionResolving: isAgentPickerPermissionLoading,

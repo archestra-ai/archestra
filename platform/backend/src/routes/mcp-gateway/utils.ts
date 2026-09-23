@@ -280,6 +280,18 @@ const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 ]);
+const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "get_guardrails_policy",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "get_guardrails_policy_change_status",
+  "load_skill",
+  "list_mcp_server_deployments",
+  "get_mcp_server_tools",
+  "search_tools",
+  "ask_user",
+]);
 
 /**
  * The tools the gateway advertises to every OpenAPPA session without an
@@ -463,6 +475,14 @@ export async function createAgentServer(params: {
             ),
           )
         : [];
+    const implicitPolicyTools =
+      openappaEnabled() && agent.agentType === "agent"
+        ? getArchestraMcpTools().filter((tool) =>
+            APPA_POLICY_TOOL_SHORT_NAMES.has(
+              archestraMcpBranding.getToolShortName(tool.name) ?? "",
+            ),
+          )
+        : [];
     const implicitAskUserTools = getImplicitAskUserTools();
     const candidateTools = dedupeToolsByName(
       [
@@ -472,6 +492,7 @@ export async function createAgentServer(params: {
         ...implicitMetaTools.map(asBuiltInTool),
         ...implicitTaskControlTools.map(asBuiltInTool),
         ...implicitOpenAppaTools.map(asBuiltInTool),
+        ...implicitPolicyTools.map(asBuiltInTool),
         ...implicitAskUserTools.map(asBuiltInTool),
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
@@ -495,6 +516,8 @@ export async function createAgentServer(params: {
       toolExposureMode: agent.toolExposureMode ?? "full",
       advertiseUiResourceTools: surface.advertiseUiTools,
       autoToolMode: agent.accessAllTools,
+      advertiseOpenAppaPolicyTools:
+        surface.keepChatOnlyTools && openappaEnabled(),
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
     const permittedTools = surface.keepChatOnlyTools
@@ -2362,10 +2385,16 @@ function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
+  advertiseOpenAppaPolicyTools: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
-    params;
+  const {
+    toolExposureMode,
+    advertiseUiResourceTools,
+    autoToolMode,
+    advertiseOpenAppaPolicyTools,
+    tools,
+  } = params;
   return tools.filter((tool) => {
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
     // the meta tools themselves and the always-exposed skill path must stay
@@ -2383,6 +2412,10 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          (advertiseOpenAppaPolicyTools &&
+            APPA_POLICY_TOOL_SHORT_NAMES.has(
+              archestraMcpBranding.getToolShortName(tool.name) ?? "",
+            )) ||
           (openappaEnabled() &&
             isImplicitOpenAppaTool(
               archestraMcpBranding.getToolShortName(tool.name),

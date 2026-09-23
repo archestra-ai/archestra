@@ -313,7 +313,7 @@ export function ElicitationFieldInput({
 
   if (enumValues?.length && choiceStyle) {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {hideLabel ? null : (
           <p id={labelId} className="text-sm font-medium">
             {field.label}
@@ -330,7 +330,7 @@ export function ElicitationFieldInput({
           aria-label={!labelledBy && hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className="flex flex-col gap-1.5"
+          className="flex flex-col gap-1"
         >
           {enumValues.map((option, index) => {
             const optionId = `${id}-${index}`;
@@ -467,7 +467,7 @@ function OptionRow({
     <label
       htmlFor={htmlFor}
       className={cn(
-        "-mx-1 flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors",
+        "-mx-1 flex cursor-pointer items-start gap-2 rounded-md border px-3 py-1.5 transition-colors",
         "hover:bg-muted/60 has-[:focus-visible]:bg-muted/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring/50",
         selected ? "border-border bg-muted" : "border-transparent",
         error && !selected ? "border-destructive/40" : null,

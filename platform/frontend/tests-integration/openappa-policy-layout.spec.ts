@@ -7,7 +7,7 @@ for (const viewport of [
   test.describe(`OpenAPPA at ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test("shows the policy editor and keeps the GitHub form padded and its actions reachable", async ({
+    test("shows the read-only policy and keeps the GitHub form padded and its actions reachable", async ({
       page,
       mswControl,
       request,
@@ -94,27 +94,27 @@ for (const viewport of [
           lastErrorAt: null,
         },
       });
-      await page.goto("/guardrails-v2");
-      await expect(page).toHaveURL(/\/openappa$/);
-      const editor = page.getByRole("heading", { name: "Policy editor" });
-      await expect(editor).toBeInViewport();
+      await page.goto("/openappa/policy");
+      const policySource = page.getByRole("heading", { name: "Policy source" });
+      await expect(policySource).toBeInViewport();
+      await expect(page.getByText("Read only", { exact: true })).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Save & apply" }),
-      ).toBeVisible();
-      // Both tab panels stay mounted; only the chosen one is shown.
+      ).toHaveCount(0);
       const effective = page.getByRole("heading", { name: "Effective policy" });
       await expect(effective).toBeHidden();
       await page.getByRole("tab", { name: "Effective policy" }).click();
       await expect(effective).toBeVisible();
-      await expect(editor).toBeHidden();
+      await expect(policySource).toBeHidden();
       await page.getByRole("tab", { name: "Policy", exact: true }).click();
-      await expect(editor).toBeVisible();
+      await expect(policySource).toBeVisible();
       await expect(effective).toBeHidden();
       await page.screenshot({
-        path: testInfo.outputPath("policy-editor.png"),
+        path: testInfo.outputPath("policy-source.png"),
         fullPage: true,
       });
-      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      await page.goto("/openappa");
+      await page.getByRole("button", { name: "Set up GitHub sync" }).click();
       const dialog = page.getByRole("dialog", {
         name: "Connect APPA to GitHub",
       });
@@ -148,8 +148,8 @@ for (const viewport of [
       // The repository field holds an unsaved value, so Cancel asks first.
       await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
-      await editor.scrollIntoViewIfNeeded();
-      await expect(editor).toBeInViewport();
+      await page.goto("/openappa/policy");
+      await expect(policySource).toBeInViewport();
     });
   });
 }

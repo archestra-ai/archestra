@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-23
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -2138,15 +2138,15 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
-- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` and `execute_remedy_plan`. Also signs native-question receipts, session receipts, tool-call ID stamps, and subagent delegation markers. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, and `signature`. This format provides integrity (JWS), not encryption (JWE). The `protected` header specifies `alg` (`HS256`) and `kid` (`default`). Unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and execution receipts stay outside the JWS. The proxy can prepend a two-line protected session mark to the first reply and to compaction summaries. This mark proves which session authored the reply. The proxy removes the mark before sending requests to the provider and before logging. Most replies carry no mark. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must use the same value. Without this secret, a subagent binds to the parent session reported by its client.
+- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables the OpenAPPA page, policy chat tools, and read-only policy details.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` and `execute_remedy_plan`. It also signs native-question receipts, session receipts, tool-call ID stamps, and subagent delegation markers. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, and `signature`. This format provides integrity (JWS), not encryption (JWE). The `protected` header specifies `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and execution receipts stay outside the JWS. The proxy can prepend a two-line protected-session mark to the first reply and compaction summaries. It removes the mark before provider dispatch and logging. Most replies have no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must use the same value. Without this secret, a subagent binds to the parent session reported by its client.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
-Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. You do not need extra database tables for child lineage or return receipts. The proxy preserves signed context across compaction and client handoffs. It removes transport proofs before provider dispatch. The short started and finished codes are display markers, not authentication tokens.
+Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. They need no extra database tables. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
 
-Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
+Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 
 `ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
 

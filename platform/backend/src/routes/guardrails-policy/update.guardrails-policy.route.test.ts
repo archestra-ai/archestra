@@ -193,7 +193,9 @@ describe("guardrails policy authoring", () => {
         { content, expectedRevision: 0 },
         context,
       ),
-    ).rejects.toThrow("This policy changed");
+    ).rejects.toThrow(
+      "The policy changed. Read it again before proposing changes.",
+    );
   });
 
   test("granting a battery a credential needs credential update, removing it does not", async ({

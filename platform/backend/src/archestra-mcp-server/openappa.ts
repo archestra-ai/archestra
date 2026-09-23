@@ -23,6 +23,11 @@ import {
   loadOfferReview,
 } from "@/openappa/service";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { getAppaGithubSync } from "@/services/openappa-github-sync";
+import {
+  getOpenAppaPolicyChangeStatus,
+  publishOpenAppaPolicyChange,
+} from "@/services/openappa-policy-change";
 import { ApiError } from "@/types";
 import {
   UpdateGuardrailsPolicySchema,
@@ -95,7 +100,7 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "get_guardrails_policy",
-    title: "Read guardrails policy",
+    title: "Read OpenAPPA policy",
     description:
       "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
@@ -106,12 +111,24 @@ const registry = defineArchestraTools([
         guardrailsPolicyService.get(context.organizationId),
         enforced(context.organizationId),
       ]);
-      return result({ ...root, effective });
+      const sync = await getAppaGithubSync(context.organizationId);
+      return result({
+        ...root,
+        effective,
+        delivery: sync.source?.interval
+          ? {
+              mode: "pull_request",
+              repo: sync.source.repo,
+              path: sync.source.path,
+              githubAppReady: Boolean(sync.source.githubAppConfigId),
+            }
+          : { mode: "revision" },
+      });
     },
   }),
   defineArchestraTool({
     shortName: "validate_guardrails_policy",
-    title: "Validate guardrails policy",
+    title: "Validate OpenAPPA policy",
     description:
       "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
@@ -126,26 +143,91 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_guardrails_policy",
-    title: "Update guardrails policy",
+    shortName: "preview_guardrails_policy_change",
+    title: "Preview OpenAPPA policy change",
     description:
-      "Save and activate organization.appa.toml for new conversations. Read the current policy first, preserve unrelated rules, validate changes, and use the revision returned by get_guardrails_policy as expectedRevision. On conflict, re-read and reconcile edits. Existing conversations keep their original policy. Requires toolPolicy:update permission, and credential:update as well whenever the saved text hands a credential to a battery it did not already reach — a new `[credentials]` entry, a changed key, or a newly included battery that reads a variable the table already binds. Removing a battery or a binding needs no extra permission. The answer carries `effective.batteries` with each battery's status: report any that is not `active`.",
+      "Validate and show a reviewable diff for a proposed organization.appa.toml. Read the current policy and pass its revision. This changes nothing. Show the diff and warnings to the user before publishing with update_guardrails_policy.",
     schema: UpdateGuardrailsPolicySchema,
+    async handler({ args, context }) {
+      if (!context.organizationId)
+        throw new ApiError(401, "Organization context is required");
+      const before = await guardrailsPolicyService.get(context.organizationId);
+      if (before.revision !== args.expectedRevision)
+        throw new ApiError(
+          409,
+          "The policy changed. Read it again before previewing.",
+        );
+      const validation = await guardrailsPolicyService.validate(args.content, {
+        organizationId: context.organizationId,
+        previous: before.content,
+      });
+      const sync = await getAppaGithubSync(context.organizationId);
+      return result({
+        stage: "preview",
+        delivery: sync.source?.interval ? "pull_request" : "revision",
+        path: sync.source?.path ?? "organization.appa.toml",
+        before: before.content,
+        after: args.content,
+        ...validation,
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "update_guardrails_policy",
+    title: "Publish OpenAPPA policy change",
+    description:
+      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain its diff and warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. Report any inactive effective battery.",
+    schema: UpdateGuardrailsPolicySchema.extend({
+      title: z
+        .string()
+        .trim()
+        .min(3)
+        .max(120)
+        .default("Update OpenAPPA policy"),
+      summary: z
+        .string()
+        .trim()
+        .max(4000)
+        .default("OpenAPPA policy change proposed in chat."),
+    }),
     async handler({ args, context }) {
       if (!context.organizationId || !context.userId)
         throw new ApiError(
           401,
           "Authenticated organization context is required",
         );
-      const saved = await guardrailsPolicyService.update({
+      const saved = await publishOpenAppaPolicyChange({
         ...args,
         organizationId: context.organizationId,
         userId: context.userId,
       });
       return result({
         ...saved,
-        effective: await enforced(context.organizationId),
+        ...(saved.delivery === "revision"
+          ? { effective: await enforced(context.organizationId) }
+          : {}),
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "get_guardrails_policy_change_status",
+    title: "Check OpenAPPA policy pull request",
+    description:
+      "Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
+    schema: z.strictObject({ number: z.number().int().positive() }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(
+          401,
+          "Authenticated organization context is required",
+        );
+      return result(
+        await getOpenAppaPolicyChangeStatus({
+          organizationId: context.organizationId,
+          userId: context.userId,
+          number: args.number,
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -518,6 +600,8 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
     shortName === "get_guardrails_policy" ||
     shortName === "validate_guardrails_policy" ||
-    shortName === "update_guardrails_policy"
+    shortName === "preview_guardrails_policy_change" ||
+    shortName === "update_guardrails_policy" ||
+    shortName === "get_guardrails_policy_change_status"
   );
 }

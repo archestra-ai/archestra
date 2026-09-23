@@ -38,6 +38,10 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config.query");
 
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: vi.fn(),
+}));
+
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
@@ -144,6 +148,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -171,6 +176,9 @@ describe("ConversationSearchPalette", () => {
       ),
     );
     vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: { enabled: false },
+    } as ReturnType<typeof useGuardrailsDeployment>);
     vi.mocked(usePathname).mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
       data: [
@@ -463,6 +471,28 @@ describe("ConversationSearchPalette", () => {
     } else {
       expect(screen.queryByText("OpenAPPA")).not.toBeInTheDocument();
     }
+  });
+
+  it("hides legacy Guardrails when the OpenAPPA deployment toggle is on", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "openappaEnabled",
+    );
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: { enabled: true },
+    } as ReturnType<typeof useGuardrailsDeployment>);
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "guardrails" },
+    });
+
+    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    expect(screen.getByText("OpenAPPA")).toBeInTheDocument();
   });
 
   it("searches pages by their visible labels and navigates to a match", () => {

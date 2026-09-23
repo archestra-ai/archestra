@@ -1,6 +1,7 @@
-import { ChatErrorCode } from "@archestra/shared";
+import { BUILT_IN_AGENT_IDS, ChatErrorCode } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import client from "prom-client";
+import config from "@/config";
 import db, { schema } from "@/database";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
@@ -18,6 +19,7 @@ import type { User } from "@/types";
 import { uuidv7 } from "@/utils/uuid";
 
 describe("chat conversation and message routes", () => {
+  const originalOpenAppaEnabled = config.openappa.enabled;
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -43,6 +45,7 @@ describe("chat conversation and message routes", () => {
   });
 
   afterEach(async () => {
+    config.openappa.enabled = originalOpenAppaEnabled;
     await app.close();
   });
 
@@ -124,6 +127,54 @@ describe("chat conversation and message routes", () => {
       agentId: agent.id,
       pinnedAt: null,
     });
+  });
+
+  test("uses the protected OpenAPPA agent for a policy conversation", async ({
+    makeAgent,
+  }) => {
+    config.openappa.enabled = true;
+    const ordinaryAgent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const policyAgent = await makeAgent({
+      organizationId,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: ordinaryAgent.id, origin: "openappa" },
+    });
+    expect(response.statusCode).toBe(200);
+    const id = response.json().id;
+    expect(response.json().origin).toBe("openappa");
+    expect(response.json().agentId).toBe(policyAgent.id);
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${id}`,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json().origin).toBe("openappa");
+  });
+
+  test("rejects a policy chat while OpenAPPA is unavailable", async ({
+    makeAgent,
+  }) => {
+    config.openappa.enabled = false;
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, origin: "openappa" },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   test("hides an app-opened chat from the list until the user writes into it", async ({

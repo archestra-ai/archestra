@@ -2540,49 +2540,42 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
+  /**
+   * Whether `agentId` is its organization's LLM Proxy and `userId` a member of
+   * that organization. See {@link organizationLlmProxyCondition}.
+   */
+  static async isOrganizationLlmProxyFor(params: {
+    agentId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.agentId),
+          notDeleted(schema.agentsTable),
+          organizationLlmProxyCondition(params.userId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   static async findAccessibleIdsForUser(
     userId: string,
     isAgentAdmin = false,
   ): Promise<string[]> {
     const rows = await db
-      .selectDistinct({ id: schema.agentsTable.id })
+      .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
-      .leftJoin(
-        schema.agentUsersTable,
-        and(
-          eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
-          eq(schema.agentUsersTable.userId, userId),
-        ),
-      )
       .where(
         and(
           notDeleted(schema.agentsTable),
-          agentListFence(userId),
           or(
             explicitAgentReadCondition(userId),
             isAgentAdmin ? sql`true` : undefined,
-            eq(schema.agentsTable.scope, "org"),
-            // A personal agent reaches its author, and anyone it has been
-            // shared with individually. The grant sits beside the scope rather
-            // than replacing it, so no scope enum has to learn a new value.
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              or(
-                eq(schema.agentsTable.authorId, userId),
-                eq(schema.agentUsersTable.userId, userId),
-              ),
-            ),
-            and(
-              eq(schema.agentsTable.scope, "team"),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.agentTeamsTable.teamId,
-              }),
-            ),
+            organizationLlmProxyCondition(userId),
           ),
         ),
       );
@@ -4789,4 +4782,19 @@ function agentListFence(userId: string): SQL {
     explicitAgentReadCondition(userId),
   ) as SQL;
   // SPDX-SnippetEnd
+}
+
+/**
+ * The organization's LLM Proxy, for a member of that organization. A proxy has
+ * no grant namespace of its own: the one row every proxy request resolves to
+ * serves the whole organization, and the retired per-user proxy rows it
+ * replaced are reached by nobody but an administrator.
+ */
+function organizationLlmProxyCondition(userId: string): SQL {
+  const table = schema.agentsTable;
+  return and(
+    eq(table.agentType, "llm_proxy"),
+    eq(table.isDefault, true),
+    sql`EXISTS (SELECT 1 FROM member proxy_member WHERE proxy_member.organization_id = ${table.organizationId} AND proxy_member.user_id = ${userId})`,
+  ) as SQL;
 }

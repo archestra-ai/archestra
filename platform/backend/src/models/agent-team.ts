@@ -5,9 +5,7 @@ import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
-import AgentUserModel from "./agent-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import TeamModel from "./team";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -42,13 +40,7 @@ class AgentTeamModel {
     });
   }
 
-  /**
-   * Get all agent IDs that a user has access to.
-   * Three sources of access:
-   * 1. Org-scoped agents (visible to all)
-   * 2. Author's own personal agents
-   * 3. Team-scoped agents where user is a team member
-   */
+  /** Get all agent IDs that a user can read. */
   static async getUserAccessibleAgentIds(
     userId: string,
     isAgentAdmin: boolean,
@@ -70,12 +62,8 @@ class AgentTeamModel {
   }
 
   /**
-   * Check if a user has access to a specific agent.
-   * Access rules (in order):
-   * 1. Admin → true
-   * 2. scope = 'org' → true
-   * 3. scope = 'personal' → only the author has access
-   * 4. scope = 'team' AND user is in one of agent's teams → true
+   * Check if a user has access to a specific agent: a grant decides for an
+   * agent or MCP gateway; see the end of the method for an LLM proxy.
    */
   static async userHasAgentAccess(params: {
     userId: string;
@@ -136,64 +124,11 @@ class AgentTeamModel {
       .limit(1);
     if (granted) return true;
     // Agents and MCP gateways are reached through grants alone. An LLM proxy
-    // has no grant namespace of its own, so it still answers from its
-    // visibility, author and team assignments below.
+    // has no grant namespace of its own: the organization's proxy serves every
+    // member, and an administrator reaches any proxy row.
     if ((await AgentModel.getAgentType(agentId)) !== "llm_proxy") return false;
     if (isAgentAdmin) return true;
-
-    // 2. scope = 'org' → true
-    if (agent.scope === "org") {
-      logger.debug(
-        { userId, agentId },
-        "AgentTeamModel.userHasAgentAccess: org-scoped agent, granting access",
-      );
-      return true;
-    }
-
-    // 3. scope = 'personal' → the author, plus anyone it was shared with by name
-    if (agent.scope === "personal") {
-      const hasAccess =
-        agent.authorId === userId ||
-        (await AgentUserModel.userHasGrant(agentId, userId));
-      logger.debug(
-        { userId, agentId, hasAccess },
-        "AgentTeamModel.userHasAgentAccess: personal agent check",
-      );
-      return hasAccess;
-    }
-
-    // 4. scope = 'team' AND user is in one of agent's teams
-    if (agent.scope === "team") {
-      const teamIds = await TeamModel.getUserTeamIds(userId);
-
-      if (teamIds.length === 0) {
-        logger.debug(
-          { userId, agentId },
-          "AgentTeamModel.userHasAgentAccess: user has no teams",
-        );
-        return false;
-      }
-
-      const agentTeam = await db
-        .select()
-        .from(schema.agentTeamsTable)
-        .where(
-          and(
-            eq(schema.agentTeamsTable.agentId, agentId),
-            inArray(schema.agentTeamsTable.teamId, teamIds),
-          ),
-        )
-        .limit(1);
-
-      const hasAccess = agentTeam.length > 0;
-      logger.debug(
-        { userId, agentId, hasAccess },
-        "AgentTeamModel.userHasAgentAccess: team check completed",
-      );
-      return hasAccess;
-    }
-
-    return false;
+    return AgentModel.isOrganizationLlmProxyFor({ agentId, userId });
   }
 
   /**

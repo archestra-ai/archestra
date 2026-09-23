@@ -1315,6 +1315,120 @@ describe("validateExternalIdpToken", () => {
     expect(outcome.result).toBeNull();
     expect(outcome.reason).toBe("no_email_claim");
   });
+
+  // An IdP-authenticated caller reaches a gateway through its grants and
+  // nothing else. A gateway with no teams used to read as organization-wide;
+  // that label is retired, so an empty grant list admits nobody but the
+  // administrators whose grant sits at `*`.
+  test("admits a gateway user through the gateway's use grant, never its retired scope", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      identityProviderId: idp.id,
+      scope: "org",
+      teams: [],
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "mcpGateway" as const,
+      scope: gateway.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const emptied = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const jwt = () =>
+      mockValidateJwt.mockResolvedValueOnce({
+        sub: "member-sub",
+        email: user.email,
+        name: user.name,
+        rawClaims: { sub: "member-sub", email: user.email },
+      });
+
+    jwt();
+    expect(await validateExternalIdpToken(gateway.id, FAKE_JWT)).toBeNull();
+
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: emptied?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    jwt();
+    expect((await validateExternalIdpToken(gateway.id, FAKE_JWT))?.userId).toBe(
+      user.id,
+    );
+  });
+
+  test("admits any member to the organization's LLM proxy and nobody to a retired proxy row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const user = await makeUser();
+    await makeMember(author.id, org.id, { role: "member" });
+    await makeMember(user.id, org.id, { role: "member" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    // The retired scope says the opposite of the rule in both cases.
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+      identityProviderId: idp.id,
+      scope: "personal",
+      authorId: author.id,
+    });
+    const retired = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: false,
+      identityProviderId: idp.id,
+      scope: "org",
+    });
+    const jwt = () =>
+      mockValidateJwt.mockResolvedValueOnce({
+        sub: "member-sub",
+        email: user.email,
+        name: user.name,
+        rawClaims: { sub: "member-sub", email: user.email },
+      });
+
+    jwt();
+    expect(
+      (await validateExternalIdpToken(proxy.id, FAKE_JWT, "llmProxy"))?.userId,
+    ).toBe(user.id);
+    jwt();
+    expect(
+      await validateExternalIdpToken(retired.id, FAKE_JWT, "llmProxy"),
+    ).toBeNull();
+  });
 });
 
 describe("authenticateMCPGatewayRequest failure reasons", () => {

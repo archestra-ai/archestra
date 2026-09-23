@@ -1160,10 +1160,11 @@ describe("validatePassthroughVirtualKey", () => {
     const org = await makeOrganization();
     const owner = await makeUser();
     await makeMember(owner.id, org.id, { role: "member" });
+    // The organization's proxy, which every member reaches.
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "org",
+      isDefault: true,
     });
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,

@@ -751,7 +751,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
       if (!notice) {
-        // Refuse call and cancel admitted calls if client declares no notice tool.
+        // Refuses the call and cancels admitted calls when the client declares no notice tool.
         await cancelCalls(
           session,
           rest.flatMap((each) =>

@@ -269,12 +269,10 @@ jobs:
   # commit the merge_group codegen check fails and the release cannot merge.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    # Fork code never runs on the self-hosted boxes. Same guard on every
-    # hetzner-amd64 job.
+    # Never run fork code on the self-hosted runners.
     if: github.event.pull_request.head.repo.fork != true
     runs-on: hetzner-amd64
-    # Leaked vitest/esbuild workers can hold the log pipe open after the job
-    # finishes. Without this the run hangs until GitHub's 6h default.
+    # Leaked vitest/esbuild workers can hang a finished job until GitHub's 6h default.
     timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
@@ -512,8 +510,7 @@ jobs:
   # run if the machine stops taking jobs, so a dead mini ejects the PR from
   # the merge queue in minutes instead of blocking it for hours.
   #
-  # Backend unit tests stay off the mini: the job wants a whole machine and
-  # the mini has 3 slots shared with the concurrent merge-queue groups.
+  # Keep backend unit tests off the mini: they want a whole machine.
   #
   # Rust toolchain checks, split out of the lint job so cargo work runs in
   # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
@@ -728,7 +725,7 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
-  # Unsharded: the job owns a whole box and vitest saturates it.
+  # Not sharded: the job owns a whole machine and vitest saturates it.
   backend-unit-tests:
     name: Backend Unit Tests
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)

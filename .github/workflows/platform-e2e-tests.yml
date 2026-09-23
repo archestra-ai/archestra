@@ -109,9 +109,8 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # Merge-queue critical path, and it needs the box's warm local
-            # layer cache: the registry cache-from misses the compile-heavy
-            # layers on every source change.
+            # Needs the runner's warm layer cache. The registry cache-from
+            # misses the compile-heavy layers on every source change.
             runner: hetzner-amd64
             context: ./platform
             dockerfile: ""

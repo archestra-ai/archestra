@@ -84,10 +84,26 @@ export function isOpenAppaPolicyChange(output: unknown): boolean {
 }
 
 function parsePolicyChange(output: unknown): PolicyChange | null {
-  const candidate =
-    output && typeof output === "object" && "structuredContent" in output
-      ? output.structuredContent
-      : output;
+  let candidate = output;
+  if (candidate && typeof candidate === "object") {
+    if ("structuredContent" in candidate) {
+      candidate = candidate.structuredContent;
+    } else if ("content" in candidate) {
+      candidate = candidate.content;
+    }
+  }
+  if (Array.isArray(candidate)) {
+    candidate = candidate.find(
+      (item) => item && typeof item === "object" && item.type === "text",
+    )?.text;
+  }
+  if (typeof candidate === "string") {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
   if (!candidate || typeof candidate !== "object") return null;
   const value = candidate as Record<string, unknown>;
   if (

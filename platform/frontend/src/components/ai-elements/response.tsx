@@ -1,5 +1,6 @@
 "use client";
 
+import { code } from "@streamdown/code";
 import { type ComponentProps, memo, useMemo } from "react";
 import {
   defaultRehypePlugins,
@@ -127,6 +128,7 @@ export const Response = memo(
           code: { copy: true, download: true },
           table: { copy: true, download: true },
         }}
+        plugins={{ code }}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling

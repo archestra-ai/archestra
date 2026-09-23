@@ -100,9 +100,6 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    # fork-guard (see hetzner routing comment above platform-lint-and-unit-tests
-    # in on-pull-requests.yml): the run-e2e label path could otherwise admit a
-    # fork PR onto the fleet.
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]')) }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
@@ -112,16 +109,8 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # Whole machine: the platform image build is compile-bound
-            # (pnpm install + turbo build + Rust NAPI inside docker build)
-            # and is merge-queue critical path — the lite legs serialize
-            # behind it. Measured 12-13 min on 4-vcpu ubuntu-latest vs ~30s
-            # on a runner whose local docker layer cache is warm; the
-            # registry cache-from misses the compile-heavy layers on every
-            # source change. A persistent Hetzner box keeps that cache warm
-            # between jobs for free; Blacksmith did it with a sticky disk.
-            # hetzner routing (see comment above platform-lint-and-unit-tests
-            # in on-pull-requests.yml)
+            # Merge-queue critical path. 12-13 min on 4 vcpu vs ~30s with a
+            # warm local layer cache, which a persistent box keeps.
             runner: hetzner-amd64
             context: ./platform
             dockerfile: ""
@@ -515,7 +504,6 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     # The 4m15s baseline spent 171s in Kind/Helm setup and only 51s in tests.
     # More CPU targets that setup bottleneck without duplicating the cluster.
-    # hetzner routing (see comment above platform-lint-and-unit-tests in on-pull-requests.yml)
     runs-on: hetzner-amd64
     timeout-minutes: 60
     permissions:
@@ -693,10 +681,6 @@ jobs:
   platform-e2e-hibernation-tests:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e') }}
-    # hetzner routing (see comment above platform-lint-and-unit-tests in
-    # on-pull-requests.yml). Four legs, one runner per box: legs beyond the
-    # box count wait for a free one. Nightly and label-triggered only, so
-    # that queueing never touches the merge queue.
     runs-on: hetzner-amd64
     timeout-minutes: 60
     strategy:
@@ -824,10 +808,8 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    # Whole fleet box. Each leg boots the full lite stack and then runs
-    # Playwright next to it: on 8 vcpu the single lite job ran 6.9 min where
-    # the 4-vcpu legs ran 8-9 min each, so the free fallback is the slow path.
-    # hetzner routing (see comment above platform-lint-and-unit-tests in on-pull-requests.yml)
+    # Each leg boots the full lite stack and runs Playwright next to it:
+    # 6.9 min on 8 vcpu, 8-9 min per leg on 4.
     runs-on: hetzner-amd64
     timeout-minutes: 30
     strategy:
@@ -1018,7 +1000,6 @@ jobs:
     # The test step is only ~1m40s; image load and platform startup dominate
     # this 5-6 minute job. Same fleet box as the other E2E legs so image
     # extraction and first-run initialization are not CPU-bound.
-    # hetzner routing (see comment above platform-lint-and-unit-tests in on-pull-requests.yml)
     runs-on: hetzner-amd64
     timeout-minutes: 30
     permissions:
@@ -1371,7 +1352,6 @@ jobs:
     name: Platform E2E Tests (Vault)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    # hetzner routing (see comment above platform-lint-and-unit-tests in on-pull-requests.yml)
     runs-on: hetzner-amd64
     timeout-minutes: 45
     permissions:
@@ -1433,7 +1413,6 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    # hetzner routing (see comment above platform-lint-and-unit-tests in on-pull-requests.yml)
     runs-on: hetzner-amd64
     timeout-minutes: 30
     permissions:

@@ -98,17 +98,9 @@ jobs:
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
-      # Cold PR evidence: 11m36s on 4-vCPU ubuntu-latest versus 3m26s for the
-      # complete full-image build on a 16-vCPU runner. One whole Hetzner box
-      # per job with a warm local layer cache; use it for every compile-bound
-      # Platform build. This is a trusted push/dispatch path, so no fork
-      # fallback is needed here. These inputs are single labels, and the
-      # per-arch label is what keeps an amd64 build off the arm64 box.
+      # 11m36s cold on 4 vCPU vs 3m26s on 16.
       amd64_runner: hetzner-amd64
-      # 16-vCPU ARM measured 5m11s; GitHub's free ubuntu-24.04-arm is 4 vCPU
-      # and would take 15-20 min cold. The mac mini is Apple Silicon and
-      # builds arm64 natively. Unlike its merge-queue jobs this has no
-      # MAC_MINI_CI fallback: if the mini is off, the arm64 build waits.
+      # Apple Silicon. ubuntu-24.04-arm is 4 vCPU; 16-vCPU ARM took 5m11s.
       arm64_runner: mac-mini-1
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.

@@ -1,14 +1,13 @@
 "use client";
 
-import { FileText, Upload, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { FileText, FolderUp, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * The bordered drag-and-drop target plus its hidden file input — extracted
- * from the knowledge upload dialog so every surface that takes documents by
- * drop looks and behaves identically on every surface that accepts files.
+ * The bordered file picker plus its hidden input. Document uploads accept
+ * drops; directory uploads use the same picker surface with a folder button.
  *
  * Selection state lives in the caller; this only reports files. Pair with
  * `StagedFileList` to show what has been picked.
@@ -17,15 +16,26 @@ export function FileDropInput({
   accept,
   typesLabel,
   onFiles,
+  directory = false,
+  inputId,
+  inputLabel,
 }: {
   /** The input's `accept` attribute, e.g. ".pdf,.docx,.txt". */
-  accept: string;
+  accept?: string;
   /** Human-readable version of `accept`, shown under the prompt. */
   typesLabel: string;
   onFiles: (files: File[]) => void;
+  directory?: boolean;
+  inputId?: string;
+  inputLabel?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
+
+  useEffect(() => {
+    if (directory) inputRef.current?.setAttribute("webkitdirectory", "");
+    else inputRef.current?.removeAttribute("webkitdirectory");
+  }, [directory]);
 
   const handleDrag = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -42,10 +52,11 @@ export function FileDropInput({
       event.preventDefault();
       event.stopPropagation();
       setDragActive(false);
+      if (directory) return;
       const files = event.dataTransfer?.files;
       if (files?.length) onFiles([...files]);
     },
-    [onFiles],
+    [directory, onFiles],
   );
 
   return (
@@ -53,34 +64,52 @@ export function FileDropInput({
     <div
       className={cn(
         "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
-        dragActive
-          ? "border-primary bg-primary/5"
-          : "border-muted-foreground/25",
+        directory
+          ? "border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50"
+          : dragActive
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25",
       )}
-      onDragEnter={handleDrag}
-      onDragLeave={handleDrag}
-      onDragOver={handleDrag}
-      onDrop={handleDrop}
+      onDragEnter={directory ? undefined : handleDrag}
+      onDragLeave={directory ? undefined : handleDrag}
+      onDragOver={directory ? undefined : handleDrag}
+      onDrop={directory ? undefined : handleDrop}
     >
-      <Upload className="h-8 w-8 text-muted-foreground/50" />
-      <p className="text-muted-foreground text-sm">
-        Drag documents here, or{" "}
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="font-medium text-primary underline-offset-4 hover:underline"
-        >
-          browse
-        </button>
-      </p>
+      {directory ? (
+        <>
+          <FolderUp className="size-8 text-muted-foreground" />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => inputRef.current?.click()}
+          >
+            Choose folder
+          </Button>
+        </>
+      ) : (
+        <>
+          <Upload className="h-8 w-8 text-muted-foreground/50" />
+          <p className="text-muted-foreground text-sm">
+            Drag documents here, or{" "}
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              browse
+            </button>
+          </p>
+        </>
+      )}
       <p className="text-muted-foreground/70 text-xs">{typesLabel}</p>
       <input
+        id={inputId}
         ref={inputRef}
         type="file"
         multiple
         accept={accept}
         className="hidden"
-        aria-label="Choose documents to upload"
+        aria-label={inputLabel ?? "Choose documents to upload"}
         onChange={(event) => {
           if (event.target.files?.length) onFiles([...event.target.files]);
           // Clearing lets the same file be re-picked after removing it.

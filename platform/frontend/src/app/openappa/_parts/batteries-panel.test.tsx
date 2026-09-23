@@ -867,13 +867,17 @@ test("uploading a package sends the picked files by their path inside the folder
   fireEvent.change(await screen.findByLabelText("Name"), {
     target: { value: "acme" },
   });
+  const folderInput = screen.getByLabelText("Package folder");
+  const openFolderPicker = vi.spyOn(folderInput, "click");
+  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+  expect(openFolderPicker).toHaveBeenCalledOnce();
   const file = new File(["schema = 1"], "battery.toml", {
     type: "application/toml",
   });
   Object.defineProperty(file, "webkitRelativePath", {
     value: "acme/battery.toml",
   });
-  fireEvent.change(screen.getByLabelText("Package folder"), {
+  fireEvent.change(folderInput, {
     target: { files: [file] },
   });
   fireEvent.click(screen.getByRole("button", { name: "Upload" }));

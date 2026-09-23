@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   siCloudflare,
   siDatabricks,
@@ -32,6 +32,7 @@ import {
 } from "simple-icons";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FileDropInput } from "@/components/files/file-drop-input";
 import {
   CollectionFilters,
   FilterBar,
@@ -1075,9 +1076,6 @@ function UploadPackageDialog({
   const upload = useUploadBatteryPackage();
   const [name, setName] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const picker = useRef<HTMLInputElement>(null);
-  // Not in React's attribute typings; lets the picker take a whole folder.
-  useEffect(() => picker.current?.setAttribute("webkitdirectory", ""), []);
   return (
     <StandardFormDialog
       open
@@ -1126,18 +1124,18 @@ function UploadPackageDialog({
           value={name}
           required
           pattern="[a-z0-9][a-z0-9\-]*"
-          placeholder="acme"
+          placeholder="my-battery"
           onChange={(event) => setName(event.target.value)}
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor="battery-package-files">Package folder</Label>
-        <Input
-          id="battery-package-files"
-          type="file"
-          multiple
-          ref={picker}
-          onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+        <FileDropInput
+          directory
+          inputId="battery-package-files"
+          inputLabel="Package folder"
+          typesLabel="Select the whole package directory."
+          onFiles={setFiles}
         />
         {files.length > 0 && (
           <div className="space-y-1 text-xs text-muted-foreground">

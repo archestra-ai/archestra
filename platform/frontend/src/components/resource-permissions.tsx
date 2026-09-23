@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  Fragment,
   type ReactNode,
   useCallback,
   useContext,
@@ -37,8 +38,12 @@ import {
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { FloatingActionBar } from "@/components/settings/settings-block";
+import {
+  FloatingActionBar,
+  SettingsSectionStack,
+} from "@/components/settings/settings-block";
 import { StandardDialog } from "@/components/standard-dialog";
+import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -291,7 +296,10 @@ function PermissionsEditor({
     name: "grants",
   });
   const dialog = useContext(ResourcePermissionsDialogContext);
-  const footerContainer = dialog?.footerContainer;
+  // A tabbed settings dialog lends its footer, so Save sits beside its Cancel.
+  const shellFooter = useContext(TabbedDialogFooterSlot);
+  const inShell = shellFooter !== undefined;
+  const footerContainer = dialog?.footerContainer ?? shellFooter;
   const headerContainer = dialog?.headerContainer;
   const [addOpen, setAddOpen] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
@@ -398,7 +406,12 @@ function PermissionsEditor({
   // its own. The host's footer already says there are unsaved changes.
   const actions =
     canManage && dirty && !registerSave && !(dialog && addOpen) ? (
-      <div className="flex w-full items-center justify-between gap-3">
+      <div
+        // A tabbed dialog hides its own buttons while this row owns its
+        // footer, the way the all-permissions dialog swaps Done for it.
+        data-section-actions=""
+        className="flex w-full items-center justify-between gap-3"
+      >
         <span className="text-xs text-muted-foreground">Unsaved changes</span>
         <div className="flex items-center gap-2">
           <Button
@@ -412,16 +425,11 @@ function PermissionsEditor({
             <span>Discard</span>
           </Button>
           <Button
-            type={
-              embedded || footerContainer !== undefined ? "button" : "submit"
-            }
+            // The bar is portaled out of the form, so it cannot submit it.
+            type="button"
             size="sm"
             aria-label="Save permissions"
-            onClick={
-              embedded || footerContainer !== undefined
-                ? () => void submit()
-                : undefined
-            }
+            onClick={() => void submit()}
             disabled={mutation.isPending || changedElsewhere || refreshFailed}
           >
             <span>{mutation.isPending ? "Saving…" : "Save"}</span>
@@ -430,8 +438,13 @@ function PermissionsEditor({
       </div>
     ) : null;
   const AccessPicker = dialog ? ResourceAccessPicker : AddResourceAccessDialog;
+  // A section that saves itself on a page keeps its floating bar directly
+  // under the list, the way a settings page does. Without a stack of its own
+  // the bar went to the end of the page, below the footer.
+  const Stack =
+    footerContainer === undefined && !dialog ? SettingsSectionStack : Fragment;
   return (
-    <>
+    <Stack>
       <Container
         hidden={!!dialog && addOpen}
         onSubmit={embedded ? undefined : submit}
@@ -439,7 +452,7 @@ function PermissionsEditor({
       >
         <PermissionsPanel
           embedded={embedded && !dialog}
-          standalone={standalone}
+          standalone={standalone || inShell}
         >
           {/* In a dialog the action takes the close button's corner, so it
             costs no vertical space above the table. */}
@@ -690,7 +703,7 @@ function PermissionsEditor({
           onAdd={(grants) => append(grants)}
         />
       )}
-    </>
+    </Stack>
   );
 }
 

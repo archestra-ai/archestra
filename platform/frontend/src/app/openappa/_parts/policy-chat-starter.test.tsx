@@ -101,7 +101,9 @@ test("offers provider setup when no chat credential is available", () => {
 
   renderStarter();
   expect(screen.getByText("Connect an LLM provider")).toBeInTheDocument();
-  expect(screen.queryByText("What should the policy do?")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("What should the policy do?"),
+  ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("textbox", {
       name: "Describe the OpenAPPA policy change",

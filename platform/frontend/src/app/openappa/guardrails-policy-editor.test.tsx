@@ -372,6 +372,8 @@ test("the composed view names the batteries that fold in as empty stubs", async 
           battery("acme", "active", 3),
           battery("globex", "missing_credentials", 5),
           battery("initech", "server_missing", 7),
+          // Composed though no rule routes to it, so not a stub.
+          battery("hooli", "unrouted", 9),
         ],
       }),
     ),
@@ -384,6 +386,7 @@ test("the composed view names the batteries that fold in as empty stubs", async 
   expect(stubs).toHaveTextContent("globex");
   expect(stubs).toHaveTextContent("initech");
   expect(stubs).not.toHaveTextContent("acme");
+  expect(stubs).not.toHaveTextContent("hooli");
 });
 
 test("the composed view lists no stub while every battery is active", async () => {

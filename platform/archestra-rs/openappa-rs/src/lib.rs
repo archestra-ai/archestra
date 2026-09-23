@@ -507,6 +507,8 @@ pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
     pub server_aliases: Vec<ServerAliasDeclaration>,
     pub credentials: Vec<CredentialDeclaration>,
+    /// The annotators the root's own `[[policy.tool]]` rules route calls to.
+    pub routed_annotators: Vec<String>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -546,6 +548,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                         line: credential.line,
                     })
                     .collect(),
+                routed_annotators: parsed.routed_annotators,
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))
@@ -636,6 +639,8 @@ pub struct BatteryPackage {
     pub namespaces: Vec<String>,
     /// The `[[policy.annotator]]` names the battery declares.
     pub annotators: Vec<String>,
+    /// The annotators the battery's own `[[policy.tool]]` rules route calls to.
+    pub routed_annotators: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
@@ -651,6 +656,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             description: info.description.clone(),
             namespaces: info.namespaces.clone(),
             annotators: info.annotators.clone(),
+            routed_annotators: info.routed_annotators.clone(),
             policy: info.policy.clone(),
             helpers: info.helpers.clone(),
             credentials: info.credentials.clone(),

@@ -25,6 +25,7 @@ function battery(
     source: "bundled",
     packageHash: null,
     status: "active",
+    scope: "catalogs",
     line: 1,
     servers: [],
     credentials: [],

@@ -33,6 +33,7 @@ import type {
   BatteryInstallStatus,
   BatteryMatches,
   BatteryPackageFile,
+  BatteryScope,
   BatterySummary,
   CreateBatteryInstall,
   EffectivePolicy,
@@ -89,6 +90,7 @@ class OpenAppaBatteriesService {
         contentHash,
         namespaces: battery.namespaces,
         annotators: battery.annotators,
+        scope: batteryScope(battery),
         helpers: battery.helpers,
         credentials: battery.credentials,
         setup: battery.setup ?? null,
@@ -822,7 +824,9 @@ class OpenAppaBatteriesService {
    * A battery composes its own policy only while it is active: a battery held
    * back by a missing credential, an unresolved server or a naming conflict
    * composes as the empty battery, exactly as an unresolved entry does, so the
-   * runtime never consults a helper the host cannot serve.
+   * runtime never consults a helper the host cannot serve. An unrouted battery
+   * composes too: nothing consults its annotators yet, and a rule that routes
+   * to them has to find them declared.
    */
   private composeInputs(params: {
     planned: PlannedComposition;
@@ -837,7 +841,8 @@ class OpenAppaBatteriesService {
       entries: planned.resolution.entries,
       helpers: (entry) => {
         const planned = byName.get(entry.name);
-        if (planned?.status !== "active") return "stub";
+        if (planned?.status !== "active" && planned?.status !== "unrouted")
+          return "stub";
         if (!entry.battery || entry.battery.externals.length === 0) return null;
         const owner = helperOwner(installs, entry.name);
         return owner ? { urlBase: helperUrlBase(owner.id), tokenEnv } : "stub";
@@ -917,11 +922,19 @@ class OpenAppaBatteriesService {
         )
         .map((entry) => entry.name),
     );
+    // A tool rule routes to an annotator from the root or from any included
+    // battery, since both compose into the one document the runtime opens.
+    const routed = new Set([
+      ...resolution.routedAnnotators,
+      ...resolution.entries.flatMap(
+        (entry) => entry.battery?.routedAnnotators ?? [],
+      ),
+    ]);
     const batteries: PlannedBattery[] = [];
     const rows = new Map<string, BatteryInstallRow>();
     for (const entry of resolution.entries) {
-      const organizationWide =
-        entry.battery !== null && governsOrganization(entry.battery);
+      const scope = batteryScope(entry.battery);
+      const organizationWide = scope === "organization";
       const namespaces = entry.battery?.namespaces ?? [];
       const servers = namespaces
         .flatMap((namespace) => aliases.get(namespace) ?? [])
@@ -944,7 +957,12 @@ class OpenAppaBatteriesService {
         credentials,
         bindable,
         governs: organizationWide
-          ? { kind: "organization" }
+          ? {
+              kind: "organization",
+              routed: (entry.battery?.annotators ?? []).some((annotator) =>
+                routed.has(annotator),
+              ),
+            }
           : {
               kind: "catalogs",
               servers,
@@ -965,6 +983,7 @@ class OpenAppaBatteriesService {
         packageHash: entry.packageHash,
         line: entry.line,
         status,
+        scope,
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
@@ -1258,7 +1277,7 @@ class OpenAppaBatteriesService {
     catalogId: string | null;
   }) {
     const { organizationId, battery, catalogId } = params;
-    const organizationWide = governsOrganization(battery);
+    const organizationWide = batteryScope(battery) === "organization";
     if (organizationWide && catalogId !== null)
       throw new ApiError(
         400,
@@ -1480,13 +1499,13 @@ type Slot<T> = { running: Promise<T>; queued: Promise<T> | null };
  * The status precedence of the design: an entry that resolves to nothing first,
  * then a variable no key can be bound to, then an ambiguous prefix, then a target
  * no catalog carries. A battery governing the organization has no server to
- * resolve, so it stops at its credentials.
+ * resolve: after its credentials, it only needs a rule routing to its annotators.
  */
 function batteryStatus(params: {
   resolved: boolean;
   credentials: ReadonlyArray<{ variable: string; key: string | null }>;
   bindable: ReadonlySet<string>;
-  governs: BatteryScope;
+  governs: BatteryGovernance;
 }): BatteryInstallStatus {
   const { resolved, credentials, bindable, governs } = params;
   if (!resolved) return "unavailable";
@@ -1498,7 +1517,7 @@ function batteryStatus(params: {
     return "missing_credentials";
   switch (governs.kind) {
     case "organization":
-      return "active";
+      return governs.routed ? "active" : "unrouted";
     case "catalogs": {
       const { servers, conflicting } = governs;
       if (conflicting || servers.some((server) => server.catalogs.size > 1))
@@ -1514,21 +1533,25 @@ function batteryStatus(params: {
 }
 
 /**
- * What a battery governs: the catalogs its namespaces' aliases resolve to, or
- * the organization for a battery made of annotators alone, which a root rule
- * routes a tool to by name.
+ * What a battery governs, with what its status depends on: the catalogs its
+ * namespaces' aliases resolve to, or the organization, where a policy rule has
+ * to route a tool to one of its annotators.
  */
-type BatteryScope =
-  | { kind: "organization" }
+type BatteryGovernance =
+  | { kind: "organization"; routed: boolean }
   | {
       kind: "catalogs";
       servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
       conflicting: boolean;
     };
 
-/** A battery with no tool namespace and at least one annotator. */
-function governsOrganization(battery: NativeBatteryPackage): boolean {
-  return battery.namespaces.length === 0 && battery.annotators.length > 0;
+/** A battery with no tool namespace and at least one annotator governs the organization. */
+function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {
+  return battery !== null &&
+    battery.namespaces.length === 0 &&
+    battery.annotators.length > 0
+    ? "organization"
+    : "catalogs";
 }
 
 /** The row whose helpers a battery's composed externals consult: its earliest one. */

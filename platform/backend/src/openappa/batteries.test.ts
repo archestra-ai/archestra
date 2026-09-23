@@ -428,14 +428,28 @@ describe("a battery made of annotators alone", () => {
       content: root(uploaded.entry, []),
     });
 
+    // The root's only rule routes every tool to `noop`: nothing consults the
+    // battery's annotator, so it is not active, though its helper is composed.
     const [row, ...others] =
       await OpenAppaBatteryInstallModel.list(organizationId);
     expect(others).toEqual([]);
     expect(row).toMatchObject({
       batteryName: "tagger",
       catalogId: null,
-      status: "active",
+      status: "unrouted",
     });
+    const unrouted = await openappaBatteriesService.recompile(organizationId);
+    expect(unrouted.lastError).toBeNull();
+    expect(unrouted.content).toContain(helperUrlBase(row.id));
+
+    await declare({
+      organizationId,
+      userId,
+      content: root(uploaded.entry, [], { route: "tagger.call" }),
+    });
+    expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual([
+      expect.objectContaining({ id: row.id, status: "active" }),
+    ]);
     const composed = await openappaBatteriesService.recompile(organizationId);
     expect(composed.lastError).toBeNull();
     expect(composed.content).toContain(helperUrlBase(row.id));
@@ -476,9 +490,14 @@ helpers = ["check.py"]
 
 /**
  * A root that includes the batteries and points the `acme` namespace at
- * `targets`; with no target it declares no alias.
+ * `targets`; with no target it declares no alias. Its one rule routes every
+ * tool to `route`, the root's own `noop` annotator unless named.
  */
-function root(entry: string | string[], targets: string[]): string {
+function root(
+  entry: string | string[],
+  targets: string[],
+  { route = "noop" }: { route?: string } = {},
+): string {
   const included = (Array.isArray(entry) ? entry : [entry])
     .map((spelling) => `"${spelling}"`)
     .join(", ");
@@ -499,7 +518,7 @@ name = "noop"
 
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "${route}"
 
 [externals.annotators.noop]
 url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"

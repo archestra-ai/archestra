@@ -218,6 +218,26 @@ pub(crate) fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &tom
         .collect()
 }
 
+/// The `[[policy.<key>]]` entries a document declares.
+pub(crate) fn policy_entries<'a>(document: &'a toml::Table, key: &str) -> &'a [toml::Value] {
+    document
+        .get("policy")
+        .and_then(toml::Value::as_table)
+        .and_then(|policy| policy.get(key))
+        .and_then(toml::Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// The annotators a document's `[[policy.tool]]` rules route calls to, sorted and
+/// once each. An annotator no rule names is never consulted.
+pub(crate) fn routed_annotators(document: &toml::Table) -> Vec<String> {
+    let routed: std::collections::BTreeSet<&str> = policy_entries(document, "tool")
+        .iter()
+        .filter_map(|rule| rule.get("annotator").and_then(toml::Value::as_str))
+        .collect();
+    routed.into_iter().map(str::to_owned).collect()
+}
+
 /// A name that stays one path segment under the helper endpoint: `.` and `..`
 /// would resolve to another route.
 fn is_url_segment(name: &str) -> bool {

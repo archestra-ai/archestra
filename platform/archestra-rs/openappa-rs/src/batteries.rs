@@ -1,6 +1,7 @@
 //! Battery packages as the host sees them: the ones bundled with the pinned
 //! OpenAPPA checkout, and the ones an organization uploads, both read through the
 //! same package validation the marketplace applies.
+use crate::policy::{policy_entries, routed_annotators};
 use appa_package::{Role, bundled_batteries, validate_package};
 use appa_runtime_api::CanonicalTool;
 use std::{path::Component, sync::OnceLock};
@@ -27,6 +28,8 @@ pub(crate) struct BatteryInfo {
     pub description: String,
     pub namespaces: Vec<String>,
     pub annotators: Vec<String>,
+    /// The annotators its own tool rules route calls to.
+    pub routed_annotators: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
@@ -132,6 +135,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
             battery.namespaces.iter().map(ToString::to_string).collect()
         },
         annotators: annotator_names(&document),
+        routed_annotators: routed_annotators(&document),
         externals: helper_externals(&document)?,
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
@@ -153,15 +157,6 @@ fn serves_this_host(document: &toml::Table) -> bool {
             .is_some_and(governs_an_mcp_tool)
     });
     governs_mcp_tools || (rules.is_empty() && !annotator_names(document).is_empty())
-}
-
-fn policy_entries<'a>(document: &'a toml::Table, key: &str) -> &'a [toml::Value] {
-    document
-        .get("policy")
-        .and_then(toml::Value::as_table)
-        .and_then(|policy| policy.get(key))
-        .and_then(toml::Value::as_array)
-        .map_or(&[], Vec::as_slice)
 }
 
 fn annotator_names(document: &toml::Table) -> Vec<String> {
@@ -228,6 +223,12 @@ mod tests {
         );
         assert!(
             github
+                .routed_annotators
+                .iter()
+                .any(|annotator| annotator == "github.repository-visibility")
+        );
+        assert!(
+            github
                 .helpers
                 .iter()
                 .any(|helper| helper == "repository-visibility.py")
@@ -253,6 +254,8 @@ mod tests {
             .expect("an annotator-only battery is served");
         assert!(jev.namespaces.is_empty());
         assert_eq!(jev.annotators, vec!["jev.tool-call".to_owned()]);
+        // A battery with no tool rule routes nothing to its own annotator.
+        assert!(jev.routed_annotators.is_empty());
         assert_eq!(
             jev.credentials,
             vec!["APPA_PROVIDER_JEV_API_KEY".to_owned()]

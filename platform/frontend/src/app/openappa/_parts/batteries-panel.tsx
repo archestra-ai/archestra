@@ -181,7 +181,7 @@ export function BatteriesPanel() {
                 key={battery.entry}
                 battery={battery}
                 installs={installsOf(battery.name)}
-                scope={scopeOf(summaryOf(battery.name))}
+                annotators={summaryOf(battery.name)?.annotators ?? []}
                 catalogName={catalogName}
                 enforced={enforced}
                 writable={writable}
@@ -252,23 +252,6 @@ const UNBOUND = "__unbound__";
  */
 type InstallRef = { id: string; catalogId: string | null };
 
-/**
- * What a battery governs: the servers its aliases point at, or the whole
- * organization for one made of annotators alone, which a policy rule routes a
- * tool to by name.
- */
-type BatteryScope = "catalogs" | "organization";
-
-function scopeOf(
-  battery: Pick<BatterySummary, "namespaces" | "annotators"> | undefined,
-): BatteryScope {
-  return battery !== undefined &&
-    battery.namespaces.length === 0 &&
-    battery.annotators.length > 0
-    ? "organization"
-    : "catalogs";
-}
-
 function HeldPullNotice({
   heldPull,
   canManage,
@@ -311,7 +294,7 @@ function HeldPullNotice({
 function IncludedBattery({
   battery,
   installs,
-  scope,
+  annotators,
   catalogName,
   enforced,
   writable,
@@ -319,7 +302,7 @@ function IncludedBattery({
 }: {
   battery: PolicyBattery;
   installs: InstallRef[];
-  scope: BatteryScope;
+  annotators: string[];
   catalogName: (catalogId: string) => string;
   enforced: boolean;
   writable: boolean;
@@ -354,8 +337,18 @@ function IncludedBattery({
       </div>
       <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
         <Section title="Governs">
-          {scope === "organization" ? (
-            <p className="text-sm">Organization-wide</p>
+          {battery.scope === "organization" ? (
+            <div className="space-y-1">
+              <p className="text-sm">Organization-wide</p>
+              {status === "unrouted" ? (
+                <p className="text-xs text-muted-foreground">
+                  No policy rule routes a tool to its annotators yet. Add one to
+                  the policy text, such as{" "}
+                  <code className="font-mono">{`annotator = "${annotators[0] ?? ""}"`}</code>
+                  .
+                </p>
+              ) : null}
+            </div>
           ) : battery.servers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No alias points this battery at a server.
@@ -584,7 +577,7 @@ function AttachForm({
   const readiness = useBatteryMatches(catalogId, catalogId !== "");
   const attach = readiness.data?.attach ?? null;
   const chosen = batteries.find((battery) => battery.name === batteryName);
-  const organizationWide = scopeOf(chosen) === "organization";
+  const organizationWide = chosen?.scope === "organization";
   const attached = new Set(
     included
       .find((entry) => entry.name === batteryName)
@@ -604,7 +597,7 @@ function AttachForm({
   // before anything is installed.
   const offered =
     installable.length === 0
-      ? batteries.filter((battery) => scopeOf(battery) === "organization")
+      ? batteries.filter((battery) => battery.scope === "organization")
       : batteries;
   const ready = organizationWide
     ? !included.some((entry) => entry.name === batteryName)

@@ -83,16 +83,21 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
       ] as BatteryInstallRow[],
     });
 
-    expect(after.map((install) => install.id)).toEqual(
-      before.map((install) => install.id),
+    // Both rows are inserted by one statement, so `list` cannot order them.
+    const byBattery = <T extends { batteryName: string }>(installs: T[]) =>
+      [...installs].sort((a, b) => a.batteryName.localeCompare(b.batteryName));
+    expect(byBattery(after).map((install) => install.id)).toEqual(
+      byBattery(before).map((install) => install.id),
     );
-    expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual([
+    expect(
+      byBattery(await OpenAppaBatteryInstallModel.list(organizationId)),
+    ).toEqual([
+      expect.objectContaining({ batteryName: "github", catalogId: catalog.id }),
       expect.objectContaining({
         batteryName: "jev",
         catalogId: null,
         status: "missing_credentials",
       }),
-      expect.objectContaining({ batteryName: "github", catalogId: catalog.id }),
     ]);
   });
 

@@ -69,6 +69,7 @@ const githubBattery = (installs: Install[] = []): Battery => ({
   contentHash: null,
   namespaces: ["github"],
   annotators: [],
+  scope: "catalogs",
   helpers: ["github_read_repo"],
   credentials: ["APPA_PROVIDER_GITHUB_TOKEN"],
   setup: null,
@@ -82,6 +83,7 @@ const declaredGithub = (
   source: "bundled",
   packageHash: null,
   status: "missing_credentials",
+  scope: "catalogs",
   line: 4,
   servers: [{ target: "code", catalogId }],
   credentials: [
@@ -489,6 +491,7 @@ const jevBattery = (installs: Install[] = []): Battery => ({
   contentHash: null,
   namespaces: [],
   annotators: ["jev.tool-call"],
+  scope: "organization",
   helpers: ["jev-annotator.py"],
   credentials: ["APPA_PROVIDER_JEV_API_KEY"],
   setup: null,
@@ -500,6 +503,7 @@ const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
   source: "bundled",
   packageHash: null,
   status: "missing_credentials",
+  scope: "organization",
   line: 2,
   servers: [],
   credentials: [
@@ -567,6 +571,24 @@ test("an included battery governing the organization says so and binds its crede
     expect(body).toEqual({
       credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "github-token" },
     }),
+  );
+});
+
+test("a battery governing the organization that no rule routes to says how to route it", async () => {
+  batteries = [
+    jevBattery([
+      install({ id: "jev-row", batteryName: "jev", catalogId: null }),
+    ]),
+  ];
+  declarations = emptyDeclarations({
+    batteries: [declaredJev({ status: "unrouted" })],
+  });
+  show();
+  const row = await entry("jev");
+  expect(row).toHaveTextContent("Not used by any rule");
+  expect(row).not.toHaveTextContent("Active");
+  expect(within(row).getByRole("code")).toHaveTextContent(
+    'annotator = "jev.tool-call"',
   );
 });
 

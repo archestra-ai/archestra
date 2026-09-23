@@ -980,7 +980,7 @@ describe("guardrails batteries", () => {
     }
   });
 
-  test("a battery made of annotators alone is installed organization-wide and serves its helper once its credential is bound", async ({
+  test("a battery made of annotators alone is installed organization-wide and serves its helper once its credential is bound and a rule routes to it", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -1064,13 +1064,30 @@ describe("guardrails batteries", () => {
       payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
     });
     expect(updated.statusCode, updated.body).toBe(200);
-    expect(updated.json()).toMatchObject({ status: "active", servers: [] });
+    // The initial root routes every tool to `noop`, so nothing consults jev yet.
+    expect(updated.json()).toMatchObject({
+      status: "unrouted",
+      servers: [],
+    });
+    // Its helper is composed all the same, served under the one row.
+    const unrouted = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(unrouted?.lastError).toBeNull();
+    expect(unrouted?.content).toContain(helperUrlBase(row.id));
 
-    // The composed command external is served by the bridge under the one row.
+    const latest = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: latest.content.replace(
+        'name = "*"\nannotator = "noop"',
+        'name = "*"\nannotator = "jev.tool-call"',
+      ),
+      expectedRevision: latest.revision,
+    });
+    await openappaBatteriesService.recompile(organizationId);
     const active = await OpenAppaEffectivePolicyModel.find(organizationId);
     expect(active?.lastError).toBeNull();
     expect(active?.content).toContain(helperUrlBase(row.id));
-    await openappaBatteriesService.recompile(organizationId);
     expect(await installRows()).toEqual([
       expect.objectContaining({
         id: row.id,
@@ -1087,6 +1104,24 @@ describe("guardrails batteries", () => {
     expect((await installRows()).map((install) => install.id)).toEqual([
       row.id,
     ]);
+
+    // A rule naming jev's annotator keeps the battery in: the text without
+    // the include would route to an annotator nothing registers.
+    const routed = await app.inject({
+      method: "DELETE",
+      url: `/api/openappa/battery-installs/${row.id}`,
+    });
+    expect(routed.statusCode, routed.body).toBe(400);
+    const routing = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: routing.content.replace(
+        'annotator = "jev.tool-call"',
+        'annotator = "noop"',
+      ),
+      expectedRevision: routing.revision,
+    });
 
     const detached = await app.inject({
       method: "PATCH",

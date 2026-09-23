@@ -31,10 +31,19 @@ export const BatteryInstallStatusSchema = z.enum([
   "missing_credentials",
   "naming_conflict",
   "server_missing",
+  "unrouted",
   "refused",
   "active",
 ]);
 export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
+
+/**
+ * What a battery governs: the servers its namespaces' aliases point at, or the
+ * whole organization for a battery made of annotators alone, which a policy rule
+ * routes a tool to by name.
+ */
+export const BatteryScopeSchema = z.enum(["catalogs", "organization"]);
+export type BatteryScope = z.infer<typeof BatteryScopeSchema>;
 
 export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
@@ -126,6 +135,7 @@ export const BatterySummarySchema = z.object({
   namespaces: z.array(z.string()),
   /** The annotators it declares; with no namespace, it governs the organization, not a catalog. */
   annotators: z.array(z.string()),
+  scope: BatteryScopeSchema,
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
@@ -153,6 +163,8 @@ export const PolicyBatteryViewSchema = z.object({
   source: BatterySourceSchema,
   packageHash: z.string().nullable(),
   status: BatteryInstallStatusSchema,
+  /** `catalogs` too for an entry that resolves to nothing. */
+  scope: BatteryScopeSchema,
   line: z.number(),
   servers: z.array(BatteryServerViewSchema),
   credentials: z.array(BatteryCredentialViewSchema),

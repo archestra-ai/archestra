@@ -32,13 +32,15 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
   const { content, contentHash, rootRevision, lastError } = effective.data;
   const refused = lastError !== null;
   const hash = contentHash.slice(0, 12);
-  // A battery composes its own policy only while it is active; the others
-  // fold in as empty stubs, which the document itself does not show. Under a
-  // refusal every battery is out, so the stubs are not listed twice.
+  // A battery composes its own policy only while it is active, or unrouted,
+  // which composes though no rule consults it; the others fold in as empty
+  // stubs, which the document itself does not show. Under a refusal every
+  // battery is out, so the stubs are not listed twice.
   const stubs = refused
     ? []
     : (declarations.data?.batteries ?? []).filter(
-        (battery) => battery.status !== "active",
+        (battery) =>
+          battery.status !== "active" && battery.status !== "unrouted",
       );
   return (
     <div

@@ -328642,6 +328642,13 @@
                           "type": "string"
                         }
                       },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "catalogs",
+                          "organization"
+                        ]
+                      },
                       "helpers": {
                         "type": "array",
                         "items": {
@@ -328690,6 +328697,7 @@
                                 "missing_credentials",
                                 "naming_conflict",
                                 "server_missing",
+                                "unrouted",
                                 "refused",
                                 "active"
                               ]
@@ -328743,6 +328751,7 @@
                       "contentHash",
                       "namespaces",
                       "annotators",
+                      "scope",
                       "helpers",
                       "credentials",
                       "setup",
@@ -329035,8 +329044,16 @@
                               "missing_credentials",
                               "naming_conflict",
                               "server_missing",
+                              "unrouted",
                               "refused",
                               "active"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "catalogs",
+                              "organization"
                             ]
                           },
                           "line": {
@@ -329102,6 +329119,7 @@
                           "source",
                           "packageHash",
                           "status",
+                          "scope",
                           "line",
                           "servers",
                           "credentials",
@@ -329805,6 +329823,7 @@
                                   "missing_credentials",
                                   "naming_conflict",
                                   "server_missing",
+                                  "unrouted",
                                   "refused",
                                   "active"
                                 ]
@@ -330176,8 +330195,16 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
                       ]
                     },
                     "line": {
@@ -330243,6 +330270,7 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
                     "line",
                     "servers",
                     "credentials",
@@ -330565,8 +330593,16 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
                       ]
                     },
                     "line": {
@@ -330632,6 +330668,7 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
                     "line",
                     "servers",
                     "credentials",

@@ -72,6 +72,7 @@ Each included battery shows a status:
 | Active | The battery governs its server. |
 | Needs a credential | A credential the battery reads is not bound, or its organization value is missing. |
 | No server bound | The alias names no installed server. |
+| Not used by any rule | An annotator-only battery is composed, but no rule routes a tool to its annotators. Add one, such as `annotator = "jev.tool-call"`. |
 | Tool name conflict | Two servers share the tool prefix, or the prefix contains `__`. |
 | Package missing | The include line names no known battery, so it governs nothing. |
 | Not enforced | The policy failed to compose. No battery is enforced until it composes again. |
@@ -84,7 +85,7 @@ You can upload your own battery package. The policy includes an upload by its co
 
 While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that binds a credential variable to a new key is held instead of published, and so is one that drops a battery your deployment declared before its declarations first reached the repository. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
 
-The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. A battery that is not active folds in as an empty stub, and the tab names each one with the reason. When the current text fails to compose, the tab shows the last document that opened and says so.
+The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. A battery that is not active folds in as an empty stub, and the tab names each one with the reason. An annotator-only battery that no rule routes to is the exception: it composes as usual, so a rule that routes to it can be saved. When the current text fails to compose, the tab shows the last document that opened and says so.
 
 ![The policy editor with a status mark on the include line](/docs/automated_screenshots/platform-ai-tool-guardrails_policy-annotations.webp)
 

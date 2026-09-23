@@ -193,23 +193,27 @@ WITH candidates AS (
   JOIN team tm ON tm.id = mt.team_id AND tm.organization_id = t.organization_id
   WHERE t.resource = 'llmModel'
   UNION ALL
+  -- Named people convert whenever the junction names them, whatever the scope
+  -- column says. An object can be team-scoped and still shared with a named
+  -- person; reading the scope here would silently drop that person. Changing
+  -- scope cleared the other kind of sharing, so a row here is always live.
   SELECT t.organization_id, t.resource, t.scope, 'user', au.user_id,
     CASE WHEN au.level = 'write' THEN ARRAY['read', 'use', 'update'] ELSE ARRAY['read', 'use'] END
   FROM targets t JOIN agent_user au ON au.agent_id = t.source_id
   JOIN member m ON m.user_id = au.user_id AND m.organization_id = t.organization_id
-  WHERE t.resource IN ('agent', 'mcpGateway') AND t.visibility = 'personal'
+  WHERE t.resource IN ('agent', 'mcpGateway')
   UNION ALL
   SELECT t.organization_id, t.resource, t.scope, 'user', su.user_id,
     CASE WHEN su.level = 'write' THEN ARRAY['read', 'use', 'update'] ELSE ARRAY['read', 'use'] END
   FROM targets t JOIN skill_user su ON su.skill_id = t.source_id
   JOIN member m ON m.user_id = su.user_id AND m.organization_id = t.organization_id
-  WHERE t.resource = 'skill' AND t.visibility = 'personal'
+  WHERE t.resource = 'skill'
   UNION ALL
   SELECT t.organization_id, t.resource, t.scope, 'user', cu.user_id,
     CASE WHEN cu.level = 'write' THEN ARRAY['read', 'use', 'update'] ELSE ARRAY['read', 'use'] END
   FROM targets t JOIN mcp_catalog_user cu ON cu.catalog_id = t.source_id
   JOIN member m ON m.user_id = cu.user_id AND m.organization_id = t.organization_id
-  WHERE t.resource IN ('mcpRegistry', 'app') AND t.visibility = 'personal'
+  WHERE t.resource IN ('mcpRegistry', 'app')
   UNION ALL
   -- Named model sharing historically grants discovery, not invocation.
   SELECT t.organization_id, t.resource, t.scope, 'user', mu.user_id, ARRAY['read']::text[]
@@ -977,8 +981,18 @@ INSERT INTO resource_permission_policies (organization_id, resource, scope, gran
 SELECT t.organization_id, t.resource, t.scope, coalesce(p.grants, '[]'::jsonb), true
 FROM pending t LEFT JOIN policies p USING (organization_id, resource, scope)
 ON CONFLICT (organization_id, resource, scope) DO UPDATE
+-- Compare before writing, as every other statement here does. A row left
+-- unmigrated by an earlier pass may already hold exactly these grants; it only
+-- needs marking, and raising its revision would fail a save the permissions
+-- editor is holding it for.
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true,
-  revision = resource_permission_policies.revision + 1, updated_at = now()
+  revision = CASE WHEN resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants
+    THEN resource_permission_policies.revision + 1
+    ELSE resource_permission_policies.revision END,
+  updated_at = CASE WHEN resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants
+    THEN now() ELSE resource_permission_policies.updated_at END
+WHERE NOT resource_permission_policies.legacy_sharing_migrated
+  OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `);
 
 /**

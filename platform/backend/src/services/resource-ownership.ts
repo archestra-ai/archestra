@@ -213,7 +213,9 @@ const SCOPED_RESOURCE_KINDS: Record<
   app: "app",
   catalog: "mcpRegistry",
   plugin: null,
-  project: null,
+  // A project's owner holds a direct grant on it like any scoped object, so
+  // a transfer moves that grant rather than leaving it with the old owner.
+  project: "project",
   remoteAgent: null,
 };
 

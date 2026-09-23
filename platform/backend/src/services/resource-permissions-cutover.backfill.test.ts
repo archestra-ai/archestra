@@ -997,7 +997,7 @@ describe("resource sharing grant backfill", () => {
     expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
   });
 
-  test("a team-scoped agent drops the individuals it was also shared with", async ({
+  test("a team-scoped agent keeps the individuals it was also shared with", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -1029,12 +1029,15 @@ describe("resource sharing grant backfill", () => {
       resource: "agent",
       scope: agent.id,
     });
-    // DEFECT: the named-user branch is gated on `visibility = 'personal'`
-    // (cutover.ts:193) while the team branch is gated on `'team'`
-    // (cutover.ts:171), so an object carrying both kinds of sharing keeps only
-    // the half its scope column names. The named individual loses the agent.
+    // An object carrying both kinds of sharing keeps both: the named-user
+    // branch converts whenever the junction names someone, not only when the
+    // scope column says personal. Before, the named individual lost the agent.
     expect(policy?.grants).toEqual([
       { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      {
+        subject: { type: "user", id: named.id },
+        actions: ["read", "update", "use"],
+      },
     ]);
     expect(
       await ResourcePermissions.allows({
@@ -1042,9 +1045,9 @@ describe("resource sharing grant backfill", () => {
         userId: named.id,
         resource: "agent",
         scope: agent.id,
-        action: "read",
+        action: "update",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("a skill shared with a named writer converts to read, update and use", async ({

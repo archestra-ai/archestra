@@ -60,19 +60,65 @@ describe("cutover idempotency", () => {
 
     await runScopedResourcePermissionCutover();
     const first = await ResourcePermissionPolicyModel.find(key);
-    // DEFECT: SESSION_SHARING_CONVERSION's conflict clause carries no
-    // `WHERE ... IS DISTINCT FROM` guard (cutover.ts:907-910), unlike the six
-    // other statement groups, so it bumps the revision even when the stored
-    // grants already match byte for byte.
+    // The stored grants already match byte for byte, so the conversion only
+    // marks the row migrated: its revision, which the permissions editor holds
+    // while somebody edits, does not move.
     expect(first?.grants).toEqual(seeded?.grants);
-    expect(first?.revision).toBe((seeded?.revision ?? 0) + 1);
+    expect(first?.legacySharingMigrated).toBe(true);
+    expect(first?.revision).toBe(seeded?.revision);
+    expect(first?.updatedAt).toEqual(seeded?.updatedAt);
 
-    // The `pending` CTE keeps the damage to that one pass: the row is migrated
-    // now, so every later start leaves it alone.
+    // The row is migrated now, so every later start writes nothing.
     await runScopedResourcePermissionCutover();
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(first);
     await runScopedResourcePermissionCutover();
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(first);
+  });
+
+  test("a shared chat converts once, and the next run writes nothing", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    removeObjectPolicies,
+  }) => {
+    enterpriseTier.setUserCountForTesting(0);
+    const org = await makeOrganization({ legacyPermissions: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const chat = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "conversation" as const,
+      scope: chat.id,
+    };
+    await removeObjectPolicies(org.id);
+    await db.insert(schema.conversationSharesTable).values({
+      conversationId: chat.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+    });
+
+    await runScopedResourcePermissionCutover();
+    const first = await ResourcePermissionPolicyModel.find(key);
+    expect(first?.grants).toEqual([
+      { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      {
+        subject: { type: "user", id: owner.id },
+        actions: ["manage-permissions", "read"],
+      },
+    ]);
+
+    await runScopedResourcePermissionCutover();
+    const second = await ResourcePermissionPolicyModel.find(key);
+    expect(second).toEqual(first);
+    expect(second?.revision).toBe(first?.revision);
   });
 
   test("one row of every convertible kind converts once and replays byte-identically", async ({

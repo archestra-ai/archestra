@@ -2,6 +2,7 @@ import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, ProjectModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -76,14 +77,22 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
         ),
       );
     expect(unchanged(after)).toEqual(unchanged(before));
-    // DEFECT: a project transfer does not move the previous owner's grant
-    // (resource-ownership.ts lists `project` as unscoped), so the previous
-    // owner keeps full control of the project through a direct grant. The
-    // audit snapshot reads sharing from that policy, so it now shows them.
+    // The transfer moves the owner's grant, like any scoped object: the
+    // previous owner keeps no direct grant, so the project reads as unshared
+    // before and after.
     expect(before).toMatchObject({ visibility: null, shareUserIds: [] });
-    expect(after).toMatchObject({
-      visibility: "user",
-      shareUserIds: [originalOwner.id],
+    expect(after).toMatchObject({ visibility: null, shareUserIds: [] });
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "project",
+      scope: resource.id,
+    });
+    expect(policy?.grants.map((grant) => grant.subject.id) ?? []).not.toContain(
+      originalOwner.id,
+    );
+    expect(policy?.grants).toContainEqual({
+      subject: { type: "user", id: recipient.id },
+      actions: ["delete", "manage-permissions", "read", "update", "use"],
     });
     user = recipient;
     expect((await transfer(resource.id, originalOwner.id)).statusCode).toBe(
@@ -127,7 +136,9 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
   }) => {
     const resource = await create();
     organizationId = (await makeOrganization()).id;
-    expect((await transfer(resource.id)).statusCode).toBe(403);
+    // Authorized by the project's grants like the other scoped kinds, which
+    // answer a foreign object as missing rather than forbidden.
+    expect((await transfer(resource.id)).statusCode).toBe(404);
   });
 
   test("rejects an unknown resource", async () => {

@@ -228,8 +228,10 @@ export function PageLayout({
                 <div
                   className={cn(
                     "flex min-w-0 items-center gap-2",
+                    // 40px even without an icon, so a plain text title and
+                    // the actions share one centre line.
                     maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
+                      ? "min-h-10 flex-nowrap overflow-hidden"
                       : "flex-wrap",
                     description && maxWidthKey !== "wizard" && "mb-2",
                   )}

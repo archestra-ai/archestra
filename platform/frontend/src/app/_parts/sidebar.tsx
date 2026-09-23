@@ -59,6 +59,7 @@ import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
@@ -499,6 +500,7 @@ export function AppSidebar() {
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
   const openappaEnabled = useFeature("openappaEnabled");
+  const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -528,6 +530,11 @@ export function AppSidebar() {
           .filter(
             (item) => item.url !== "/openappa" || openappaEnabled === true,
           )
+          .filter(
+            (item) =>
+              item.url !== "/mcp/tool-guardrails" ||
+              guardrailsDeployment?.enabled !== true,
+          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -544,7 +551,12 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [pluginsEnabled, openappaEnabled, permissionMap],
+    [
+      pluginsEnabled,
+      openappaEnabled,
+      guardrailsDeployment?.enabled,
+      permissionMap,
+    ],
   );
 
   return (

@@ -38,9 +38,6 @@ Some tools enforce an **additional access requirement** in their handler beyond 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `whoami` | Returns the name and ID of the current agent. | None (no additional RBAC permission required) |
-| `yell` | Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. | None (no additional RBAC permission required) |
-| `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
-| `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
 
 #### whoami
 
@@ -55,6 +52,17 @@ This tool takes no arguments.
 | `agentId` | `string` | Yes | The ID of the current agent. |
 | `agentName` | `string` | Yes | The display name of the current agent. |
 
+### OpenAPPA
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `yell` | Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. | None (no additional RBAC permission required) |
+| `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
+| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `toolPolicy:update` |
+| `update_guardrails_policy` | Save and activate organization.appa.toml for new conversations. | `toolPolicy:update` |
+| `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
+| `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
+
 #### yell
 
 Required RBAC permission: None (no additional RBAC permission required)
@@ -65,6 +73,36 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-----------|------|----------|-------------|
 | `message` | `string` | Yes |  |
 | `with_trajectory` | `boolean` | Yes |  |
+
+
+#### get_guardrails_policy
+
+Required RBAC permission: `toolPolicy:read`
+
+This tool takes no arguments.
+
+
+#### validate_guardrails_policy
+
+Required RBAC permission: `toolPolicy:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes |  |
+
+
+#### update_guardrails_policy
+
+Required RBAC permission: `toolPolicy:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes |  |
+| `expectedRevision` | `integer` | Yes |  |
 
 
 #### get_remedy_plans
@@ -1230,9 +1268,6 @@ This tool takes no arguments.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
-| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `toolPolicy:update` |
-| `update_guardrails_policy` | Save and activate organization.appa.toml for new conversations. | `toolPolicy:update` |
 | `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels | `toolPolicy:read` |
 | `get_tool_invocation_policies` | Get all tool invocation policies | `toolPolicy:read` |
 | `create_tool_invocation_policy` | Create a new tool invocation policy | `toolPolicy:create` |
@@ -1244,36 +1279,6 @@ This tool takes no arguments.
 | `get_trusted_data_policy` | Get a specific trusted data policy by ID | `toolPolicy:read` |
 | `update_trusted_data_policy` | Update a trusted data policy | `toolPolicy:update` |
 | `delete_trusted_data_policy` | Delete a trusted data policy by ID | `toolPolicy:delete` |
-
-#### get_guardrails_policy
-
-Required RBAC permission: `toolPolicy:read`
-
-This tool takes no arguments.
-
-
-#### validate_guardrails_policy
-
-Required RBAC permission: `toolPolicy:update`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `content` | `string` | Yes |  |
-
-
-#### update_guardrails_policy
-
-Required RBAC permission: `toolPolicy:update`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `content` | `string` | Yes |  |
-| `expectedRevision` | `integer` | Yes |  |
-
 
 #### get_autonomy_policy_operators
 

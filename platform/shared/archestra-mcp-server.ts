@@ -374,6 +374,7 @@ export type ArchestraToolFullName<
  */
 export const ARCHESTRA_TOOL_GROUPS = [
   { id: "identity", label: "Identity" },
+  { id: "openappa", label: "OpenAPPA" },
   { id: "agents", label: "Agents" },
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
@@ -412,12 +413,12 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   ArchestraToolGroupId
 > = {
   whoami: "identity",
-  execute_remedy_plan: "identity",
-  yell: "identity",
-  get_remedy_plans: "identity",
-  get_guardrails_policy: "policies",
-  validate_guardrails_policy: "policies",
-  update_guardrails_policy: "policies",
+  execute_remedy_plan: "openappa",
+  yell: "openappa",
+  get_remedy_plans: "openappa",
+  get_guardrails_policy: "openappa",
+  validate_guardrails_policy: "openappa",
+  update_guardrails_policy: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",

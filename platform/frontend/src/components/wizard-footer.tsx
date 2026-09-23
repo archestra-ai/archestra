@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Shared sticky action row for full-page create/edit wizards. */
+/** Shared action row for full-page create/edit wizards. */
 export function WizardFooter({
   children,
   className,
@@ -13,7 +13,7 @@ export function WizardFooter({
   return (
     <div
       className={cn(
-        "sticky bottom-0 z-10 flex flex-col items-stretch gap-2 border-t bg-background py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
+        "flex flex-col items-stretch gap-2 border-t bg-background py-4 sm:sticky sm:bottom-0 sm:z-10 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
         className,
       )}
     >

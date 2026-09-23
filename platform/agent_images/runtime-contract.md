@@ -156,7 +156,19 @@ Send these headers on every LLM proxy and MCP gateway request. The maintained ca
 | `X-Archestra-Run-Id` | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Groups one turn's model interactions and tool calls in logs and traces. |
 | `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
 | `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
+| `X-Appa-Parent-ID` | The parent's `X-Appa-Session-ID` | Optional. Marks a subagent session as a child of that session. |
 
 The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
+
+Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
+
+Guardrails failures:
+
+| Response | Meaning | Client action |
+| --- | --- | --- |
+| HTTP 500, `x-should-retry: false` | The organization's guardrails policy is invalid. The message ends with a trace reference. | Do not retry. An administrator must fix the policy. |
+| HTTP 503, `Retry-After: 5` | The policy runtime or its database is unavailable. | Retry after the delay. |
+
+A blocked tool call is not an HTTP error. The proxy and gateway report it inside the normal response.
 
 Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. Custom images receive a standard virtual key: send `ARCHESTRA_VIRTUAL_KEY` as the provider API key to `ARCHESTRA_LLM_PROXY_URL`. The maintained Claude Code subscription mode receives a personal passthrough key instead. Its wrapper sends that key in `X-Archestra-Virtual-Key`, its OAuth bearer token in `Authorization`, and model requests to the proxy URL. The passthrough key authenticates the run's user while the bearer token authenticates to Anthropic.

@@ -777,6 +777,75 @@ case "$marketplace_state" in
       fi
     fi
     ;;
+esac
+${claudeMarketplaceAutoUpdate(marketplaceName)}`;
+}
+
+/**
+ * Claude Code refreshes a third-party marketplace, and updates the plugins
+ * installed from it, only when that marketplace has auto-update enabled — and
+ * it is off by default for every marketplace added with `marketplace add`.
+ * Without it the client keeps the skill revision it installed on connect
+ * forever, so shipped skill fixes never reach it. Claude Code reads the flag
+ * from the marketplace's `extraKnownMarketplaces` declaration (its own
+ * "Enable auto-update" toggle writes the same field), so set it there. An
+ * explicit value is the user's choice and is kept.
+ */
+function claudeMarketplaceAutoUpdate(marketplaceName: string): string {
+  const manual = sh(
+    `Could not enable auto-update for the "${marketplaceName}" marketplace. Enable it in /plugin > Marketplaces so Claude Code picks up new skill versions.`,
+  );
+  return `claude_marketplace_auto_update() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '%s' unavailable
+    return
+  fi
+  ARCHESTRA_MARKETPLACE_NAME=${sh(marketplaceName)} \\
+    python3 - <<'ARCHESTRA_MARKETPLACE_AUTO_UPDATE_PY'
+import json, os, tempfile
+from pathlib import Path
+
+name = os.environ["ARCHESTRA_MARKETPLACE_NAME"]
+config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+settings_path = config_dir / "settings.json"
+
+try:
+    settings = json.loads(settings_path.read_text())
+    entry = settings.get("extraKnownMarketplaces", {}).get(name)
+except Exception:
+    print("unavailable")
+    raise SystemExit
+
+if not isinstance(entry, dict):
+    print("unavailable")
+    raise SystemExit
+if "autoUpdate" in entry:
+    print("kept")
+    raise SystemExit
+
+entry["autoUpdate"] = True
+try:
+    fd, tmp = tempfile.mkstemp(dir=settings_path.parent, prefix=".settings.", suffix=".tmp")
+    with os.fdopen(fd, "w") as handle:
+        json.dump(settings, handle, indent=2)
+        handle.write("\\n")
+    os.chmod(tmp, settings_path.stat().st_mode & 0o777)
+    os.replace(tmp, settings_path)
+except Exception:
+    print("unavailable")
+    raise SystemExit
+print("enabled")
+ARCHESTRA_MARKETPLACE_AUTO_UPDATE_PY
+}
+
+case "$(claude_marketplace_auto_update)" in
+  enabled)
+    ok ${sh(`Enabled auto-update for the "${marketplaceName}" marketplace.`)}
+    ;;
+  kept) ;;
+  *)
+    warn ${manual}
+    ;;
 esac`;
 }
 

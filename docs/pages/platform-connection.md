@@ -164,7 +164,7 @@ The `claude` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
-- **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
+- **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
 - **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.

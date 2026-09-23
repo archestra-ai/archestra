@@ -283,6 +283,31 @@ describe("BedrockInvokeStreamAdapter", () => {
   });
 });
 
+describe("BedrockInvokeResponseAdapter", () => {
+  // The governed-response replace path refuses to send a response it cannot
+  // safely rewrite; without this delegation the wrapper 503'd on an admitted
+  // final answer even though the Anthropic adapter underneath supports it.
+  test("withReplacedText delegates to the wrapped Anthropic adapter", () => {
+    const adapter = bedrockInvokeAdapterFactory.createResponseAdapter({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "claude-sonnet-4-5",
+      content: [{ type: "text", text: "RAW", citations: null }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 2 },
+    } as unknown as AnthropicProvider.Messages.Message);
+
+    expect(adapter.getText()).toBe("RAW");
+    const replaced = adapter.withReplacedText?.("ADMITTED");
+    expect(replaced?.content).toEqual([
+      { type: "text", text: "ADMITTED", citations: [] },
+    ]);
+    expect(replaced?.stop_reason).toBe("end_turn");
+  });
+});
+
 describe("BedrockInvokeRequestAdapter", () => {
   test("streaming is endpoint-selected via _isStreaming, not the stream body field", () => {
     const base = {

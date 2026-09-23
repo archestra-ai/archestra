@@ -121,9 +121,16 @@ class BedrockOpenaiResponseAdapter
   }
 
   toRefusalResponse(
-    _refusalMessage: string,
+    refusalMessage: string,
     contentMessage: string,
   ): BedrockResponse {
+    // The wire refusal is built in OpenAI shape directly, but the interaction
+    // log must store the refusal in the inner Converse shape — otherwise the
+    // blocked tool-call turn is persisted instead.
+    this.rewrittenInner = this.inner.toRefusalResponse(
+      refusalMessage,
+      contentMessage,
+    );
     const usage = this.inner.getUsage();
     return {
       id: this.ctx.chatcmplId,

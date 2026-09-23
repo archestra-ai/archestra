@@ -368,6 +368,76 @@ describe("OpenAIResponseAdapter", () => {
       );
       expect(refusal.choices[0].finish_reason).toBe("stop");
     });
+
+    test("clears logprobs that encode the withheld raw text", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "withheld raw text",
+      });
+      response.choices[0].logprobs = {
+        content: [
+          {
+            token: "withheld raw text",
+            bytes: [],
+            logprob: -0.1,
+            top_logprobs: [],
+          },
+        ],
+        refusal: null,
+      };
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const refusal = adapter.toRefusalResponse(
+        "Full refusal",
+        "Tool call blocked by policy",
+      );
+
+      expect(refusal.choices[0].logprobs).toBeNull();
+      expect(JSON.stringify(refusal.choices[0])).not.toContain(
+        "withheld raw text",
+      );
+    });
+  });
+
+  describe("withReplacedText", () => {
+    test("replaces the message content", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "Original content",
+      });
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const replaced = adapter.withReplacedText?.("approved replacement");
+
+      expect(replaced?.choices[0].message.content).toBe("approved replacement");
+      expect(replaced?.choices[0].finish_reason).toBe("stop");
+    });
+
+    test("clears logprobs that encode the replaced raw text", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "withheld raw text",
+      });
+      response.choices[0].logprobs = {
+        content: [
+          {
+            token: "withheld raw text",
+            bytes: [],
+            logprob: -0.1,
+            top_logprobs: [],
+          },
+        ],
+        refusal: null,
+      };
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const replaced = adapter.withReplacedText?.("approved replacement");
+
+      expect(replaced?.choices[0].logprobs).toBeNull();
+      expect(JSON.stringify(replaced?.choices[0])).not.toContain(
+        "withheld raw text",
+      );
+    });
   });
 });
 

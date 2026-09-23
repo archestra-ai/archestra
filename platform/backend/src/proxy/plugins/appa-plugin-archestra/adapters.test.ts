@@ -244,7 +244,63 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     expect(openCode.isSpawnTool("builtin:skill")).toBe(false);
     expect(openCode.isSpawnTool("task")).toBe(true);
     expect(openCode.isSpawnTool("builtin:task")).toBe(true);
+    expect(openCode.isSpawnTool("host/archestra/task")).toBe(true);
     expect(openCode.isSpawnTool("bash")).toBe(false);
+  });
+
+  test("keeps foreign-namespaced OpenCode task lookalikes out of native spawn and completion", () => {
+    // OpenCode declares no wire namespaces: a namespaced `task` is a foreign
+    // tool that shares the native name (OpenCode also speaks the Responses
+    // wire, where MCP servers declare `mcp__<server>` namespaces).
+    expect(openCode.isSpawnTool("task", "mcp__foreign")).toBe(false);
+    expect(openCode.isSpawnTool("task", "multi_agent_v1")).toBe(false);
+    // Other clients' native spellings are not OpenCode's.
+    expect(openCode.isSpawnTool("functions.task")).toBe(false);
+    expect(openCode.isSpawnTool("host/claude-code/task")).toBe(false);
+    expect(openCode.isSpawnTool("host/task")).toBe(false);
+    // OpenCode's own MCP/gateway spellings never reduce to the native name.
+    expect(openCode.isSpawnTool("mcp:foreign:task")).toBe(false);
+    expect(openCode.isSpawnTool("foreign__task")).toBe(false);
+
+    const foreignResult = {
+      id: "foreign-task",
+      name: "task",
+      namespace: "mcp__foreign",
+      content: "task: oc-child\nSUMMARY(...)",
+      isError: false,
+    };
+    expect(openCode.isChildCompletionResult?.(foreignResult)).toBe(false);
+    expect(
+      openCode.isChildCompletionResult?.({
+        ...foreignResult,
+        namespace: "multi_agent_v1",
+      }),
+    ).toBe(false);
+    expect(
+      openCode.isChildCompletionResult?.({
+        ...foreignResult,
+        namespace: undefined,
+        name: "host/claude-code/task",
+      }),
+    ).toBe(false);
+
+    // The native spellings still classify, as call and as result.
+    const { namespace: _foreign, ...nativeResult } = foreignResult;
+    expect(openCode.isChildCompletionResult?.(nativeResult)).toBe(true);
+    expect(
+      openCode.isChildCompletionResult?.({
+        ...nativeResult,
+        name: "builtin:task",
+      }),
+    ).toBe(true);
+
+    // The spawn prompt lives only behind a natively-spelled task call.
+    expect(
+      openCode.spawnPromptField("functions.task", { prompt: "p" }),
+    ).toBeUndefined();
+    expect(
+      openCode.spawnPromptField("host/claude-code/task", { prompt: "p" }),
+    ).toBeUndefined();
   });
 
   test("keeps Chat child-incapable", () => {

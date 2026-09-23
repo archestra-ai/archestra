@@ -127,3 +127,40 @@ describe("ZhipuaiStreamAdapter policy refusal", () => {
     expect(response.choices[0].message.content).toBe("all good");
   });
 });
+
+describe("ZhipuaiResponseAdapter", () => {
+  // The governed-response replace path refuses to send a response it cannot
+  // safely rewrite; without withReplacedText an admitted final answer 503'd.
+  test("withReplacedText replaces the assistant message and drops tool calls", () => {
+    const adapter = zhipuaiAdapterFactory.createResponseAdapter({
+      id: "chatcmpl-test",
+      object: "chat.completion",
+      created: 1,
+      model: "glm-4",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "RAW",
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function" as const,
+                function: { name: "read_file", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    } as unknown as Zhipuai.Types.ChatCompletionsResponse);
+
+    const replaced = adapter.withReplacedText?.("ADMITTED");
+
+    expect(replaced?.choices[0].message.content).toBe("ADMITTED");
+    expect(replaced?.choices[0].message.tool_calls).toBeUndefined();
+    expect(replaced?.choices[0].finish_reason).toBe("stop");
+  });
+});

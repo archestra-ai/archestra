@@ -592,6 +592,22 @@ class MinimaxResponseAdapter implements LLMResponseAdapter<MinimaxResponse> {
       ],
     };
   }
+
+  withReplacedText(text: string): MinimaxResponse {
+    return {
+      ...this.response,
+      choices: [
+        {
+          ...this.response.choices[0],
+          message: {
+            role: "assistant",
+            content: text,
+          },
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
 }
 
 // =============================================================================

@@ -96,6 +96,17 @@ describe("delegation markers", () => {
     expect(verify(readBack(`${PROMPT}\n${marker}`))).toBe(true);
   });
 
+  test("a CRLF-formatted marker line reads back, verifies, and is recognized", () => {
+    const marker = mint();
+    const read = readBack(`${PROMPT}\r\n\r\n${marker}\r\n`);
+    expect(read.parentId).toBe("s1");
+    expect(verify(read)).toBe(true);
+    expect(isDelegationMarkerLine(`${marker}\r`)).toBe(true);
+    expect(isDelegationMarkerItem({ type: "text", text: `${marker}\r` })).toBe(
+      true,
+    );
+  });
+
   test("reads parent ids with colons and dots back whole", () => {
     const parentId = "sess.1:agent.2:grand:3";
     const marker = mintDelegationMarker({ ...SPAWN, parentId, prompt: PROMPT });
@@ -559,6 +570,58 @@ describe("stripping delegation markers", () => {
     expect(responses.input[0].content).toEqual([
       { type: "input_text", text: PROMPT },
     ]);
+  });
+
+  test("strips CRLF-formatted marker lines before provider dispatch", () => {
+    const marker = mint();
+    const body = {
+      system: `${PROMPT}\r\n\r\n${marker}\r\n`,
+      messages: [
+        { role: "user", content: `${PROMPT}\r\n\r\n${marker}\r\n` },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "Agent",
+              input: { prompt: `${PROMPT}\r\n\r\n${marker}\r\n` },
+            },
+          ],
+        },
+      ],
+    };
+
+    stripDelegationMarkers({ family: "anthropic:messages", body });
+
+    expect(JSON.stringify(body)).not.toContain(marker);
+    expect(body.system).toBe(`${PROMPT}\n`);
+    expect(body.messages[0].content).toBe(`${PROMPT}\n`);
+    expect(body.messages[1].content[0]).toMatchObject({
+      input: { prompt: `${PROMPT}\n` },
+    });
+
+    const responses = {
+      input: [
+        {
+          type: "function_call",
+          call_id: "c1",
+          name: "spawn_agent",
+          arguments: JSON.stringify({
+            items: [
+              { type: "text", text: PROMPT },
+              { type: "text", text: `${marker}\r` },
+            ],
+          }),
+        },
+      ],
+    };
+
+    stripDelegationMarkers({ family: "openai:responses", body: responses });
+
+    expect(JSON.parse(responses.input[0].arguments)).toEqual({
+      items: [{ type: "text", text: PROMPT }],
+    });
   });
 
   test("leaves a marker-like line with a malformed token, and is idempotent", () => {

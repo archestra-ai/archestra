@@ -263,6 +263,41 @@ describe("InteractionModel", () => {
       const parsed = SelectInteractionSchema.safeParse(interaction);
       expect(parsed.success).toBe(true);
     });
+
+    test("round-trips a responses/compact response stored as openai:responses", async () => {
+      // The compact endpoint's native response (object "response.compaction")
+      // is logged under the openai:responses interaction type. Reading it back
+      // must not coerce it to the malformed sentinel.
+      const compactedResponse = {
+        id: "resp_compact_test",
+        object: "response.compaction" as const,
+        created_at: 1720000000,
+        output: [
+          {
+            id: "cmp_1",
+            type: "compaction",
+            encrypted_content: "cipher-text",
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-5.1",
+          input: [{ role: "user", content: "Compact this" }],
+        },
+        response: compactedResponse,
+        type: "openai:responses",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+      expect(found?.response).toEqual(compactedResponse);
+
+      const parsed = SelectInteractionSchema.safeParse(found);
+      expect(parsed.success).toBe(true);
+    });
   });
 
   describe("create - null byte sanitization", () => {

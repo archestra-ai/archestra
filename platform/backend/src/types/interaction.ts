@@ -228,6 +228,9 @@ export const InteractionResponseSchema = z.union([
   Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
+  // The compact endpoint's native response is logged under `openai:responses`
+  // but is not a ResponsesResponseSchema (`object` is "response.compaction").
+  OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
   InteractionErrorResponseSchema,
@@ -403,7 +406,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.ResponsesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.ResponsesResponseSchema),
+    // The responses/compact endpoint logs its native compacted response under
+    // this type, so accept it alongside ordinary Responses results — otherwise
+    // normalizeInteractionResponse coerces it to the malformed sentinel.
+    response: withErrorResponse(
+      z.union([
+        OpenAi.API.ResponsesResponseSchema,
+        OpenAi.API.ResponsesCompactedResponseSchema,
+      ]),
+    ),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

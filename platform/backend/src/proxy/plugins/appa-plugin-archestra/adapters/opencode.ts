@@ -17,7 +17,6 @@ const QUESTION_HEADER_MAX_LENGTH = 30;
 import {
   asRecord,
   bindMintedChildTrajectory,
-  localToolName,
   namesChildrenFromArguments,
   stringField,
   stripRecordFields,
@@ -117,19 +116,27 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       : undefined;
   }
 
-  isSpawnTool(name: string): boolean {
-    return CHILD_SPAWN_TOOLS.has(localToolName(name));
+  isSpawnTool(name: string, namespace?: string): boolean {
+    // OpenCode declares its native tools without a wire namespace, so any
+    // namespace is foreign (it also speaks the Responses wire, where MCP
+    // servers declare `mcp__<server>` namespaces). Other clients' spellings
+    // (`functions.`, `host/claude-code/`, bare `host/`) are foreign too: only
+    // OpenCode's own decorations reduce to the native name.
+    return (
+      namespace === undefined &&
+      CHILD_SPAWN_TOOLS.has(nativeOpenCodeToolName(name))
+    );
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
-    return CHILD_SPAWN_TOOLS.has(localToolName(result.name)) && !result.isError;
+    return this.isSpawnTool(result.name, result.namespace) && !result.isError;
   }
 
   spawnPromptField(
     name: string,
     _args?: Record<string, unknown>,
   ): AppaSpawnPromptField | undefined {
-    return CHILD_SPAWN_TOOLS.has(localToolName(name))
+    return CHILD_SPAWN_TOOLS.has(nativeOpenCodeToolName(name))
       ? { field: "prompt", kind: "text" }
       : undefined;
   }
@@ -179,6 +186,19 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       "agent_id",
     ]);
   }
+}
+
+/**
+ * Reduces OpenCode's own spellings of a local tool to the bare name: the
+ * undecorated wire name, its `builtin:` decoration, and the embedded
+ * runtime's `host/archestra/` derivation. Unlike the shared localToolName,
+ * no other client's namespace strips to an OpenCode-native name.
+ */
+function nativeOpenCodeToolName(name: string): string {
+  for (const prefix of ["builtin:", "host/archestra/"] as const) {
+    if (name.startsWith(prefix)) return name.slice(prefix.length);
+  }
+  return name;
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

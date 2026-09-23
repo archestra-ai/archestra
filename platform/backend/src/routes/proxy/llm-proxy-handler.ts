@@ -2280,7 +2280,10 @@ async function handleStreaming<
     data: string | Uint8Array,
     isResponsePreamble = false,
   ) => {
-    if (bufferModelResponse && !isResponsePreamble) {
+    if (
+      bufferModelResponse &&
+      !(isResponsePreamble && !preambleSseCarriesContent(data))
+    ) {
       bufferedChildBytes +=
         typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
       if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
@@ -3590,6 +3593,65 @@ async function handleNonStreaming<
     if (appended) markSessionReceiptIssued(sessionReceipt);
   }
   return reply.send(outboundResponse);
+}
+
+// Adapters flag a frame `isResponsePreamble` on its type alone, so the flag is
+// only as trustworthy as the upstream that filled the frame in. A
+// message_start or response.created/response.in_progress envelope whose
+// content/output arrays carry text would otherwise bypass the buffered
+// admission gate, releasing unapproved model output before
+// onBufferedModelResponse rules. Anything that cannot be proven content-free
+// is treated as content: buffering a true preamble only delays it, while
+// content released early cannot be taken back.
+function preambleSseCarriesContent(data: string | Uint8Array): boolean {
+  const text =
+    typeof data === "string" ? data : Buffer.from(data).toString("utf8");
+  let sawDataLine = false;
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    sawDataLine = true;
+    let frame: unknown;
+    try {
+      frame = JSON.parse(line.slice("data:".length).trim());
+    } catch {
+      return true;
+    }
+    const payload = asRecord(frame);
+    if (!payload) return true;
+    // Anthropic envelope: message_start carries the initial Message object.
+    if (payload.type === "message_start") {
+      const content = asRecord(payload.message)?.content;
+      if (Array.isArray(content) && content.length > 0) return true;
+      continue;
+    }
+    // OpenAI/Azure Responses envelope: response.created and
+    // response.in_progress carry the in-flight Response object.
+    if (
+      typeof payload.type === "string" &&
+      payload.type.startsWith("response.")
+    ) {
+      const output = asRecord(payload.response)?.output;
+      if (Array.isArray(output) && output.length > 0) return true;
+      continue;
+    }
+    // OpenAI chat chunk: only a role-only delta is content-free.
+    if (Array.isArray(payload.choices)) {
+      for (const choice of payload.choices) {
+        const delta = asRecord(asRecord(choice)?.delta);
+        if (
+          delta?.content ||
+          delta?.reasoning_content ||
+          delta?.refusal ||
+          delta?.tool_calls
+        ) {
+          return true;
+        }
+      }
+      continue;
+    }
+    return true;
+  }
+  return !sawDataLine;
 }
 
 function containsChildReturnProof(

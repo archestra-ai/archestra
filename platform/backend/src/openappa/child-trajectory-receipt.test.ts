@@ -167,4 +167,43 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     config.openappa.offerSigningSecret = "";
     expect(mintChildTrajectoryReceipt(BINDING)).toBeUndefined();
   });
+
+  test("passes benign oversized text through unchanged", () => {
+    const large = `start ${"x".repeat(8 * 1024 * 1024)} end`;
+    const stripped = stripChildTrajectoryReceipts(large);
+
+    expect(stripped.text).toBe(large);
+    expect(stripped.receipts).toHaveLength(0);
+  });
+
+  test("rejects an oversized text that carries a proof", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const large = `${"x".repeat(8 * 1024 * 1024)}\n\n${footer}`;
+
+    expect(() => stripChildTrajectoryReceipts(large)).toThrowError(
+      /child-trajectory carrier exceeds its limit/,
+    );
+  });
+
+  test("strips every carrier at the per-site limit", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const stripped = stripChildTrajectoryReceipts(
+      Array.from({ length: 64 }, () => footer).join("\n\n"),
+    );
+
+    expect(stripped.receipts).toHaveLength(64);
+    expect(stripped.text).not.toContain("appact2-");
+  });
+
+  test("rejects instead of leaving proofs beyond the per-site limit", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const crowded = Array.from({ length: 65 }, () => footer).join("\n\n");
+
+    expect(() => stripChildTrajectoryReceipts(crowded)).toThrowError(
+      /too many child-trajectory carriers/,
+    );
+  });
 });

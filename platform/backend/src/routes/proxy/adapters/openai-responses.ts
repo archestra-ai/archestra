@@ -642,6 +642,9 @@ class OpenAiResponsesResponseAdapter
     return {
       ...this.response,
       status: "completed",
+      // The SDK/wire convenience string aggregates the raw output text; the
+      // spread would otherwise keep the withheld text at the top level.
+      output_text: text,
       output: [
         {
           id: `msg_${Date.now()}`,

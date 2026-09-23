@@ -526,6 +526,39 @@ describe("OpenAiResponsesResponseAdapter.getToolCalls", () => {
   });
 });
 
+describe("OpenAiResponsesResponseAdapter.withReplacedText", () => {
+  // The wire/SDK convenience string `output_text` aggregates the raw output
+  // text at the top level; replacing `output` while spreading the original
+  // response would leave the withheld text readable there.
+  test("replaces the top-level output_text convenience string along with output", () => {
+    const rawText = "withheld raw text";
+    const adapter = openAiResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_1",
+      object: "response",
+      created_at: 0,
+      model: "gpt-5.3-codex",
+      status: "completed",
+      output_text: rawText,
+      output: [
+        {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: rawText, annotations: [] }],
+        },
+      ],
+    } as never);
+
+    const replaced = adapter.withReplacedText?.("approved replacement") as
+      | { output_text?: string }
+      | undefined;
+
+    expect(replaced?.output_text).toBe("approved replacement");
+    expect(JSON.stringify(replaced)).not.toContain(rawText);
+  });
+});
+
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   // Reasoning turns (`store: false`) finish with `response.completed` carrying
   // an empty `output`, even though the text arrived in delta chunks. Persisting

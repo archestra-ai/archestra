@@ -23,7 +23,12 @@ import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
-import { APPA_PLUGIN_TRUSTED_CONTEXT, type AppaTrustedContext } from "./types";
+import {
+  APPA_CHILD_TRAJECTORY_RECEIPT,
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaChildTrajectoryReceiptOutput,
+  type AppaTrustedContext,
+} from "./types";
 
 vi.mock("@/cache-manager");
 
@@ -1361,6 +1366,251 @@ describe("rendering runtime text for this client", () => {
       expect(cancelCalls).toHaveBeenCalledWith(expect.anything(), ["admitted"]);
     } finally {
       cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("suppresses the queued start proof when a streamed child completes its handback", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:streamed-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const queued = context.resources.get(APPA_CHILD_TRAJECTORY_RECEIPT) as
+        | AppaChildTrajectoryReceiptOutput
+        | undefined;
+      expect(queued?.footer).toContain("appact2-");
+
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback",
+            name: "SubagentHandback",
+            arguments: { message: "raw child return" },
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") {
+        throw new Error("expected the handback batch to be released");
+      }
+      expect(JSON.stringify(outcome.toolCalls)).toContain("appar-");
+      expect(outcome.blocked).toEqual([
+        expect.objectContaining({ id: "handback" }),
+      ]);
+
+      const buffered = await plugin.onBufferedModelResponse({
+        ...context,
+        streaming: true,
+        response: {},
+        responseText: "",
+      });
+      if (buffered?.decision !== "replace") {
+        throw new Error(
+          "expected the completed handback to replace the buffered stream",
+        );
+      }
+      expect(buffered.responseText).toContain("raw child return");
+      expect(buffered.responseText).toContain("appar-");
+      expect(buffered.responseText).not.toContain("appact2-");
+      expect(endChild).toHaveBeenCalledTimes(1);
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("keeps releasing the rewritten handback call when the child is not streaming", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:buffered-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback",
+            name: "SubagentHandback",
+            arguments: { message: "raw child return" },
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") {
+        throw new Error("expected the handback batch to be released");
+      }
+      const handback = outcome.toolCalls.find((call) => call.id === "handback");
+      expect(JSON.stringify(handback?.arguments)).toContain("appar-");
+
+      const buffered = await plugin.onBufferedModelResponse({
+        ...context,
+        streaming: false,
+        response: {},
+        responseText: "",
+      });
+      expect(buffered).toBeUndefined();
+      expect(endChild).toHaveBeenCalledTimes(1);
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("keeps a streamed handback turn open when sibling calls share the batch", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:mixed-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback",
+            name: "SubagentHandback",
+            arguments: { message: "raw child return" },
+          },
+          { id: "sibling", name: "Read", arguments: { file_path: "a" } },
+        ],
+      });
+      if (outcome?.decision !== "allow") {
+        throw new Error("expected the mixed batch to be released");
+      }
+      expect(outcome.toolCalls.map((call) => call.id)).toEqual([
+        "handback",
+        "sibling",
+      ]);
+
+      const buffered = await plugin.onBufferedModelResponse({
+        ...context,
+        streaming: true,
+        response: {},
+        responseText: "",
+      });
+      expect(buffered).toBeUndefined();
+    } finally {
       evaluateToolCalls.mockRestore();
       endChild.mockRestore();
       config.openappa.offerSigningSecret = priorSecret;

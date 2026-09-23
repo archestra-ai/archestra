@@ -391,18 +391,24 @@ export function sessionFromHeaders(params: {
 async function startSession(
   session: OpenAppaSession,
   policyContent?: string,
-): Promise<string | undefined> {
+): Promise<void> {
   const decision = await dispatch(
     session,
     { event: "session_start" },
     policyContent,
   );
   if (decision.decision === "context") {
-    return decision.text;
+    // The runtime hands the session's start context — a child's return
+    // contract — to the harness for delivery before inference. The proxy has
+    // no channel that carries it to the model, so refuse rather than silently
+    // govern the session without the contract it was opened under.
+    throw new ApiError(
+      409,
+      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
+    );
   }
   if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
-  return undefined;
 }
 
 function extractApprovedOutput(

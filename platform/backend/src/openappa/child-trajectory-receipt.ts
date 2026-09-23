@@ -6,6 +6,7 @@
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import config from "@/config";
+import { ApiError } from "@/types";
 
 export type AppaChildTrajectoryReceipt = {
   token: string;
@@ -27,6 +28,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
 const MAX_CLAIMS_BYTES = 16 * 1024;
 const MAX_RECEIPTS_PER_SITE = 64;
+const PROOF_LINE_PREFIX = "[appa] child trajectory appact2-";
 const TOKEN_SOURCE = String.raw`appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}`;
 const TOKEN = /^(appact2-([A-Za-z0-9_-]+)\.([0-9a-f]{64}))$/;
 const DISPLAY_MARKER = String.raw`(?:${LOGO_PATTERN}\s+)?(?:started subagent|started protected subagent|protected delegated session)(?:\s+[A-Za-z0-9_:-]+)?\s+[A-Za-z0-9_-]{1,64}`;
@@ -132,15 +134,22 @@ export function stripChildTrajectoryReceipts(text: string): {
   receipts: AppaChildTrajectoryReceipt[];
 } {
   if (Buffer.byteLength(text, "utf8") > MAX_SCAN_BYTES) {
-    return { text, receipts: [] };
+    if (!text.includes(PROOF_LINE_PREFIX)) return { text, receipts: [] };
+    throw new ApiError(
+      400,
+      "OpenAPPA child-trajectory carrier exceeds its limit",
+    );
   }
   const receipts: AppaChildTrajectoryReceipt[] = [];
   let stripped = text;
-  const matches = [...text.matchAll(clonePattern())].slice(
-    0,
-    MAX_RECEIPTS_PER_SITE,
-  );
+  const matches = [...text.matchAll(clonePattern())];
   if (matches.length === 0) return { text, receipts };
+  if (matches.length > MAX_RECEIPTS_PER_SITE) {
+    throw new ApiError(
+      400,
+      "OpenAPPA received too many child-trajectory carriers",
+    );
+  }
   for (let index = matches.length - 1; index >= 0; index--) {
     const match = matches[index];
     const token = match.groups?.token;

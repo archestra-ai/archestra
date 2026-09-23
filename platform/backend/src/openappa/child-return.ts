@@ -527,7 +527,10 @@ function replaceSubagentNotifications(
     const parsedJson = tryParseJson(inside.trim());
     const object = asRecord(parsedJson);
     const status = asRecord(object?.status);
-    const completed = status ? stringField(status.completed) : undefined;
+    const completed =
+      status && typeof status.completed === "string"
+        ? status.completed
+        : undefined;
     if (object && status && completed !== undefined) {
       const agentPath = optionalBoundedMetadata(object.agent_path);
       const agentId = optionalBoundedMetadata(object.agent_id);

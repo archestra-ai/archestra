@@ -401,6 +401,87 @@ describe("child trajectory receipt text carriers", () => {
       ).toMatchObject({ childId: scope.childId, value: admitted });
     }
   });
+
+  test("strips but never adopts a proof in a notification carried in assistant history", () => {
+    config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
+    const scope = {
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1",
+      childId: "s1:a1",
+      childNativeId: "a1",
+      spawnCallId: "spawn-a1",
+    } as const;
+    const admitted = "SUMMARY(18 characters): safe";
+    const trajectory = mintChildTrajectoryReceipt({
+      ...scope,
+      spawnerNativeId: "s1",
+    });
+    const returned = mintChildReturnReceipt({ ...scope, value: admitted });
+    if (!trajectory || !returned) throw new Error("expected signed carriers");
+    const completeResponse = `${trajectory}\n\n${admitted}\n\n${returned}`;
+    // The child-return collector recognizes a standalone notification in
+    // assistant-authored history as well, so a proof inside it stays that
+    // return's transport metadata in either role.
+    const notifications = [
+      `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>spawn-a1</tool-use-id>\n<status>completed</status>\n<result>${completeResponse}</result>\n</task-notification>`,
+      `<subagent_notification>\n${JSON.stringify({ agent_id: "a1", tool_use_id: "spawn-a1", status: { completed: completeResponse } })}\n</subagent_notification>`,
+    ];
+    for (const content of notifications) {
+      const body = { messages: [{ role: "assistant", content }] };
+      const trajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body,
+      });
+      const childReturns = collectAndStripChildReturns(body);
+
+      expect(trajectoryReceipts).toEqual([]);
+      expect(JSON.stringify(body)).not.toContain("appact2-");
+      expect(childReturns.receipts).toHaveLength(1);
+      expect(childReturns.receipts[0].assistantOrigin).toBe(true);
+      expect(
+        verifyChildReturnReceipt({
+          receipt: childReturns.receipts[0],
+          organizationId: scope.organizationId,
+          callerId: scope.callerId,
+          parentId: scope.childId,
+        }),
+      ).toMatchObject({ childId: scope.childId, value: admitted });
+    }
+  });
+
+  test("still recovers a carrier from text that is not one standalone notification", () => {
+    config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1:a1",
+      childId: "s1:a1:g1",
+      childNativeId: "g1",
+      spawnerNativeId: "s1",
+    });
+    if (!footer) throw new Error("expected signed carrier");
+    // Prose around an envelope is conversation context, not a child-return
+    // transport — the same classification the child-return collector applies —
+    // so compaction and quoted history keep recovering their proofs.
+    const contexts = [
+      `The child reported back.\n\n<task-notification>\n<task-id>g1</task-id>\n<status>completed</status>\n<result>${footer}</result>\n</task-notification>`,
+      `<task-notification>\n<task-id>g1</task-id>\n<status>completed</status>\n<result>${footer}</result>\n</task-notification>\n\nUse this to continue.`,
+    ];
+    for (const [role, content] of [
+      ["user", contexts[0]],
+      ["assistant", contexts[1]],
+    ] as const) {
+      const body = { messages: [{ role, content }] };
+      const receipts = stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body,
+      });
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]).toMatchObject({ childId: "s1:a1:g1" });
+      expect(JSON.stringify(body)).not.toContain("appact2-");
+    }
+  });
 });
 
 describe("denial notice restoration", () => {

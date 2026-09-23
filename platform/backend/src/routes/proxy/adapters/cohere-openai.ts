@@ -95,9 +95,16 @@ class CohereOpenaiResponseAdapter
   }
 
   toRefusalResponse(
-    _refusalMessage: string,
+    refusalMessage: string,
     contentMessage: string,
   ): CohereResponse {
+    // The wire refusal is built in OpenAI shape directly, but the interaction
+    // log must store the refusal in the inner Cohere shape — otherwise the
+    // blocked tool-call turn is persisted instead.
+    this.rewrittenInner = this.inner.toRefusalResponse(
+      refusalMessage,
+      contentMessage,
+    );
     const usage = this.inner.getUsage();
     const response: OpenAi.Types.ChatCompletionsResponse = {
       id: this.ctx.chatcmplId,

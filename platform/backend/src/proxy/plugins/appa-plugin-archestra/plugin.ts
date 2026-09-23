@@ -87,6 +87,12 @@ type AppaPluginBinding = {
   requestBody: unknown;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
+  /**
+   * Admitted return of a completed native handback when it was the whole
+   * batch. A buffered streamed release replaces the response with it so the
+   * queued start proof does not ride alongside the authenticated return.
+   */
+  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -141,6 +147,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       request: trustedContext.request,
       requestBody: context.requestBody,
       turnOpen: false,
+      completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
       requestHeaders: context.headers,
@@ -700,13 +707,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const released: ToolCall[] = [];
     for (const call of calls) {
       if (handbackIds.has(call.id)) {
-        const admitted = await admitChildHandback({ binding, call });
+        const handback = await admitChildHandback({ binding, call });
         blocked.push({
           id: call.id,
           name: call.name,
           reason: "OpenAPPA replaced the child return with admitted bytes",
         });
-        released.push(admitted);
+        released.push(handback.call);
+        if (calls.length === 1) {
+          binding.completedHandbackReturn = handback.returnText;
+        }
         continue;
       }
       const decision = decisionById.get(call.id);
@@ -849,6 +859,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.compaction = true;
     }
     if (binding?.compaction) return { decision: "release" };
+    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
+      return {
+        decision: "replace",
+        responseText: binding.completedHandbackReturn,
+      };
+    }
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }
@@ -1202,7 +1218,7 @@ async function approveChildReturnCarriers(params: {
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;
   call: ToolCall;
-}): Promise<ToolCall> {
+}): Promise<{ call: ToolCall; returnText: string }> {
   const { binding, call } = params;
   const adapter = binding.adapter;
   const raw = adapter?.childHandbackValue?.(call.arguments);
@@ -1249,14 +1265,14 @@ async function admitChildHandback(params: {
   if (!receipt) {
     throw new ApiError(503, "OpenAPPA could not protect the child return");
   }
-  const rewritten = adapter?.rewriteChildHandback?.(
-    call.arguments,
-    `${admitted}\n\n${receipt}`,
-  );
+  const returnText = `${admitted}\n\n${receipt}`;
+  const rewritten = adapter?.rewriteChildHandback?.(call.arguments, returnText);
   return {
-    ...call,
-    arguments:
-      rewritten === undefined ? `${admitted}\n\n${receipt}` : rewritten,
+    call: {
+      ...call,
+      arguments: rewritten === undefined ? returnText : rewritten,
+    },
+    returnText,
   };
 }
 

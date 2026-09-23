@@ -1195,6 +1195,40 @@ describe("APPA feature boundary", () => {
       },
     ]);
   });
+  test("refuses a session whose return contract the proxy cannot deliver before inference", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "session_start"
+          ? {
+              decision: "context",
+              text: "[appa] Your final message is checked when you stop: it must be one JSON object matching this schema.",
+            }
+          : { decision: "ack" },
+      );
+    });
+    await expect(
+      processProxyResults({
+        session: { ...session, parent_id: "parent" },
+        canonicalize: (name: string) => name,
+        results: [
+          {
+            id: "call",
+            name: "read_file",
+            content: "RAW RESULT",
+            isError: false,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    // The refusal happens at session start: no tool result reaches the runtime.
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "tool_result"),
+    ).toHaveLength(0);
+  });
+
   test("preserves an explicit native unknown-control ruling without inspecting its text", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);

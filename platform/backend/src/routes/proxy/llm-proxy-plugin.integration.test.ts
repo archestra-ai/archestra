@@ -15,7 +15,11 @@ import {
   createAnthropicTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
-import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import {
+  anthropicAdapterFactory,
+  openAiResponsesAdapterFactory,
+  openaiAdapterFactory,
+} from "./adapters";
 import { makeAnthropicOpenaiAdapterFactory } from "./adapters/anthropic-openai";
 import { makeResponsesFromChatAdapterFactory } from "./adapters/openai-responses-from-chat";
 import { handleLLMProxy } from "./llm-proxy-handler";
@@ -195,6 +199,284 @@ describe("LLM proxy plugin lifecycle", () => {
       expect(response.body).toContain(
         stream ? '"type":"response.completed"' : '"object":"response"',
       );
+    } finally {
+      unregister();
+    }
+  });
+
+  test.for([
+    { decision: "replace" as const, leakVisible: false },
+    { decision: "release" as const, leakVisible: true },
+  ])("gates an Anthropic message_start carrying content behind buffered admission ($decision)", async ({
+    decision,
+    leakVisible,
+  }, { makeAgent }) => {
+    const leakedText = "PREAMBLE LEAK TEXT";
+    const rawText = "RAW ANSWER";
+    const admittedText = "ADMITTED ANSWER";
+    const unregister = registerLlmProxyPlugin({
+      id: `test-anthropic-preamble-content-${crypto.randomUUID()}`,
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse() {
+        return decision === "replace"
+          ? { decision, responseText: admittedText }
+          : { decision };
+      },
+    });
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(() => {
+      const base = createAnthropicTestClient({ responseText: rawText });
+      return {
+        messages: {
+          create: async (params: { stream?: boolean }) => {
+            const result = await base.messages.create(params as never);
+            if (!params.stream) return result;
+            const iterator = (
+              result as AsyncIterable<{
+                type: string;
+                message?: { content?: unknown };
+              }>
+            )[Symbol.asyncIterator]();
+            let patched = false;
+            return {
+              [Symbol.asyncIterator]() {
+                return {
+                  async next() {
+                    const item = await iterator.next();
+                    if (
+                      !patched &&
+                      !item.done &&
+                      item.value?.type === "message_start"
+                    ) {
+                      patched = true;
+                      return {
+                        done: false as const,
+                        value: {
+                          ...item.value,
+                          message: {
+                            ...item.value.message,
+                            content: [{ type: "text", text: leakedText }],
+                          },
+                        },
+                      };
+                    }
+                    return item;
+                  },
+                };
+              },
+            };
+          },
+        },
+      } as never;
+    });
+    app.post("/test/anthropic/:agentId", async (request, reply) =>
+      handleLLMProxy(
+        request.body as Parameters<
+          typeof anthropicAdapterFactory.createRequestAdapter
+        >[0],
+        request,
+        reply,
+        anthropicAdapterFactory,
+      ),
+    );
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-wrapped",
+      provider: "anthropic",
+      modelId: "claude-wrapped",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/test/anthropic/${agent.id}`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "claude-wrapped",
+          max_tokens: 128,
+          messages: [{ role: "user", content: "hello" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      if (leakVisible) {
+        // Admitted: the buffered preamble is flushed with the rest of the
+        // turn, so its content arrives — after the admission decision.
+        expect(response.body).toContain(leakedText);
+        expect(response.body).toContain(rawText);
+      } else {
+        expect(response.body).not.toContain(leakedText);
+        expect(response.body).not.toContain(rawText);
+        expect(response.body).toContain(admittedText);
+      }
+    } finally {
+      unregister();
+    }
+  });
+
+  test.for([
+    { decision: "replace" as const, leakVisible: false },
+    { decision: "release" as const, leakVisible: true },
+  ])("gates a Responses response.in_progress carrying output behind buffered admission ($decision)", async ({
+    decision,
+    leakVisible,
+  }, { makeAgent }) => {
+    const leakedText = "PREAMBLE LEAK TEXT";
+    const rawText = "RAW ANSWER";
+    const admittedText = "ADMITTED ANSWER";
+    const unregister = registerLlmProxyPlugin({
+      id: `test-responses-preamble-content-${crypto.randomUUID()}`,
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse() {
+        return decision === "replace"
+          ? { decision, responseText: admittedText }
+          : { decision };
+      },
+    });
+    const responseEnvelope = {
+      id: "resp-preamble-leak",
+      object: "response",
+      created_at: 1,
+      model: "gpt-4o",
+      status: "in_progress",
+    };
+    const leakedOutputItem = {
+      id: "msg-preamble-leak",
+      type: "message",
+      role: "assistant",
+      status: "in_progress",
+      content: [{ type: "output_text", text: leakedText, annotations: [] }],
+    };
+    const chunks = [
+      {
+        type: "response.created",
+        sequence_number: 0,
+        response: { ...responseEnvelope, output: [] },
+      },
+      {
+        type: "response.in_progress",
+        sequence_number: 1,
+        response: { ...responseEnvelope, output: [leakedOutputItem] },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        sequence_number: 2,
+        item: { ...leakedOutputItem, content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: "msg-preamble-leak",
+        output_index: 0,
+        content_index: 0,
+        sequence_number: 3,
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: "msg-preamble-leak",
+        output_index: 0,
+        content_index: 0,
+        sequence_number: 4,
+        delta: rawText,
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 0,
+        sequence_number: 5,
+        item: {
+          ...leakedOutputItem,
+          status: "completed",
+          content: [{ type: "output_text", text: rawText, annotations: [] }],
+        },
+      },
+      {
+        type: "response.completed",
+        sequence_number: 6,
+        response: {
+          ...responseEnvelope,
+          status: "completed",
+          output: [
+            {
+              ...leakedOutputItem,
+              status: "completed",
+              content: [
+                { type: "output_text", text: rawText, annotations: [] },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 2,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: 1,
+            output_tokens_details: { reasoning_tokens: 0 },
+            total_tokens: 3,
+          },
+        },
+      },
+    ];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              [Symbol.asyncIterator]() {
+                let index = 0;
+                return {
+                  async next() {
+                    if (index < chunks.length) {
+                      return { done: false, value: chunks[index++] };
+                    }
+                    return { done: true, value: undefined };
+                  },
+                };
+              },
+            }),
+          },
+        }) as never,
+    );
+    app.post("/test/responses/:agentId", async (request, reply) =>
+      handleLLMProxy(
+        request.body as Parameters<
+          typeof openAiResponsesAdapterFactory.createRequestAdapter
+        >[0],
+        request,
+        reply,
+        openAiResponsesAdapterFactory,
+      ),
+    );
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/test/responses/${agent.id}`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          input: "hello",
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      if (leakVisible) {
+        expect(response.body).toContain(leakedText);
+        expect(response.body).toContain(rawText);
+      } else {
+        expect(response.body).not.toContain(leakedText);
+        expect(response.body).not.toContain(rawText);
+        expect(response.body).toContain(admittedText);
+      }
     } finally {
       unregister();
     }

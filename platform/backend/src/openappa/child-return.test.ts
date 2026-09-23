@@ -293,6 +293,30 @@ describe("OpenAPPA stateless child-return receipts", () => {
     });
   });
 
+  test("canonicalizes subagent notifications with an empty completed value", () => {
+    const notification = {
+      agent_id: "child",
+      tool_use_id: "spawn-call",
+      status: { completed: "" },
+      raw_output: "UNSIGNED-ROOT",
+    };
+    const body = {
+      role: "user",
+      content: `<subagent_notification>\n${JSON.stringify(notification)}\n</subagent_notification>`,
+    };
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(body.content).toBe(
+      `<subagent_notification>\n${JSON.stringify({ agent_id: "child", tool_use_id: "spawn-call", status: { completed: "" } })}\n</subagent_notification>`,
+    );
+    expect(body.content).not.toContain("UNSIGNED-ROOT");
+    expect(collected.receipts).toEqual([]);
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ childNativeId: "child", value: "" }),
+    ]);
+  });
+
   test("preserves exact admitted bytes and rejects unsigned suffixes", () => {
     const exact = "  admitted bytes  \n\n";
     const returned = { ...RETURN, value: exact };

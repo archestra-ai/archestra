@@ -995,6 +995,9 @@ export class OpenAIResponseAdapter
             content: contentMessage,
             refusal: null,
           },
+          // logprobs.content encodes the withheld text token-by-token; the
+          // replaced turn must not carry it.
+          logprobs: null,
           finish_reason: "stop",
         },
       ],
@@ -1008,6 +1011,8 @@ export class OpenAIResponseAdapter
         {
           ...this.response.choices[0],
           message: { role: "assistant", content: text, refusal: null },
+          // See toRefusalResponse: raw tokens would survive the replacement.
+          logprobs: null,
           finish_reason: "stop",
         },
       ],

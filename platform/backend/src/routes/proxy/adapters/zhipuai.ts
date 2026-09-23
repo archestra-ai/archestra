@@ -596,6 +596,22 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
       ],
     };
   }
+
+  withReplacedText(text: string): ZhipuaiResponse {
+    return {
+      ...this.response,
+      choices: [
+        {
+          ...this.response.choices[0],
+          message: {
+            role: "assistant",
+            content: text,
+          },
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
 }
 
 // =============================================================================

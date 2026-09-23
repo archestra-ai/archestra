@@ -372,7 +372,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
     const text = site.get();
     const stripped = stripChildTrajectoryReceipts(text);
     site.set(stripped.text);
-    if (!isChildReturnEnvelopeSite(site, text)) {
+    if (!isChildReturnEnvelopeSite(text)) {
       receipts.push(...stripped.receipts);
     }
   }
@@ -1267,7 +1267,6 @@ export function chatMessages(body: unknown): Record<string, unknown>[] {
 type TextSite = {
   get: () => string;
   set: (text: string) => void;
-  role?: "user" | "assistant";
 };
 
 /**
@@ -1277,10 +1276,8 @@ type TextSite = {
 function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
   const sites: TextSite[] = [];
   const addContent = (message: Record<string, unknown>) => {
-    const role = message.role as "user" | "assistant";
     if (typeof message.content === "string") {
       sites.push({
-        role,
         get: () => message.content as string,
         set: (text) => {
           message.content = text;
@@ -1297,7 +1294,6 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
       )
         continue;
       sites.push({
-        role,
         get: () => record.text as string,
         set: (text) => {
           record.text = text;
@@ -1310,7 +1306,6 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
     const record = asRecord(body);
     if (typeof record?.input === "string") {
       sites.push({
-        role: "user",
         get: () => record.input as string,
         set: (text) => {
           record.input = text;
@@ -1336,8 +1331,13 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
   return sites;
 }
 
-function isChildReturnEnvelopeSite(site: TextSite, text: string): boolean {
-  if (site.role !== "user") return false;
+/**
+ * A whole text that is one child-return notification, in whichever role the
+ * client carried it — the child-return collector recognizes the same envelope
+ * in assistant-authored history too. A proof inside it is that return's
+ * transport metadata, never this conversation's lineage.
+ */
+function isChildReturnEnvelopeSite(text: string): boolean {
   const trimmed = text.trim();
   return (
     (trimmed.startsWith("<task-notification>") &&

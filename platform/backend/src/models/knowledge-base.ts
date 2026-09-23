@@ -7,7 +7,7 @@ import {
   ilike,
   inArray,
   isNotNull,
-  ne,
+  not,
   notInArray,
   or,
   sql,
@@ -66,53 +66,47 @@ function buildOrgFilters(params: {
         ]
       : params.canReadAll === false
         ? [
+            // A caller with no user of its own reaches what is published to
+            // the organization at large, plus what its teams were granted.
             or(
-              eq(schema.knowledgeBasesTable.visibility, "org-wide"),
-              ...(params.viewerUserId
-                ? [
-                    and(
-                      eq(schema.knowledgeBasesTable.visibility, "private"),
-                      eq(
-                        schema.knowledgeBasesTable.createdBy,
-                        params.viewerUserId,
-                      ),
-                    ),
-                  ]
-                : []),
-              ...(params.viewerTeamIds ?? []).map((id) =>
-                and(
-                  eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
-                  sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-                ),
-              ),
+              ResourcePermissionPolicyModel.organizationAccessCondition({
+                organizationId: params.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+                action: "read",
+              }),
+              ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+                organizationId: params.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+                teamIds: params.viewerTeamIds ?? [],
+              }),
             ),
           ]
         : []),
     // SPDX-SnippetEnd
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // The personal / team / org label and the team filter come from each
+    // knowledge base's own grants, not the retired visibility columns.
     ...(params.scope
       ? [
-          eq(
-            schema.knowledgeBasesTable.visibility,
-            (
-              {
-                personal: "private",
-                team: "team-scoped",
-                org: "org-wide",
-              } as const
-            )[params.scope],
-          ),
+          ResourcePermissionPolicyModel.audienceIs({
+            ...ownAudienceContext(params.organizationId),
+            audience: params.scope,
+          }),
         ]
       : []),
     ...(params.teamIds?.length
       ? [
-          or(
-            ...params.teamIds.map(
-              (id) =>
-                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-            ),
-          ),
+          ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            ...ownAudienceContext(params.organizationId),
+            teamIds: params.teamIds,
+          }),
         ]
       : []),
+    // SPDX-SnippetEnd
     ...(params.authorIds?.length
       ? [inArray(schema.knowledgeBasesTable.createdBy, params.authorIds)]
       : []),
@@ -130,7 +124,12 @@ function buildOrgFilters(params: {
     ...(params.excludeOtherPersonal
       ? [
           or(
-            ne(schema.knowledgeBasesTable.visibility, "private"),
+            not(
+              ResourcePermissionPolicyModel.audienceIs({
+                ...ownAudienceContext(params.organizationId),
+                audience: "personal",
+              }),
+            ),
             params.viewerUserId
               ? eq(schema.knowledgeBasesTable.createdBy, params.viewerUserId)
               : sql`false`,
@@ -511,3 +510,12 @@ class KnowledgeBaseModel {
 }
 
 export default KnowledgeBaseModel;
+
+function ownAudienceContext(organizationId: string) {
+  return {
+    organizationId,
+    resource: "knowledgeBase" as const,
+    scopeColumn: schema.knowledgeBasesTable.id,
+    ownerColumn: schema.knowledgeBasesTable.createdBy,
+  };
+}

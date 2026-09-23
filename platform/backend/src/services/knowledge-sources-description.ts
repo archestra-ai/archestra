@@ -57,16 +57,23 @@ export async function buildKnowledgeSourcesDescription(
     const assignedBases = await KnowledgeBaseModel.findByIds(
       assignments.map((a) => a.knowledgeBaseId),
     );
-    knowledgeBases = assignedBases.filter(
-      (kb) =>
-        kb.organizationId === organizationId &&
-        (access
-          ? knowledgeSourceAccessControlService.canQueryKnowledgeBase(
+    knowledgeBases = access
+      ? assignedBases.filter(
+          (kb) =>
+            kb.organizationId === organizationId &&
+            knowledgeSourceAccessControlService.canQueryKnowledgeBase(
               access,
               kb,
-            )
-          : kb.visibility === "org-wide"),
-    );
+            ),
+        )
+      : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+          {
+            organizationId,
+            resource: "knowledgeBase",
+            sources: assignedBases,
+            action: "use",
+          },
+        );
     const [kbConnectors, directConnectors] = await Promise.all([
       KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
         knowledgeBases.map((kb) => kb.id),
@@ -84,8 +91,13 @@ export async function buildKnowledgeSourcesDescription(
           access,
           directConnectors,
         )
-      : directConnectors.filter(
-          (connector) => connector.visibility === "org-wide",
+      : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+          {
+            organizationId,
+            resource: "knowledgeConnector",
+            sources: directConnectors,
+            action: "use",
+          },
         );
     connectors = [
       ...new Map(

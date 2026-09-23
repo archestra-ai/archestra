@@ -361,6 +361,7 @@ async function agentHasSearchableKnowledgeConnectors(params: {
     organizationId,
     canReadAll: access.canReadAll,
     viewerTeamIds: access.teamIds,
+    viewerUserId: access.userId,
     // Query scope: an auto-sync-permissions connector makes the query tool
     // available to everyone; its per-chunk ACLs gate what a user retrieves.
     visibilityScope: "query",

@@ -1,9 +1,68 @@
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("KnowledgeBaseConnectorModel", () => {
   describe("findByOrganization", () => {
+    test("a caller with no user reaches what is published to the organization or granted to its teams", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const kb = await makeKnowledgeBase(org.id);
+      // Each retired visibility contradicts the grants written below.
+      const published = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Published",
+        visibility: "team-scoped",
+        teamIds: [crypto.randomUUID()],
+      });
+      const teamGranted = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Team granted",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Ungranted" });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Auto Sync",
+        connectorType: "github",
+        visibility: "auto-sync-permissions",
+      });
+      for (const [connector, subject] of [
+        [published, { type: "organization", id: "*" }],
+        [teamGranted, { type: "team", id: team.id }],
+      ] as const) {
+        await ResourcePermissionPolicyModel.replace({
+          organizationId: org.id,
+          resource: "knowledgeConnector",
+          scope: connector.id,
+          revision: 0,
+          grants: [{ subject, actions: ["read", "use"] }],
+        });
+      }
+      const names = async (visibilityScope?: "query") =>
+        (
+          await KnowledgeBaseConnectorModel.findByOrganization({
+            organizationId: org.id,
+            viewerTeamIds: [team.id],
+            visibilityScope,
+          })
+        )
+          .map((connector) => connector.name)
+          .sort();
+
+      expect(await names()).toEqual(["Published", "Team granted"]);
+      // Queries also span auto-sync connectors; per-chunk ACLs decide there.
+      expect(await names("query")).toEqual([
+        "Auto Sync",
+        "Published",
+        "Team granted",
+      ]);
+    });
+
     test("returns connectors for a given organization", async ({
       makeOrganization,
       makeKnowledgeBase,
@@ -20,6 +79,7 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org.id,
+        canReadAll: true,
       });
 
       expect(results).toHaveLength(2);
@@ -42,6 +102,7 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org1.id,
+        canReadAll: true,
       });
 
       expect(results).toHaveLength(1);
@@ -60,6 +121,7 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org.id,
+        canReadAll: true,
         limit: 2,
       });
 
@@ -79,9 +141,11 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const all = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org.id,
+        canReadAll: true,
       });
       const offset = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org.id,
+        canReadAll: true,
         offset: 1,
       });
 
@@ -95,34 +159,9 @@ describe("KnowledgeBaseConnectorModel", () => {
       const org = await makeOrganization();
       const results = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId: org.id,
+        canReadAll: true,
       });
       expect(results).toHaveLength(0);
-    });
-
-    test("filters out team-scoped connectors when viewer is not on the team", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeTeam,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const kb = await makeKnowledgeBase(org.id);
-      const team = await makeTeam(org.id, user.id);
-      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Org Wide" });
-      await makeKnowledgeBaseConnector(kb.id, org.id, {
-        name: "Restricted",
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      });
-
-      const results = await KnowledgeBaseConnectorModel.findByOrganization({
-        organizationId: org.id,
-        viewerTeamIds: [],
-      });
-
-      expect(results.map((connector) => connector.name)).toEqual(["Org Wide"]);
     });
 
     test("returns team-scoped connectors when canReadAll is true", async ({
@@ -150,56 +189,6 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       expect(results.map((connector) => connector.name)).toEqual([
         "Restricted",
-      ]);
-    });
-
-    test("hides auto-sync-permissions connectors from non-admins on management reads, keeps them on query reads", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Org Wide" });
-      await makeKnowledgeBaseConnector(kb.id, org.id, {
-        name: "Auto Sync",
-        connectorType: "github",
-        visibility: "auto-sync-permissions",
-      });
-
-      // Management scope (the default): admin-only.
-      const managementResults =
-        await KnowledgeBaseConnectorModel.findByOrganization({
-          organizationId: org.id,
-          viewerTeamIds: [],
-        });
-      expect(managementResults.map((connector) => connector.name)).toEqual([
-        "Org Wide",
-      ]);
-
-      // Query scope: everyone — the per-chunk ACL is the enforcement.
-      const queryResults = await KnowledgeBaseConnectorModel.findByOrganization(
-        {
-          organizationId: org.id,
-          viewerTeamIds: [],
-          visibilityScope: "query",
-        },
-      );
-      expect(queryResults.map((connector) => connector.name).sort()).toEqual([
-        "Auto Sync",
-        "Org Wide",
-      ]);
-
-      // Admins see auto-sync connectors on management reads too.
-      const adminResults = await KnowledgeBaseConnectorModel.findByOrganization(
-        {
-          organizationId: org.id,
-          canReadAll: true,
-        },
-      );
-      expect(adminResults.map((connector) => connector.name).sort()).toEqual([
-        "Auto Sync",
-        "Org Wide",
       ]);
     });
   });
@@ -289,6 +278,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       const result =
         await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
+          canReadAll: true,
           limit: 1,
           offset: 1,
         });
@@ -321,6 +311,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       const byDescription =
         await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
+          canReadAll: true,
           limit: 10,
           offset: 0,
           search: "backlog",
@@ -328,6 +319,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       const byType =
         await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
+          canReadAll: true,
           limit: 10,
           offset: 0,
           connectorType: "github",
@@ -356,6 +348,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       const result =
         await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
+          canReadAll: true,
           limit: 10,
           offset: 0,
           search: "%",
@@ -378,6 +371,9 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
         kb.id,
+        {
+          canReadAll: true,
+        },
       );
 
       expect(results).toHaveLength(1);
@@ -397,6 +393,9 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
         kb1.id,
+        {
+          canReadAll: true,
+        },
       );
 
       expect(results).toHaveLength(1);
@@ -411,39 +410,12 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
         kb.id,
+        {
+          canReadAll: true,
+        },
       );
 
       expect(results).toHaveLength(0);
-    });
-
-    test("filters out team-scoped connectors when listing connectors for a knowledge base", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeTeam,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const kb = await makeKnowledgeBase(org.id);
-      const team = await makeTeam(org.id, user.id);
-      await makeKnowledgeBaseConnector(kb.id, org.id, {
-        name: "Visible Connector",
-      });
-      await makeKnowledgeBaseConnector(kb.id, org.id, {
-        name: "Hidden Connector",
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      });
-
-      const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
-        kb.id,
-        { viewerTeamIds: [] },
-      );
-
-      expect(results.map((connector) => connector.name)).toEqual([
-        "Visible Connector",
-      ]);
     });
   });
 
@@ -459,10 +431,10 @@ describe("KnowledgeBaseConnectorModel", () => {
       const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
       const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
 
-      const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseIds([
-        kb1.id,
-        kb2.id,
-      ]);
+      const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
+        [kb1.id, kb2.id],
+        { canReadAll: true },
+      );
 
       expect(results).toHaveLength(2);
       const result1 = results.find((r) => r.id === connector1.id);
@@ -489,39 +461,15 @@ describe("KnowledgeBaseConnectorModel", () => {
       await makeKnowledgeBaseConnector(kb1.id, org.id);
       await makeKnowledgeBaseConnector(kb2.id, org.id);
 
-      const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseIds([
-        kb1.id,
-      ]);
-
-      expect(results).toHaveLength(1);
-      expect(results[0].knowledgeBaseId).toBe(kb1.id);
-    });
-
-    test("returns team-scoped connectors when viewer belongs to the team", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeTeam,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const kb = await makeKnowledgeBase(org.id);
-      const team = await makeTeam(org.id, user.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        name: "Team Connector",
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      });
-
       const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
-        [kb.id],
-        { viewerTeamIds: [team.id] },
+        [kb1.id],
+        {
+          canReadAll: true,
+        },
       );
 
       expect(results).toHaveLength(1);
-      expect(results[0].id).toBe(connector.id);
-      expect(results[0].knowledgeBaseId).toBe(kb.id);
+      expect(results[0].knowledgeBaseId).toBe(kb1.id);
     });
   });
 

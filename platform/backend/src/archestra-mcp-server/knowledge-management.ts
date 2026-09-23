@@ -638,7 +638,14 @@ async function handleQueryKnowledgeSources(params: {
               kb,
             ),
           )
-        : validKbs.filter((kb) => kb.visibility === "org-wide");
+        : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+            {
+              organizationId,
+              resource: "knowledgeBase",
+              sources: validKbs,
+              action: "use",
+            },
+          );
 
       const directConnectors = directConnectorIds.length
         ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)

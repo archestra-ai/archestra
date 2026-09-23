@@ -26,6 +26,7 @@ import {
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -165,6 +166,21 @@ describe("knowledge base routes", () => {
         teamIds: [team.id],
       });
       const org = await makeKnowledgeBase(organizationId);
+      // The personal / team / org label comes from each base's own grants.
+      for (const [kb, subject] of [
+        [own, { type: "user", id: user.id }],
+        [theirs, { type: "user", id: other.id }],
+        [shared, { type: "team", id: team.id }],
+        [org, { type: "role", id: "member" }],
+      ] as const) {
+        await ResourcePermissionPolicyModel.replace({
+          organizationId,
+          resource: "knowledgeBase",
+          scope: kb.id,
+          revision: 0,
+          grants: [{ subject, actions: ["read", "use"] }],
+        });
+      }
       for (const [query, ids] of [
         ["excludeOtherPersonal=true", [own.id, shared.id, org.id]],
         ["excludeOtherPersonal=false", [own.id, theirs.id, shared.id, org.id]],

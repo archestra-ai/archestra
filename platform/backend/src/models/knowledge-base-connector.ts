@@ -1081,47 +1081,30 @@ function buildVisibilityFilter(params: {
 }) {
   if (params.canReadAll && !params.userId) return undefined;
 
-  const conditions = [];
-  // Management surfaces (the default) hide auto-sync-permissions connectors
-  // from non-admins entirely; "query" scope keeps them in reach because their
-  // per-chunk ACLs — not connector visibility — decide what a user retrieves.
-  if (params.scope !== "query") {
-    conditions.push(
-      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'auto-sync-permissions'`,
-    );
-  }
-
-  // No access context means "org-wide only" by default; callers must opt into
-  // team-scoped connectors by passing the viewer's team IDs or canReadAll.
-  if (!params.teamIds || params.teamIds.length === 0) {
-    conditions.push(
-      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`,
-    );
-  } else {
-    const teamIds = sql.join(
-      params.teamIds.map((teamId) => sql`${teamId}`),
-      sql`, `,
-    );
-
-    conditions.push(sql`(
-      ${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'
-      OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
-    )`);
-  }
-
-  if (!params.userId) return and(...conditions);
   const table = schema.knowledgeBaseConnectorsTable;
   const context = {
     organizationId: table.organizationId,
     resource: "knowledgeConnector" as const,
     scopeColumn: table.id,
+    action: params.scope === "query" ? ("use" as const) : ("read" as const),
   };
   return or(
-    ResourcePermissionPolicyModel.grantCondition({
-      ...context,
-      userId: params.userId,
-      action: params.scope === "query" ? "use" : "read",
-    }),
+    params.userId
+      ? ResourcePermissionPolicyModel.grantCondition({
+          ...context,
+          userId: params.userId,
+        })
+      : // A caller with no user of its own reaches what is published to the
+        // organization at large, plus what its teams were granted.
+        or(
+          ResourcePermissionPolicyModel.organizationAccessCondition(context),
+          ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            ...context,
+            teamIds: params.teamIds ?? [],
+          }),
+        ),
+    // Queries span every auto-sync connector and every file-upload connector:
+    // per-chunk ACLs and per-file grants decide what a caller retrieves.
     params.scope === "query"
       ? or(
           eq(table.visibility, "auto-sync-permissions"),

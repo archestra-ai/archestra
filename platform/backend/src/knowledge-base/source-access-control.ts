@@ -12,6 +12,7 @@ import {
   KnowledgeBaseConnectorModel,
   TeamModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import * as metrics from "@/observability/metrics";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -302,6 +303,32 @@ class KnowledgeSourceAccessControlService {
       id: knowledgeBase.id,
       action: "use",
     });
+  }
+
+  /**
+   * For a caller with no user of its own: the knowledge bases or connectors
+   * published to the organization at large for `action`.
+   */
+  async filterPublishedToOrganization<
+    T extends { id: string; organizationId: string },
+  >(params: {
+    organizationId: string;
+    resource: "knowledgeBase" | "knowledgeConnector";
+    sources: T[];
+    action: "read" | "use";
+  }): Promise<T[]> {
+    const published =
+      await ResourcePermissionPolicyModel.findOrganizationWideScopes({
+        organizationId: params.organizationId,
+        resource: params.resource,
+        scopes: params.sources.map((source) => source.id),
+        action: params.action,
+      });
+    return params.sources.filter(
+      (source) =>
+        source.organizationId === params.organizationId &&
+        published.has(source.id),
+    );
   }
 
   filterKnowledgeBases(

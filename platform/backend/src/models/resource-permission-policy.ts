@@ -87,6 +87,35 @@ export default class ResourcePermissionPolicyModel {
     );
   }
 
+  /**
+   * Of `scopes`, the ones within reach of the organization at large for
+   * `action` — {@link isOrganizationWide} over each object's own policy and
+   * the resource's `*` policy. For principals with no user of their own.
+   */
+  static async findOrganizationWideScopes(params: {
+    organizationId: string;
+    resource: ScopedResource;
+    scopes: string[];
+    action: ResourcePermissionAction;
+  }): Promise<Set<string>> {
+    if (params.scopes.length === 0) return new Set();
+    const policies =
+      await ResourcePermissionPolicyModel.findApplicableBatch(params);
+    return new Set(
+      params.scopes.filter((scope) =>
+        policies.some(
+          (policy) =>
+            (policy.scope === "*" || policy.scope === scope) &&
+            ResourcePermissionPolicyModel.isOrganizationWide({
+              policy,
+              scope,
+              action: params.action,
+            }),
+        ),
+      ),
+    );
+  }
+
   /** Provider refreshes create defaults only for models without a policy. */
   static async initializeModels(params: {
     tx: Transaction;

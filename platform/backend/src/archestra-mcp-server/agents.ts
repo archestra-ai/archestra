@@ -346,7 +346,16 @@ const registry = defineArchestraTools([
               knowledgeAccess,
               knowledgeBases,
             )
-          : knowledgeBases.filter((kb) => kb.visibility === "org-wide");
+          : context.organizationId
+            ? await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+                {
+                  organizationId: context.organizationId,
+                  resource: "knowledgeBase",
+                  sources: knowledgeBases,
+                  action: "read",
+                },
+              )
+            : [];
         const kbMap = new Map(visibleKnowledgeBases.map((kb) => [kb.id, kb]));
         const connectorMap = new Map(connectors.map((c) => [c.id, c]));
 

@@ -820,7 +820,16 @@ async function validateKnowledgeAssignments(params: {
               access,
               knowledgeBase,
             )
-          : knowledgeBase.visibility === "org-wide")
+          : (
+              await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+                {
+                  organizationId,
+                  resource: "knowledgeBase",
+                  sources: [knowledgeBase],
+                  action: "read",
+                },
+              )
+            ).length > 0)
       ) {
         throw createValidationError(
           ["knowledgeBaseIds"],

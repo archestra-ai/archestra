@@ -474,7 +474,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let prepared = call;
       let offerIds: string[] = [];
       if (
-        tools.platformToolNames?.has(call.name) &&
+        call.name === tools.askUser?.name &&
+        call.namespace === tools.askUser.namespace &&
         archestraMcpBranding.getToolShortName(
           this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
@@ -753,8 +754,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // Refuse call and cancel admitted calls if client declares no notice tool.
         await cancelCalls(
           session,
-          calls.flatMap((each, at) =>
-            decisions[at].kind === "allow" ? [each.id] : [],
+          rest.flatMap((each) =>
+            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
           ),
         );
         const contentMessage = `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`;
@@ -968,8 +969,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     call: LlmProxyToolCallsContext["toolCalls"][number],
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     const native = binding.adapter?.nativeQuestion;
+    const askUser = binding.request.tools?.askUser;
     if (
       !native?.fromAskUser ||
+      call.name !== askUser?.name ||
+      call.namespace !== askUser.namespace ||
       native.isAvailable?.(binding.requestHeaders) === false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(

@@ -20,7 +20,11 @@ export function referencesChildTranscriptPath(params: {
         const path = posix.normalize(token.replaceAll("\\", "/"));
         return params.pathPatterns.some(({ prefix, suffix }) => {
           const start = path.indexOf(prefix);
-          return start >= 0 && path.indexOf(suffix, start + prefix.length) >= 0;
+          return (
+            start >= 0 &&
+            (start === 0 || path.charAt(start - 1) === "/") &&
+            path.indexOf(suffix, start + prefix.length) >= 0
+          );
         });
       });
     }
@@ -61,9 +65,9 @@ export function namesChildrenFromArguments(params: {
     params.pathPatterns,
     params.idKeys,
   );
-  const rootNativeId = params.rootId.slice(params.rootId.lastIndexOf(":") + 1);
+  const ancestors = new Set(params.rootId.split(":"));
   const unique = [...new Set(agents)].filter(
-    (agent) => agent !== params.rootId && agent !== rootNativeId,
+    (agent) => agent !== params.rootId && !ancestors.has(agent),
   );
   unique.sort();
   return unique.map((agent) =>

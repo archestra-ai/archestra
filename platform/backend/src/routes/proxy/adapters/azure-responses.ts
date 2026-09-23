@@ -475,6 +475,22 @@ class AzureResponsesResponseAdapter
       usage: this.response.usage,
     } as unknown as AzureResponsesResponse;
   }
+
+  withReplacedText(text: string): AzureResponsesResponse {
+    return {
+      ...this.response,
+      status: "completed",
+      output: [
+        {
+          id: `msg_${Date.now()}`,
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text, annotations: [] }],
+        },
+      ],
+    } as unknown as AzureResponsesResponse;
+  }
 }
 
 class AzureResponsesStreamAdapter

@@ -1283,6 +1283,90 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("withdraws evaluated calls by id when a child handback shares a refused batch", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = undefined;
+    trusted.request.turnEndOperationId = "turn_end:shared-batch";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        { kind: "allow" as const },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          offers: [],
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback",
+            name: "SubagentHandback",
+            arguments: { message: "raw child return" },
+          },
+          { id: "admitted", name: "Read", arguments: { file_path: "a" } },
+          { id: "denied", name: "Bash", arguments: { command: "rm -rf /" } },
+        ],
+      });
+
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: { blockedToolId: "denied" },
+      });
+      expect(cancelCalls).toHaveBeenCalledWith(expect.anything(), ["admitted"]);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
   test("an unattested namespace stays foreign", async () => {
     // Codex declares an MCP server's tools inside a `mcp__<label>` namespace
     // and calls them by bare name, so the label says nothing. What the gateway

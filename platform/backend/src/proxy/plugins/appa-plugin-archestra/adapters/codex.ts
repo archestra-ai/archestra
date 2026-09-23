@@ -261,12 +261,16 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       "parent_thread_id",
       "child_thread_id",
       "parent_id",
+      "x-codex-parent-thread-id",
+      "x-codex-turn-metadata",
     ]);
     stripRecordFields(asRecord(body.metadata), [
       "agent_id",
       "parent_thread_id",
       "child_thread_id",
       "parent_id",
+      "x-codex-parent-thread-id",
+      "x-codex-turn-metadata",
     ]);
   }
 }

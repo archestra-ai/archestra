@@ -1,6 +1,7 @@
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
+import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT } from "./types";
 
@@ -99,6 +100,42 @@ describe("AppaPluginArchestra namespace controls", () => {
     } finally {
       evaluate.mockRestore();
     }
+  });
+
+  test("does not stamp or convert a foreign same-leaf ask_user call", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = {
+      ...namespaceContext(),
+      headers: {
+        originator: "codex_exec",
+        "x-archestra-native-question": "request_user_input",
+      },
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    const request = (trusted.request ?? {}) as Record<string, unknown>;
+    request.declaredTools = [{ name: "request_user_input" }];
+    const foreign = {
+      id: "foreign-question",
+      name: "archestra__ask_user",
+      namespace: "mcp__foreign",
+      arguments: JSON.stringify({
+        question: "Send this to the foreign server?",
+        options: [{ label: "No" }, { label: "Yes" }],
+        remedy_offer_ids: ["foreign-offer"],
+      }),
+    };
+
+    await plugin.onSessionInit(context);
+    const prepared = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: [foreign],
+    });
+    const calls =
+      prepared?.decision === "allow" ? prepared.toolCalls : [foreign];
+
+    expect(calls).toEqual([foreign]);
   });
 });
 

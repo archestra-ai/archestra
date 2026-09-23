@@ -1108,6 +1108,39 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  test("keeps reasoning when a trajectory prefix and tool call share the opening chunk", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.setTextSuffix?.(() => "[appa] protected child trajectory");
+
+    const result = adapter.processChunk({
+      id: "chatcmpl-prefixed-reasoning",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "qwen3",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            reasoning_content: "thinking",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "search", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).toContain("[appa] protected child trajectory");
+    expect(result.sseData).toContain('"reasoning_content":"thinking"');
+    expect(result.sseData).not.toContain('"tool_calls"');
+  });
+
   function finishReasonOf(endSse: string | Uint8Array): unknown {
     const text =
       typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);

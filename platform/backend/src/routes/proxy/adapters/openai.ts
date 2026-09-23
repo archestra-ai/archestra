@@ -1191,7 +1191,8 @@ export class OpenAIStreamAdapter
         if (prefix) {
           this.textPrefixIssued = true;
           this.state.text = prefix;
-          sseData = this.formatTextDeltaSSE(prefix);
+          const prefixSse = this.formatTextDeltaSSE(prefix);
+          sseData = sseData ? `${prefixSse}${sseData}` : prefixSse;
         }
       }
       for (const toolCallDelta of delta.tool_calls) {

@@ -308,6 +308,43 @@ describe("azureResponsesAdapterFactory", () => {
     expect(adapter.getFinishReasons()).toEqual(["tool_calls"]);
   });
 
+  test("replaces a non-streaming governed response with admitted text", () => {
+    const adapter = azureResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_replace",
+      object: "response",
+      created_at: 123,
+      model: "gpt-4.1",
+      status: "completed",
+      output: [
+        {
+          id: "msg_raw",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            { type: "output_text", text: "RAW CHILD RETURN", annotations: [] },
+          ],
+        },
+      ],
+    } as never);
+
+    const replaced = adapter.withReplacedText?.("ADMITTED CHILD RETURN");
+
+    expect(replaced).toMatchObject({
+      id: "resp_replace",
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "ADMITTED CHILD RETURN" }],
+        },
+      ],
+    });
+    expect(JSON.stringify(replaced)).not.toContain("RAW CHILD RETURN");
+  });
+
   test("keeps the namespace a call names", () => {
     const adapter = azureResponsesAdapterFactory.createResponseAdapter({
       id: "resp_ns",

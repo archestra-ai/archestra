@@ -8,6 +8,7 @@ import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
+import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import type { AppaMatchContext } from "./types";
 
 describe("APPA child trajectory adapters", () => {
@@ -320,6 +321,22 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     }
   });
 
+  test("matches transcript path prefixes only at path segment boundaries", () => {
+    const pathPatterns = [{ prefix: "tasks/", suffix: ".output" }];
+    expect(
+      referencesChildTranscriptPath({
+        arguments: { file_path: "/home/u/.claude/tasks/a1.output" },
+        pathPatterns,
+      }),
+    ).toBe(true);
+    expect(
+      referencesChildTranscriptPath({
+        arguments: { file_path: "/home/u/.claude/mytasks/a1.output" },
+        pathPatterns,
+      }),
+    ).toBe(false);
+  });
+
   test("Codex and OpenCode name children from spawn/resume identity fields", () => {
     expect(
       codex.namesChildren({
@@ -327,6 +344,16 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         arguments: { agent_id: "thread-child" },
       }),
     ).toEqual(["thread-parent:thread-child"]);
+    expect(
+      codex.namesChildren({
+        rootId: "t0:t1:t2",
+        arguments: {
+          receiver_thread_id: "t0",
+          thread_id: "t1",
+          agent_id: "t3",
+        },
+      }),
+    ).toEqual(["t0:t1:t2:t3"]);
     expect(
       codex.namesChildren({
         rootId: "thread-parent",
@@ -351,6 +378,27 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     claudeCode.stripCarrierMetadata(request);
     expect(request.metadata.agent_id).toBeUndefined();
     expect(JSON.parse(request.metadata.user_id)).toEqual({ session_id: "s1" });
+  });
+
+  test("strips Codex child carrier objects from the provider body", () => {
+    const request = {
+      client_metadata: {
+        thread_id: "t1",
+        "x-codex-turn-metadata": {
+          thread_id: "t1",
+          parent_thread_id: "t0",
+        },
+      },
+      metadata: {
+        thread_id: "t1",
+        "x-codex-parent-thread-id": "t0",
+      },
+    };
+
+    codex.stripCarrierMetadata(request);
+
+    expect(request.client_metadata).toEqual({ thread_id: "t1" });
+    expect(request.metadata).toEqual({ thread_id: "t1" });
   });
 
   test("mints Claude Code child ids from agent_id under the native parent session", () => {

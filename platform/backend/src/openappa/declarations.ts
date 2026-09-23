@@ -42,6 +42,8 @@ export type PolicyResolution = {
   aliases: AliasDeclaration[];
   /** The `[credentials]` table: helper variable → runtime credential key. */
   credentials: Record<string, string>;
+  /** The annotators the root's own tool rules route calls to. */
+  routedAnnotators: string[];
   /**
    * Everything wrong with the declarations themselves: a shape the reader could
    * not make sense of, and an entry spelled outside the two admitted forms.
@@ -175,6 +177,7 @@ class OpenAppaDeclarations {
       credentials: Object.fromEntries(
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
+      routedAnnotators: declarations.routedAnnotators,
       errors,
     };
   }

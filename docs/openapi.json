@@ -328636,6 +328636,19 @@
                           "type": "string"
                         }
                       },
+                      "annotators": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "catalogs",
+                          "organization"
+                        ]
+                      },
                       "helpers": {
                         "type": "array",
                         "items": {
@@ -328669,6 +328682,7 @@
                               "type": "string"
                             },
                             "catalogId": {
+                              "nullable": true,
                               "type": "string",
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -328683,6 +328697,7 @@
                                 "missing_credentials",
                                 "naming_conflict",
                                 "server_missing",
+                                "unrouted",
                                 "refused",
                                 "active"
                               ]
@@ -328735,6 +328750,8 @@
                       "source",
                       "contentHash",
                       "namespaces",
+                      "annotators",
+                      "scope",
                       "helpers",
                       "credentials",
                       "setup",
@@ -329027,9 +329044,20 @@
                               "missing_credentials",
                               "naming_conflict",
                               "server_missing",
+                              "unrouted",
                               "refused",
                               "active"
                             ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "catalogs",
+                              "organization"
+                            ]
+                          },
+                          "composed": {
+                            "type": "boolean"
                           },
                           "line": {
                             "type": "number"
@@ -329094,6 +329122,8 @@
                           "source",
                           "packageHash",
                           "status",
+                          "scope",
+                          "composed",
                           "line",
                           "servers",
                           "credentials",
@@ -329782,6 +329812,7 @@
                                 "type": "string"
                               },
                               "catalogId": {
+                                "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -329796,6 +329827,7 @@
                                   "missing_credentials",
                                   "naming_conflict",
                                   "server_missing",
+                                  "unrouted",
                                   "refused",
                                   "active"
                                 ]
@@ -330128,8 +330160,7 @@
                   }
                 },
                 "required": [
-                  "batteryName",
-                  "catalogId"
+                  "batteryName"
                 ],
                 "additionalProperties": false
               }
@@ -330168,9 +330199,20 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
                       ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
+                      ]
+                    },
+                    "composed": {
+                      "type": "boolean"
                     },
                     "line": {
                       "type": "number"
@@ -330235,6 +330277,8 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",
@@ -330557,9 +330601,20 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
                       ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
+                      ]
+                    },
+                    "composed": {
+                      "type": "boolean"
                     },
                     "line": {
                       "type": "number"
@@ -330624,6 +330679,8 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",
@@ -331514,6 +331571,12 @@
                         "type": "string"
                       }
                     },
+                    "annotators": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "helpers": {
                       "type": "array",
                       "items": {
@@ -331537,6 +331600,7 @@
                     "contentHash",
                     "entry",
                     "namespaces",
+                    "annotators",
                     "helpers",
                     "credentials",
                     "setup"

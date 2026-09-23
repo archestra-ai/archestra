@@ -10,7 +10,11 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
-import { openappaDeclarations, packageContentHash } from "./declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  packageContentHash,
+} from "./declarations";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
@@ -404,6 +408,129 @@ describe("composing an organization's declarations", () => {
   });
 });
 
+describe("a battery made of annotators alone", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  test("derives one organization-wide row that owns its helper and survives recomposes", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const uploaded = await uploadTagger({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(uploaded.entry, []),
+    });
+
+    // The root's only rule routes every tool to `noop`: nothing consults the
+    // battery's annotator, so it is not active, though its helper is composed.
+    const [row, ...others] =
+      await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(others).toEqual([]);
+    expect(row).toMatchObject({
+      batteryName: "tagger",
+      catalogId: null,
+      status: "unrouted",
+    });
+    const unrouted = await openappaBatteriesService.recompile(organizationId);
+    expect(unrouted.lastError).toBeNull();
+    expect(unrouted.content).toContain(helperUrlBase(row.id));
+
+    await declare({
+      organizationId,
+      userId,
+      content: root(uploaded.entry, [], { route: "tagger.call" }),
+    });
+    expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual([
+      expect.objectContaining({ id: row.id, status: "active" }),
+    ]);
+    const composed = await openappaBatteriesService.recompile(organizationId);
+    expect(composed.lastError).toBeNull();
+    expect(composed.content).toContain(helperUrlBase(row.id));
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    await openappaBatteriesService.recompile(organizationId);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        (install) => install.id,
+      ),
+    ).toEqual([row.id]);
+
+    // Bytes that no longer resolve hold it back before anything else.
+    await OpenAppaBatteryPackageModel.delete({
+      organizationId,
+      contentHash: uploaded.contentHash,
+    });
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    await openappaBatteriesService.recompile(organizationId);
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .batteries,
+    ).toEqual([
+      expect.objectContaining({ name: "tagger", status: "unavailable" }),
+    ]);
+  });
+});
+
+describe("routing to an organization-wide battery", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  test("a rule counts only from a battery that composes it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const tagger = await uploadTagger({ organizationId, userId });
+    const router = await uploadRouter({ organizationId, userId });
+    const statuses = async () =>
+      Object.fromEntries(
+        (
+          await openappaBatteriesService.policyDeclarations(organizationId)
+        ).batteries.map((battery) => [battery.name, battery.status]),
+      );
+
+    // No alias binds the router, so it is stubbed and its rule routes nothing.
+    await declare({
+      organizationId,
+      userId,
+      content: root([tagger.entry, router.entry], []),
+    });
+    expect(await statuses()).toEqual({
+      tagger: "unrouted",
+      acme: "server_missing",
+    });
+
+    // Bound to a server, the router composes and its rule routes to tagger.
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    await declare({
+      organizationId,
+      userId,
+      content: root([tagger.entry, router.entry], ["acme_prod"]),
+    });
+    expect(await statuses()).toEqual({ tagger: "active", acme: "active" });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
+    ).toBeNull();
+  });
+});
+
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"
 description = "Acme battery under test"
@@ -415,17 +542,29 @@ namespaces = ["acme"]
 helpers = ["check.py"]
 `;
 
-/** A root that includes the batteries and points the `acme` namespace at `targets`. */
-function root(entry: string | string[], targets: string[]): string {
+/**
+ * A root that includes the batteries and points the `acme` namespace at
+ * `targets`; with no target it declares no alias. Its one rule routes every
+ * tool to `route`, the root's own `noop` annotator unless named.
+ */
+function root(
+  entry: string | string[],
+  targets: string[],
+  { route = "noop" }: { route?: string } = {},
+): string {
   const included = (Array.isArray(entry) ? entry : [entry])
     .map((spelling) => `"${spelling}"`)
     .join(", ");
-  return `include = [${included}]
-
-[server_aliases]
+  const aliases =
+    targets.length === 0
+      ? ""
+      : `[server_aliases]
 acme = [${targets.map((target) => `"${target}"`).join(", ")}]
 
-[policy]
+`;
+  return `include = [${included}]
+
+${aliases}[policy]
 version = 2
 
 [[policy.annotator]]
@@ -433,7 +572,7 @@ name = "noop"
 
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "${route}"
 
 [externals.annotators.noop]
 url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
@@ -481,6 +620,76 @@ command = ["python3", "check.py"]
       {
         path: "check.py",
         text: `print('{}')\n${params.note ? `# ${params.note}\n` : ""}`,
+      },
+    ],
+  });
+}
+
+/** A battery declaring one annotator and no tool rule, served by one helper command. */
+async function uploadTagger(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "tagger",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: `schema = 1
+name = "tagger"
+description = "Tags every call"
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+helpers = ["tag.py"]
+`,
+      },
+      {
+        path: "appa.toml",
+        text: `[policy]
+version = 2
+
+[[policy.annotator]]
+name = "tagger.call"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[externals.annotators."tagger.call"]
+command = ["python3", "tag.py"]
+`,
+      },
+      { path: "tag.py", text: "print('{}')\n" },
+    ],
+  });
+}
+
+/** A battery governing `mcp/acme/list` whose one rule routes to tagger's annotator. */
+async function uploadRouter(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "acme",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: BATTERY_MANIFEST.replace('helpers = ["check.py"]\n', ""),
+      },
+      {
+        path: "appa.toml",
+        text: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "mcp/acme/list"
+annotator = "tagger.call"
+`,
       },
     ],
   });

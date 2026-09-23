@@ -29,7 +29,9 @@ with the status it composed under. Only \`active\` means the battery governs its
 servers: \`unavailable\` means nothing answers its entry, \`missing_credentials\`
 that \`[credentials]\` does not bind what it reads, \`server_missing\` that no
 alias target resolves to a server, \`naming_conflict\` that a target is ambiguous,
-and \`refused\` that the runtime rejected the composition. If the user only asked
+\`unrouted\` that no \`[[policy.tool]]\` rule routes calls to the annotators of an
+organization-wide battery, and \`refused\` that the runtime rejected the
+composition. If the user only asked
 to inspect or explain, summarize what is enforced from \`effective.content\`, note
 which rules come from batteries rather than the root text, and report every
 non-\`active\` battery and any \`effective.error\` as a problem to fix. Do not

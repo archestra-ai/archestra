@@ -507,6 +507,8 @@ pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
     pub server_aliases: Vec<ServerAliasDeclaration>,
     pub credentials: Vec<CredentialDeclaration>,
+    /// The annotators the root's own `[[policy.tool]]` rules route calls to.
+    pub routed_annotators: Vec<String>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -546,6 +548,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                         line: credential.line,
                     })
                     .collect(),
+                routed_annotators: parsed.routed_annotators,
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))
@@ -634,6 +637,10 @@ pub struct BatteryPackage {
     pub name: String,
     pub description: String,
     pub namespaces: Vec<String>,
+    /// The `[[policy.annotator]]` names the battery declares.
+    pub annotators: Vec<String>,
+    /// The annotators the battery's own `[[policy.tool]]` rules route calls to.
+    pub routed_annotators: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
@@ -648,6 +655,8 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             name: info.name.clone(),
             description: info.description.clone(),
             namespaces: info.namespaces.clone(),
+            annotators: info.annotators.clone(),
+            routed_annotators: info.routed_annotators.clone(),
             policy: info.policy.clone(),
             helpers: info.helpers.clone(),
             credentials: info.credentials.clone(),
@@ -675,7 +684,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
 }
 
 /// The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
-/// which is what Archestra serves.
+/// which is what Archestra serves, or declare annotators alone.
 #[napi(js_name = "listBundledOpenappaBatteries")]
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
@@ -1397,6 +1406,7 @@ impl State {
                     .arguments
                     .clone()
                     .ok_or_else(|| error("missing remedy arguments"))?,
+                cwd: None,
             };
             let ruling = input.ruling.as_ref().map(|r| match r {
                 RulingInput::Approve => Ruling::Approve,
@@ -2123,6 +2133,7 @@ fn proposed_recorded_call(call: &RecordedCall) -> napi::Result<ProposedCall> {
     Ok(ProposedCall {
         tool: canonical_tool(&call.tool)?,
         arguments: call.arguments.clone(),
+        cwd: None,
     })
 }
 
@@ -2241,6 +2252,7 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
             .arguments
             .clone()
             .ok_or_else(|| error("missing arguments"))?,
+        cwd: None,
     })
 }
 
@@ -2549,6 +2561,7 @@ mod typed_tests {
         let call = appa_runtime_api::ProposedCall {
             tool: "canonical_tool".to_owned(),
             arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 1 })).unwrap(),
+            cwd: None,
         };
 
         // The user may have accepted the plan through ask_user, so the model
@@ -2601,6 +2614,7 @@ mod typed_tests {
         let call = appa_runtime_api::ProposedCall {
             tool: "canonical_tool".to_owned(),
             arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 2 })).unwrap(),
+            cwd: None,
         };
 
         let result = render_remedy_outcome(
@@ -2663,6 +2677,7 @@ mod typed_tests {
             tool: "mcp/archestra/whoami".to_owned(),
             arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
                 .unwrap(),
+            cwd: None,
         };
 
         let hint = render_released_call("Authorized", &call, Some(&owner));

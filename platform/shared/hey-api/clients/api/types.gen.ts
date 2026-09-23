@@ -85297,6 +85297,8 @@ export type GetOpenappaBatteriesResponses = {
         source: 'bundled' | 'upload';
         contentHash: string | null;
         namespaces: Array<string>;
+        annotators: Array<string>;
+        scope: 'catalogs' | 'organization';
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -85304,9 +85306,9 @@ export type GetOpenappaBatteriesResponses = {
             id: string;
             organizationId: string;
             batteryName: string;
-            catalogId: string;
+            catalogId: string | null;
             enabled: boolean;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
             packageHash: string | null;
             lastError: string | null;
             credentialBindings: {
@@ -85402,7 +85404,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             name: string;
             source: 'bundled' | 'upload';
             packageHash: string | null;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+            scope: 'catalogs' | 'organization';
+            composed: boolean;
             line: number;
             servers: Array<{
                 target: string;
@@ -85610,9 +85614,9 @@ export type GetOpenappaBatteryMatchesResponses = {
                 id: string;
                 organizationId: string;
                 batteryName: string;
-                catalogId: string;
+                catalogId: string | null;
                 enabled: boolean;
-                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
                 packageHash: string | null;
                 lastError: string | null;
                 credentialBindings: {
@@ -85630,7 +85634,7 @@ export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesRespons
 export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
-        catalogId: string;
+        catalogId?: string;
         packageHash?: string | null;
     };
     path?: never;
@@ -85712,7 +85716,9 @@ export type CreateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -85902,7 +85908,9 @@ export type UpdateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -86093,6 +86101,7 @@ export type UploadOpenappaBatteryPackageResponses = {
         contentHash: string;
         entry: string;
         namespaces: Array<string>;
+        annotators: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;

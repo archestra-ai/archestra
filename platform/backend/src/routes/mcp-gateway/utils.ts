@@ -716,7 +716,11 @@ export async function createAgentServer(params: {
           null;
         try {
           if (skillsSurfaceEnabled()) {
-            skillResource = await serveSkillResource({ uri, agentId });
+            skillResource = await serveSkillResource({
+              uri,
+              agentId,
+              callerUserId: tokenAuth?.userId ?? null,
+            });
           }
         } catch (error) {
           logger.error(
@@ -728,6 +732,9 @@ export async function createAgentServer(params: {
             "Skill resource read failed",
           );
           throw { code: -32603, message: "Resource read failed" };
+        }
+        if (skillResource && "error" in skillResource) {
+          throw skillResource.error;
         }
         if (skillResource) {
           return complete(withPrivateCacheHint(skillResource));

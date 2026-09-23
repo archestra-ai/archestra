@@ -1,19 +1,16 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=primary provider keys move from scope partitions to owner partitions; the old partitions have no reader left
+-- drizzle-migration-linter: reason=primary provider keys move from scope partitions to owner partitions and skill names from scope partitions to author partitions; no reader of the old partitions is left
 DROP INDEX "chat_api_keys_primary_personal_unique";
 --> statement-breakpoint
 DROP INDEX "chat_api_keys_primary_team_unique";
 --> statement-breakpoint
 DROP INDEX "chat_api_keys_primary_org_unique";
 --> statement-breakpoint
-ALTER TABLE "knowledge_base_connectors" ADD COLUMN "sync_permissions_from_source" boolean DEFAULT false NOT NULL;
+DROP INDEX "skills_org_personal_name_idx";
 --> statement-breakpoint
--- Connector permission sync gets its own switch. It used to be one value of
--- `visibility`, which also carried the retired org/team audience. Idempotent.
-UPDATE "knowledge_base_connectors"
-SET "sync_permissions_from_source" = true
-WHERE "visibility" = 'auto-sync-permissions'
-  AND "sync_permissions_from_source" = false;
+DROP INDEX "skills_org_shared_name_idx";
+--> statement-breakpoint
+ALTER TABLE "knowledge_base_connectors" ADD COLUMN "sync_permissions_from_source" boolean DEFAULT false NOT NULL;
 --> statement-breakpoint
 -- Primary provider keys are now partitioned by owner: one per provider for
 -- each owner's own keys, and one per provider among the shared keys (no
@@ -33,9 +30,40 @@ FROM (
 WHERE api_key."id" = ranked."id"
   AND ranked."rank" > 1;
 --> statement-breakpoint
+-- Skill names become unique per (organization, author), where a skill a
+-- service account wrote keys on the service account. Before the new index,
+-- rename any live skill that would share its name with another skill of the
+-- same author. That happens only where one author held a personal skill and
+-- a shared skill of the same name. The shared skill keeps its name, because
+-- links to it name no author. The other gets its id prefix appended.
+-- Idempotent: a second run finds no clash.
+UPDATE "skills" skill
+SET "name" = left(ranked."name", 55) || '-' || left(skill."id"::text, 8)
+FROM (
+  SELECT "id", "name", row_number() OVER (
+    PARTITION BY "organization_id",
+      coalesce("author_id", "created_by_service_account_id"::text), "name"
+    ORDER BY ("scope" <> 'personal') DESC, "created_at", "id"
+  ) AS "rank"
+  FROM "skills"
+  WHERE "deleted_at" IS NULL
+    AND coalesce("author_id", "created_by_service_account_id"::text) IS NOT NULL
+) ranked
+WHERE skill."id" = ranked."id"
+  AND ranked."rank" > 1;
+--> statement-breakpoint
 CREATE UNIQUE INDEX "chat_api_keys_primary_owner_unique" ON "chat_api_keys" USING btree ("organization_id","provider","user_id") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."user_id" IS NOT NULL;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "chat_api_keys_primary_shared_unique" ON "chat_api_keys" USING btree ("organization_id","provider") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."user_id" IS NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "skills_org_author_name_idx" ON "skills" USING btree ("organization_id",coalesce("author_id", "created_by_service_account_id"::text),"name") WHERE "skills"."deleted_at" IS NULL;
+--> statement-breakpoint
+-- Connector permission sync gets its own switch. It used to be one value of
+-- `visibility`, which also carried the retired org/team audience. Idempotent.
+UPDATE "knowledge_base_connectors"
+SET "sync_permissions_from_source" = true
+WHERE "visibility" = 'auto-sync-permissions'
+  AND "sync_permissions_from_source" = false;
 --> statement-breakpoint
 -- Retire the old non-default LLM proxy rows. Every proxy request already
 -- resolves to the organization's single default proxy, so these rows are

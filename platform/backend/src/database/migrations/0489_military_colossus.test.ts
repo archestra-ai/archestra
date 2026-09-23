@@ -447,3 +447,72 @@ describe("0489 app backing install scope", () => {
     });
   });
 });
+
+describe("0489 skill names unique per author", () => {
+  test("renames the personal skill that clashes with the author's shared skill of the same name", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const other = await makeUser();
+    const insertSkill = async (values: {
+      name: string;
+      scope: "personal" | "org";
+      authorId: string;
+    }) => {
+      const [row] = await db
+        .insert(schema.skillsTable)
+        .values({
+          organizationId: org.id,
+          description: "d",
+          content: "c",
+          latestVersion: 1,
+          ...values,
+        })
+        .returning();
+      return row;
+    };
+    const shared = await insertSkill({
+      name: "refunds",
+      scope: "org",
+      authorId: author.id,
+    });
+    const otherAuthors = await insertSkill({
+      name: "refunds",
+      scope: "personal",
+      authorId: other.id,
+    });
+    // The old indexes allowed this pair: one personal, one shared name space.
+    await db.execute(sql`DROP INDEX IF EXISTS "skills_org_author_name_idx"`);
+    let personal: typeof shared;
+    try {
+      personal = await insertSkill({
+        name: "refunds",
+        scope: "personal",
+        authorId: author.id,
+      });
+      await runDataMigration();
+      await runDataMigration();
+    } finally {
+      await db.execute(
+        sql`CREATE UNIQUE INDEX IF NOT EXISTS "skills_org_author_name_idx" ON "skills" ("organization_id", coalesce("author_id", "created_by_service_account_id"::text), "name") WHERE "deleted_at" IS NULL`,
+      );
+    }
+
+    const names = new Map(
+      (
+        await db
+          .select({
+            id: schema.skillsTable.id,
+            name: schema.skillsTable.name,
+          })
+          .from(schema.skillsTable)
+          .where(eq(schema.skillsTable.organizationId, org.id))
+      ).map((row) => [row.id, row.name]),
+    );
+    expect(names.get(shared.id)).toBe("refunds");
+    expect(names.get(otherAuthors.id)).toBe("refunds");
+    expect(names.get(personal.id)).toBe(`refunds-${personal.id.slice(0, 8)}`);
+  });
+});

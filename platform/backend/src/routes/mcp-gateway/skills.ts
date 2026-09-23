@@ -5,6 +5,7 @@ import { SkillModel } from "@/models";
 import {
   resolveExposedSkill,
   resolveExposedSkills,
+  type SkillUriResolution,
 } from "@/services/agent-skill-resolution";
 import {
   findPublishedSkillFile,
@@ -17,7 +18,6 @@ import {
   buildSkillManifestUri,
   buildSkillUri,
   parseSkillUri,
-  type SkillUriScope,
 } from "@/skills/skill-uri";
 import {
   hasPublishableFilePathSet,
@@ -76,11 +76,13 @@ export function isSkillMethod(body: unknown): boolean {
 export async function handleSkillMethod(params: {
   body: unknown;
   agentId: string;
+  /** The user behind the gateway token; null for a token with no user. */
+  callerUserId: string | null;
 }): Promise<
   | { result: Record<string, unknown> }
   | { error: { code: number; message: string } }
 > {
-  const { body, agentId } = params;
+  const { body, agentId, callerUserId } = params;
   const method = isRecord(body) ? body.method : undefined;
   const bodyParams = isRecord(body) && isRecord(body.params) ? body.params : {};
 
@@ -88,9 +90,9 @@ export async function handleSkillMethod(params: {
     case "skills/list":
       return await handleList({ agentId, bodyParams });
     case "skills/get":
-      return await handleGet({ agentId, bodyParams });
+      return await handleGet({ agentId, callerUserId, bodyParams });
     case "resources/directory/read":
-      return await handleDirectoryRead({ agentId, bodyParams });
+      return await handleDirectoryRead({ agentId, callerUserId, bodyParams });
     default:
       return {
         error: { code: -32601, message: `Method not found: ${method}` },
@@ -112,17 +114,26 @@ export async function handleSkillMethod(params: {
 export async function serveSkillResource(params: {
   uri: string;
   agentId: string;
-}): Promise<{
-  contents: Array<Record<string, unknown>>;
-} | null> {
+  /** The user behind the gateway token; null for a token with no user. */
+  callerUserId: string | null;
+}): Promise<
+  | { contents: Array<Record<string, unknown>> }
+  | { error: { code: number; message: string } }
+  | null
+> {
   const parsed = parseSkillUri(params.uri);
   if (!parsed) return null;
 
-  const skill = await resolveExposedSkill({
+  const resolution = await resolveExposedSkill({
     agentId: params.agentId,
     name: parsed.name,
     authorId: parsed.authorId,
+    callerUserId: params.callerUserId,
   });
+  if (resolution && "ambiguous" in resolution) {
+    return { error: ambiguousSkillError(params.uri, resolution.ambiguous) };
+  }
+  const skill = resolution?.skill;
   if (!skill) return null;
 
   const artifacts = await loadArtifacts(skill);
@@ -223,6 +234,7 @@ async function handleList(params: {
 
 async function handleGet(params: {
   agentId: string;
+  callerUserId: string | null;
   bodyParams: Record<string, unknown>;
 }): Promise<
   | { result: Record<string, unknown> }
@@ -234,14 +246,19 @@ async function handleGet(params: {
   }
 
   const parsed = parseSkillUri(uri);
-  const skill =
+  const resolution =
     parsed && parsed.filePath === SKILL_MANIFEST_FILENAME
       ? await resolveExposedSkill({
           agentId: params.agentId,
           name: parsed.name,
           authorId: parsed.authorId,
+          callerUserId: params.callerUserId,
         })
       : null;
+  if (resolution && "ambiguous" in resolution) {
+    return { error: ambiguousSkillError(uri, resolution.ambiguous) };
+  }
+  const skill = resolvedSkill(resolution);
   // An unexposed skill and a nonexistent one answer identically, so the
   // response cannot be used to probe what other gateways publish.
   if (!skill) {
@@ -267,6 +284,7 @@ async function handleGet(params: {
  */
 async function handleDirectoryRead(params: {
   agentId: string;
+  callerUserId: string | null;
   bodyParams: Record<string, unknown>;
 }): Promise<
   | { result: Record<string, unknown> }
@@ -278,13 +296,18 @@ async function handleDirectoryRead(params: {
   }
 
   const parsed = parseSkillUri(uri);
-  const skill = parsed
+  const resolution = parsed
     ? await resolveExposedSkill({
         agentId: params.agentId,
         name: parsed.name,
         authorId: parsed.authorId,
+        callerUserId: params.callerUserId,
       })
     : null;
+  if (resolution && "ambiguous" in resolution) {
+    return { error: ambiguousSkillError(uri, resolution.ambiguous) };
+  }
+  const skill = resolvedSkill(resolution);
   if (!skill || !parsed) {
     return { error: { code: -32602, message: `Unknown directory: ${uri}` } };
   }
@@ -389,31 +412,14 @@ async function loadArtifacts(
 }
 
 /**
- * Whether a skill is fit to serve: it still exists, its URI parts are
- * expressible at all, and every stored file path is expressible as a
- * `skill://` URI that round-trips.
+ * Whether a skill is fit to serve: it still exists, and every stored file
+ * path is expressible as a `skill://` URI that round-trips.
  */
 function isServable(
   skill: PublishableSkill,
   artifacts: SkillPublicationArtifacts | undefined,
 ): artifacts is SkillPublicationArtifacts {
   if (!artifacts) return false;
-  // A personal skill with no author (the user row was deleted before the
-  // publication gates excluded orphans) cannot be named: the author id is a
-  // URI segment, and `buildSkillUri` throws without one. The resolution gates
-  // never fetch such a row; this guard exists so that if one ever slips
-  // through, it withholds a single skill instead of failing the whole
-  // response.
-  if (skill.scope === "personal" && !skill.authorId) {
-    if (!withheldWarnThrottle.get(skill.id)) {
-      withheldWarnThrottle.set(skill.id, true);
-      logger.warn(
-        { skillId: skill.id, skillName: skill.name },
-        "Skill withheld from MCP listing: a personal skill has no author, so no skill:// URI can name it",
-      );
-    }
-    return false;
-  }
   return hasPublishablePaths(
     skill,
     artifacts.files.map((file) => file.path),
@@ -459,14 +465,38 @@ function hasPublishablePaths(
 }
 
 function skillUriParts(skill: PublishableSkill): {
-  scope: SkillUriScope;
   authorId: string | null;
   name: string;
 } {
+  // The author segment is the key a name is unique under: the author, or the
+  // service account that wrote the skill. A skill with neither is bare.
   return {
-    scope: skill.scope === "personal" ? "personal" : "shared",
-    authorId: skill.authorId,
+    authorId: skill.authorId ?? skill.createdByServiceAccountId,
     name: skill.name,
+  };
+}
+
+function resolvedSkill(
+  resolution: SkillUriResolution,
+): PublishableSkill | null {
+  return resolution && "skill" in resolution ? resolution.skill : null;
+}
+
+/**
+ * The answer to a bare URI that names several skills the caller can see: an
+ * Invalid Params error that lists the author-form URI of each, so the client
+ * can pick one. It names only skills the caller can already read.
+ */
+function ambiguousSkillError(
+  uri: string,
+  matches: PublishableSkill[],
+): { code: number; message: string } {
+  const candidates = matches
+    .map((skill) => buildSkillManifestUri(skillUriParts(skill)))
+    .sort();
+  return {
+    code: -32602,
+    message: `Ambiguous skill URI: ${uri} names ${matches.length} skills. Use one of: ${candidates.join(", ")}`,
   };
 }
 

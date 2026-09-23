@@ -3,7 +3,7 @@ title: Publishing Skills over MCP
 category: MCP
 order: 6
 description: Serve your organization's skills to MCP clients as skill:// resources
-lastUpdated: 2026-08-26
+lastUpdated: 2026-09-23
 ---
 
 A gateway can publish your organization's [skills](/docs/platform-agent-skills) to the MCP clients that connect to it. The client reads them as `skill://` resources and offers them alongside its own skills.
@@ -18,12 +18,16 @@ A client that speaks the extension lists the gateway's skills, fetches any one o
 
 Every file carries a SHA-256 digest. A client uses the digest to verify what it downloaded and to notice when a skill changes. Digests are recorded whenever a skill is saved, so a skill that nobody edits keeps the same digest.
 
-Resource URIs name the skill in their last path segment:
+Resource URIs name the author and then the skill:
 
 ```
-skill://archestra/shared/<name>/SKILL.md
-skill://archestra/shared/<name>/references/GUIDE.md
+skill://archestra/<author-id>/<name>/SKILL.md
+skill://archestra/<author-id>/<name>/references/GUIDE.md
 ```
+
+A skill name is unique per author, so two people can each publish a `refunds` skill. Built-in skills have no author and use `skill://archestra/shared/<name>/SKILL.md`.
+
+Older links of the form `skill://archestra/shared/<name>/...` keep working. The gateway resolves them by name among the published skills you can read — your own skill first, otherwise the only match. When several match, the error lists the author URI of each.
 
 Skills reach clients as resources. This is separate from `load_skill`, the tool Archestra's own agents use, which keeps working unchanged.
 

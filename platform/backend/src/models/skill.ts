@@ -73,21 +73,17 @@ export function publishableSkillColumns() {
 }
 
 /**
- * Match the one skill a `skill://` URI names.
+ * Match the skills a `skill://` URI names.
  *
- * A name is unique only within its visibility, which is why the URI carries a
- * scope segment: `authorId` null means the URI named a shared skill (team or
- * org), and a set `authorId` means it named that user's personal one. Passing
- * the parsed URI's `authorId` straight through therefore reproduces the scope
- * discriminator without the caller restating it.
- *
- * Selects at most one live row: `skills_org_shared_name_idx` and
- * `skills_org_personal_name_idx` make a name unique within exactly the
- * visibility this predicate pins, so there is never a second candidate. The
+ * A name is unique per `(organization, author)`, so an author-form URI (a
+ * set `authorId`) names at most one live row: `skills_org_author_name_idx`
+ * makes it so. The author segment of a skill a service account wrote is the
+ * service account, the same key the index uses. A bare URI (`authorId` null) names every skill with that name,
+ * whoever wrote it; the caller picks one (see `resolveExposedSkill`). The
  * publication gates (`publishableSkillPredicate`) are composed alongside this
  * predicate by each query, not folded in here.
  *
- * Shared by both publication modes so a URI resolves to the same row whether
+ * Shared by both publication modes so a URI resolves to the same rows whether
  * the gateway is in Auto or Custom mode.
  */
 export function skillUriKeyPredicate(params: {
@@ -95,14 +91,10 @@ export function skillUriKeyPredicate(params: {
   authorId: string | null;
 }): SQL | undefined {
   return params.authorId === null
-    ? and(
-        eq(schema.skillsTable.name, params.name),
-        ne(schema.skillsTable.scope, "personal"),
-      )
+    ? eq(schema.skillsTable.name, params.name)
     : and(
         eq(schema.skillsTable.name, params.name),
-        eq(schema.skillsTable.scope, "personal"),
-        eq(schema.skillsTable.authorId, params.authorId),
+        sql`${skillNameOwnerKey()} = ${params.authorId}`,
       );
 }
 
@@ -112,10 +104,9 @@ export function skillUriKeyPredicate(params: {
  * bytes to digest), not agent-delegated (delegation has no MCP counterpart),
  * spec-compliant frontmatter (SEP-2640 hosts refuse entries whose URI segment
  * breaks the Agent Skills naming rules or whose fields exceed its length
- * limits), a personal skill still holding its author (the author id is a URI
- * segment, so without one no `skill://` URI can name the skill), no
- * unpublishable file path, and publication artifacts present for the row and
- * every file it publishes.
+ * limits), an owner for the author segment of its URI (or, with no owner,
+ * publication to the whole organization), no unpublishable file path, and publication artifacts present
+ * for the row and every file it publishes.
  *
  * SQL rather than TypeScript so the paging `LIMIT` bounds the work: a gate
  * settled after the window is cut forces the caller to re-read until the page
@@ -144,10 +135,20 @@ export function publishableSkillPredicate(): SQL | undefined {
     // serializer omits it — so only its upper bound appears here.
     sql`char_length(${schema.skillsTable.description}) BETWEEN 1 AND ${MAX_SKILL_DESCRIPTION_LENGTH}`,
     sql`char_length(coalesce(${schema.skillsTable.compatibility}, '')) <= ${MAX_SKILL_COMPATIBILITY_LENGTH}`,
-    // A personal skill whose author row was deleted (`author_id` is ON DELETE
-    // SET NULL) has no author URI segment, so nothing can name it: withheld
-    // here rather than left to throw inside URI building at serve time.
-    sql`NOT (${schema.skillsTable.scope} = 'personal' AND ${schema.skillsTable.authorId} IS NULL)`,
+    // A skill with no author (a built-in, or one whose author row was
+    // deleted: `author_id` is ON DELETE SET NULL) is addressed by its bare
+    // URI, which a caller resolves only among the skills it can read. So such
+    // a skill is published only when it is published to the organization,
+    // where every caller can read it. An orphaned personal skill is withheld.
+    or(
+      sql`${skillNameOwnerKey()} IS NOT NULL`,
+      ResourcePermissionPolicyModel.organizationAccessCondition({
+        organizationId: schema.skillsTable.organizationId,
+        resource: "skill",
+        scopeColumn: schema.skillsTable.id,
+        action: "read",
+      }),
+    ),
     publishableFilePathsPredicate(),
     nonCollidingFilePathsPredicate(),
     // Twin of `storedArtifacts` (services/skill-publication.ts): both halves
@@ -512,23 +513,27 @@ class SkillModel {
   }
 
   /**
-   * The single org-scoped skill a `skill://` URI names, or null.
+   * The org-scoped skills a `skill://` URI names: at most one for an author
+   * URI, every skill of that name for a bare one (capped at
+   * {@link MAX_URI_MATCHES}).
    *
    * The by-key twin of {@link SkillModel.findOrgScopedInEnvironment}: serving
    * one skill's manifest or one of its files does not need the org's catalog,
-   * only the row the URI addresses. Same predicates, so a skill reachable
+   * only the rows the URI addresses. Same predicates, so a skill reachable
    * through the listing is reachable through its own URI and no other.
+   * `readableBy` narrows the rows further to the skills that caller can read.
    */
   static async findOrgScopedByUriKey(params: {
     organizationId: string;
     environmentId: string | null;
     name: string;
     authorId: string | null;
-  }): Promise<PublishableSkill | null> {
+    readableBy?: { userId: string | null };
+  }): Promise<PublishableSkill[]> {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const [skill] = await db
+    return await db
       .select(publishableSkillColumns())
       .from(schema.skillsTable)
       .where(
@@ -541,16 +546,19 @@ class SkillModel {
             action: "use",
           }),
           skillUriKeyPredicate(params),
+          skillReadablePredicate({
+            organizationId: params.organizationId,
+            readableBy: params.readableBy,
+          }),
           skillInEnvironmentPredicate(params.environmentId),
           notDeleted(schema.skillsTable),
           enabledSkillPredicate(),
           publishableSkillPredicate(),
         ),
       )
-      .limit(1);
+      .orderBy(asc(schema.skillsTable.id))
+      .limit(MAX_URI_MATCHES);
     // SPDX-SnippetEnd
-
-    return skill ?? null;
   }
 
   /**
@@ -757,11 +765,10 @@ class SkillModel {
   }
 
   /**
-   * Of `names`, the ones an import by `userId` would collide with, mirroring the
-   * two partial unique indexes: a shared (team/org) skill of that name, or the
-   * importer's own personal skill of that name. Another user's personal skill is
-   * deliberately excluded — per-scope uniqueness lets personal names coexist, so
-   * it cannot block this user's import. Backs the discover "name exists" hint.
+   * Of `names`, the ones an import by `userId` would collide with: the
+   * importer's own live skills of that name, mirroring
+   * `skills_org_author_name_idx`. Another author's skill of the same name is
+   * no collision. Backs the discover "name exists" hint.
    */
   static async findImportNameCollisions(params: {
     organizationId: string;
@@ -770,7 +777,6 @@ class SkillModel {
   }): Promise<Set<string>> {
     if (params.names.length === 0) return new Set();
 
-    const sharedScopes: ResourceVisibilityScope[] = ["team", "org"];
     const rows = await db
       .select({ name: schema.skillsTable.name })
       .from(schema.skillsTable)
@@ -778,16 +784,10 @@ class SkillModel {
         and(
           eq(schema.skillsTable.organizationId, params.organizationId),
           inArray(schema.skillsTable.name, params.names),
-          // mirrors the partial unique indexes, which exclude soft-deleted
-          // rows — a deleted skill's name is free for re-use.
+          // mirrors the unique index, which excludes soft-deleted rows — a
+          // deleted skill's name is free for re-use.
           notDeleted(schema.skillsTable),
-          or(
-            inArray(schema.skillsTable.scope, sharedScopes),
-            and(
-              eq(schema.skillsTable.scope, "personal"),
-              eq(schema.skillsTable.authorId, params.userId),
-            ),
-          ),
+          eq(schema.skillsTable.authorId, params.userId),
         ),
       );
 
@@ -798,10 +798,9 @@ class SkillModel {
    * Create a skill, its bundled resource files, and its team assignments in
    * one transaction.
    *
-   * Returns `null` when a name conflict already exists in the skill's
-   * visibility namespace (personal names per author, team/org names per org).
-   * The insert is atomic (`ON CONFLICT DO NOTHING`, matching whichever partial
-   * unique index applies), so this is race-free against concurrent creates.
+   * Returns `null` when the author already has a live skill of that name
+   * (`skills_org_author_name_idx`). The insert is atomic (`ON CONFLICT DO
+   * NOTHING`), so this is race-free against concurrent creates.
    * When `teamIds` / `environmentIds` are supplied the junction rows are
    * inserted in the same transaction, so a failed assignment cannot leave a
    * scoped skill orphaned.
@@ -1440,51 +1439,32 @@ class SkillModel {
   }
 
   /**
-   * Whether restoring `skill` would collide with an active skill on either
-   * partial name-uniqueness index. Returns a 409 message, or null when clear.
-   * Advisory only: the partial unique index is the real guard, so the restore
-   * route also maps its violation to a 409 in case a create races this check.
+   * Whether restoring `skill` would collide with an active skill of the same
+   * name and author (`skills_org_author_name_idx`). Returns a 409 message, or
+   * null when clear. Advisory only: the unique index is the real guard, so the
+   * restore route also maps its violation to a 409 in case a create races
+   * this check.
    */
   static async getRestoreConflictMessage(skill: Skill): Promise<string | null> {
-    if (skill.scope === "personal") {
-      // The personal index is (org, authorId, name); NULLs are distinct in a
-      // unique index, so an authorless row can never collide — skip the check.
-      if (!skill.authorId) return null;
-      const [conflict] = await db
-        .select({ id: schema.skillsTable.id })
-        .from(schema.skillsTable)
-        .where(
-          and(
-            eq(schema.skillsTable.organizationId, skill.organizationId),
-            eq(schema.skillsTable.authorId, skill.authorId),
-            eq(schema.skillsTable.name, skill.name),
-            eq(schema.skillsTable.scope, "personal"),
-            ne(schema.skillsTable.id, skill.id),
-            notDeleted(schema.skillsTable),
-          ),
-        )
-        .limit(1);
-      return conflict
-        ? `Cannot restore: a personal skill named "${skill.name}" already exists.`
-        : null;
-    }
-
-    // team + org share the (org, name) partial index over scope in team/org.
+    const owner = skill.authorId ?? skill.createdByServiceAccountId;
+    // The index leaves a skill with no author and no service account
+    // unconstrained, so such a row can never collide.
+    if (!owner) return null;
     const [conflict] = await db
       .select({ id: schema.skillsTable.id })
       .from(schema.skillsTable)
       .where(
         and(
           eq(schema.skillsTable.organizationId, skill.organizationId),
+          sql`${skillNameOwnerKey()} = ${owner}`,
           eq(schema.skillsTable.name, skill.name),
-          inArray(schema.skillsTable.scope, ["team", "org"]),
           ne(schema.skillsTable.id, skill.id),
           notDeleted(schema.skillsTable),
         ),
       )
       .limit(1);
     return conflict
-      ? `Cannot restore: a shared skill named "${skill.name}" already exists.`
+      ? `Cannot restore: a skill named "${skill.name}" by the same author already exists.`
       : null;
   }
 
@@ -1827,3 +1807,46 @@ function getSkillStatusCondition(status: SkillRecordStatus): SQL {
 }
 
 export default SkillModel;
+
+/** How many skills a bare `skill://` URI may match before the list is cut. */
+export const MAX_URI_MATCHES = 20;
+
+/**
+ * Narrows a skill query to what one caller can read: a user through the
+ * grants, a caller with no user through what is published to the whole
+ * organization. Undefined (no narrowing) when no caller is given.
+ */
+export function skillReadablePredicate(params: {
+  organizationId: string;
+  readableBy?: { userId: string | null };
+}): SQL | undefined {
+  if (!params.readableBy) return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return params.readableBy.userId === null
+    ? ResourcePermissionPolicyModel.organizationAccessCondition({
+        organizationId: params.organizationId,
+        resource: "skill",
+        scopeColumn: schema.skillsTable.id,
+        action: "read",
+      })
+    : ResourcePermissionPolicyModel.grantCondition({
+        organizationId: params.organizationId,
+        userId: params.readableBy.userId,
+        resource: "skill",
+        action: "read",
+        scopeColumn: schema.skillsTable.id,
+      });
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The key that makes a skill name unique within an organization: the author,
+ * or the service account for a skill a service account wrote. Null for a
+ * skill with neither (a built-in, or one whose author was deleted), which the
+ * unique index leaves unconstrained.
+ */
+function skillNameOwnerKey(): SQL {
+  return sql`coalesce(${schema.skillsTable.authorId}, ${schema.skillsTable.createdByServiceAccountId}::text)`;
+}

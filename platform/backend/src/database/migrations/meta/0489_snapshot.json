@@ -1,5 +1,5 @@
 {
-  "id": "d028d0bc-fb6e-4c95-b00b-3588cc34c6cc",
+  "id": "06babfa2-a793-473f-af44-dc7f7c6b6773",
   "prevId": "158b80e8-3669-4e07-8b86-f9bdcec52dc6",
   "version": "7",
   "dialect": "postgresql",
@@ -23744,8 +23744,8 @@
           "method": "btree",
           "with": {}
         },
-        "skills_org_personal_name_idx": {
-          "name": "skills_org_personal_name_idx",
+        "skills_org_author_name_idx": {
+          "name": "skills_org_author_name_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -23754,9 +23754,9 @@
               "nulls": "last"
             },
             {
-              "expression": "author_id",
-              "isExpression": false,
+              "expression": "coalesce(\"author_id\", \"created_by_service_account_id\"::text)",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             },
             {
@@ -23767,29 +23767,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"skills\".\"scope\" = 'personal' AND \"skills\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skills_org_shared_name_idx": {
-          "name": "skills_org_shared_name_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"skills\".\"scope\" in ('team', 'org') AND \"skills\".\"deleted_at\" IS NULL",
+          "where": "\"skills\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

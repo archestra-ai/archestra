@@ -1006,6 +1006,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outcome = await handleSkillMethod({
             body: request.body,
             agentId: profileId,
+            callerUserId: tokenAuth.userId ?? null,
           });
         } catch (error) {
           logger.error(

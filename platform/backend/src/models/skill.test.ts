@@ -58,7 +58,7 @@ async function agentBindingCounts(skillId: string) {
   };
 }
 
-describe("SkillModel name uniqueness by scope", () => {
+describe("SkillModel name uniqueness per author", () => {
   test("two users can each own a personal skill with the same name", async ({
     makeOrganization,
     makeUser,
@@ -120,7 +120,10 @@ describe("SkillModel name uniqueness by scope", () => {
     expect(second).toBeNull();
   });
 
-  test("a shared (org) name is unique across the organization", async ({
+  // Names were unique per org among shared skills. A name is now unique per
+  // author, whoever the skill is shared with: the author segment of its
+  // `skill://` URI makes the address unique.
+  test("two authors can each share a skill with the same name", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -148,10 +151,10 @@ describe("SkillModel name uniqueness by scope", () => {
     });
 
     expect(a).not.toBeNull();
-    expect(b).toBeNull();
+    expect(b).not.toBeNull();
   });
 
-  test("a personal name and a shared name can coexist", async ({
+  test("one author cannot hold a personal and a shared skill of the same name", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -178,7 +181,7 @@ describe("SkillModel name uniqueness by scope", () => {
     });
 
     expect(personal).not.toBeNull();
-    expect(org_).not.toBeNull();
+    expect(org_).toBeNull();
   });
 });
 
@@ -269,7 +272,7 @@ describe("SkillModel.findImportNameCollisions", () => {
     expect(collisions.has("notes")).toBe(true);
   });
 
-  test("a shared (org) skill is a collision regardless of who owns it", async ({
+  test("another author's shared skill of the same name is not a collision", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -293,7 +296,7 @@ describe("SkillModel.findImportNameCollisions", () => {
       names: ["shared"],
     });
 
-    expect(collisions.has("shared")).toBe(true);
+    expect(collisions.has("shared")).toBe(false);
   });
 });
 
@@ -973,63 +976,73 @@ describe("SkillModel restore + status filter", () => {
     expect(await SkillModel.findDeletedById(skill.id, "other-org")).toBeNull();
   });
 
-  test("getRestoreConflictMessage flags a reclaimed name for shared and personal scopes", async ({
+  test("getRestoreConflictMessage flags a name the same author reclaimed", async ({
     makeOrganization,
     makeUser,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    const other = await makeUser();
 
-    // shared (org/team) name reclaimed by another active shared skill
-    const shared = await SkillModel.createWithFiles({
-      skill: skillInput({ organizationId: org.id, name: "dup", scope: "org" }),
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        scope: "org",
+        authorId: author.id,
+      }),
       files: [],
     });
-    if (!shared) throw new Error("seed failed");
-    await SkillModel.delete(shared.id);
-    const sharedDeleted = await SkillModel.findDeletedById(shared.id, org.id);
-    if (!sharedDeleted) throw new Error("deleted lookup failed");
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.delete(skill.id);
+    const deleted = await SkillModel.findDeletedById(skill.id, org.id);
+    if (!deleted) throw new Error("deleted lookup failed");
     // nothing has taken the name yet
-    expect(
-      await SkillModel.getRestoreConflictMessage(sharedDeleted),
-    ).toBeNull();
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toBeNull();
+
+    // Another author taking the name is no conflict.
     await SkillModel.createWithFiles({
-      skill: skillInput({ organizationId: org.id, name: "dup", scope: "team" }),
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        scope: "org",
+        authorId: other.id,
+      }),
       files: [],
     });
-    expect(await SkillModel.getRestoreConflictMessage(sharedDeleted)).toContain(
-      "shared skill",
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toBeNull();
+
+    // The same author taking it again is, whatever the audience.
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        scope: "personal",
+        authorId: author.id,
+      }),
+      files: [],
+    });
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toContain(
+      "same author",
     );
 
-    // personal name reclaimed by the same author
-    const personal = await SkillModel.createWithFiles({
-      skill: skillInput({
-        organizationId: org.id,
-        name: "mine",
-        scope: "personal",
-        authorId: author.id,
-      }),
+    // A skill with no author (a built-in) is unconstrained, so it never
+    // conflicts on restore.
+    const builtIn = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "free", scope: "org" }),
       files: [],
     });
-    if (!personal) throw new Error("seed failed");
-    await SkillModel.delete(personal.id);
-    const personalDeleted = await SkillModel.findDeletedById(
-      personal.id,
-      org.id,
-    );
-    if (!personalDeleted) throw new Error("deleted lookup failed");
+    if (!builtIn) throw new Error("seed failed");
+    await SkillModel.delete(builtIn.id);
     await SkillModel.createWithFiles({
-      skill: skillInput({
-        organizationId: org.id,
-        name: "mine",
-        scope: "personal",
-        authorId: author.id,
-      }),
+      skill: skillInput({ organizationId: org.id, name: "free", scope: "org" }),
       files: [],
     });
+    const builtInDeleted = await SkillModel.findDeletedById(builtIn.id, org.id);
+    if (!builtInDeleted) throw new Error("deleted lookup failed");
     expect(
-      await SkillModel.getRestoreConflictMessage(personalDeleted),
-    ).toContain("personal skill");
+      await SkillModel.getRestoreConflictMessage(builtInDeleted),
+    ).toBeNull();
   });
 
   test("status=deleted lists only the trash and never leaks into source repos", async ({

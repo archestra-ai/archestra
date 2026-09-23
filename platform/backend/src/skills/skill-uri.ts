@@ -3,31 +3,38 @@ import { SKILL_MANIFEST_FILENAME } from "./parser";
 /**
  * The `skill://` URI space Archestra publishes its skills under (SEP-2640).
  *
- *     skill://archestra/shared/<name>/<file>
- *     skill://archestra/personal/<authorId>/<name>/<file>
+ *     skill://archestra/<authorId>/<name>/<file>      the address of a skill
+ *     skill://archestra/shared/<name>/<file>          bare: resolved by name
+ *     skill://archestra/personal/<authorId>/<name>/…  earlier author form
  *
  * The spec requires the last path segment before the file to equal the skill's
  * frontmatter `name`, so a client can read the name straight off the URI
  * without fetching the manifest. Everything before it is a free-form
- * organizational prefix, which is where the scope discriminator goes.
+ * organizational prefix, which is where the author goes.
  *
- * Scope is in the path because a name is only unique within its visibility:
- * personal skills are unique per `(org, author, name)` and shared (team/org)
- * ones per `(org, name)`, so a user can hold a personal `refunds` *and* see an
- * org `refunds`. The author segment disambiguates the personal side. Note the
- * disclosure this carries: an author who publishes a personal skill on a
- * shared gateway exposes their user id in the URI to everyone holding that
- * gateway's token — publication is the author's own act, but the id travels
- * with the skill.
+ * A skill name is unique per `(organization, author)`, so the author segment
+ * makes the address unique. A skill with no author (a built-in, or one a
+ * service account wrote) has no author segment and is published under the
+ * bare form.
+ *
+ * The bare form is also how skills were addressed before names became unique
+ * per author, so earlier links keep working. It names no author, so the
+ * gateway resolves it by name: the caller's own skill first, else the single
+ * matching skill the caller can see, else an error that lists the matches.
+ * The earlier `personal/<authorId>` form names an author and resolves like the
+ * author form.
+ *
+ * Note the disclosure this carries: a published skill exposes its author's
+ * user id in the URI to everyone holding that gateway's token.
  *
  * @see https://agentskills.io/specification
  */
 
-export type SkillUriScope = "personal" | "shared";
-
 interface ParsedSkillUri {
-  scope: SkillUriScope;
-  /** Set only for `personal` URIs — the owning author's user id. */
+  /**
+   * The author the URI names, or null for the bare form, which names none
+   * and is resolved by name.
+   */
   authorId: string | null;
   name: string;
   /**
@@ -35,11 +42,15 @@ interface ParsedSkillUri {
    * `""` for the skill root directory itself.
    */
   filePath: string;
+  /** Spelled in the earlier `personal/<authorId>` form; kept for rebuilding. */
+  legacyPersonal: boolean;
 }
 
-/** Build the URI of one file inside a skill (`SKILL.md` for the manifest). */
+/**
+ * Build the URI of one file inside a skill (`SKILL.md` for the manifest):
+ * the author form when the skill has an author, the bare form otherwise.
+ */
 export function buildSkillUri(params: {
-  scope: SkillUriScope;
   authorId: string | null;
   name: string;
   filePath: string;
@@ -50,7 +61,6 @@ export function buildSkillUri(params: {
 
 /** The URI of a skill's `SKILL.md` — the identity SEP-2640 addresses it by. */
 export function buildSkillManifestUri(params: {
-  scope: SkillUriScope;
   authorId: string | null;
   name: string;
 }): string {
@@ -107,7 +117,10 @@ export function isPlatformSkillUri(uri: string): boolean {
 export function parseSkillUri(uri: string): ParsedSkillUri | null {
   const parsed = parseSkillUriSegments(uri);
   if (!parsed) return null;
-  return buildSkillUri(parsed) === uri ? parsed : null;
+  const rebuilt = parsed.legacyPersonal
+    ? buildLegacyPersonalUri(parsed)
+    : buildSkillUri(parsed);
+  return rebuilt === uri ? parsed : null;
 }
 
 // ===== Internal =====
@@ -183,47 +196,73 @@ function parseSkillUriSegments(uri: string): ParsedSkillUri | null {
     segments.push(decoded);
   }
 
-  const [scope, ...rest] = segments;
+  const [first, ...rest] = segments;
+  if (!first) return null;
 
-  if (scope === "shared") {
+  if (first === BARE_SEGMENT) {
     const [name, ...filePath] = rest;
     if (!name) return null;
     return {
-      scope: "shared",
       authorId: null,
       name,
       filePath: filePath.join("/"),
+      legacyPersonal: false,
     };
   }
 
-  if (scope === "personal") {
+  if (first === LEGACY_PERSONAL_SEGMENT) {
     const [authorId, name, ...filePath] = rest;
     if (!authorId || !name) return null;
     return {
-      scope: "personal",
       authorId,
       name,
       filePath: filePath.join("/"),
+      legacyPersonal: true,
     };
   }
 
-  return null;
+  const [name, ...filePath] = rest;
+  if (!name) return null;
+  return {
+    authorId: first,
+    name,
+    filePath: filePath.join("/"),
+    legacyPersonal: false,
+  };
 }
 
 /** The skill's root directory URI — its file URIs minus the file path. */
 function buildSkillRootUri(params: {
-  scope: SkillUriScope;
   authorId: string | null;
   name: string;
 }): string {
-  if (params.scope === "personal") {
-    if (!params.authorId) {
-      throw new Error("personal skill URIs require an authorId");
-    }
-    return `${SKILL_URI_PREFIX}/personal/${encodeURIComponent(params.authorId)}/${encodeURIComponent(params.name)}`;
+  // An author id never takes a reserved first segment: user ids are random
+  // 32-character strings. Refusing one keeps the forms unambiguous anyway.
+  if (params.authorId === null || isReservedSegment(params.authorId)) {
+    return `${SKILL_URI_PREFIX}/${BARE_SEGMENT}/${encodeURIComponent(params.name)}`;
   }
-  return `${SKILL_URI_PREFIX}/shared/${encodeURIComponent(params.name)}`;
+  return `${SKILL_URI_PREFIX}/${encodeURIComponent(params.authorId)}/${encodeURIComponent(params.name)}`;
 }
+
+/** The earlier `personal/<authorId>` spelling, rebuilt for the canonical check. */
+function buildLegacyPersonalUri(params: {
+  authorId: string | null;
+  name: string;
+  filePath: string;
+}): string {
+  const root = `${SKILL_URI_PREFIX}/${LEGACY_PERSONAL_SEGMENT}/${encodeURIComponent(params.authorId ?? "")}/${encodeURIComponent(params.name)}`;
+  return params.filePath ? `${root}/${encodePath(params.filePath)}` : root;
+}
+
+function isReservedSegment(segment: string): boolean {
+  return segment === BARE_SEGMENT || segment === LEGACY_PERSONAL_SEGMENT;
+}
+
+/** First path segment of the bare, name-only form. */
+const BARE_SEGMENT = "shared";
+
+/** First path segment of the earlier author form. */
+const LEGACY_PERSONAL_SEGMENT = "personal";
 
 /** Encode a skill-relative path segment-by-segment, the mirror of parsing. */
 function encodePath(filePath: string): string {

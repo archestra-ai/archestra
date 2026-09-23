@@ -169,12 +169,27 @@ export async function resolveExposedSkills(params: {
 }
 
 /**
- * The one skill a parsed `skill://` URI names on this gateway, or null.
+ * What a `skill://` URI resolves to on one gateway: the one skill it names,
+ * several skills when a bare URI matches more than one, or null.
+ */
+export type SkillUriResolution =
+  | { skill: PublishableSkill }
+  | { ambiguous: PublishableSkill[] }
+  | null;
+
+/**
+ * The skill a parsed `skill://` URI names on this gateway.
  *
  * The by-key resolution `skills/get`, `resources/directory/read` and
  * `resources/read` use. A client fetching a twenty-file skill resolves twenty
  * times, so this path must not scale with the org's catalog: it reads the
- * addressed row and, in Auto mode, one exclusion probe.
+ * addressed rows and, in Auto mode, one exclusion probe per row.
+ *
+ * An author URI names at most one skill. A bare URI (no author) names skills
+ * by name alone, so it resolves only among the exposed skills the caller can
+ * read: the caller's own skill of that name first, else the single match,
+ * else `ambiguous` with every match. It can therefore never reach a skill the
+ * caller cannot read, whatever the gateway publishes.
  *
  * Applies exactly the gates {@link resolveExposedSkills} applies, and answers
  * null for every reason — not a publishing surface, wrong mode, excluded, out
@@ -185,24 +200,42 @@ export async function resolveExposedSkills(params: {
 export async function resolveExposedSkill(params: {
   agentId: string;
   name: string;
-  /** The URI's author segment: null for a shared URI, set for a personal one. */
+  /** The URI's author segment: null for a bare URI. */
   authorId: string | null;
-}): Promise<PublishableSkill | null> {
+  /** The user behind the gateway token; null for a token with no user. */
+  callerUserId: string | null;
+}): Promise<SkillUriResolution> {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) return null;
   if (!publishesSkills(agent.agentType)) return null;
 
-  const key = { name: params.name, authorId: params.authorId };
-  const skill = agent.accessAllSkills
-    ? await resolveAutoModeSkill(agent, key)
-    : await AgentSkillModel.findSkillByAgentAndUriKey({
+  const bare = params.authorId === null;
+  const key = {
+    name: params.name,
+    authorId: params.authorId,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ...(bare ? { readableBy: { userId: params.callerUserId } } : {}),
+    // SPDX-SnippetEnd
+  };
+  const candidates = agent.accessAllSkills
+    ? await resolveAutoModeSkills(agent, key)
+    : await AgentSkillModel.findSkillsByAgentAndUriKey({
         agentId: params.agentId,
+        organizationId: agent.organizationId,
         environmentId: agent.environmentId,
         ...key,
       });
+  const exposed = candidates.filter((skill) => isExposable(skill));
+  if (exposed.length === 0) return null;
+  if (!bare || exposed.length === 1) return { skill: exposed[0] };
 
-  if (!skill || !isExposable(skill)) return null;
-  return skill;
+  const own =
+    params.callerUserId === null
+      ? undefined
+      : exposed.find((skill) => skill.authorId === params.callerUserId);
+  return own ? { skill: own } : { ambiguous: exposed };
 }
 
 /**
@@ -270,10 +303,7 @@ function isExposable(skill: PublishableSkill): boolean {
     isPublishableType(skill) &&
     isSpecCompliantSkillName(skill.name) &&
     isSpecCompliantSkillDescription(skill.description) &&
-    isSpecCompliantSkillCompatibility(skill.compatibility) &&
-    // A personal skill with no author (the user row was deleted) has no author
-    // URI segment, so no `skill://` URI can name it.
-    !(skill.scope === "personal" && skill.authorId === null);
+    isSpecCompliantSkillCompatibility(skill.compatibility);
   if (!exposable && !driftWarnThrottle.get(skill.id)) {
     // Throttled: drift is a property of the row, not of the request, so an
     // unthrottled log repeats on every listing page the row lands in for as
@@ -293,22 +323,28 @@ const driftWarnThrottle = new LRUCacheManager<true>({
   defaultTtl: TimeInMs.Hour,
 });
 
-async function resolveAutoModeSkill(
+async function resolveAutoModeSkills(
   agent: { id: string; organizationId: string; environmentId: string | null },
-  key: { name: string; authorId: string | null },
-): Promise<PublishableSkill | null> {
-  const skill = await SkillModel.findOrgScopedByUriKey({
+  key: {
+    name: string;
+    authorId: string | null;
+    readableBy?: { userId: string | null };
+  },
+): Promise<PublishableSkill[]> {
+  const skills = await SkillModel.findOrgScopedByUriKey({
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,
     ...key,
   });
-  if (!skill) return null;
-
-  const excluded = await AgentExcludedSkillModel.isExcluded({
-    agentId: agent.id,
-    skillId: skill.id,
-  });
-  return excluded ? null : skill;
+  const kept: PublishableSkill[] = [];
+  for (const skill of skills) {
+    const excluded = await AgentExcludedSkillModel.isExcluded({
+      agentId: agent.id,
+      skillId: skill.id,
+    });
+    if (!excluded) kept.push(skill);
+  }
+  return kept;
 }
 
 /**

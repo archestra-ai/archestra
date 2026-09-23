@@ -209,19 +209,19 @@ const skillsTable = softDeletablePgTable(
     index("skills_github_sync_due_idx")
       .on(table.lastSyncedAt)
       .where(sql`${table.githubSyncInterval} is not null`),
-    // Name uniqueness mirrors visibility: a name only needs to be unique among
-    // those who can see the skill. Personal skills are visible to their author
-    // alone, so they are unique per (org, author); team/org skills are shared,
-    // so they are unique per org to keep activation by name unambiguous.
-    // Soft-deleted rows are excluded so deleting a skill frees its name.
-    uniqueIndex("skills_org_personal_name_idx")
-      .on(table.organizationId, table.authorId, table.name)
-      .where(sql`${table.scope} = 'personal' AND ${table.deletedAt} IS NULL`),
-    uniqueIndex("skills_org_shared_name_idx")
-      .on(table.organizationId, table.name)
-      .where(
-        sql`${table.scope} in ('team', 'org') AND ${table.deletedAt} IS NULL`,
-      ),
+    // A name is unique per (org, author): the author segment of a skill://
+    // URI then names one skill. A skill a service account wrote keys on the
+    // service account instead. A skill with neither (a built-in, or one whose
+    // author was deleted) is unconstrained, so deleting a user can never fail
+    // on a name clash. Soft-deleted rows are excluded so deleting a skill
+    // frees its name.
+    uniqueIndex("skills_org_author_name_idx")
+      .on(
+        table.organizationId,
+        sql`coalesce(${table.authorId}, ${table.createdByServiceAccountId}::text)`,
+        table.name,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

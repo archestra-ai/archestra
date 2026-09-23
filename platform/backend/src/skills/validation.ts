@@ -197,16 +197,13 @@ export function refineUniqueFilePaths(
 }
 
 /**
- * Whether an error is a skill-name unique violation on either visibility
- * namespace (personal-per-author or shared-per-org), as opposed to a team FK or
- * a duplicate resource-file path. Shared by the REST routes and the MCP skill
+ * Whether an error is a skill-name unique violation (a name is unique per
+ * organization and author), as opposed to a team FK or a duplicate
+ * resource-file path. Shared by the REST routes and the MCP skill
  * tools so a rename collision maps to a friendly conflict on both surfaces.
  */
 export function isSkillNameConflict(error: unknown): boolean {
-  return (
-    isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
-    isUniqueConstraintError(error, "skills_org_shared_name_idx")
-  );
+  return isUniqueConstraintError(error, "skills_org_author_name_idx");
 }
 
 // =============================================================================

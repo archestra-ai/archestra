@@ -1177,10 +1177,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The pre-check is advisory; the partial unique index is the real
         // guard. A create can claim the freed name between the check and this
         // UPDATE — map that violation to a 409 rather than a 500.
-        if (
-          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
-          isUniqueConstraintError(error, "skills_org_shared_name_idx")
-        ) {
+        if (isUniqueConstraintError(error, "skills_org_author_name_idx")) {
           throw skillNameConflict(skill.name);
         }
         throw error;

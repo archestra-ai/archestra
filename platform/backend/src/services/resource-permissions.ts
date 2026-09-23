@@ -348,11 +348,7 @@ export class ResourcePermissions {
       revision: policy?.revision ?? 0,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
-        grants:
-          policy?.grants ??
-          (params.resource === "conversation" || params.resource === "agentRun"
-            ? sessionLegacyGrants(effective.target)
-            : []),
+        grants: policy?.grants ?? [],
       }),
       inheritedGrants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -733,31 +729,4 @@ function effectiveActionsForPolicy(
       },
     }),
   );
-}
-
-function sessionLegacyGrants(
-  target: Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>,
-): ResourcePermissionGrant[] {
-  if (!target) return [];
-  const grants: ResourcePermissionGrant[] = [];
-  if (target.authorId)
-    grants.push({
-      subject: { type: "user", id: target.authorId },
-      actions: ["read", "manage-permissions"],
-    });
-  if (target.enabled === false) return grants;
-  if (target.scope === "org")
-    grants.push({
-      subject: { type: "organization", id: "*" },
-      actions: ["read"],
-    });
-  for (const team of target.teams)
-    grants.push({ subject: { type: "team", id: team.id }, actions: ["read"] });
-  for (const user of target.users)
-    if (user.id !== target.authorId)
-      grants.push({
-        subject: { type: "user", id: user.id },
-        actions: ["read"],
-      });
-  return grants;
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+// TODO: Reuse this OpenAPPA landing layout for the main chat landing after its design is approved.
 interface ChatLandingLayoutProps {
   title: string;
   description: ReactNode;

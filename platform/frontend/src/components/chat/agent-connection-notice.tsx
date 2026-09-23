@@ -21,13 +21,7 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
  * Renders nothing for the default agent configuration, which is the common
  * case; it is only the author's opt-in that makes this visible.
  */
-export function AgentConnectionNotice({
-  agentId,
-  className,
-}: {
-  agentId: string;
-  className?: string;
-}) {
+export function AgentConnectionNotice({ agentId }: { agentId: string }) {
   const { data: readiness } = useAgentCredentialReadiness();
   const orchestrator = useMcpInstallOrchestrator();
   const entry = indexReadinessByAgent(readiness).get(agentId);
@@ -39,7 +33,7 @@ export function AgentConnectionNotice({
   const servers = listServerNames(gate.serverNames);
 
   return (
-    <InlineNotice className={className}>
+    <InlineNotice>
       <KeyRound />
       <InlineNoticeText className="flex-1 truncate">
         {gate.kind === "block" ? (

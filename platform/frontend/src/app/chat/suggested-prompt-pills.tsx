@@ -33,7 +33,7 @@ export const SuggestedPromptPills = ({
 }: SuggestedPromptPillsProps) => (
   <div
     className={cn(
-      "flex w-full flex-wrap items-center gap-2",
+      "flex flex-wrap items-center gap-2 max-w-2xl",
       align === "start" ? "justify-start" : "justify-center",
     )}
   >

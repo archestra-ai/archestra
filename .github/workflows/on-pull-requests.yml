@@ -272,7 +272,6 @@ jobs:
     # Never run fork code on the self-hosted runners.
     if: github.event.pull_request.head.repo.fork != true
     runs-on: hetzner-amd64
-    # Leaked vitest/esbuild workers can hang a finished job until GitHub's 6h default.
     timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.

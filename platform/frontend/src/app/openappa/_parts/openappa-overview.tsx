@@ -9,8 +9,10 @@ import { PolicyChatStarter } from "./policy-chat-starter";
 
 export function OpenAppaOverview({
   conversationId,
+  initialPrompt,
 }: {
   conversationId?: string;
+  initialPrompt?: string;
 }) {
   const [chatStarted, setChatStarted] = useState(Boolean(conversationId));
   return (
@@ -44,6 +46,7 @@ export function OpenAppaOverview({
       </div>
       <PolicyChatStarter
         initialConversationId={conversationId}
+        initialPrompt={initialPrompt}
         onConversationStart={() => setChatStarted(true)}
       />
     </div>

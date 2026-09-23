@@ -68,7 +68,7 @@ export function GuardrailsPolicyEditor({
     // Editable drafts stay mounted while switching; the read-only details page
     // shows only the selected document so it never presents two editors.
     <Tabs
-      className="-mt-4 gap-0"
+      className={readOnly ? "gap-0" : "-mt-4 gap-0"}
       value={tab}
       onValueChange={(next) => setTab(next === "effective" ? next : "policy")}
     >

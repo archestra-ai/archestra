@@ -64,10 +64,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
 
 const create = vi.fn();
 const sendMessage = vi.fn();
-const renderStarter = () =>
+const renderStarter = (initialPrompt?: string) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <PolicyChatStarter />
+      <PolicyChatStarter initialPrompt={initialPrompt} />
     </QueryClientProvider>,
   );
 
@@ -160,6 +160,36 @@ test("starts a policy conversation on this page and sends the user's request", a
       parts: [{ type: "text", text: "Require approval for outbound messages" }],
     }),
   );
+});
+
+test("starts a prompted configuration session when a model is available", async () => {
+  renderStarter("Review my policy before changing it");
+
+  await vi.waitFor(() =>
+    expect(create).toHaveBeenCalledWith({
+      modelId: "model-1",
+      origin: "openappa",
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "Review my policy before changing it" }],
+      }),
+    ),
+  );
+  expect(create).toHaveBeenCalledTimes(1);
+});
+
+test("does not start a prompted session before a provider key is available", () => {
+  vi.mocked(useHasAnyApiKey).mockReturnValue({
+    hasAnyApiKey: false,
+    isLoading: false,
+    isLoadError: false,
+    refetch: vi.fn(),
+  });
+  renderStarter("Review my policy before changing it");
+  expect(create).not.toHaveBeenCalled();
 });
 
 test("starts with a policy-specific suggested prompt", async () => {

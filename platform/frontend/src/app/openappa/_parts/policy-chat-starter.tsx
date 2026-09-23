@@ -6,6 +6,7 @@ import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import {
   startTransition,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -33,9 +34,11 @@ import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
 export function PolicyChatStarter({
   initialConversationId,
+  initialPrompt,
   onConversationStart,
 }: {
   initialConversationId?: string;
+  initialPrompt?: string;
   onConversationStart?: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +48,7 @@ export function PolicyChatStarter({
   );
   const [conversationId, setConversationId] = useState(initialConversationId);
   const pendingPrompt = useRef<string | null>(null);
+  const autoStarted = useRef(false);
   const sectionRef = useRef<HTMLElement>(null);
   const [chatLayout, setChatLayout] = useState<{
     height: number;
@@ -125,33 +129,60 @@ export function PolicyChatStarter({
   const sync = useAppaGithubSync();
   const usesGitHub = Boolean(sync.data?.source?.interval);
   const githubAppReady = Boolean(sync.data?.source?.githubAppConfigId);
-  const submit = async (request: string) => {
-    const text = request.trim();
-    if (!text) return;
-    setError(null);
-    if (session) {
-      session.sendMessage({
-        role: "user",
-        parts: [{ type: "text", text }],
-        metadata: { createdAt: new Date().toISOString() },
-      });
+  const submit = useCallback(
+    async (request: string) => {
+      const text = request.trim();
+      if (!text) return;
+      setError(null);
+      if (session) {
+        session.sendMessage({
+          role: "user",
+          parts: [{ type: "text", text }],
+          metadata: { createdAt: new Date().toISOString() },
+        });
+        return;
+      }
+      if (!selectedModel) return;
+      try {
+        pendingPrompt.current = text;
+        const created = await createConversation.mutateAsync({
+          modelId: selectedModel,
+          origin: "openappa",
+        });
+        if (!created)
+          throw new Error("Could not start the policy conversation");
+        onConversationStart?.();
+        startTransition(() => setConversationId(created.id));
+      } catch (cause) {
+        pendingPrompt.current = null;
+        setError(
+          cause instanceof Error ? cause.message : "Could not start chat",
+        );
+      }
+    },
+    [session, selectedModel, createConversation, onConversationStart],
+  );
+
+  useEffect(() => {
+    if (
+      autoStarted.current ||
+      !initialPrompt ||
+      initialConversationId ||
+      !hasAnyApiKey ||
+      !selectedModel ||
+      models.isPending
+    )
       return;
-    }
-    if (!selectedModel) return;
-    try {
-      pendingPrompt.current = text;
-      const created = await createConversation.mutateAsync({
-        modelId: selectedModel,
-        origin: "openappa",
-      });
-      if (!created) throw new Error("Could not start the policy conversation");
-      onConversationStart?.();
-      startTransition(() => setConversationId(created.id));
-    } catch (cause) {
-      pendingPrompt.current = null;
-      setError(cause instanceof Error ? cause.message : "Could not start chat");
-    }
-  };
+    autoStarted.current = true;
+    void submit(initialPrompt);
+  }, [
+    initialPrompt,
+    initialConversationId,
+    hasAnyApiKey,
+    selectedModel,
+    models.isPending,
+    submit,
+  ]);
   const changeModel = (modelId: string) => {
     setSelectedModel(modelId);
     if (conversationId) {

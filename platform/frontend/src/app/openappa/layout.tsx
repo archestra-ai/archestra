@@ -26,7 +26,7 @@ export default async function OpenAppaLayout({
       tabs={[
         { label: "Overview", href: "/openappa" },
         { label: "Batteries", href: "/openappa/batteries" },
-        { label: "Policy details", href: "/openappa/policy" },
+        { label: "Policy", href: "/openappa/policy" },
       ]}
       actionButton={<BatteriesUploadAction />}
     >

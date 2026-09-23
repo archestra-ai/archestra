@@ -1050,9 +1050,20 @@ class AnthropicStreamAdapter
     this.outIndexByUpstream.clear();
     this.nextOutIndex = 0;
     // A governed replacement is the only assistant content for this turn.
-    // Clears raw output and reasoning blocks because they were not admitted.
+    // Clear raw output, calls, block state, and stop reason because none of it
+    // crossed the child-return boundary.
     this.reasoningBlocks.clear();
     this.state.text = "";
+    this.state.toolCalls = [];
+    this.state.rawToolCallEvents = [];
+    this.state.stopReason = "end_turn";
+    this.toolCallsReleased = false;
+    this.toolUseBlockIndices.clear();
+    this.textBlockIndices.clear();
+    this.textByBlock.clear();
+    this.pendingTextBlockStop = "";
+    this.pendingTextBlockIndex = null;
+    this.currentToolCallIndex = 0;
   }
 
   formatEndSSE(): string {
@@ -1100,7 +1111,10 @@ class AnthropicStreamAdapter
     }
 
     // Only tool calls the client actually received.
-    for (const toolCall of this.toolCallsReleased ? this.state.toolCalls : []) {
+    for (const toolCall of !this.responseReplacedWithText &&
+    this.toolCallsReleased
+      ? this.state.toolCalls
+      : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);

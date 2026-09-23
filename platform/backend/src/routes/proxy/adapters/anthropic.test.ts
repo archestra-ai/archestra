@@ -1398,6 +1398,27 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     ).toMatchObject([{ id: "toolu_1", name: "list" }]);
   });
 
+  test("governed replacement clears released calls and raw stream state", () => {
+    const adapter = streamBlockedToolTurn();
+    expect(adapter.getRawToolCallEvents()).not.toHaveLength(0);
+
+    adapter.prepareResponseReplacement?.();
+    const replacement = adapter
+      .formatCompleteTextSSE("SUMMARY(24 characters): safe")
+      .join("");
+    const endEvents = adapter.formatEndSSE();
+    const response = adapter.toProviderResponse();
+
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+    expect(replacement).toContain('"index":0');
+    expect(endEvents).toContain('"stop_reason":"end_turn"');
+    expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+    expect(response.stop_reason).toBe("end_turn");
+    expect(response.content).toEqual([
+      { type: "text", text: "SUMMARY(24 characters): safe", citations: null },
+    ]);
+  });
+
   // The record has to describe the turn the CLIENT saw. "let me check" was
   // streamed live and the refusal was appended after it as a further block, so
   // both belong. Keeping only the refusal deleted the model's own answer from

@@ -204,6 +204,7 @@ const createAgent = async (
   request: APIRequestContext,
   name: string,
   scope: "personal" | "team" | "org",
+  agentType?: "agent" | "mcp_gateway",
 ) =>
   makeApiRequest({
     request,
@@ -213,6 +214,7 @@ const createAgent = async (
       name,
       teams: [],
       scope,
+      ...(agentType ? { agentType } : {}),
     },
   });
 

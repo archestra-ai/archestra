@@ -77,6 +77,7 @@ const uiTestMatch = [
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
+  "**/list-return-url.spec.ts",
   "**/llm-logs-slack-source.spec.ts",
   "**/loading-states.spec.ts",
   "**/mcp-edit.spec.ts",

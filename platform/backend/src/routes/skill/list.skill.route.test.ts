@@ -1,6 +1,4 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import {
   AgentExcludedSkillModel,
   AgentModel,
@@ -8,7 +6,6 @@ import {
   SkillModel,
 } from "@/models";
 import MemberModel from "@/models/member";
-import SkillTeamModel from "@/models/skill-team";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { describe, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -394,39 +391,30 @@ describe("GET /api/skills", () => {
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
 
-    await withRetiredScope(
-      await seedImportedSkill({
-        organizationId: ctx.organizationId,
-        name: "org-skill",
-        sourceRef: "shared/org@main:SKILL.md",
-        access: "org",
-      }),
-      { scope: "org" },
-    );
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "org-skill",
+      sourceRef: "shared/org@main:SKILL.md",
+      access: "org",
+    });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
       authorId: ctx.user.id,
     });
-    await withRetiredScope(
-      await seedImportedSkill({
-        organizationId: ctx.organizationId,
-        name: "team-a-skill",
-        sourceRef: "team/a@main:SKILL.md",
-        access: { teams: [teamA.id] },
-      }),
-      { scope: "team", teamIds: [teamA.id] },
-    );
-    await withRetiredScope(
-      await seedImportedSkill({
-        organizationId: ctx.organizationId,
-        name: "team-b-skill",
-        sourceRef: "team/b@main:SKILL.md",
-        access: { teams: [teamB.id] },
-      }),
-      { scope: "team", teamIds: [teamB.id] },
-    );
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "team-a-skill",
+      sourceRef: "team/a@main:SKILL.md",
+      access: { teams: [teamA.id] },
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "team-b-skill",
+      sourceRef: "team/b@main:SKILL.md",
+      access: { teams: [teamB.id] },
+    });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
@@ -464,15 +452,12 @@ describe("GET /api/skills", () => {
     makeUser,
   }) => {
     const otherAuthor = await makeUser();
-    await withRetiredScope(
-      await seedImportedSkill({
-        organizationId: ctx.organizationId,
-        name: "org-skill",
-        sourceRef: "shared/org@main:SKILL.md",
-        access: "org",
-      }),
-      { scope: "org" },
-    );
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "org-skill",
+      sourceRef: "shared/org@main:SKILL.md",
+      access: "org",
+    });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
@@ -484,6 +469,20 @@ describe("GET /api/skills", () => {
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
       authorId: otherAuthor.id,
+    });
+    // Another author's skill shared by grant is not "personal": the
+    // exclude-other-personal filter keeps it, like a built-in with no author.
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "other-shared-skill",
+      sourceRef: "other/shared@main:SKILL.md",
+      authorId: otherAuthor.id,
+      access: { users: [otherAuthor.id, ctx.user.id], preset: "view" },
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "built-in-skill",
+      sourceRef: "builtin/skill@main:SKILL.md",
     });
 
     const listNames = async (query: string) => {
@@ -505,15 +504,19 @@ describe("GET /api/skills", () => {
     );
     expect(
       await listNames(`?scope=personal&authorIds=${otherAuthor.id}`),
-    ).toEqual(["other-personal-skill"]);
+    ).toEqual(["other-personal-skill", "other-shared-skill"]);
     // authorless rows (e.g. built-ins) survive an exclude filter
     expect(await listNames(`?excludeAuthorIds=${otherAuthor.id}`)).toEqual([
+      "built-in-skill",
       "my-personal-skill",
       "org-skill",
     ]);
+    // Only another author's author-only skill is hidden.
     expect(await listNames("?excludeOtherPersonalSkills=true")).toEqual([
+      "built-in-skill",
       "my-personal-skill",
       "org-skill",
+      "other-shared-skill",
     ]);
   });
 
@@ -608,23 +611,3 @@ describe("GET /api/skills", () => {
     expect(response.statusCode).toBe(403);
   });
 });
-
-/**
- * Write the retired visibility column and team rows a skill carried before
- * permission policies. The admin list filters (`scope`, `teamIds`,
- * `excludeOtherPersonalSkills`) still select on them, and create no longer
- * sets them.
- */
-async function withRetiredScope(
-  skill: { id: string },
-  legacy: { scope: "org" | "team"; teamIds?: string[] },
-) {
-  await db
-    .update(schema.skillsTable)
-    .set({ scope: legacy.scope })
-    .where(eq(schema.skillsTable.id, skill.id));
-  if (legacy.teamIds) {
-    await SkillTeamModel.syncSkillTeams(skill.id, legacy.teamIds);
-  }
-  return skill;
-}

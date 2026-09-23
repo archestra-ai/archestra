@@ -174,9 +174,8 @@ describe("agent skills routes", () => {
           name: "incident-response",
           activationName: "incident-response",
           description: "Respond to incidents",
-          // The retired visibility column, which create no longer sets; the
-          // skill reaches the agent through its organization grants.
-          scope: "personal",
+          // Derived from the skill's grants: it reaches the organization.
+          scope: "org",
           providerName: null,
         },
       ],
@@ -218,7 +217,7 @@ describe("agent skills routes", () => {
           reference: { source: "native", skillId: visible.id },
           name: "visible-here",
           activationName: "visible-here",
-          scope: "personal",
+          scope: "org",
         },
       ],
     });

@@ -109,11 +109,15 @@ export async function listAccessibleCatalogSkills(
         ? await AgentModel.findEnvironmentId(agentId)
         : undefined;
 
-  return SkillModel.findByOrganization({
-    organizationId,
-    accessibleSkillIds,
-    environmentId,
-  });
+  // `scope` from the grants: name precedence ranks the caller's own skill,
+  // then team, then organization skills by who each skill reaches.
+  return SkillModel.withGrantedScope(
+    await SkillModel.findByOrganization({
+      organizationId,
+      accessibleSkillIds,
+      environmentId,
+    }),
+  );
 }
 
 /**

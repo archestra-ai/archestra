@@ -17,6 +17,7 @@ import {
   isNull,
   like,
   ne,
+  not,
   notInArray,
   or,
   type SQL,
@@ -252,6 +253,37 @@ export function enabledSkillPredicate(): SQL | undefined {
 }
 
 class SkillModel {
+  /**
+   * The skills with `scope` set from each skill's grants instead of the
+   * retired column, which every new skill stores as `personal`: `org` when
+   * they reach the organization or a role, `team` when they reach a team,
+   * `personal` otherwise. Name precedence and API responses read this.
+   */
+  static async withGrantedScope<
+    T extends { id: string; organizationId: string; scope: string },
+  >(skills: T[]): Promise<(T & { scope: ResourceVisibilityScope })[]> {
+    const idsByOrganization = new Map<string, string[]>();
+    for (const skill of skills) {
+      idsByOrganization.set(skill.organizationId, [
+        ...(idsByOrganization.get(skill.organizationId) ?? []),
+        skill.id,
+      ]);
+    }
+    const audiences = new Map<string, ResourceVisibilityScope>();
+    for (const [organizationId, scopes] of idsByOrganization) {
+      const found = await ResourcePermissionPolicyModel.findAudiences({
+        organizationId,
+        resource: "skill",
+        scopes,
+      });
+      for (const [id, { audience }] of found) audiences.set(id, audience);
+    }
+    return skills.map((skill) => ({
+      ...skill,
+      scope: audiences.get(skill.id) ?? "personal",
+    }));
+  }
+
   static async transferOwnership(params: {
     id: string;
     organizationId: string;
@@ -1747,16 +1779,27 @@ function buildOrgFilters(params: {
         ]
       : []),
     // SPDX-SnippetEnd
-    ...(params.scope ? [eq(schema.skillsTable.scope, params.scope)] : []),
+    // The audience and team filters read each skill's grants, not the
+    // retired scope column and team rows.
+    ...(params.scope
+      ? [
+          ResourcePermissionPolicyModel.audienceIs({
+            organizationId: schema.skillsTable.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            ownerColumn: schema.skillsTable.authorId,
+            audience: params.scope,
+          }),
+        ]
+      : []),
     ...(params.teamIds?.length
       ? [
-          inArray(
-            schema.skillsTable.id,
-            db
-              .select({ skillId: schema.skillTeamsTable.skillId })
-              .from(schema.skillTeamsTable)
-              .where(inArray(schema.skillTeamsTable.teamId, params.teamIds)),
-          ),
+          ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            organizationId: schema.skillsTable.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            teamIds: params.teamIds,
+          }),
         ]
       : []),
     ...(params.authorIds?.length
@@ -1770,13 +1813,23 @@ function buildOrgFilters(params: {
           ),
         ]
       : []),
+    // Hide other people's author-only skills: those whose grants reach
+    // nobody but their author. A shared skill and a built-in (no author) stay.
     ...(params.excludeOtherPersonalForUserId
       ? [
           or(
-            ne(schema.skillsTable.scope, "personal"),
+            isNull(schema.skillsTable.authorId),
             eq(
               schema.skillsTable.authorId,
               params.excludeOtherPersonalForUserId,
+            ),
+            not(
+              ResourcePermissionPolicyModel.reachesOnlyOwner({
+                organizationId: schema.skillsTable.organizationId,
+                resource: "skill",
+                scopeColumn: schema.skillsTable.id,
+                ownerColumn: schema.skillsTable.authorId,
+              }),
             ),
           ),
         ]

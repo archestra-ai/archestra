@@ -987,7 +987,12 @@ async function findAccessibleSkill(
   }
   if (accessible.length === 0) return null;
 
-  return selectEffectiveNativeSkills(accessible, ctx.userId)[0] ?? null;
+  return (
+    selectEffectiveNativeSkills(
+      await SkillModel.withGrantedScope(accessible),
+      ctx.userId,
+    )[0] ?? null
+  );
 }
 
 /**

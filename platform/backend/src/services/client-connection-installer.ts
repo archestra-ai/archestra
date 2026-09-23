@@ -71,6 +71,7 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
     let state;
     try { state = await request('/api/client-connections/poll', { deviceCode: started.deviceCode }); }
     catch (error) {
+      if (certificateError(error)) throw error;
       if (!error.retryable && !(error instanceof TypeError) && error.name !== 'TimeoutError') throw error;
       console.log('Deployment temporarily unavailable. Retrying while approval is pending...');
       await new Promise(resolve => setTimeout(resolve, 7000));
@@ -188,5 +189,32 @@ async function openDesktopTerminal({ origin, platform, noOpen, setupToken }) {
   child.unref();
   console.log('Desktop setup opened in a separate terminal. Review its browser approval. The terminal will verify inference and restart Desktop; this conversation may close.');
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+/**
+ * Node's fetch reports every transport failure as a TypeError reading only
+ * 'fetch failed'. The reason sits on error.cause. A certificate the runtime
+ * does not trust is the one reason a caller can fix, and it is easy to miss
+ * because curl reads the system CA store while Node does not, so the same URL
+ * works in the shell and fails here.
+ */
+function errorCode(error) {
+  const code = error && error.cause && error.cause.code;
+  return typeof code === 'string' ? code : undefined;
+}
+function certificateError(error) {
+  const code = errorCode(error);
+  return code !== undefined && (code.indexOf('CERT') !== -1 || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || code === 'UNABLE_TO_GET_ISSUER_CERT');
+}
+function describeError(error) {
+  const code = errorCode(error);
+  // A name mismatch is a certificate problem too, but a CA bundle never fixes
+  // it, so it must not be answered with the CA advice below.
+  if (code === 'ERR_TLS_CERT_ALTNAME_INVALID') {
+    return 'The deployment\'s TLS certificate is not valid for this hostname (' + code + '). Use the hostname the certificate was issued for in --url.';
+  }
+  if (certificateError(error)) {
+    return 'Node.js does not trust this deployment\'s TLS certificate (' + code + '). curl can still succeed here, because it reads the system CA store and Node.js does not. Re-run with the CA bundle: NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt node <installer> --url ... (use your own bundle path; on macOS export it from Keychain Access).';
+  }
+  return code ? error.message + ' (' + code + ')' : error.message;
+}
+main().catch(error => { console.error(describeError(error)); process.exitCode = 1; });
 `;

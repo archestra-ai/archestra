@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import * as fileSystem from "node:fs/promises";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { createServer as createSecureServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -440,3 +441,81 @@ test.each([
   expect(polls).toBe(0);
   expect(downloads).toBe(0);
 });
+
+// Node's fetch reports every transport failure as "fetch failed" and hides the
+// reason on error.cause. An untrusted certificate is the one cause the caller
+// can fix, and it is easy to misread: curl reads the system CA store, so the
+// same URL succeeds in the shell and fails inside the installer.
+test("an untrusted certificate fails immediately and names the fix", async () => {
+  const tls = await mkdtemp(join(tmpdir(), "connect-installer-tls-"));
+  try {
+    await promisify(execFile)("openssl", [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-keyout",
+      join(tls, "key.pem"),
+      "-out",
+      join(tls, "cert.pem"),
+      "-days",
+      "1",
+      "-nodes",
+      "-subj",
+      "/CN=127.0.0.1",
+      "-addext",
+      "subjectAltName=IP:127.0.0.1",
+    ]);
+
+    let requests = 0;
+    const secure = createSecureServer(
+      {
+        key: readFileSync(join(tls, "key.pem")),
+        cert: readFileSync(join(tls, "cert.pem")),
+      },
+      (_request, response) => {
+        requests++;
+        response.end("{}");
+      },
+    );
+    secure.listen(0, "127.0.0.1");
+    await once(secure, "listening");
+    const { port } = secure.address() as { port: number };
+
+    try {
+      const started = Date.now();
+      const result = await run(`https://127.0.0.1:${port}`, "opencode");
+      const elapsed = Date.now() - started;
+
+      expect(result.code).toBe(1);
+      // The cause code, not the bare "fetch failed" the runtime hands us.
+      expect(result.output).toContain("DEPTH_ZERO_SELF_SIGNED_CERT");
+      expect(result.output).toContain("NODE_EXTRA_CA_CERTS");
+      // The handshake never completed, so the deployment saw nothing, and the
+      // installer must not sit in its retry loop waiting for approval.
+      expect(requests).toBe(0);
+      expect(result.output).not.toContain("Retrying while approval is pending");
+      expect(elapsed).toBeLessThan(20_000);
+    } finally {
+      secure.close();
+      await once(secure, "close");
+    }
+  } finally {
+    await rm(tls, { recursive: true, force: true });
+  }
+}, 40_000);
+
+test("a transport failure that is not a certificate problem still reports its cause", async () => {
+  const idle = createServer();
+  idle.listen(0, "127.0.0.1");
+  await once(idle, "listening");
+  const { port } = idle.address() as { port: number };
+  idle.close();
+  await once(idle, "close");
+
+  const result = await run(`https://127.0.0.1:${port}`, "opencode");
+
+  expect(result.code).toBe(1);
+  expect(result.output).toContain("ECONNREFUSED");
+  expect(result.output).not.toContain("NODE_EXTRA_CA_CERTS");
+}, 40_000);

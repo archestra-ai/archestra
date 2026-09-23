@@ -389,6 +389,42 @@ class AgentModel {
   }
 
   /**
+   * Set each agent's `scope` from its grants instead of the retired column,
+   * which every new agent stores as `personal`: `org` when they reach the
+   * organization or a role, `team` when they reach a team, `personal`
+   * otherwise. An LLM proxy has no grants and keeps its column.
+   */
+  private static async populateGrantedScope(
+    agents: Pick<Agent, "id" | "organizationId" | "agentType" | "scope">[],
+  ): Promise<void> {
+    const byKey = new Map<string, string[]>();
+    for (const agent of agents) {
+      if (agent.agentType === "llm_proxy") continue;
+      const resource =
+        agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+      const key = `${agent.organizationId}\u0000${resource}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), agent.id]);
+    }
+    const audiences = new Map<string, AgentScope>();
+    for (const [key, scopes] of byKey) {
+      const [organizationId, resource] = key.split("\u0000") as [
+        string,
+        "agent" | "mcpGateway",
+      ];
+      const found = await ResourcePermissionPolicyModel.findAudiences({
+        organizationId,
+        resource,
+        scopes,
+      });
+      for (const [id, { audience }] of found) audiences.set(id, audience);
+    }
+    for (const agent of agents) {
+      const audience = audiences.get(agent.id);
+      if (audience) agent.scope = audience;
+    }
+  }
+
+  /**
    * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
@@ -889,6 +925,7 @@ class AgentModel {
       connectorIds: connectorIds ?? [],
       suggestedPrompts: suggestedPrompts ?? [],
     };
+    await AgentModel.populateGrantedScope([result]);
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
@@ -1089,6 +1126,7 @@ class AgentModel {
     }
 
     await Promise.all([
+      AgentModel.populateGrantedScope(agents),
       isChatView ? Promise.resolve() : AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
@@ -1175,6 +1213,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateGrantedScope(results);
     await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
@@ -1325,6 +1364,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateGrantedScope(results);
     await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
@@ -1946,6 +1986,7 @@ class AgentModel {
     }
 
     await Promise.all([
+      AgentModel.populateGrantedScope(agents),
       AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
@@ -2858,6 +2899,7 @@ class AgentModel {
     };
 
     await Promise.all([
+      AgentModel.populateGrantedScope([result]),
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
       AgentModel.populateResolvedLlm([result]),
@@ -3132,6 +3174,7 @@ class AgentModel {
     };
 
     await Promise.all([
+      AgentModel.populateGrantedScope([result]),
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
       AgentModel.populateResolvedLlm([result]),
@@ -3470,7 +3513,7 @@ class AgentModel {
 
     if (!updatedAgent) return null;
 
-    return {
+    const result = {
       ...updatedAgent,
       tools: toolRows,
       teams: currentTeams,
@@ -3479,6 +3522,8 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
+    await AgentModel.populateGrantedScope([result]);
+    return result;
   }
 
   /**

@@ -5,6 +5,7 @@ import { describe, expect, test } from "@/test";
 import { SelectLlmProviderApiKeySchema } from "@/types";
 import { _resetCachedKey } from "@/utils/crypto";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("LlmProviderApiKeyModel", () => {
   test("an old validation cannot overwrite a reconnected credential", async ({
@@ -853,6 +854,80 @@ describe("LlmProviderApiKeyModel", () => {
   });
 
   describe("resolveApiKey", () => {
+    // Decision 2 order, read from grants: the owner's key, then a shared key
+    // granted to one of the caller's teams (even when it also reaches the
+    // organization), then an organization key. The retired scope column plays
+    // no part, and a newer, primary organization key does not jump the queue.
+    test("ranks a key granted to the caller's team above an organization key, by grants", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      const teamKey = await makeLlmProviderApiKey(
+        org.id,
+        (await makeSecret()).id,
+        {
+          name: "Team and org",
+          access: { teams: [team.id] },
+        },
+      );
+      // The same key also reaches the organization.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "llmProviderApiKey",
+        scope: teamKey.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: org.id,
+        resource: "llmProviderApiKey",
+        scope: teamKey.id,
+        revision: policy?.revision ?? 0,
+        grants: [
+          ...(policy?.grants ?? []),
+          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        ],
+      });
+      await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+        name: "Org primary",
+        isPrimary: true,
+        access: "org",
+      });
+
+      const resolve = () =>
+        LlmProviderApiKeyModel.getCurrentApiKey({
+          organizationId: org.id,
+          userId: user.id,
+          userTeamIds: [team.id],
+          provider: "anthropic",
+          conversationId: null,
+        });
+      expect((await resolve())?.id).toBe(teamKey.id);
+
+      const ownKey = await makeLlmProviderApiKey(
+        org.id,
+        (await makeSecret()).id,
+        { name: "Mine", userId: user.id },
+      );
+      expect((await resolve())?.id).toBe(ownKey.id);
+
+      const scopes = await LlmProviderApiKeyModel.findDisplayScopes({
+        organizationId: org.id,
+        keys: [teamKey, ownKey],
+      });
+      expect(scopes.get(ownKey.id)).toBe("personal");
+      expect(scopes.get(teamKey.id)).toBe("org");
+    });
+
     test("returns personal key first", async ({
       makeOrganization,
       makeUser,

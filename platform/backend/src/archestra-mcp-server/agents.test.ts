@@ -489,8 +489,8 @@ describe("agent tool execution", () => {
         name: "triage-incidents",
         activationName: "triage-incidents",
         description: "Triage incoming incidents",
-        // The retired visibility column, shown as stored until it is dropped.
-        scope: skill.scope,
+        // Derived from the skill's grants, not the retired column.
+        scope: "org",
         providerName: null,
       },
     ]);

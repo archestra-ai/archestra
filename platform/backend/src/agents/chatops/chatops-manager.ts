@@ -2113,9 +2113,19 @@ export class ChatOpsManager {
 
       const providerLabel =
         providerDisplayNames[selectedProvider] ?? selectedProvider;
-      const keyDescription = key
-        ? `the ${LLM_KEY_SCOPE_LABELS[key.scope]} ${providerLabel} API key "${key.name}"`
-        : `the ${providerLabel} API key from the server environment`;
+      // The label reads the key's owner and grants, not the retired column.
+      const keyScope = key
+        ? ((
+            await LlmProviderApiKeyModel.findDisplayScopes({
+              organizationId: params.organizationId,
+              keys: [key],
+            })
+          ).get(key.id) ?? "personal")
+        : null;
+      const keyDescription =
+        key && keyScope
+          ? `the ${LLM_KEY_SCOPE_LABELS[keyScope]} ${providerLabel} API key "${key.name}"`
+          : `the ${providerLabel} API key from the server environment`;
       return `This request used ${keyDescription} with model \`${selectedModel}\`.`;
     } catch (error) {
       logger.warn(

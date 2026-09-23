@@ -202,6 +202,7 @@ class InternalMcpCatalogModel {
       labels: itemLabels,
       teams: itemTeams,
     };
+    await InternalMcpCatalogModel.populateGrantedScope([result]);
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
@@ -508,6 +509,7 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
     }
 
+    await InternalMcpCatalogModel.populateGrantedScope([catalogItem]);
     await InternalMcpCatalogModel.populateAuthorNames([catalogItem]);
 
     return catalogItem;
@@ -1017,6 +1019,7 @@ class InternalMcpCatalogModel {
       labels: itemLabels,
       teams: itemTeams,
     };
+    await InternalMcpCatalogModel.populateGrantedScope([result]);
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
@@ -1678,7 +1681,7 @@ class InternalMcpCatalogModel {
         InternalMcpCatalogModel.getSkillStats(ids),
       ]);
 
-    return dbItems.map((item) => ({
+    const items = dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
       teams: teamsMap.get(item.id) || [],
@@ -1687,6 +1690,46 @@ class InternalMcpCatalogModel {
       skillCount: skillStatsMap.get(item.id) ?? 0,
       providesSkills: (skillStatsMap.get(item.id) ?? 0) > 0,
     }));
+    await InternalMcpCatalogModel.populateGrantedScope(items);
+    return items;
+  }
+
+  /**
+   * Set each catalog item's `scope` from its grants instead of the retired
+   * column: `org` when they reach the organization or a role, `team` when
+   * they reach a team, `personal` otherwise. A global item (no organization)
+   * and an app's backing item (no registry policy; its install scope follows
+   * the app) keep their column.
+   */
+  private static async populateGrantedScope(
+    items: Array<{
+      id: string;
+      organizationId: string | null;
+      serverType: string;
+      scope: ResourceVisibilityScope;
+    }>,
+  ): Promise<void> {
+    const idsByOrganization = new Map<string, string[]>();
+    for (const item of items) {
+      if (!item.organizationId || item.serverType === "app") continue;
+      idsByOrganization.set(item.organizationId, [
+        ...(idsByOrganization.get(item.organizationId) ?? []),
+        item.id,
+      ]);
+    }
+    const audiences = new Map<string, ResourceVisibilityScope>();
+    for (const [organizationId, scopes] of idsByOrganization) {
+      const found = await ResourcePermissionPolicyModel.findAudiences({
+        organizationId,
+        resource: "mcpRegistry",
+        scopes,
+      });
+      for (const [id, { audience }] of found) audiences.set(id, audience);
+    }
+    for (const item of items) {
+      const audience = audiences.get(item.id);
+      if (audience) item.scope = audience;
+    }
   }
 
   private static buildListCondition(

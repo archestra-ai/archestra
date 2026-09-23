@@ -24,6 +24,7 @@ import {
   isReservedAppSlug,
 } from "@/types/app";
 import type { LabelWithDetails } from "@/types/label";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
@@ -47,9 +48,15 @@ const COLLISION_SUFFIX_LENGTH = 7;
 // of the code. Keeping the icon there (rather than duplicating it on the app
 // row) means the app and the registry entry that fronts it cannot disagree
 // about it, whichever surface last edited it.
+// `scope` is derived from the app's own grants, not the retired catalog
+// column: `org` when they reach the organization or a role, `team` when they
+// reach a team, `personal` otherwise.
 const appWithCatalogColumns = {
   ...getTableColumns(schema.appsTable),
-  scope: schema.internalMcpCatalogTable.scope,
+  scope: sql<ResourceVisibilityScope>`CASE
+    WHEN ${appAudienceIs("org")} THEN 'org'
+    WHEN ${appAudienceIs("team")} THEN 'team'
+    ELSE 'personal' END`,
   environmentId: schema.internalMcpCatalogTable.environmentId,
   icon: schema.internalMcpCatalogTable.icon,
 };
@@ -989,3 +996,17 @@ function auditIcon(icon: string | null): string | null {
 }
 
 export default AppModel;
+
+function appAudienceIs(audience: ResourceVisibilityScope) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.audienceIs({
+    organizationId: schema.appsTable.organizationId,
+    resource: "app",
+    scopeColumn: schema.appsTable.id,
+    ownerColumn: schema.appsTable.authorId,
+    audience,
+  });
+  // SPDX-SnippetEnd
+}

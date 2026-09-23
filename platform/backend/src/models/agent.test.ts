@@ -717,6 +717,9 @@ describe("AgentModel", () => {
 
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0]).toMatchObject({ id: team1.id, name: team1.name });
+      // `scope` is read from the grants too, not the stored "personal".
+      expect(agent.scope).toBe("team");
+      expect((await AgentModel.findById(agent.id))?.scope).toBe("team");
 
       const updatedAgent = await AgentModel.update(agent.id, {
         teams: [team2.id],

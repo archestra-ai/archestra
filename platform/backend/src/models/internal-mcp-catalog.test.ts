@@ -640,6 +640,8 @@ describe("InternalMcpCatalogModel", () => {
       expect(catalog?.teams).toEqual([
         expect.objectContaining({ id: team.id, name: team.name }),
       ]);
+      // `scope` is read from the grants, not the retired column.
+      expect(catalog?.scope).toBe("team");
     });
 
     test("findById with access check denies non-authorized user", async ({

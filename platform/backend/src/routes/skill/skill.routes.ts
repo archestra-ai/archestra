@@ -654,7 +654,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       return reply.send({
-        data: skills.map((skill) => ({
+        // `scope` from each skill's grants, not the retired column.
+        data: (await SkillModel.withGrantedScope(skills)).map((skill) => ({
           ...skill,
           canPublish: publicationPermissions.get(skill.id),
           // skill_files holds only bundled resources; +1 for the mandatory
@@ -1911,8 +1912,9 @@ async function loadSkillDetail(skill: Skill) {
     CreatedByModel.resolveOne(CreatedByModel.id(skill, skill.authorId)),
     SkillLabelModel.getLabelsFor(skill.id),
   ]);
+  const [withScope] = await SkillModel.withGrantedScope([skill]);
   return {
-    ...skill,
+    ...withScope,
     createdBy,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],

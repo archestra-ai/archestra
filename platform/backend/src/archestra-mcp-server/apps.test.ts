@@ -3750,7 +3750,8 @@ describe("publish_app", () => {
     expect((result.content[0] as any).text).toContain(
       `[${app.name}](/a/${app.slug})`,
     );
-    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+    // An app's scope is read from its grants: publishing makes it `org`.
+    expect((await AppModel.findById(app.id))?.scope).toBe("org");
     expect(
       (
         await ResourcePermissionPolicyModel.find({
@@ -3787,8 +3788,9 @@ describe("publish_app", () => {
 
     const result = await publish({ appId: app.id, scope: "org" }, context);
     expect(result.isError).toBe(false);
-    // scope is unchanged — the gate rejected the promotion
-    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+    // The creator's full access lets them publish; the app's scope, read
+    // from its grants, is now `org`.
+    expect((await AppModel.findById(app.id))?.scope).toBe("org");
   });
 
   test("publishing to a team requires teams", async ({

@@ -38,6 +38,7 @@ import type {
   SecretValue,
   UpdateLlmProviderApiKey,
 } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
@@ -359,15 +360,22 @@ class LlmProviderApiKeyModel {
         }),
       )
     ).filter((key) => key !== null);
-    const labelsByKey = await LlmProviderApiKeyLabelModel.getLabelsForMany(
-      accessibleKeys.map((key) => key.id),
-    );
+    const [labelsByKey, displayScopes] = await Promise.all([
+      LlmProviderApiKeyLabelModel.getLabelsForMany(
+        accessibleKeys.map((key) => key.id),
+      ),
+      LlmProviderApiKeyModel.findDisplayScopes({
+        organizationId,
+        keys: accessibleKeys,
+      }),
+    ]);
 
     return CreatedByModel.attach(
       await Promise.all(
         accessibleKeys.map(async (key) => ({
           ...(await toApiKeyWithScopeInfo(
-            key,
+            // `scope` from the owner column and grants, not the retired one.
+            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
             options?.includeSubscriptionInfo === true,
           )),
           labels: labelsByKey.get(key.id) ?? [],
@@ -488,15 +496,22 @@ class LlmProviderApiKeyModel {
         }),
       )
     ).filter((key) => key !== null);
-    const labelsByKey = await LlmProviderApiKeyLabelModel.getLabelsForMany(
-      accessibleKeys.map((key) => key.id),
-    );
+    const [labelsByKey, displayScopes] = await Promise.all([
+      LlmProviderApiKeyLabelModel.getLabelsForMany(
+        accessibleKeys.map((key) => key.id),
+      ),
+      LlmProviderApiKeyModel.findDisplayScopes({
+        organizationId,
+        keys: accessibleKeys,
+      }),
+    ]);
 
     return CreatedByModel.attach(
       await Promise.all(
         accessibleKeys.map(async (key) => ({
           ...(await toApiKeyWithScopeInfo(
-            key,
+            // `scope` from the owner column and grants, not the retired one.
+            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
             options?.includeSubscriptionInfo === true,
           )),
           labels: labelsByKey.get(key.id) ?? [],
@@ -606,6 +621,7 @@ class LlmProviderApiKeyModel {
     const rank = await LlmProviderApiKeyModel.ownershipRanks({
       organizationId,
       userId,
+      userTeamIds,
       keys: available,
     });
     available.sort(
@@ -710,6 +726,7 @@ class LlmProviderApiKeyModel {
     const rank = await LlmProviderApiKeyModel.ownershipRanks({
       organizationId,
       userId,
+      userTeamIds,
       keys: usable,
     });
     return (
@@ -804,10 +821,44 @@ class LlmProviderApiKeyModel {
    * the rest of getCurrentApiKey runs.
    */
   /**
-   * Resolution order among keys a caller may use: their own key first, then
-   * a key their team was granted, then anything else. "Own" is the key's
-   * owner column. "Team" is the key's own grants reaching a team, the same
-   * label the retired scope column used to carry.
+   * The label the retired `scope` column carried, derived for display: a key
+   * with an owner is `personal`. A shared key (no owner) is `team` when its
+   * grants reach teams and not the organization, and `org` otherwise, the
+   * partition shared keys live in. The chatops key label and API responses
+   * read this.
+   */
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async findDisplayScopes(params: {
+    organizationId: string;
+    keys: Array<{ id: string; userId: string | null }>;
+  }): Promise<Map<string, ResourceVisibilityScope>> {
+    const shared = params.keys.filter((key) => key.userId === null);
+    const audiences = await ResourcePermissionPolicyModel.findAudiences({
+      organizationId: params.organizationId,
+      resource: "llmProviderApiKey",
+      scopes: shared.map((key) => key.id),
+    });
+    return new Map(
+      params.keys.map((key) => [
+        key.id,
+        key.userId !== null
+          ? "personal"
+          : audiences.get(key.id)?.audience === "team"
+            ? "team"
+            : "org",
+      ]),
+    );
+  }
+  // SPDX-SnippetEnd
+
+  /**
+   * Resolution order among keys a caller may use (decision: owner column
+   * first, then team-granted, then organization): their own key first, then
+   * a key whose grants reach one of the caller's teams (or reach teams only),
+   * then anything else. "Own" is the key's owner column. A key shared with a
+   * caller's team AND the organization still ranks as the team's key.
    */
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -815,6 +866,7 @@ class LlmProviderApiKeyModel {
   private static async ownershipRanks(params: {
     organizationId: string;
     userId: string | undefined;
+    userTeamIds: string[];
     keys: Array<{ id: string; userId: string | null }>;
   }): Promise<Map<string, number>> {
     const audiences = await ResourcePermissionPolicyModel.findAudiences({
@@ -827,7 +879,10 @@ class LlmProviderApiKeyModel {
         key.id,
         params.userId !== undefined && key.userId === params.userId
           ? 0
-          : audiences.get(key.id)?.audience === "team"
+          : audiences.get(key.id)?.audience === "team" ||
+              (audiences.get(key.id)?.teamIds ?? []).some((teamId) =>
+                params.userTeamIds.includes(teamId),
+              )
             ? 1
             : 2,
       ]),

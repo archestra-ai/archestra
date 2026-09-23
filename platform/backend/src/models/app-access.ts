@@ -93,109 +93,52 @@ class AppAccessModel {
     return grant !== undefined;
   }
 
-  /** Team IDs assigned to one app (via its backing catalog). */
+  /** The teams an app's own policy grants read to. */
   static async getTeamsForApp(appId: string): Promise<string[]> {
-    const rows = await db
-      .select({ teamId: schema.mcpCatalogTeamsTable.teamId })
-      .from(schema.appsTable)
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .innerJoin(
-        schema.mcpCatalogTeamsTable,
-        eq(
-          schema.mcpServersTable.catalogId,
-          schema.mcpCatalogTeamsTable.catalogId,
-        ),
-      )
-      .where(eq(schema.appsTable.id, appId));
-    return rows.map((r) => r.teamId);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["app"],
+      scopes: [appId],
+    });
+    return recipients.get(appId)?.teamIds ?? [];
   }
 
   /**
-   * Individually-granted user details for several apps in one query (no N+1).
-   * The Users analogue of {@link getTeamDetailsForApps}: it backs the "shared
-   * with" list in App settings, so the author can see who an app reaches by
-   * name rather than only which teams it reaches.
+   * The people an app's own policy grants read to, other than its author,
+   * for several apps. Backs the "shared with" list in App settings next to
+   * {@link getTeamDetailsForApps}.
    */
   static async getUserDetailsForApps(
     appIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string; email: string }>>> {
-    const map = new Map<
-      string,
-      Array<{ id: string; name: string; email: string }>
-    >();
-    for (const id of appIds) map.set(id, []);
-    if (appIds.length === 0) return map;
-
-    const rows = await db
-      .select({
-        appId: schema.appsTable.id,
-        userId: schema.mcpCatalogUsersTable.userId,
-        userName: schema.usersTable.name,
-        userEmail: schema.usersTable.email,
-      })
+    if (appIds.length === 0) return new Map();
+    const authors = await db
+      .select({ id: schema.appsTable.id, authorId: schema.appsTable.authorId })
       .from(schema.appsTable)
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .innerJoin(
-        schema.mcpCatalogUsersTable,
-        eq(
-          schema.mcpServersTable.catalogId,
-          schema.mcpCatalogUsersTable.catalogId,
-        ),
-      )
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.mcpCatalogUsersTable.userId, schema.usersTable.id),
-      )
       .where(inArray(schema.appsTable.id, appIds));
-
-    for (const { appId, userId, userName, userEmail } of rows) {
-      map.get(appId)?.push({ id: userId, name: userName, email: userEmail });
-    }
-    return map;
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["app"],
+        scopes: appIds,
+        excludeUserIds: new Map(authors.map((row) => [row.id, row.authorId])),
+      });
+    return new Map(appIds.map((id) => [id, details.get(id)?.users ?? []]));
   }
 
-  /** Team details (id + name) for several apps in one query (no N+1). */
+  /** Team details (id + name) for {@link getTeamsForApp}, for several apps. */
   static async getTeamDetailsForApps(
     appIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const map = new Map<string, Array<{ id: string; name: string }>>();
-    for (const id of appIds) map.set(id, []);
-    if (appIds.length === 0) return map;
-
-    const rows = await db
-      .select({
-        appId: schema.appsTable.id,
-        teamId: schema.mcpCatalogTeamsTable.teamId,
-        teamName: schema.teamsTable.name,
-      })
-      .from(schema.appsTable)
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .innerJoin(
-        schema.mcpCatalogTeamsTable,
-        eq(
-          schema.mcpServersTable.catalogId,
-          schema.mcpCatalogTeamsTable.catalogId,
-        ),
-      )
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.mcpCatalogTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(inArray(schema.appsTable.id, appIds));
-
-    for (const { appId, teamId, teamName } of rows) {
-      map.get(appId)?.push({ id: teamId, name: teamName });
-    }
-    return map;
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["app"],
+        scopes: appIds,
+      });
+    return new Map(
+      appIds.map((id) => [
+        id,
+        (details.get(id)?.teams ?? []).map(({ id, name }) => ({ id, name })),
+      ]),
+    );
   }
 }
 

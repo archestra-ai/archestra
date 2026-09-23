@@ -993,35 +993,6 @@ class TeamModel {
     );
   }
 
-  /**
-   * Get all teams for an agent with their compression settings
-   */
-  static async getTeamsForAgent(agentId: string): Promise<Team[]> {
-    logger.debug(
-      { agentId },
-      "TeamModel.getTeamsForAgent: fetching agent teams",
-    );
-    const agentTeams = await db
-      .select({
-        team: schema.teamsTable,
-      })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.agentTeamsTable.agentId, agentId));
-
-    logger.debug(
-      { agentId, count: agentTeams.length },
-      "TeamModel.getTeamsForAgent: completed",
-    );
-    return agentTeams.map((result) => ({
-      ...result.team,
-      members: [], // Members not needed for compression logic
-    }));
-  }
-
   // ==========================================
   // External Group Sync Methods
   // ==========================================

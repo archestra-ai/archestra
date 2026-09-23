@@ -349,9 +349,6 @@ const registry = defineArchestraTools([
             id: randomUUID(),
             name: args.displayName,
             authorId: ctx.userId,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

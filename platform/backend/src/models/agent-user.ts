@@ -6,6 +6,7 @@ import {
   normalizeResourceUserInput,
   type ResourceUserInput,
 } from "@/types/resource-user-level";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * Individually-named grants on an agent — the per-person counterpart to
@@ -104,39 +105,28 @@ class AgentUserModel {
     return new Set(rows.map((row) => row.id));
   }
 
-  /** Grantee details for several agents in one query (no N+1). */
+  /**
+   * The people an agent's own policy grants read to, other than its author,
+   * for the "shared with" list.
+   */
   static async getUserDetailsForAgents(
     agentIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string; email: string }>>> {
-    const map = new Map<
-      string,
-      Array<{ id: string; name: string; email: string }>
-    >();
-    for (const id of agentIds) map.set(id, []);
-    if (agentIds.length === 0) return map;
-
-    const rows = await db
+    if (agentIds.length === 0) return new Map();
+    const authors = await db
       .select({
-        resourceId: schema.agentUsersTable.agentId,
-        userId: schema.agentUsersTable.userId,
-        userName: schema.usersTable.name,
-        userEmail: schema.usersTable.email,
+        id: schema.agentsTable.id,
+        authorId: schema.agentsTable.authorId,
       })
-      .from(schema.agentUsersTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.agentUsersTable.userId, schema.usersTable.id),
-      )
-      .where(inArray(schema.agentUsersTable.agentId, agentIds));
-
-    for (const { resourceId, userId, userName, userEmail } of rows) {
-      map.get(resourceId)?.push({
-        id: userId,
-        name: userName,
-        email: userEmail,
+      .from(schema.agentsTable)
+      .where(inArray(schema.agentsTable.id, agentIds));
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["agent", "mcpGateway"],
+        scopes: agentIds,
+        excludeUserIds: new Map(authors.map((row) => [row.id, row.authorId])),
       });
-    }
-    return map;
+    return new Map(agentIds.map((id) => [id, details.get(id)?.users ?? []]));
   }
 }
 

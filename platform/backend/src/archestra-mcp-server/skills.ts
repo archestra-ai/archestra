@@ -526,9 +526,6 @@ const registry = defineArchestraTools([
             id: resourceId,
             name: parsed.name,
             authorId: ctx.userId,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

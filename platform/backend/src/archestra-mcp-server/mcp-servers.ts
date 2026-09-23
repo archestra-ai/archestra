@@ -1152,9 +1152,6 @@ async function handleCreateMcpServer(
           id: crypto.randomUUID(),
           name,
           authorId: context.userId,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd

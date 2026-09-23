@@ -132,8 +132,10 @@ describe("GET /api/apps/:appId", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ id: personal.id });
-    // The access grant is stored in the policy, not the retired users list.
-    expect(response.json().users).toEqual([]);
+    // The "shared with" list reads the app's grants.
+    expect(response.json().users).toEqual([
+      expect.objectContaining({ id: other.id }),
+    ]);
   });
 
   test("revoking the grant closes access again", async ({

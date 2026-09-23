@@ -716,9 +716,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: resourceId,
             name: parsed.name,
             authorId: user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -1637,9 +1634,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: crypto.randomUUID(),
           name: "Imported skill",
           authorId: user.id,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd

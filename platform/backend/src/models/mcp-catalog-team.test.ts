@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { expect } from "vitest";
+import db, { schema } from "@/database";
 import { test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -215,6 +217,40 @@ test("userHasCatalogAccess treats global catalog items by their grants", async (
   await expect(check()).resolves.toBe(true);
 });
 
+test("a catalog item's teams and their levels come from its grants", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const editors = await makeTeam(org.id, user.id, { name: "Editors" });
+  const users = await makeTeam(org.id, user.id, { name: "Users" });
+  // No retired team rows: the grants alone name the teams.
+  const catalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    access: {
+      teams: [
+        { id: editors.id, level: "edit" },
+        { id: users.id, level: "use" },
+      ],
+    },
+  });
+
+  const details = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+    catalog.id,
+  );
+
+  expect(details).toEqual(
+    expect.arrayContaining([
+      { id: editors.id, name: "Editors", level: "write" },
+      { id: users.id, name: "Users", level: "use" },
+    ]),
+  );
+  expect(details).toHaveLength(2);
+});
+
 test("syncCatalogTeams replaces team assignments", async ({
   makeOrganization,
   makeUser,
@@ -232,19 +268,19 @@ test("syncCatalogTeams replaces team assignments", async ({
     organizationId: org.id,
   });
 
-  let teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id);
+  let teams = await storedTeamRows(catalog.id);
   expect(teams).toHaveLength(1);
   expect(teams[0].id).toBe(team1.id);
 
   // Replace with team2
   await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [team2.id]);
-  teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id);
+  teams = await storedTeamRows(catalog.id);
   expect(teams).toHaveLength(1);
   expect(teams[0].id).toBe(team2.id);
 
   // Clear all
   await McpCatalogTeamModel.syncCatalogTeams(catalog.id, []);
-  teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id);
+  teams = await storedTeamRows(catalog.id);
   expect(teams).toHaveLength(0);
 });
 
@@ -267,9 +303,7 @@ test("syncCatalogTeams stores an explicit level and reads it back", async ({
     { id: team.id, level: "use" },
   ]);
 
-  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-    catalog.id,
-  );
+  const [detail] = await storedTeamRows(catalog.id);
   expect(detail.level).toBe("use");
 });
 
@@ -289,9 +323,7 @@ test("a team assigned with a bare id defaults to write", async ({
     organizationId: org.id,
   });
 
-  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-    catalog.id,
-  );
+  const [detail] = await storedTeamRows(catalog.id);
   expect(detail.level).toBe("write");
 });
 
@@ -313,9 +345,7 @@ test("syncCatalogTeams preserves a stored level when re-synced with a bare id", 
   // A level-less id must not reset the stored `use` back to the NULL default.
   await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [team.id]);
 
-  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-    catalog.id,
-  );
+  const [detail] = await storedTeamRows(catalog.id);
   expect(detail.level).toBe("use");
 });
 
@@ -338,9 +368,7 @@ test("syncCatalogTeams applies an explicit level over the stored one", async ({
     { id: team.id, level: "write" },
   ]);
 
-  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-    catalog.id,
-  );
+  const [detail] = await storedTeamRows(catalog.id);
   expect(detail.level).toBe("write");
 });
 
@@ -367,9 +395,7 @@ test("syncCatalogTeams honors a mixed list, preserving each team's stored level"
   ]);
 
   const levels = Object.fromEntries(
-    (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id)).map(
-      (t) => [t.id, t.level],
-    ),
+    (await storedTeamRows(catalog.id)).map((t) => [t.id, t.level]),
   );
   expect(levels).toEqual({ [keep.id]: "use", [added.id]: "write" });
 });
@@ -424,3 +450,17 @@ test("a catalog item is in front of the organization by its grants, not its reti
     }),
   ).toBe(true);
 });
+
+/**
+ * The team rows `syncCatalogTeams` stored. Readers take a catalog item's teams
+ * from its grants now, so the writer tests read the rows themselves.
+ */
+async function storedTeamRows(catalogId: string) {
+  return db
+    .select({
+      id: schema.mcpCatalogTeamsTable.teamId,
+      level: schema.mcpCatalogTeamsTable.level,
+    })
+    .from(schema.mcpCatalogTeamsTable)
+    .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
+}

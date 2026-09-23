@@ -509,9 +509,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.name,
             authorId: null,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -1176,9 +1173,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.name,
             authorId: null,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

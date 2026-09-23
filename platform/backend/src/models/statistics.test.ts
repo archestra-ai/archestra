@@ -1,5 +1,4 @@
 import type { StatisticsTimeFrame } from "@archestra/shared";
-import AgentTeamModel from "@/models/agent-team";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import StatisticsModel from "./statistics";
@@ -37,15 +36,15 @@ describe("StatisticsModel", () => {
         users.slice(1).map((user) => makeTeamMember(teamBeta.id, user.id)),
       );
 
+      // Team statistics follow the teams the agents' grants reach.
       const alphaAgent = await makeAgent({
         organizationId: org.id,
+        access: { teams: [teamAlpha.id] },
       });
       const betaAgent = await makeAgent({
         organizationId: org.id,
+        access: { teams: [teamBeta.id] },
       });
-      // Team statistics follow the agents' team assignment, not their grants.
-      await AgentTeamModel.assignTeamsToAgent(alphaAgent.id, [teamAlpha.id]);
-      await AgentTeamModel.assignTeamsToAgent(betaAgent.id, [teamBeta.id]);
 
       await makeInteraction(alphaAgent.id, {
         inputTokens: 100,

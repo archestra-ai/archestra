@@ -238,16 +238,8 @@ export async function propagateAppCatalogChange(
     if (!server) return;
     const app = await AppModel.findByMcpServerId(server.id);
     if (app) {
-      // Mirror the catalog edit onto the app's description and re-assert the
-      // team membership so a rescope via the MCP Configuration form is reflected.
-      // Team membership is owned by the catalog-team junction (`mcp_catalog_team`,
-      // the source of truth for app visibility).
-      const teamIds =
-        changes.scope === "team"
-          ? (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalogId)).map(
-              (t) => t.id,
-            )
-          : [];
+      // Mirror the catalog edit onto the app. Who reaches the app is its
+      // grants, edited on its Permissions tab, so no team list travels here.
       await AppModel.update({
         id: app.id,
         patch: {
@@ -255,7 +247,6 @@ export async function propagateAppCatalogChange(
           environmentId: changes.environmentId,
           description: changes.description,
         },
-        teamIds,
       });
     }
   } catch (error) {

@@ -187,9 +187,12 @@ export async function cleanupCredentialSourcesAfterMemberRemoval(params: {
   let cleanedCount = 0;
   for (const teamId of affectedTeamIds) {
     cleanedCount += await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-      params.removedUserId,
-      teamId,
-      removedUserIsAgentAdmin,
+      {
+        userId: params.removedUserId,
+        teamId,
+        organizationId: params.organizationId,
+        isAgentAdmin: removedUserIsAgentAdmin,
+      },
     );
   }
   return cleanedCount;

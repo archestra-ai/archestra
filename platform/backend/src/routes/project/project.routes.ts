@@ -129,9 +129,6 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: body.name,
             authorId: user.id,
             // A project starts unshared, so its own audience is its owner.
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

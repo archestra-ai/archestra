@@ -483,9 +483,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: crypto.randomUUID(),
             name: restBody.name,
             authorId: request.user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

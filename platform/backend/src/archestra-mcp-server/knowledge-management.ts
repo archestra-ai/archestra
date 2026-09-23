@@ -860,9 +860,6 @@ async function handleCreateKnowledgeBase(params: {
           id: randomUUID(),
           name: args.name,
           authorId: null,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd
@@ -1117,9 +1114,6 @@ async function handleCreateKnowledgeConnector(params: {
           id: randomUUID(),
           name: args.name,
           authorId: null,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd

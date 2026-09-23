@@ -13,13 +13,14 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
       const team2 = await makeTeam(org.id, user.id, { name: "Security" });
-      const agent = await makeAgent();
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team1.id, team2.id] },
+      });
       await TeamLabelModel.syncTeamLabels(team1.id, [
         { key: "env", value: "prod", keyId: "", valueId: "" },
       ]);
@@ -46,19 +47,20 @@ describe("AgentTeamModel", () => {
   });
 
   describe("getTeamsForAgent", () => {
-    test("returns team IDs for a single agent", async ({
+    test("returns the teams the agent's grants reach", async ({
       makeAgent,
       makeTeam,
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
-      const agent = await makeAgent();
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team1.id, team2.id] },
+      });
 
       const teams = await AgentTeamModel.getTeamsForAgent(agent.id);
 
@@ -83,19 +85,22 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
       const team3 = await makeTeam(org.id, user.id);
 
-      const agent1 = await makeAgent();
-      const agent2 = await makeAgent();
-      const agent3 = await makeAgent();
-
-      await AgentTeamModel.assignTeamsToAgent(agent1.id, [team1.id, team2.id]);
-      await AgentTeamModel.assignTeamsToAgent(agent2.id, [team3.id]);
-      // agent3 has no teams
+      const agent1 = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team1.id, team2.id] },
+      });
+      const agent2 = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team3.id] },
+      });
+      // agent3 is shared with the organization, which names no team.
+      const agent3 = await makeAgent({ organizationId: org.id });
 
       const teamsMap = await AgentTeamModel.getTeamsForAgents([
         agent1.id,
@@ -315,74 +320,6 @@ describe("AgentTeamModel", () => {
       });
 
       expect(hasAccess).toBe(false);
-    });
-  });
-
-  describe("syncAgentTeams", () => {
-    test("syncs team assignments for an agent", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team1 = await makeTeam(org.id, user.id);
-      const team2 = await makeTeam(org.id, user.id);
-      const agent = await makeAgent();
-
-      const assignedCount = await AgentTeamModel.syncAgentTeams(agent.id, [
-        team1.id,
-        team2.id,
-      ]);
-
-      expect(assignedCount).toBe(2);
-
-      const teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-      expect(teams).toHaveLength(2);
-      expect(teams).toContain(team1.id);
-      expect(teams).toContain(team2.id);
-    });
-
-    test("replaces existing team assignments", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team1 = await makeTeam(org.id, user.id);
-      const team2 = await makeTeam(org.id, user.id);
-      const team3 = await makeTeam(org.id, user.id);
-      const agent = await makeAgent();
-
-      await AgentTeamModel.syncAgentTeams(agent.id, [team1.id, team2.id]);
-      await AgentTeamModel.syncAgentTeams(agent.id, [team3.id]);
-
-      const teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-      expect(teams).toHaveLength(1);
-      expect(teams).toContain(team3.id);
-      expect(teams).not.toContain(team1.id);
-      expect(teams).not.toContain(team2.id);
-    });
-
-    test("clears all team assignments when syncing with empty array", async ({
-      makeAgent,
-      makeTeam,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const user = await makeUser();
-      const team1 = await makeTeam(org.id, user.id);
-      const agent = await makeAgent();
-
-      await AgentTeamModel.syncAgentTeams(agent.id, [team1.id]);
-      await AgentTeamModel.syncAgentTeams(agent.id, []);
-
-      const teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-      expect(teams).toHaveLength(0);
     });
   });
 });

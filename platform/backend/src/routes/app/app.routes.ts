@@ -535,9 +535,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: crypto.randomUUID(),
           name: body.name,
           authorId: user.id,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd

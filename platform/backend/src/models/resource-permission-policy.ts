@@ -543,6 +543,31 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
+   * Whether an object's own policy reaches nobody but its owner: no grant that
+   * can read or use it names anyone else (a team, a role, the organization,
+   * another person or a service account). An object with no policy reaches
+   * nobody. The SQL form of "author-only", which readers of the retired
+   * personal scope ask instead.
+   */
+  static reachesOnlyOwner(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+  }) {
+    return sql<boolean>`NOT EXISTS (
+      SELECT 1 FROM resource_permission_policies owner_policy,
+        jsonb_array_elements(owner_policy.grants) owner_entry
+      WHERE owner_policy.organization_id = ${params.organizationId}
+        AND owner_policy.resource = ${params.resource}
+        AND owner_policy.scope = ${params.scopeColumn}::text
+        AND ((owner_entry->'actions') ? 'read' OR (owner_entry->'actions') ? 'use')
+        AND NOT (owner_entry->'subject'->>'type' = 'user'
+          AND owner_entry->'subject'->>'id' IS NOT DISTINCT FROM ${params.ownerColumn}::text)
+    )`;
+  }
+
+  /**
    * Whether an object's own policy reaches `userId` and nobody else: every
    * grant that can read or use it names that user. The per-user credential
    * rules ask this where they used to ask for a personal scope.
@@ -589,6 +614,171 @@ export default class ResourcePermissionPolicyModel {
     return new Map(
       params.scopes.map((scope) => [scope, audienceOf(byScope.get(scope))]),
     );
+  }
+
+  /**
+   * The teams and people each object's own policy grants read to, keyed by
+   * scope. Replaces reading the retired team and user assignment rows. Object
+   * ids are unique across resources, so an agent lookup may pass both the
+   * `agent` and `mcpGateway` resources and let each id find its own policy.
+   */
+  static async findReadRecipients(params: {
+    resources: ScopedResource[];
+    scopes: string[];
+  }): Promise<Map<string, ReadRecipients>> {
+    const recipients = new Map<string, ReadRecipients>(
+      params.scopes.map((scope) => [
+        scope,
+        { teamIds: [], userIds: [], teamActions: {} },
+      ]),
+    );
+    if (params.scopes.length === 0 || params.resources.length === 0)
+      return recipients;
+    const table = schema.resourcePermissionPoliciesTable;
+    const policies = await db
+      .select({ scope: table.scope, grants: table.grants })
+      .from(table)
+      .where(
+        and(
+          inArray(table.resource, params.resources),
+          inArray(table.scope, params.scopes),
+        ),
+      );
+    for (const policy of policies) {
+      const entry = recipients.get(policy.scope);
+      if (!entry) continue;
+      for (const grant of policy.grants) {
+        if (!grant.actions.includes("read")) continue;
+        if (grant.subject.type === "team") {
+          if (!entry.teamActions[grant.subject.id])
+            entry.teamIds.push(grant.subject.id);
+          entry.teamActions[grant.subject.id] = [
+            ...new Set([
+              ...(entry.teamActions[grant.subject.id] ?? []),
+              ...grant.actions,
+            ]),
+          ];
+        }
+        if (
+          grant.subject.type === "user" &&
+          !entry.userIds.includes(grant.subject.id)
+        )
+          entry.userIds.push(grant.subject.id);
+      }
+    }
+    return recipients;
+  }
+
+  /**
+   * {@link findReadRecipients} with each team's name and each person's name
+   * and email, for the "shared with" lists in API responses. People in
+   * `excludeUserIds` (an object's author, keyed by scope) are left out: a
+   * creator's own grant is not a share.
+   */
+  static async findReadRecipientDetails(params: {
+    resources: ScopedResource[];
+    scopes: string[];
+    excludeUserIds?: Map<string, string | null>;
+  }): Promise<Map<string, ReadRecipientDetails>> {
+    const recipients =
+      await ResourcePermissionPolicyModel.findReadRecipients(params);
+    const teamIds = [
+      ...new Set([...recipients.values()].flatMap((entry) => entry.teamIds)),
+    ];
+    const userIds = [
+      ...new Set([...recipients.values()].flatMap((entry) => entry.userIds)),
+    ];
+    const [teams, users] = await Promise.all([
+      teamIds.length === 0
+        ? []
+        : db
+            .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.id, teamIds)),
+      userIds.length === 0
+        ? []
+        : db
+            .select({
+              id: schema.usersTable.id,
+              name: schema.usersTable.name,
+              email: schema.usersTable.email,
+            })
+            .from(schema.usersTable)
+            .where(inArray(schema.usersTable.id, userIds)),
+    ]);
+    const teamById = new Map(teams.map((team) => [team.id, team]));
+    const userById = new Map(users.map((user) => [user.id, user]));
+    return new Map(
+      [...recipients].map(([scope, entry]) => {
+        const excluded = params.excludeUserIds?.get(scope);
+        return [
+          scope,
+          {
+            teams: entry.teamIds.flatMap((id) => {
+              const team = teamById.get(id);
+              return team
+                ? [{ ...team, actions: entry.teamActions[id] ?? [] }]
+                : [];
+            }),
+            users: entry.userIds.flatMap((id) => {
+              const user = id === excluded ? undefined : userById.get(id);
+              return user ? [user] : [];
+            }),
+          },
+        ];
+      }),
+    );
+  }
+
+  /**
+   * Scopes of `resources` whose own policy grants read to `teamId`. Replaces
+   * listing the retired team assignment rows by team.
+   */
+  static async findScopesReadByTeam(params: {
+    organizationId: string;
+    resources: ScopedResource[];
+    teamId: string;
+  }): Promise<string[]> {
+    const table = schema.resourcePermissionPoliciesTable;
+    const rows = await db
+      .select({ scope: table.scope })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          inArray(table.resource, params.resources),
+          sql`EXISTS (
+            SELECT 1 FROM jsonb_array_elements(${table.grants}) team_entry
+            WHERE (team_entry->'actions') ? 'read'
+              AND team_entry->'subject'->>'type' = 'team'
+              AND team_entry->'subject'->>'id' = ${params.teamId}
+          )`,
+        ),
+      );
+    return rows.map((row) => row.scope).filter((scope) => scope !== "*");
+  }
+
+  /**
+   * Whether the object in `scopeColumn` has a policy that grants read to the
+   * team in `teamColumn`. The join condition that replaces joining through a
+   * retired team assignment table.
+   */
+  static grantsReadToTeamColumn(params: {
+    organizationId: SQLWrapper;
+    resource: ScopedResource | SQLWrapper;
+    scopeColumn: SQLWrapper;
+    teamColumn: SQLWrapper;
+  }) {
+    return sql<boolean>`EXISTS (
+      SELECT 1 FROM resource_permission_policies team_policy,
+        jsonb_array_elements(team_policy.grants) team_entry
+      WHERE team_policy.organization_id = ${params.organizationId}
+        AND team_policy.resource = ${params.resource}
+        AND team_policy.scope = ${params.scopeColumn}::text
+        AND (team_entry->'actions') ? 'read'
+        AND team_entry->'subject'->>'type' = 'team'
+        AND team_entry->'subject'->>'id' = ${params.teamColumn}::text
+    )`;
   }
 
   /**
@@ -766,6 +956,18 @@ export default class ResourcePermissionPolicyModel {
     return !!updated;
   }
 }
+
+type ReadRecipients = {
+  teamIds: string[];
+  userIds: string[];
+  /** Every action granted to each team in `teamIds`. */
+  teamActions: Record<string, ResourcePermissionAction[]>;
+};
+
+type ReadRecipientDetails = {
+  teams: { id: string; name: string; actions: ResourcePermissionAction[] }[];
+  users: { id: string; name: string; email: string }[];
+};
 
 type ObjectAudience = {
   audience: "personal" | "team" | "org";

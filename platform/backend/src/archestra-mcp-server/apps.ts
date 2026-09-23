@@ -560,9 +560,6 @@ const registry = defineArchestraTools([
               id: crypto.randomUUID(),
               name: args.name,
               authorId: userId,
-              scope: "personal",
-              teams: [],
-              users: [],
             },
           });
           // SPDX-SnippetEnd

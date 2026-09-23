@@ -28,7 +28,6 @@ import {
   TeamModel,
 } from "@/models";
 import type { KbFileViewer } from "@/models/kb-file";
-import { knowledgeScope } from "@/models/resource-permission-target";
 import {
   findAccessibleKnowledgeBase,
   findAccessibleKnowledgeBasesForFiles,
@@ -224,7 +223,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
-      const scope = knowledgeScope(body.visibility);
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -238,9 +236,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.filename,
             authorId: user.id,
-            scope,
-            teams: body.teamIds.map((id) => ({ id })),
-            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -452,7 +447,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
-      const scope = knowledgeScope(body.visibility);
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -466,9 +460,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: filename,
             authorId: user.id,
-            scope,
-            teams: body.teamIds.map((id) => ({ id })),
-            users: [],
           },
         });
       }

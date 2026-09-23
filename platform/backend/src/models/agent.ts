@@ -868,9 +868,7 @@ class AgentModel {
 
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
-      teams && teams.length > 0
-        ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
-        : Promise.resolve([]),
+      AgentTeamModel.getTeamDetailsForAgent(createdAgent.id),
       db
         .select({ tool: agentToolRefColumns })
         .from(schema.agentToolsTable)
@@ -1589,18 +1587,6 @@ class AgentModel {
       ),
     );
 
-    const regularTeamNames = db
-      .select({
-        agentId: schema.agentTeamsTable.agentId,
-        teamName: min(schema.teamsTable.name).as("team_name"),
-      })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
-      )
-      .groupBy(schema.agentTeamsTable.agentId)
-      .as("regular_catalog_team_names");
     const externalTeamNames = db
       .select({
         agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
@@ -1619,7 +1605,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         createdAt: schema.agentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${regularTeamNames.teamName}, '')`.as(
+        teamName: sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`.as(
           "team_name",
         ),
         personalPriority: sql<number>`CASE
@@ -1634,10 +1620,6 @@ class AgentModel {
         )`.as("pinned_at"),
       })
       .from(schema.agentsTable)
-      .leftJoin(
-        regularTeamNames,
-        eq(regularTeamNames.agentId, schema.agentsTable.id),
-      )
       .where(regularWhereClause);
     const externalCandidates = db
       .select({
@@ -1868,29 +1850,11 @@ class AgentModel {
           ),
         );
     } else if (sorting?.sortBy === "team") {
-      const teamNameSubquery = db
-        .select({
-          agentId: schema.agentTeamsTable.agentId,
-          teamName: min(schema.teamsTable.name).as("teamName"),
-        })
-        .from(schema.agentTeamsTable)
-        .leftJoin(
-          schema.teamsTable,
-          eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-        )
-        .groupBy(schema.agentTeamsTable.agentId)
-        .as("teamNames");
-
-      query = query
-        .leftJoin(
-          teamNameSubquery,
-          eq(schema.agentsTable.id, teamNameSubquery.agentId),
-        )
-        .orderBy(
-          ...pinnedAgentOrderClauses,
-          ...personalAgentPriorityOrderClauses,
-          direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`),
-        );
+      query = query.orderBy(
+        ...pinnedAgentOrderClauses,
+        ...personalAgentPriorityOrderClauses,
+        direction(sql`COALESCE(${agentFirstGrantedTeamName()}, '')`),
+      );
     } else {
       query = query.orderBy(
         ...pinnedAgentOrderClauses,
@@ -4828,6 +4792,14 @@ function agentGrantsReadToAnyTeam(teamIds: string[]): SQL {
     and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
   ) as SQL;
   // SPDX-SnippetEnd
+}
+
+/** The first (by name) team an agent's own policy grants read to. */
+function agentFirstGrantedTeamName() {
+  return sql<string | null>`(
+    SELECT min(granted_team_name.name) FROM team granted_team_name
+    WHERE granted_team_name.id = ANY(${agentGrantedTeamIds()})
+  )`;
 }
 
 /** The teams an agent's own policy grants read to, as a SQL text array. */

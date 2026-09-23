@@ -316,9 +316,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: "Imported plugin",
             authorId: user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
       }
@@ -490,9 +487,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.displayName,
             authorId: user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
       }
@@ -744,9 +738,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.displayName,
             authorId: user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

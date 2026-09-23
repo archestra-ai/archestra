@@ -535,9 +535,6 @@ async function validateVirtualKeyInitialGrants(params: {
       id: randomUUID(),
       name: params.body.name,
       authorId: params.ownerId,
-      scope: "personal",
-      teams: [],
-      users: [],
     },
   });
   // SPDX-SnippetEnd

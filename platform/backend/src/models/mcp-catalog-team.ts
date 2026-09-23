@@ -252,68 +252,41 @@ class McpCatalogTeamModel {
     return assignments.length;
   }
 
+  /**
+   * The teams a catalog item's own policy grants read to. A team that may
+   * also update the item holds the `write` level; any other holds `use`.
+   */
   static async getTeamDetailsForCatalog(
     catalogId: string,
   ): Promise<CatalogTeamDetail[]> {
-    const catalogTeams = await db
-      .select({
-        teamId: schema.mcpCatalogTeamsTable.teamId,
-        teamName: schema.teamsTable.name,
-        level: schema.mcpCatalogTeamsTable.level,
-      })
-      .from(schema.mcpCatalogTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.mcpCatalogTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
-
-    return catalogTeams.map((ct) => ({
-      id: ct.teamId,
-      name: ct.teamName,
-      level: ct.level,
-    }));
+    return (
+      (await McpCatalogTeamModel.getTeamDetailsForCatalogs([catalogId])).get(
+        catalogId,
+      ) ?? []
+    );
   }
 
-  /**
-   * Get team details for multiple catalog items in one query to avoid N+1
-   */
+  /** {@link getTeamDetailsForCatalog} for several catalog items at once. */
   static async getTeamDetailsForCatalogs(
     catalogIds: string[],
   ): Promise<Map<string, CatalogTeamDetail[]>> {
-    if (catalogIds.length === 0) return new Map();
-
-    const catalogTeams = await db
-      .select({
-        catalogId: schema.mcpCatalogTeamsTable.catalogId,
-        teamId: schema.mcpCatalogTeamsTable.teamId,
-        teamName: schema.teamsTable.name,
-        level: schema.mcpCatalogTeamsTable.level,
-      })
-      .from(schema.mcpCatalogTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.mcpCatalogTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(inArray(schema.mcpCatalogTeamsTable.catalogId, catalogIds));
-
-    const teamsMap = new Map<string, CatalogTeamDetail[]>();
-
-    for (const catalogId of catalogIds) {
-      teamsMap.set(catalogId, []);
-    }
-
-    for (const { catalogId, teamId, teamName, level } of catalogTeams) {
-      const teams = teamsMap.get(catalogId) || [];
-      teams.push({
-        id: teamId,
-        name: teamName,
-        level,
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["mcpRegistry"],
+        scopes: catalogIds,
       });
-      teamsMap.set(catalogId, teams);
-    }
-
-    return teamsMap;
+    return new Map(
+      catalogIds.map((id) => [
+        id,
+        (details.get(id)?.teams ?? []).map((team) => ({
+          id: team.id,
+          name: team.name,
+          level: team.actions.includes("update")
+            ? ("write" as const)
+            : ("use" as const),
+        })),
+      ]),
+    );
   }
 }
 

@@ -692,7 +692,10 @@ describe("AgentModel", () => {
       expect(fields).toBeNull();
     });
 
-    test("update syncs team assignments correctly", async ({
+    // An agent's `teams` are the teams its grants reach. Writing the retired
+    // team rows on update no longer changes who the agent is shared with, so
+    // the response keeps showing the granted team.
+    test("an agent's teams follow its grants, not the retired team rows", async ({
       makeAdmin,
       makeOrganization,
       makeMember,
@@ -710,23 +713,18 @@ describe("AgentModel", () => {
         organizationId: org.id,
         name: "Test Agent",
         access: { teams: [team1.id] },
-        legacy: { scope: "team", teams: [team1.id] },
       });
 
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0]).toMatchObject({ id: team1.id, name: team1.name });
 
-      // Update to only include team2
       const updatedAgent = await AgentModel.update(agent.id, {
         teams: [team2.id],
       });
 
-      expect(updatedAgent?.teams).toHaveLength(1);
-      expect(updatedAgent?.teams[0]).toMatchObject({
-        id: team2.id,
-        name: team2.name,
-      });
-      expect(updatedAgent?.teams.some((t) => t.id === team1.id)).toBe(false);
+      expect(updatedAgent?.teams).toEqual([
+        expect.objectContaining({ id: team1.id, name: team1.name }),
+      ]);
     });
 
     test("update without teams keeps existing assignments", async ({

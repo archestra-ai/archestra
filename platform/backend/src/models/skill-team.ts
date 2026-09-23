@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
@@ -95,42 +95,30 @@ class SkillTeamModel {
     );
   }
 
-  /** Team IDs assigned to a skill. */
+  /** The teams a skill's own policy grants read to. */
   static async getTeamsForSkill(skillId: string): Promise<string[]> {
-    const rows = await db
-      .select({ teamId: schema.skillTeamsTable.teamId })
-      .from(schema.skillTeamsTable)
-      .where(eq(schema.skillTeamsTable.skillId, skillId));
-    return rows.map((r) => r.teamId);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["skill"],
+      scopes: [skillId],
+    });
+    return recipients.get(skillId)?.teamIds ?? [];
   }
 
-  /** Team details (id + name) for several skills in one query (no N+1). */
+  /** Team details (id + name) for {@link getTeamsForSkill}, for several skills. */
   static async getTeamDetailsForSkills(
     skillIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const map = new Map<string, Array<{ id: string; name: string }>>();
-    for (const id of skillIds) {
-      map.set(id, []);
-    }
-    if (skillIds.length === 0) return map;
-
-    const rows = await db
-      .select({
-        skillId: schema.skillTeamsTable.skillId,
-        teamId: schema.skillTeamsTable.teamId,
-        teamName: schema.teamsTable.name,
-      })
-      .from(schema.skillTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.skillTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(inArray(schema.skillTeamsTable.skillId, skillIds));
-
-    for (const { skillId, teamId, teamName } of rows) {
-      map.get(skillId)?.push({ id: teamId, name: teamName });
-    }
-    return map;
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["skill"],
+        scopes: skillIds,
+      });
+    return new Map(
+      skillIds.map((id) => [
+        id,
+        (details.get(id)?.teams ?? []).map(({ id, name }) => ({ id, name })),
+      ]),
+    );
   }
 
   /** Replace a skill's team assignments with the given set. */

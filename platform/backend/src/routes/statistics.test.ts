@@ -7,7 +7,6 @@ import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillModel } from "@/models";
-import AgentTeamModel from "@/models/agent-team";
 import MemberModel from "@/models/member";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -222,8 +221,8 @@ describe("GET /api/statistics/users", () => {
       organizationId,
       authorId: currentUser.id,
       name: "Overview Agent",
+      access: { teams: [team.id] },
     });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await makeInteraction(agent.id, {
       inputTokens: 80,
       outputTokens: 20,
@@ -293,11 +292,8 @@ describe("GET /api/statistics/users", () => {
       organizationId,
       authorId: agentOwner.id,
       name: "Organization Agent",
-      access: "personal",
+      access: { teams: [organizationTeam.id] },
     });
-    await AgentTeamModel.assignTeamsToAgent(organizationAgent.id, [
-      organizationTeam.id,
-    ]);
     await makeInteraction(organizationAgent.id, {
       userId: agentOwner.id,
       inputTokens: 60,
@@ -314,8 +310,8 @@ describe("GET /api/statistics/users", () => {
       organizationId: otherOrganization.id,
       authorId: agentOwner.id,
       name: "Other Organization Agent",
+      access: { teams: [otherTeam.id] },
     });
-    await AgentTeamModel.assignTeamsToAgent(otherAgent.id, [otherTeam.id]);
     await makeInteraction(otherAgent.id, {
       userId: agentOwner.id,
       inputTokens: 900,

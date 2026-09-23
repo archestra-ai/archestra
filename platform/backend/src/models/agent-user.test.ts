@@ -129,6 +129,31 @@ describe("AgentUserModel", () => {
     });
   });
 
+  describe("getUserDetailsForAgents", () => {
+    // The "shared with" list reads the agent's grants, not the retired rows,
+    // and leaves out the author's own grant.
+    test("lists the people the agent's grants reach, other than its author", async ({
+      makeUser,
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const author = await makeUser();
+      const colleague = await makeUser();
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: author.id,
+        access: { users: [author.id, colleague.id], preset: "view" },
+      });
+
+      const details = await AgentUserModel.getUserDetailsForAgents([agent.id]);
+
+      expect(details.get(agent.id)).toEqual([
+        expect.objectContaining({ id: colleague.id, email: colleague.email }),
+      ]);
+    });
+  });
+
   describe("syncAgentUsers", () => {
     test("a new grant starts at least privilege", async ({
       makeUser,
@@ -144,10 +169,6 @@ describe("AgentUserModel", () => {
 
       await AgentUserModel.syncAgentUsers(agent.id, [colleague.id]);
 
-      const details = await AgentUserModel.getUserDetailsForAgents([agent.id]);
-      expect(details.get(agent.id)).toEqual([
-        expect.objectContaining({ id: colleague.id }),
-      ]);
       expect(await AgentUserModel.userHasGrant(agent.id, colleague.id)).toBe(
         true,
       );

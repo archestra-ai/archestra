@@ -52,7 +52,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.name,
           authorId: table.authorId,
-          scope: table.scope,
         })
         .from(table)
         .where(
@@ -68,16 +67,7 @@ export default class ResourcePermissionTargetModel {
             ),
           ),
         );
-      if (!target) return null;
-      const teams = await db
-        .select({ id: schema.agentTeamsTable.teamId })
-        .from(schema.agentTeamsTable)
-        .where(eq(schema.agentTeamsTable.agentId, params.id));
-      const users = await db
-        .select({ id: schema.agentUsersTable.userId })
-        .from(schema.agentUsersTable)
-        .where(eq(schema.agentUsersTable.agentId, params.id));
-      return { ...target, teams, users };
+      return target ?? null;
     }
     if (params.resource === "skill") {
       const table = schema.skillsTable;
@@ -86,7 +76,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.name,
           authorId: table.authorId,
-          scope: table.scope,
         })
         .from(table)
         .where(
@@ -96,16 +85,7 @@ export default class ResourcePermissionTargetModel {
             isNull(table.deletedAt),
           ),
         );
-      if (!target) return null;
-      const teams = await db
-        .select({ id: schema.skillTeamsTable.teamId })
-        .from(schema.skillTeamsTable)
-        .where(eq(schema.skillTeamsTable.skillId, params.id));
-      const users = await db
-        .select({ id: schema.skillUsersTable.userId })
-        .from(schema.skillUsersTable)
-        .where(eq(schema.skillUsersTable.skillId, params.id));
-      return { ...target, teams, users };
+      return target ?? null;
     }
     if (params.resource === "llmModel") {
       const table = schema.modelsTable;
@@ -113,24 +93,7 @@ export default class ResourcePermissionTargetModel {
         .select({ id: table.id, name: table.modelId })
         .from(table)
         .where(eq(table.id, params.id));
-      if (!target) return null;
-      const [teams, users] = await Promise.all([
-        db
-          .select({ id: schema.modelTeamsTable.teamId })
-          .from(schema.modelTeamsTable)
-          .where(eq(schema.modelTeamsTable.modelId, params.id)),
-        db
-          .select({ id: schema.modelUsersTable.userId })
-          .from(schema.modelUsersTable)
-          .where(eq(schema.modelUsersTable.modelId, params.id)),
-      ]);
-      return {
-        ...target,
-        authorId: null,
-        scope: teams.length > 0 ? "team" : "org",
-        teams,
-        users,
-      };
+      return target ? { ...target, authorId: null } : null;
     }
     // Resources whose authority is organization-wide have no object to name,
     // so there is nothing to resolve. Their grants live at `*` alone.
@@ -167,13 +130,7 @@ export default class ResourcePermissionTargetModel {
       if (!target) return null;
       // Sharing lives on the session's permission policy alone. Without one,
       // the session is its author's.
-      return {
-        ...target,
-        name: target.name ?? "Chat",
-        scope: "personal",
-        teams: [],
-        users: [],
-      };
+      return { ...target, name: target.name ?? "Chat" };
     }
     if (params.resource === "project") {
       const table = schema.projectsTable;
@@ -190,7 +147,7 @@ export default class ResourcePermissionTargetModel {
       if (!target) return null;
       // Sharing lives on the project's permission policy alone. Without one,
       // the project is its owner's.
-      return { ...target, scope: "personal", teams: [], users: [] };
+      return target;
     }
     if (params.resource === "plugin") {
       const table = schema.pluginsTable;
@@ -199,7 +156,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.displayName,
           authorId: table.authorId,
-          scope: table.scope,
         })
         .from(table)
         .where(
@@ -209,18 +165,7 @@ export default class ResourcePermissionTargetModel {
             isNull(table.deletedAt),
           ),
         );
-      if (!target) return null;
-      const [teams, users] = await Promise.all([
-        db
-          .select({ id: schema.pluginTeamsTable.teamId })
-          .from(schema.pluginTeamsTable)
-          .where(eq(schema.pluginTeamsTable.pluginId, params.id)),
-        db
-          .select({ id: schema.pluginUsersTable.userId })
-          .from(schema.pluginUsersTable)
-          .where(eq(schema.pluginUsersTable.pluginId, params.id)),
-      ]);
-      return { ...target, teams, users };
+      return target ?? null;
     }
     if (params.resource === "serviceAccount") {
       const table = schema.serviceAccountsTable;
@@ -249,9 +194,6 @@ export default class ResourcePermissionTargetModel {
         ...rest,
         authorId:
           CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
-        scope: "org",
-        teams: [],
-        users: [],
       };
     }
     if (params.resource === "llmVirtualKey") {
@@ -261,7 +203,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.name,
           authorId: table.authorId,
-          scope: table.scope,
         })
         .from(table)
         .where(
@@ -270,12 +211,7 @@ export default class ResourcePermissionTargetModel {
             eq(table.organizationId, params.organizationId),
           ),
         );
-      if (!target) return null;
-      const teams = await db
-        .select({ id: schema.virtualApiKeyTeamsTable.teamId })
-        .from(schema.virtualApiKeyTeamsTable)
-        .where(eq(schema.virtualApiKeyTeamsTable.virtualApiKeyId, params.id));
-      return { ...target, teams, users: [] };
+      return target ?? null;
     }
     if (params.resource === "llmProviderApiKey") {
       const table = schema.llmProviderApiKeysTable;
@@ -284,8 +220,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.name,
           authorId: table.userId,
-          scope: table.scope,
-          teamId: table.teamId,
         })
         .from(table)
         .where(
@@ -294,14 +228,7 @@ export default class ResourcePermissionTargetModel {
             eq(table.organizationId, params.organizationId),
           ),
         );
-      if (!target) return null;
-      // A provider key names its recipients in its own columns.
-      const { teamId, ...rest } = target;
-      return {
-        ...rest,
-        teams: teamId ? [{ id: teamId }] : [],
-        users: [],
-      };
+      return target ?? null;
     }
     if (
       params.resource === "knowledgeBase" ||
@@ -312,12 +239,7 @@ export default class ResourcePermissionTargetModel {
           ? schema.knowledgeBasesTable
           : schema.knowledgeBaseConnectorsTable;
       const [target] = await db
-        .select({
-          id: table.id,
-          name: table.name,
-          visibility: table.visibility,
-          teamIds: table.teamIds,
-        })
+        .select({ id: table.id, name: table.name })
         .from(table)
         .where(
           and(
@@ -326,17 +248,8 @@ export default class ResourcePermissionTargetModel {
             isNull(table.deletedAt),
           ),
         );
-      if (!target) return null;
-      // Knowledge keeps its teams as an array on the row, and carries no
-      // author column at all, so a private object belongs to no one.
-      return {
-        id: target.id,
-        name: target.name,
-        authorId: null,
-        scope: knowledgeScope(target.visibility),
-        teams: (target.teamIds ?? []).map((id: string) => ({ id })),
-        users: [],
-      };
+      // Knowledge carries no author column, so it names no author.
+      return target ? { ...target, authorId: null } : null;
     }
     if (params.resource === "knowledgeFile") {
       const table = schema.kbFilesTable;
@@ -345,7 +258,6 @@ export default class ResourcePermissionTargetModel {
           id: table.id,
           name: table.filename,
           authorId: table.uploadedBy,
-          visibility: table.visibility,
         })
         .from(table)
         .where(
@@ -354,13 +266,7 @@ export default class ResourcePermissionTargetModel {
             eq(table.organizationId, params.organizationId),
           ),
         );
-      if (!target) return null;
-      const teams = await db
-        .select({ id: schema.kbFileTeamsTable.teamId })
-        .from(schema.kbFileTeamsTable)
-        .where(eq(schema.kbFileTeamsTable.kbFileId, params.id));
-      const { visibility, ...rest } = target;
-      return { ...rest, scope: knowledgeScope(visibility), teams, users: [] };
+      return target ?? null;
     }
     if (params.resource === "environment") {
       const table = schema.environmentsTable;
@@ -376,7 +282,7 @@ export default class ResourcePermissionTargetModel {
       if (!target) return null;
       // An environment is a place, not a possession: it has no author and no
       // audience of its own. Its whole access story is the grants below.
-      return { ...target, authorId: null, scope: "org", teams: [], users: [] };
+      return { ...target, authorId: null };
     }
     if (params.resource === "mcpRegistry" && isBuiltInCatalogId(params.id))
       return null;
@@ -416,7 +322,6 @@ export default class ResourcePermissionTargetModel {
         id: catalog.id,
         name: catalog.name,
         authorId: catalog.authorId,
-        scope: catalog.scope,
       })
       .from(catalog)
       .where(
@@ -430,43 +335,13 @@ export default class ResourcePermissionTargetModel {
         ),
       );
     if (!target) return null;
-    const teams = await db
-      .select({
-        id: schema.mcpCatalogTeamsTable.teamId,
-        level: schema.mcpCatalogTeamsTable.level,
-      })
-      .from(schema.mcpCatalogTeamsTable)
-      .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
-    const users = await db
-      .select({ id: schema.mcpCatalogUsersTable.userId })
-      .from(schema.mcpCatalogUsersTable)
-      .where(eq(schema.mcpCatalogUsersTable.catalogId, catalogId));
-    return { ...target, ...app, teams, users };
+    return { ...target, ...app };
   }
-}
-
-/**
- * The knowledge visibilities, in the vocabulary the grants use.
- *
- * Knowledge bases, connectors and files each spell their audience differently
- * (`private`, `org-wide`, `team-scoped`, `auto-sync-permissions`), and every
- * create path has to reach the same answer this resolver and the conversion
- * SQL reach, so the mapping lives here once.
- */
-export function knowledgeScope(
-  visibility: string | null,
-): "personal" | "team" | "org" {
-  if (visibility === "team-scoped") return "team";
-  if (visibility === "private") return "personal";
-  return "org";
 }
 
 type Target = {
   id: string;
   name: string;
   authorId: string | null;
-  scope: "personal" | "team" | "org";
-  teams: { id: string; level?: "use" | "write" }[];
-  users: { id: string }[];
   enabled?: boolean;
 };

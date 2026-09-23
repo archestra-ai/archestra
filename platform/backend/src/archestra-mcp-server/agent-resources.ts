@@ -382,9 +382,6 @@ export async function handleCreateResource<
           id: crypto.randomUUID(),
           name: args.name,
           authorId: context.userId,
-          scope: "personal",
-          teams: [],
-          users: [],
         },
       });
       // SPDX-SnippetEnd

@@ -565,9 +565,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: body.name,
             authorId: ownerId,
-            scope,
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

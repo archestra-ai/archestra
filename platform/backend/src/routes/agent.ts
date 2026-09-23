@@ -727,9 +727,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: resourceId,
             name: body.name,
             authorId: user.id,
-            scope: "personal",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -1065,10 +1062,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         grants: initialGrants,
         target: {
           ...sourceAgent,
-          scope: "personal",
           authorId: user.id,
-          users: [],
-          teams: [],
         },
       });
       // SPDX-SnippetEnd

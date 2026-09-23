@@ -617,28 +617,29 @@ describe("InternalMcpCatalogModel", () => {
       expect(catalog.authorName).toBeDefined();
     });
 
-    test("create with teams populates team details", async ({
+    // A catalog item's `teams` are the teams its grants reach.
+    test("a catalog item's teams are the teams its grants reach", async ({
       makeUser,
       makeOrganization,
       makeTeam,
+      makeInternalMcpCatalog,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      const catalog = await InternalMcpCatalogModel.create(
-        {
-          name: "team-scoped-catalog",
-          serverType: "remote",
-          scope: "team",
-          teams: [team.id],
-        },
-        { organizationId: org.id, authorId: user.id },
-      );
+      const created = await makeInternalMcpCatalog({
+        access: { teams: [team.id] },
+        organizationId: org.id,
+        authorId: user.id,
+      });
+      const catalog = await InternalMcpCatalogModel.findById(created.id, {
+        organizationId: org.id,
+      });
 
-      expect(catalog.scope).toBe("team");
-      expect(catalog.teams).toHaveLength(1);
-      expect(catalog.teams[0].id).toBe(team.id);
+      expect(catalog?.teams).toEqual([
+        expect.objectContaining({ id: team.id, name: team.name }),
+      ]);
     });
 
     test("findById with access check denies non-authorized user", async ({
@@ -681,14 +682,16 @@ describe("InternalMcpCatalogModel", () => {
       expect(adminAccess).not.toBeNull();
     });
 
-    test("update with teams syncs team assignments", async ({
+    // Writing the retired team rows on update no longer changes who the item
+    // is shared with, so its `teams` keep showing the granted team.
+    test("an update's retired team rows do not change the granted teams", async ({
       makeUser,
       makeOrganization,
       makeTeam,
       makeInternalMcpCatalog,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
 
@@ -701,8 +704,7 @@ describe("InternalMcpCatalogModel", () => {
         teams: [team2.id],
       });
 
-      expect(updated?.teams).toHaveLength(1);
-      expect(updated?.teams[0].id).toBe(team2.id);
+      expect(updated?.teams.map((team) => team.id)).toEqual([team1.id]);
     });
 
     test("searchByQuery respects scope filtering", async ({

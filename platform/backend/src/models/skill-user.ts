@@ -6,6 +6,7 @@ import {
   normalizeResourceUserInput,
   type ResourceUserInput,
 } from "@/types/resource-user-level";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * Individually-named grants on a skill — the per-person counterpart to
@@ -104,39 +105,28 @@ class SkillUserModel {
     return new Set(rows.map((row) => row.id));
   }
 
-  /** Grantee details for several skills in one query (no N+1). */
+  /**
+   * The people a skill's own policy grants read to, other than its author,
+   * for the "shared with" list.
+   */
   static async getUserDetailsForSkills(
     skillIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string; email: string }>>> {
-    const map = new Map<
-      string,
-      Array<{ id: string; name: string; email: string }>
-    >();
-    for (const id of skillIds) map.set(id, []);
-    if (skillIds.length === 0) return map;
-
-    const rows = await db
+    if (skillIds.length === 0) return new Map();
+    const authors = await db
       .select({
-        resourceId: schema.skillUsersTable.skillId,
-        userId: schema.skillUsersTable.userId,
-        userName: schema.usersTable.name,
-        userEmail: schema.usersTable.email,
+        id: schema.skillsTable.id,
+        authorId: schema.skillsTable.authorId,
       })
-      .from(schema.skillUsersTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.skillUsersTable.userId, schema.usersTable.id),
-      )
-      .where(inArray(schema.skillUsersTable.skillId, skillIds));
-
-    for (const { resourceId, userId, userName, userEmail } of rows) {
-      map.get(resourceId)?.push({
-        id: userId,
-        name: userName,
-        email: userEmail,
+      .from(schema.skillsTable)
+      .where(inArray(schema.skillsTable.id, skillIds));
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["skill"],
+        scopes: skillIds,
+        excludeUserIds: new Map(authors.map((row) => [row.id, row.authorId])),
       });
-    }
-    return map;
+    return new Map(skillIds.map((id) => [id, details.get(id)?.users ?? []]));
   }
 }
 

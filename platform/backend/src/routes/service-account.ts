@@ -143,9 +143,6 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: randomUUID(),
             name: request.body.name,
             authorId: request.user.id,
-            scope: "org",
-            teams: [],
-            users: [],
           },
         });
         // SPDX-SnippetEnd

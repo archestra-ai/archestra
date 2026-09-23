@@ -24,6 +24,7 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
@@ -1151,9 +1152,23 @@ export class ChatOpsManager {
     });
     if (accessible.length === 1) {
       const agent = await AgentModel.findById(accessible[0].id);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const audience = agent
+        ? (
+            await ResourcePermissionPolicyModel.findAudience({
+              organizationId: agent.organizationId,
+              resource: "agent",
+              scope: agent.id,
+              ownerId: agent.authorId,
+            })
+          ).audience
+        : null;
+      // SPDX-SnippetEnd
       return {
         agentId: accessible[0].id,
-        persist: agent?.scope !== "personal",
+        persist: audience !== "personal",
       };
     }
     return null;

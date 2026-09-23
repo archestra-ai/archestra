@@ -22,6 +22,7 @@ import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
 import OrganizationModel from "./organization";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 import ToolModel from "./tool";
 
@@ -2986,7 +2987,7 @@ describe("AgentModel", () => {
   });
 
   describe("findByIdsForPermissionCheck", () => {
-    test("returns agentType, scope, authorId, and teamIds for each agent", async ({
+    test("reads the audience and teams from the agent's own grants", async ({
       makeAgent,
       makeOrganization,
       makeMember,
@@ -3001,21 +3002,40 @@ describe("AgentModel", () => {
       const agent = await makeAgent({
         name: "Perm Check Agent",
         agentType: "profile",
-        scope: "org",
+        scope: "team",
         organizationId: org.id,
         authorId: user.id,
         teams: [team.id],
       });
 
-      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
-
-      expect(result.size).toBe(1);
-      const entry = result.get(agent.id);
-      expect(entry).toBeDefined();
+      const entry = (
+        await AgentModel.findByIdsForPermissionCheck([agent.id])
+      ).get(agent.id);
       expect(entry?.agentType).toBe("profile");
-      expect(entry?.scope).toBe("org");
+      expect(entry?.scope).toBe("team");
       expect(entry?.authorId).toBe(user.id);
       expect(entry?.teamIds).toEqual([team.id]);
+
+      // A grant to a role puts the agent in front of the organization, and
+      // the retired scope column has no say.
+      const key = {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: agent.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          ...(policy?.grants ?? []),
+          { subject: { type: "role", id: "member" }, actions: ["read", "use"] },
+        ],
+      });
+      expect(
+        (await AgentModel.findByIdsForPermissionCheck([agent.id])).get(agent.id)
+          ?.scope,
+      ).toBe("org");
     });
 
     test("returns multiple agents in a single batch", async ({ makeAgent }) => {
@@ -3075,6 +3095,7 @@ describe("AgentModel", () => {
       const agent = await makeAgent({
         name: "Multi-Team Agent",
         organizationId: org.id,
+        scope: "team",
         teams: [team1.id, team2.id],
       });
 

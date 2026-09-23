@@ -30,6 +30,7 @@ import {
   max,
   min,
   ne,
+  not,
   notInArray,
   or,
   type SQL,
@@ -88,7 +89,6 @@ import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import TeamModel from "./team";
 import ToolModel from "./tool";
 
 type AgentListFilters = {
@@ -988,13 +988,13 @@ class AgentModel {
 
     // Filter by scope if specified
     if (options?.scope) {
-      whereConditions.push(eq(schema.agentsTable.scope, options.scope));
+      whereConditions.push(agentAudienceIs(options.scope));
     }
 
     // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
       const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
+        not(agentAudienceIs("personal")),
         eq(schema.agentsTable.authorId, userId),
         explicitAgentReadCondition(userId),
       );
@@ -1413,7 +1413,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.agentType, "agent"),
           eq(schema.agentsTable.builtIn, false),
-          ne(schema.agentsTable.scope, "personal"),
+          not(agentAudienceIs("personal")),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -1443,11 +1443,8 @@ class AgentModel {
           eq(schema.agentsTable.agentType, "agent"),
           eq(schema.agentsTable.builtIn, false),
           or(
-            ne(schema.agentsTable.scope, "personal"),
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
-            ),
+            not(agentAudienceIs("personal")),
+            eq(schema.agentsTable.authorId, userId),
           ),
           notDeleted(schema.agentsTable),
         ),
@@ -1616,7 +1613,7 @@ class AgentModel {
           "team_name",
         ),
         personalPriority: sql<number>`CASE
-          WHEN ${schema.agentsTable.scope} = 'personal'
+          WHEN ${agentAudienceIs("personal")}
             AND ${schema.agentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`(
@@ -2061,19 +2058,13 @@ class AgentModel {
 
     if (filters?.scope === "built_in") {
       whereConditions.push(eq(schema.agentsTable.builtIn, true));
-    } else if (filters?.scope === "personal") {
+    } else if (
+      filters?.scope === "personal" ||
+      filters?.scope === "team" ||
+      filters?.scope === "org"
+    ) {
       whereConditions.push(
-        eq(schema.agentsTable.scope, "personal"),
-        eq(schema.agentsTable.builtIn, false),
-      );
-    } else if (filters?.scope === "team") {
-      whereConditions.push(
-        eq(schema.agentsTable.scope, "team"),
-        eq(schema.agentsTable.builtIn, false),
-      );
-    } else if (filters?.scope === "org") {
-      whereConditions.push(
-        eq(schema.agentsTable.scope, "org"),
+        agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
     } else {
@@ -2083,16 +2074,7 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (filters?.teamIds?.length) {
-      const agentIdsInTeams = await db
-        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
-        .from(schema.agentTeamsTable)
-        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
-      const ids = agentIdsInTeams.map((row) => row.agentId);
-      whereConditions.push(
-        ids.length > 0
-          ? inArray(schema.agentsTable.id, ids)
-          : sql<boolean>`false`,
-      );
+      whereConditions.push(agentGrantsReadToAnyTeam(filters.teamIds));
     }
     if (filters?.authorIds?.length) {
       whereConditions.push(
@@ -2108,7 +2090,7 @@ class AgentModel {
     }
     if (filters?.excludeOtherPersonalAgents && userId) {
       const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
+        not(agentAudienceIs("personal")),
         eq(schema.agentsTable.authorId, userId),
         explicitAgentReadCondition(userId),
       );
@@ -2215,7 +2197,7 @@ class AgentModel {
     return [
       asc(sql`
         CASE
-          WHEN ${schema.agentsTable.scope} = 'personal'
+          WHEN ${agentAudienceIs("personal")}
             AND ${schema.agentsTable.authorId} = ${userId}
           THEN 0
           ELSE 1
@@ -2752,29 +2734,31 @@ class AgentModel {
       return new Map();
     }
 
-    const [agents, teamsMap] = await Promise.all([
-      db
-        .select({
-          id: schema.agentsTable.id,
-          agentType: schema.agentsTable.agentType,
-          scope: schema.agentsTable.scope,
-          authorId: schema.agentsTable.authorId,
-          createdByServiceAccountId:
-            schema.agentsTable.createdByServiceAccountId,
-          environmentId: schema.agentsTable.environmentId,
-        })
-        .from(schema.agentsTable)
-        .where(
-          and(
-            inArray(schema.agentsTable.id, ids),
-            notDeleted(schema.agentsTable),
-            organizationId
-              ? eq(schema.agentsTable.organizationId, organizationId)
-              : undefined,
-          ),
+    // The audience and teams come from each agent's own grants, not the
+    // retired scope and team rows, so assignability follows permission edits.
+    const agents = await db
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+        scope: sql<AgentScope>`CASE
+          WHEN ${agentAudienceIs("org")} THEN 'org'
+          WHEN ${agentAudienceIs("team")} THEN 'team'
+          ELSE 'personal' END`,
+        authorId: schema.agentsTable.authorId,
+        teamIds: agentGrantedTeamIds(),
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+        environmentId: schema.agentsTable.environmentId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.id, ids),
+          notDeleted(schema.agentsTable),
+          organizationId
+            ? eq(schema.agentsTable.organizationId, organizationId)
+            : undefined,
         ),
-      AgentTeamModel.getTeamDetailsForAgents(ids),
-    ]);
+      );
 
     const result = new Map<
       string,
@@ -2787,12 +2771,11 @@ class AgentModel {
       }
     >();
     for (const agent of agents) {
-      const teams = teamsMap.get(agent.id) ?? [];
       result.set(agent.id, {
         agentType: agent.agentType,
         scope: agent.scope,
         authorId: agent.authorId,
-        teamIds: teams.map((t) => t.id),
+        teamIds: agent.teamIds,
         environmentId: agent.environmentId,
       });
     }
@@ -3853,7 +3836,7 @@ class AgentModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.authorId, params.userId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.scope, "personal"),
+          agentAudienceIs("personal"),
           eq(schema.agentsTable.builtIn, false),
           params.excludeId
             ? ne(schema.agentsTable.id, params.excludeId)
@@ -3880,7 +3863,7 @@ class AgentModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.authorId, params.userId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.scope, "personal"),
+          agentAudienceIs("personal"),
           eq(schema.agentsTable.builtIn, false),
         ),
       )
@@ -4789,4 +4772,70 @@ function organizationLlmProxyCondition(userId: string): SQL {
     eq(table.isDefault, true),
     sql`EXISTS (SELECT 1 FROM member proxy_member WHERE proxy_member.organization_id = ${table.organizationId} AND proxy_member.user_id = ${userId})`,
   ) as SQL;
+}
+
+/**
+ * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind. The
+ * organization's LLM proxy has no grant namespace and serves the whole
+ * organization, so it always reads as `org`.
+ */
+function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
+  const table = schema.agentsTable;
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.audienceIs({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      audience,
+    });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      eq(table.agentType, "llm_proxy"),
+      audience === "org" ? sql`true` : sql`false`,
+    ),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/** Agents whose own policy grants read to any of `teamIds`. */
+function agentGrantsReadToAnyTeam(teamIds: string[]): SQL {
+  const table = schema.agentsTable;
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      teamIds,
+    });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/** The teams an agent's own policy grants read to, as a SQL text array. */
+function agentGrantedTeamIds() {
+  const table = schema.agentsTable;
+  return sql<string[]>`coalesce(array(
+    SELECT DISTINCT granted_team.subject_id FROM (
+      SELECT team_entry->'subject'->>'id' AS subject_id
+      FROM resource_permission_policies team_policy,
+        jsonb_array_elements(team_policy.grants) team_entry
+      WHERE team_policy.organization_id = ${table.organizationId}
+        AND team_policy.resource = CASE WHEN ${table.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END
+        AND team_policy.scope = ${table.id}::text
+        AND (team_entry->'actions') ? 'read'
+        AND team_entry->'subject'->>'type' = 'team'
+    ) granted_team
+  ), array[]::text[])`;
 }

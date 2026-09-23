@@ -485,6 +485,84 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
+   * Whether an object's own grants give it the named audience — the label the
+   * retired visibility field used to carry, now derived from
+   * {@link sharedAudience}: `org` when the policy reaches the organization or
+   * a role, `team` when it reaches a team, and `personal` otherwise (the
+   * owner alone, or named people). List filters and orderings that read the
+   * old field read this instead, so they follow permission edits.
+   */
+  static audienceIs(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+    audience: "personal" | "team" | "org";
+  }) {
+    const shared = ResourcePermissionPolicyModel.sharedAudience(params);
+    switch (params.audience) {
+      case "org":
+        return sql<boolean>`coalesce(${shared} = 'organization', false)`;
+      case "team":
+        return sql<boolean>`coalesce(${shared} = 'team', false)`;
+      case "personal":
+        return sql<boolean>`coalesce(${shared}, 'user') = 'user'`;
+    }
+  }
+
+  /**
+   * Whether an object's own policy grants read to any of `teamIds`. Replaces
+   * filtering by the retired team assignment rows.
+   */
+  static grantsReadToAnyTeam(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    teamIds: string[];
+  }) {
+    if (params.teamIds.length === 0) return sql<boolean>`false`;
+    return sql<boolean>`EXISTS (
+      SELECT 1 FROM resource_permission_policies team_policy,
+        jsonb_array_elements(team_policy.grants) team_entry
+      WHERE team_policy.organization_id = ${params.organizationId}
+        AND team_policy.resource = ${params.resource}
+        AND team_policy.scope = ${params.scopeColumn}::text
+        AND (team_entry->'actions') ? 'read'
+        AND team_entry->'subject'->>'type' = 'team'
+        AND ${inArray(sql`team_entry->'subject'->>'id'`, params.teamIds)}
+    )`;
+  }
+
+  /**
+   * The audience and granted teams of one object, from its own policy, in
+   * the terms of {@link audienceIs}. For callers that decide in code rather
+   * than in a query.
+   */
+  static async findAudience(params: {
+    organizationId: string;
+    resource: ScopedResource;
+    scope: string;
+    ownerId: string | null;
+  }): Promise<{ audience: "personal" | "team" | "org"; teamIds: string[] }> {
+    const policy = await ResourcePermissionPolicyModel.find(params);
+    const readers = (policy?.grants ?? []).filter((grant) =>
+      grant.actions.includes("read"),
+    );
+    const teamIds = readers
+      .filter((grant) => grant.subject.type === "team")
+      .map((grant) => grant.subject.id);
+    const audience = readers.some(
+      (grant) =>
+        grant.subject.type === "organization" || grant.subject.type === "role",
+    )
+      ? "org"
+      : teamIds.length > 0
+        ? "team"
+        : "personal";
+    return { audience, teamIds };
+  }
+
+  /**
    * Names of the teams, or of the people other than the owner, that an
    * object's own policy grants read to, sorted. Backs the recipient list next
    * to {@link sharedAudience}.

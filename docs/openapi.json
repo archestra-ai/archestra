@@ -174132,190 +174132,372 @@
                               "response": {
                                 "anyOf": [
                                   {
-                                    "type": "object",
-                                    "properties": {
-                                      "id": {
-                                        "type": "string"
-                                      },
-                                      "object": {
-                                        "type": "string",
-                                        "enum": [
-                                          "response"
-                                        ]
-                                      },
-                                      "created_at": {
-                                        "type": "number"
-                                      },
-                                      "model": {
-                                        "type": "string"
-                                      },
-                                      "output": {
-                                        "type": "array",
-                                        "items": {
-                                          "anyOf": [
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "message"
-                                                  ]
-                                                },
-                                                "role": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "assistant"
-                                                  ]
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                },
-                                                "content": {
-                                                  "type": "array",
-                                                  "items": {
-                                                    "anyOf": [
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "output_text"
-                                                            ]
-                                                          },
-                                                          "text": {
-                                                            "type": "string"
-                                                          }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "text"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                      },
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "refusal"
-                                                            ]
-                                                          },
-                                                          "refusal": {
-                                                            "type": "string"
-                                                          }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "refusal"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
-                                                      }
-                                                    ]
-                                                  }
-                                                }
-                                              },
-                                              "required": [
-                                                "id",
-                                                "type",
-                                                "role",
-                                                "status",
-                                                "content"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "function_call"
-                                                  ]
-                                                },
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "call_id": {
-                                                  "type": "string"
-                                                },
-                                                "name": {
-                                                  "type": "string"
-                                                },
-                                                "arguments": {
-                                                  "type": "string"
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "type",
-                                                "call_id",
-                                                "name",
-                                                "arguments"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "type": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "type"
-                                              ],
-                                              "additionalProperties": {}
-                                            }
-                                          ]
-                                        }
-                                      },
-                                      "status": {
-                                        "type": "string"
-                                      },
-                                      "usage": {
+                                    "anyOf": [
+                                      {
                                         "type": "object",
                                         "properties": {
-                                          "input_tokens": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response"
+                                            ]
+                                          },
+                                          "created_at": {
                                             "type": "number"
                                           },
-                                          "output_tokens": {
-                                            "type": "number"
+                                          "model": {
+                                            "type": "string"
                                           },
-                                          "total_tokens": {
-                                            "type": "number"
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "message"
+                                                      ]
+                                                    },
+                                                    "role": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "assistant"
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "content": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "output_text"
+                                                                ]
+                                                              },
+                                                              "text": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                          },
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "refusal"
+                                                                ]
+                                                              },
+                                                              "refusal": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "refusal"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "type",
+                                                    "role",
+                                                    "status",
+                                                    "content"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "function_call"
+                                                      ]
+                                                    },
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "call_id": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "call_id",
+                                                    "name",
+                                                    "arguments"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "additionalProperties": {}
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "status": {
+                                            "type": "string"
+                                          },
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
+                                              },
+                                              "output_tokens": {
+                                                "type": "number"
+                                              },
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                           }
                                         },
                                         "required": [
-                                          "input_tokens",
-                                          "output_tokens",
-                                          "total_tokens"
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "model",
+                                          "output",
+                                          "status"
                                         ],
                                         "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response.compaction"
+                                            ]
+                                          },
+                                          "created_at": {
+                                            "type": "number"
+                                          },
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "message"
+                                                      ]
+                                                    },
+                                                    "role": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "assistant"
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "content": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "output_text"
+                                                                ]
+                                                              },
+                                                              "text": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                          },
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "refusal"
+                                                                ]
+                                                              },
+                                                              "refusal": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "refusal"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "type",
+                                                    "role",
+                                                    "status",
+                                                    "content"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "function_call"
+                                                      ]
+                                                    },
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "call_id": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "call_id",
+                                                    "name",
+                                                    "arguments"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "additionalProperties": {}
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
+                                              },
+                                              "output_tokens": {
+                                                "type": "number"
+                                              },
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "output",
+                                          "usage"
+                                        ],
+                                        "additionalProperties": {}
                                       }
-                                    },
-                                    "required": [
-                                      "id",
-                                      "object",
-                                      "created_at",
-                                      "model",
-                                      "output",
-                                      "status"
-                                    ],
-                                    "additionalProperties": {},
-                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                    ]
                                   },
                                   {
                                     "type": "object",
@@ -209847,190 +210029,372 @@
                         "response": {
                           "anyOf": [
                             {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "object": {
-                                  "type": "string",
-                                  "enum": [
-                                    "response"
-                                  ]
-                                },
-                                "created_at": {
-                                  "type": "number"
-                                },
-                                "model": {
-                                  "type": "string"
-                                },
-                                "output": {
-                                  "type": "array",
-                                  "items": {
-                                    "anyOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "message"
-                                            ]
-                                          },
-                                          "role": {
-                                            "type": "string",
-                                            "enum": [
-                                              "assistant"
-                                            ]
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          },
-                                          "content": {
-                                            "type": "array",
-                                            "items": {
-                                              "anyOf": [
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "output_text"
-                                                      ]
-                                                    },
-                                                    "text": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "text"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                },
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "refusal"
-                                                      ]
-                                                    },
-                                                    "refusal": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "refusal"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
-                                                }
-                                              ]
-                                            }
-                                          }
-                                        },
-                                        "required": [
-                                          "id",
-                                          "type",
-                                          "role",
-                                          "status",
-                                          "content"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "function_call"
-                                            ]
-                                          },
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "call_id": {
-                                            "type": "string"
-                                          },
-                                          "name": {
-                                            "type": "string"
-                                          },
-                                          "arguments": {
-                                            "type": "string"
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "type",
-                                          "call_id",
-                                          "name",
-                                          "arguments"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "type": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "type"
-                                        ],
-                                        "additionalProperties": {}
-                                      }
-                                    ]
-                                  }
-                                },
-                                "status": {
-                                  "type": "string"
-                                },
-                                "usage": {
+                              "anyOf": [
+                                {
                                   "type": "object",
                                   "properties": {
-                                    "input_tokens": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response"
+                                      ]
+                                    },
+                                    "created_at": {
                                       "type": "number"
                                     },
-                                    "output_tokens": {
-                                      "type": "number"
+                                    "model": {
+                                      "type": "string"
                                     },
-                                    "total_tokens": {
-                                      "type": "number"
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "message"
+                                                ]
+                                              },
+                                              "role": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "assistant"
+                                                ]
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              },
+                                              "content": {
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "output_text"
+                                                          ]
+                                                        },
+                                                        "text": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                    },
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "refusal"
+                                                          ]
+                                                        },
+                                                        "refusal": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "refusal"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "type",
+                                              "role",
+                                              "status",
+                                              "content"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "function_call"
+                                                ]
+                                              },
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "call_id": {
+                                                "type": "string"
+                                              },
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "arguments": {
+                                                "type": "string"
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "call_id",
+                                              "name",
+                                              "arguments"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "status": {
+                                      "type": "string"
+                                    },
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
+                                        },
+                                        "output_tokens": {
+                                          "type": "number"
+                                        },
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                     }
                                   },
                                   "required": [
-                                    "input_tokens",
-                                    "output_tokens",
-                                    "total_tokens"
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "model",
+                                    "output",
+                                    "status"
                                   ],
                                   "additionalProperties": {},
-                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response.compaction"
+                                      ]
+                                    },
+                                    "created_at": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "message"
+                                                ]
+                                              },
+                                              "role": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "assistant"
+                                                ]
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              },
+                                              "content": {
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "output_text"
+                                                          ]
+                                                        },
+                                                        "text": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                    },
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "refusal"
+                                                          ]
+                                                        },
+                                                        "refusal": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "refusal"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "type",
+                                              "role",
+                                              "status",
+                                              "content"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "function_call"
+                                                ]
+                                              },
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "call_id": {
+                                                "type": "string"
+                                              },
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "arguments": {
+                                                "type": "string"
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "call_id",
+                                              "name",
+                                              "arguments"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
+                                        },
+                                        "output_tokens": {
+                                          "type": "number"
+                                        },
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "output",
+                                    "usage"
+                                  ],
+                                  "additionalProperties": {}
                                 }
-                              },
-                              "required": [
-                                "id",
-                                "object",
-                                "created_at",
-                                "model",
-                                "output",
-                                "status"
-                              ],
-                              "additionalProperties": {},
-                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                              ]
                             },
                             {
                               "type": "object",

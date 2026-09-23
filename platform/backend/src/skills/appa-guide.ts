@@ -17,7 +17,7 @@ Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client
 
 If the request says \`diagnose\` and \`inspect only\`, do not propose or make changes. Inspect the host and report **Health** for runtime, policy, agents, and tool servers. Report an optional **Unavailable** section, one **OpenAPPA pieces** line, and then **No changes applied.** Do not mention battery matches or suggested includes in the report.
 
-You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, preview the proposed policy, explain it in plain English, wait for approval, publish it, and check the result. The OpenAPPA Policy page shows the policy read-only. Archestra stores the effective policy in the database; when GitHub sync is configured, the repository owns the source text. A local client file, setting, or shell command does not change this policy.
+You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, preview the proposed policy, explain it in plain English, wait for approval, publish it, and check the result. The OpenAPPA Policy page shows the policy read-only. Archestra stores the effective policy in the database. When GitHub sync is configured, the repository owns the source text. A local client file, setting, or shell command does not change this policy.
 
 ## Platform tools in Archestra
 
@@ -39,8 +39,8 @@ If you run from a connected client where tool names lack the \`archestra__\` pre
 
 Use one mode:
 
-- **\`init\`** — inspect installed tools and build a starting policy.
-- **\`adjust\`** — help the operator change an existing policy.
+- **\`init\`** - inspect installed tools and build a starting policy.
+- **\`adjust\`** - help the operator change an existing policy.
 
 If the request makes the mode clear, start in that mode. Otherwise, show these two choices in one short message and wait. Do not run both modes at the same time. Treat a maintenance or lifecycle request (such as a health audit, agent protection, or runtime upgrade) as \`adjust\` with a clear goal.
 
@@ -68,7 +68,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - The root config is the operator's source of truth. Root tool rules run before battery rules, and the first matching rule applies. Keep every root rule unless the operator approves changing or removing it.
 - Use Information Flow Control (IFC) labels first. Express boundaries with trust and audience labels. Do not use effects or human approvals when labels express the requirement. Trusted data flowing within its audience stays autonomous.
 - A battery gives maintained defaults. Never edit a battery. Override a tool contract with a root rule.
-- A battery is declared in this same policy document. \`include\` names it — either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package — \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
+- A battery is declared in this same policy document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
 - A battery is available when it exists in the bundled or organization battery layer. It is declared by \`include\` and governs calls only when \`effective.batteries\` marks it \`active\`. Say "include" rather than "install" when you propose that change.
 - Read and preview before you propose. Show the diff, warnings, and complete proposed behavior in plain English. Wait for approval before you publish. Ask for approval again if a correction changes that behavior.
 - An initial request for a change is not approval to execute it. End the first turn with the proposal. Act only after a later message approves that exact proposal.
@@ -90,7 +90,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Keep user-facing replies compact. Group tools by server and behavior. Use one short sentence or bullet per outcome.
 
 After a local revision, summarize the active behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
-> Saved policies apply to new conversations; this conversation keeps the policy it started with.
+> Saved policies apply to new conversations. This conversation keeps the policy it started with.
 
 If publishing opens a GitHub PR, give its link and state that the proposed policy is not enforced until merge and a successful repository sync. Do not claim it is active or tell the operator to start a new conversation yet.
 
@@ -122,8 +122,8 @@ Batteries supply pre-packaged security rules for popular MCP servers. In Archest
 - Check which batteries are declared in \`include\` and active in \`effective.batteries\`.
 - An organization-wide annotator-only battery governs no server. It is \`unrouted\` until a tool rule names its annotator. Check that rule before calling it active. If it needs a credential, calls routed to it are refused until the credential is bound.
 - When you propose a battery, write one short sentence stating what it covers, what it protects, and any key assumption. Keep it under 20 words. Examples:
-  > Slack battery — Keeps Slack data private and asks before publishing it.
-  > GitHub battery — Assumes every repository is public and prevents private data from leaking to GitHub.
+  > Slack battery - Keeps Slack data private and asks before publishing it.
+  > GitHub battery - Assumes every repository is public and prevents private data from leaking to GitHub.
 - If the current root config changes a battery's default behavior, explain the result in plain English.
 
 ### Cover the remaining tools
@@ -152,18 +152,18 @@ Wait for the answer before you show the proposal.
 
 ### Propose, then apply
 
-Before showing the proposal, call \`archestra__preview_guardrails_policy_change\` with the complete draft and the revision you read. It validates and composes the draft without saving. Fix errors and preview again. Show warnings; \`valid\` alone does not prove a battery governs tools or an external service works. If the preview shows no change, report that no update is needed without asking for approval.
+Before showing the proposal, call \`archestra__preview_guardrails_policy_change\` with the complete draft and the revision you read. It validates and composes the draft without saving. Fix errors and preview again. Show warnings. A valid status alone does not prove that a battery governs tools or an external service works. If the preview shows no change, report that no update is needed without asking for approval.
 
 Group the proposal by server. Show:
 
-- the proposed starting policy;
-- batteries to add via \`include\`, each with its one-sentence explanation;
-- existing behavior that stays unchanged;
-- how remaining installed tools will behave;
-- tools left undeclared (covered by \`name = "*"\` if present, refused otherwise);
-- every configured MCP server whose tools could not be detected.
-- any requested subagent return boundary that the connected host cannot support or verify.
-- the previewed diff and whether approval will save a local revision or open a GitHub PR.
+- the proposed starting policy
+- batteries to add via \`include\`, each with its one-sentence explanation
+- existing behavior that stays unchanged
+- how remaining installed tools will behave
+- tools left undeclared (covered by \`name = "*"\` if present, refused otherwise)
+- every configured MCP server whose tools could not be detected
+- any requested subagent return boundary that the connected host cannot support or verify
+- the previewed diff and whether approval will save a local revision or open a GitHub PR
 
 Add one short \`OpenAPPA pieces: <primitives>\` line.
 
@@ -180,7 +180,7 @@ After approval:
 3. If the draft is unchanged, report that no update is needed. Otherwise call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the revision from the re-read. Use a clear \`title\` and \`summary\` when publishing a GitHub PR.
 4. On a conflict, re-read, combine your change with the new text, preview, and ask for approval again if the proposed behavior changes. Never just increase N and retry the old draft.
 5. If publish returns \`pull_request\`, give its URL. Use \`archestra__get_guardrails_policy_change_status\` with its number when asked about progress. State that the proposal is not enforced until the PR merges and repository sync succeeds. Do not say the policy changed yet.
-6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed; do not claim a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations; this conversation keeps the policy it started with.
+6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim that a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations. This conversation keeps the policy it started with.
 
 ## Adjust the current config (\`adjust\`)
 
@@ -197,18 +197,18 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 7. Re-read the policy and its \`revision\` and \`delivery\`. If either changed, revise the proposal and ask for approval again. Otherwise preview the exact approved draft again. If the diff or warnings changed, ask for approval again. Do not publish an invalid or unchanged preview.
 8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the latest revision. Give a GitHub PR a clear \`title\` and \`summary\`.
 9. On a conflict, re-read, merge, preview, and request approval again if the proposed behavior changes.
-10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations; this one keeps its original policy.
+10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations. This conversation keeps the policy it started with.
 
 ## Boundaries
 
-- Reading and previewing require \`toolPolicy:read\`; publishing requires \`toolPolicy:update\`. GitHub PR publishing and status checks also require \`credential:read\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing. If GitHub sync lacks a ready App credential or has changed upstream, do not claim a policy update; fix or sync the source before retrying.
+- Reading and previewing require \`toolPolicy:read\`. Publishing requires \`toolPolicy:update\`. GitHub PR publishing and status checks also require \`credential:read\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing. If GitHub sync lacks a ready App credential or has changed upstream, do not claim a policy update. Fix or sync the source before retrying.
 - The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
 - The supported editor format is \`[policy]\` plus \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change deployment settings through this skill.
-- A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error; do not claim Guardrails v2 switched off or that the draft is active.
+- A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 `,
   files: [
     {
@@ -223,7 +223,7 @@ The policy document starts with:
 version = 2
 \`\`\`
 
-This version identifies the policy format. The API revision is a separate save number that prevents overwriting concurrent edits. Preview the complete draft with that revision before showing the diff and publishing it. With GitHub sync, publishing creates a PR; the policy takes effect after merge and successful sync. Without GitHub sync, publishing saves a local revision.
+This version identifies the policy format. The API revision is a separate save number that prevents overwriting concurrent edits. Preview the complete draft with that revision before showing the diff and publishing it. With GitHub sync, publishing creates a PR. The policy takes effect after merge and successful sync. Without GitHub sync, publishing saves a local revision.
 
 ## Tool rules
 
@@ -290,7 +290,7 @@ An approval requires an authority with appropriate permissions and a review chan
 
 ## Battery declarations
 
-A battery is declared in this same document. \`include\` names it — either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package — \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys:
+A battery is declared in this same document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
@@ -318,7 +318,7 @@ It also defines approvals and data transforms when a call is blocked.
 
 ## Policy format and storage
 
-Archestra shows the policy read-only on the OpenAPPA Policy page. The document follows the \`organization.appa.toml\` format. With GitHub sync, the repository owns the source text; a proposed edit opens a PR, and Archestra enforces it only after merge and successful sync. Without sync, Archestra saves a local revision in the database.
+Archestra shows the policy read-only on the OpenAPPA Policy page. The document follows the \`organization.appa.toml\` format. With GitHub sync, the repository owns the source text. A proposed edit opens a PR, and Archestra enforces it only after merge and successful sync. Without sync, Archestra saves a local revision in the database.
 
 Rules belong under \`[policy]\`. External services (remote annotators, authorities, sanitizers) and limits belong under \`[externals]\`. Batteries are declared with \`include\`, \`[server_aliases]\`, and \`[credentials]\`.
 
@@ -388,7 +388,7 @@ In Archestra:
 - Platform tools: \`archestra__<name>\` ↔ \`mcp/archestra/<name>\` or \`host/archestra/<name>\`
 - Native client built-ins: \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Match the name the runtime evaluates, not a guessed translation.
 - Search without catch-all: declare \`archestra__search_tools\` with \`delta = {}\`.
-- Command tools such as \`bash\`, \`shell\`, \`exec_command\`, and \`run_command\` can use \`command\` or \`cmd\` arguments. The proxy normalizes these variants; check the evaluated tool name when writing an argument-specific rule.
+- Command tools such as \`bash\`, \`shell\`, \`exec_command\`, and \`run_command\` can use \`command\` or \`cmd\` arguments. The proxy normalizes these variants. Check the evaluated tool name when writing an argument-specific rule.
 
 ### Information Flow Control (IFC)
 
@@ -410,7 +410,7 @@ For resources scoped to channels, repos, or projects:
 
 ### Subagent returns
 
-Claude Code, Codex, and OpenCode can protect native CLI subagent returns through the Archestra proxy. A child inherits its parent's restrictions, but its tool-call rules do not by themselves protect the answer it sends back. The parent must choose a return contract before spawning the child. The proxy withholds the child's final answer, including a tool-free answer, until OpenAPPA admits it. An available output sanitizer can replace it with an approved summary. The parent receives only a verified return; if verification fails, the return stays blocked.
+Claude Code, Codex, and OpenCode can protect native CLI subagent returns through the Archestra proxy. A child inherits its parent's restrictions, but its tool-call rules do not by themselves protect the answer it sends back. The parent must choose a return contract before spawning the child. The proxy withholds the child's final answer, including a tool-free answer, until OpenAPPA admits it. An available output sanitizer can replace it with an approved summary. The parent receives only a verified return. If verification fails, the return stays blocked.
 
 The root policy can declare that the integration controls child context and returns:
 
@@ -422,7 +422,7 @@ version = 2
 context_control = true
 \`\`\`
 
-This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation; never claim the child is protected. Confirm the deployment can issue signed lineage and return receipts without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
+This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Never claim the child is protected. Confirm the deployment can issue signed lineage and return receipts without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
 
 This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 

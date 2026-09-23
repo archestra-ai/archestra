@@ -316,7 +316,7 @@ describe("APPA Guide feature availability", () => {
 
     // P13: Multi-runtime / session isolation
     expect(content).toContain(
-      "Saved policies apply to new conversations; this conversation keeps",
+      "Saved policies apply to new conversations. This conversation keeps",
     );
     expect(content).toContain("policy it started with.");
 

@@ -208,6 +208,7 @@ mod tests {
                 r#"{"path":"tasks/a1.output"}"#.into(),
             )
             .unwrap(),
+            cwd: None,
         };
         assert!((adapter().names_children)(&actor, &call).is_empty());
     }

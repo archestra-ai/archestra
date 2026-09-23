@@ -1,6 +1,7 @@
 "use client";
 
 import { EDITABLE_TEXT_FILE_MAX_BYTES } from "@archestra/shared";
+import { csvParseRows } from "d3-dsv";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
@@ -454,12 +455,7 @@ function FileTextPreview({
     return <EmptyFileNotice />;
   }
   if (asTable) {
-    // Naive CSV: split on newlines/commas. Good enough for a preview; does not
-    // handle quoted commas or embedded newlines.
-    const rows = text
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => line.split(","));
+    const rows = csvParseRows(text);
     return (
       <div className="overflow-auto p-2">
         <table className="w-full border-collapse text-xs">

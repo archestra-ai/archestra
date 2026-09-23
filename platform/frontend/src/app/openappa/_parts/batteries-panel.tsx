@@ -179,13 +179,13 @@ export function BatteriesPanel() {
       ? (catalog.data.find((entry) => entry.id === catalogId)?.name ??
         "Removed server")
       : "";
+  const summaryOf = (name: string) =>
+    batteries.data.find((battery) => battery.name === name);
   const installsOf = (name: string) =>
-    batteries.data
-      .find((battery) => battery.name === name)
-      ?.installs.map((install) => ({
-        id: install.id,
-        catalogId: install.catalogId,
-      })) ?? [];
+    summaryOf(name)?.installs.map((install) => ({
+      id: install.id,
+      catalogId: install.catalogId,
+    })) ?? [];
   const includedHashes = new Set(
     included
       .map((battery) => battery.packageHash)
@@ -434,6 +434,7 @@ export function BatteriesPanel() {
               <IncludedBattery
                 battery={row.original.included}
                 installs={installsOf(row.original.name)}
+                annotators={summaryOf(row.original.name)?.annotators ?? []}
                 catalogName={catalogName}
                 enforced={enforced}
                 writable={writable}
@@ -505,8 +506,11 @@ const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
 
 const UNBOUND = "__unbound__";
 
-/** A battery install as this panel needs it: the row id behind one catalog. */
-type InstallRef = { id: string; catalogId: string };
+/**
+ * A battery install as this panel needs it: the row id behind one catalog, or
+ * behind the organization for a battery made of annotators alone.
+ */
+type InstallRef = { id: string; catalogId: string | null };
 
 function HeldPullNotice({
   heldPull,
@@ -550,6 +554,7 @@ function HeldPullNotice({
 function IncludedBattery({
   battery,
   installs,
+  annotators,
   catalogName,
   enforced,
   writable,
@@ -557,6 +562,7 @@ function IncludedBattery({
 }: {
   battery: PolicyBattery;
   installs: InstallRef[];
+  annotators: string[];
   catalogName: (catalogId: string) => string;
   enforced: boolean;
   writable: boolean;
@@ -591,7 +597,19 @@ function IncludedBattery({
       </div>
       <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
         <Section title="Governs">
-          {battery.servers.length === 0 ? (
+          {battery.scope === "organization" ? (
+            <div className="space-y-1">
+              <p className="text-sm">Organization-wide</p>
+              {status === "unrouted" ? (
+                <p className="text-xs text-muted-foreground">
+                  No policy rule routes a tool to its annotators yet. Add one to
+                  the policy text, such as{" "}
+                  <code className="font-mono">{`annotator = "${annotators[0] ?? ""}"`}</code>
+                  .
+                </p>
+              ) : null}
+            </div>
+          ) : battery.servers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No alias points this battery at a server.
             </p>
@@ -830,6 +848,7 @@ function BatteryRowActions({
       (installedCatalogIds === null || installedCatalogIds.has(entry.id)) &&
       !attached.has(entry.id),
   );
+  const organizationWide = battery?.scope === "organization";
   return (
     <TableRowActions
       actions={[
@@ -837,10 +856,14 @@ function BatteryRowActions({
           ? [
               {
                 icon: <Link2 className="size-4" />,
-                label: `Attach the ${battery.name} battery to a server`,
+                label: organizationWide
+                  ? `Attach the ${battery.name} battery to the organization`
+                  : `Attach the ${battery.name} battery to a server`,
                 onClick: onAttach,
-                disabled: options.length === 0,
-                disabledTooltip: "Connect an available MCP server first",
+                disabled: organizationWide ? !!included : options.length === 0,
+                disabledTooltip: organizationWide
+                  ? "Already included in this policy"
+                  : "Connect an available MCP server first",
               },
             ]
           : []),
@@ -889,7 +912,11 @@ function AttachBatteryDialog({
 }) {
   const create = useCreateBatteryInstall();
   const [catalogId, setCatalogId] = useState("");
-  const readiness = useBatteryMatches(catalogId, catalogId !== "");
+  const organizationWide = battery.scope === "organization";
+  const readiness = useBatteryMatches(
+    catalogId,
+    catalogId !== "" && !organizationWide,
+  );
   const attach = readiness.data?.attach ?? null;
   const attached = new Set(
     included?.servers
@@ -908,14 +935,20 @@ function AttachBatteryDialog({
         if (!open) onClose();
       }}
       title={`Attach ${battery.name}`}
-      description="Choose the MCP server this battery should govern."
+      description={
+        organizationWide
+          ? "Include this battery across the organization."
+          : "Choose the MCP server this battery should govern."
+      }
       size="small"
       isDirty={catalogId !== ""}
       onSubmit={(event) => {
         event.preventDefault();
-        if (!catalogId || attach !== "ready") return;
+        if (!organizationWide && (!catalogId || attach !== "ready")) return;
         create.mutate(
-          { batteryName: battery.name, catalogId },
+          organizationWide
+            ? { batteryName: battery.name }
+            : { batteryName: battery.name, catalogId },
           { onSuccess: onClose },
         );
       }}
@@ -924,71 +957,78 @@ function AttachBatteryDialog({
           <DialogCancelButton disabled={create.isPending} />
           <Button
             type="submit"
-            disabled={!catalogId || attach !== "ready" || create.isPending}
+            disabled={
+              (!organizationWide && (!catalogId || attach !== "ready")) ||
+              create.isPending
+            }
           >
             <span>{create.isPending ? "Attaching…" : "Attach battery"}</span>
           </Button>
         </>
       }
     >
-      <div className="space-y-2">
-        <Label htmlFor={`battery-server-${battery.name}`}>MCP server</Label>
-        <SearchableSelect
-          id={`battery-server-${battery.name}`}
-          ariaLabel="MCP server"
-          value={catalogId}
-          onValueChange={setCatalogId}
-          placeholder="Select a server…"
-          items={options.map((entry) => ({
-            value: entry.id,
-            label: entry.name,
-            content: (
-              <span className="flex items-center gap-2">
-                <McpCatalogIcon
-                  icon={entry.icon}
-                  catalogId={entry.id}
-                  size={16}
-                />
-                <span>{entry.name}</span>
-              </span>
-            ),
-            selectedContent: (
-              <span className="flex items-center gap-2">
-                <McpCatalogIcon
-                  icon={entry.icon}
-                  catalogId={entry.id}
-                  size={16}
-                />
-                <span>{entry.name}</span>
-              </span>
-            ),
-          }))}
-        />
-        {attach !== null && attach !== "ready" && (
-          <p
-            role="note"
-            className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
-          >
-            <span>{ATTACH_NOTES[attach]}</span>
-            {attach === "unsynced" && <SyncToolsButton catalogId={catalogId} />}
-          </p>
-        )}
-        {readiness.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            <span>
-              Could not check whether this server can take a battery.{" "}
-            </span>
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0"
-              onClick={() => readiness.refetch()}
+      {!organizationWide && (
+        <div className="space-y-2">
+          <Label htmlFor={`battery-server-${battery.name}`}>MCP server</Label>
+          <SearchableSelect
+            id={`battery-server-${battery.name}`}
+            ariaLabel="MCP server"
+            value={catalogId}
+            onValueChange={setCatalogId}
+            placeholder="Select a server…"
+            items={options.map((entry) => ({
+              value: entry.id,
+              label: entry.name,
+              content: (
+                <span className="flex items-center gap-2">
+                  <McpCatalogIcon
+                    icon={entry.icon}
+                    catalogId={entry.id}
+                    size={16}
+                  />
+                  <span>{entry.name}</span>
+                </span>
+              ),
+              selectedContent: (
+                <span className="flex items-center gap-2">
+                  <McpCatalogIcon
+                    icon={entry.icon}
+                    catalogId={entry.id}
+                    size={16}
+                  />
+                  <span>{entry.name}</span>
+                </span>
+              ),
+            }))}
+          />
+          {attach !== null && attach !== "ready" && (
+            <p
+              role="note"
+              className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
             >
-              <span>Retry</span>
-            </Button>
-          </p>
-        )}
-      </div>
+              <span>{ATTACH_NOTES[attach]}</span>
+              {attach === "unsynced" && (
+                <SyncToolsButton catalogId={catalogId} />
+              )}
+            </p>
+          )}
+          {readiness.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              <span>
+                Could not check whether this server can take a battery.{" "}
+              </span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => readiness.refetch()}
+              >
+                <span>Retry</span>
+              </Button>
+            </p>
+          )}
+        </div>
+      )}
     </StandardFormDialog>
   );
 }

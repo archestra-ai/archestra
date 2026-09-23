@@ -1,0 +1,5 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=the constraint replaces a unique index over the same three columns in one transaction. Every existing row has a non-null catalog_id and already satisfies that index, and NULLS NOT DISTINCT only differs from it for rows with a null catalog_id, and none exists yet, so it cannot fail on existing data. ON CONFLICT (organization_id, catalog_id, battery_name) writers infer the new constraint as they did the index.
+DROP INDEX "openappa_battery_installs_org_catalog_battery_idx";--> statement-breakpoint
+ALTER TABLE "openappa_battery_installs" ALTER COLUMN "catalog_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "openappa_battery_installs" ADD CONSTRAINT "openappa_battery_installs_org_catalog_battery_uq" UNIQUE NULLS NOT DISTINCT("organization_id","catalog_id","battery_name");

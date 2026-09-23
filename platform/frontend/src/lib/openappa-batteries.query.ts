@@ -25,6 +25,11 @@ export type PolicyDeclarations =
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
 export type EffectivePolicy =
   archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
+/** What an attach names: the battery, and the catalog unless it governs the organization. */
+type CreateInstallParams = Pick<
+  archestraApiTypes.CreateOpenappaBatteryInstallData["body"],
+  "batteryName" | "catalogId"
+>;
 
 /** Why a catalog cannot take a battery yet, for the surfaces that offer one. */
 export const ATTACH_NOTES: Record<
@@ -140,7 +145,7 @@ export function useSetBatteryEnabled(catalogId: string) {
 export function useCreateBatteryInstall() {
   const client = useQueryClient();
   return useBatteryMutation(
-    async (params: { batteryName: string; catalogId: string }) =>
+    async (params: CreateInstallParams) =>
       settled(await createInstall(client, params)),
     (battery) => toast.success(`Battery "${battery.name}" attached`),
   );
@@ -218,10 +223,7 @@ export function useDeleteBatteryPackage() {
  * from the server, so a policy that moved since the render still lands; the
  * answer goes through the query cache so the page shows what was written to.
  */
-async function createInstall(
-  client: QueryClient,
-  params: { batteryName: string; catalogId: string },
-) {
+async function createInstall(client: QueryClient, params: CreateInstallParams) {
   const packageHash = await includedPackageHash(client, params.batteryName);
   return archestraApiSdk.createOpenappaBatteryInstall({
     body: {

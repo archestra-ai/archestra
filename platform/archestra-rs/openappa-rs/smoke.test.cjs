@@ -33,6 +33,15 @@ test('native typed remedies are durable, scoped, and replayed by logical call id
     });
   });
   await new Promise((resolve) => sanitizer.listen(0, '127.0.0.1', resolve));
+  const annotation = '{"version":1,"answer":{"delta":{},"requires":{"history":[],"attention":[]},"emits":[]}}';
+  const annotator = createServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json', 'x-appa-diagnostics': 'model=m1' });
+      response.end(annotation);
+    });
+  });
+  await new Promise((resolve) => annotator.listen(0, '127.0.0.1', resolve));
   const policyPath = path.join(dir, 'policy.toml');
   writeFileSync(policyPath, `${readFileSync(path.join(__dirname, 'test-policy.toml'), 'utf8')}
 [[policy.tool]]
@@ -53,6 +62,13 @@ confined_results = ["leak", "leak_partial"]
 context_control = true
 [externals.sanitizers.scrub]
 url = "http://127.0.0.1:${sanitizer.address().port}/"
+[[policy.annotator]]
+name = "gatekeeper"
+[[policy.tool]]
+name = "annotated_read"
+annotator = "gatekeeper"
+[externals.annotators.gatekeeper]
+url = "http://127.0.0.1:${annotator.address().port}/"
 [[policy.tool]]
 name = "send_email"
 parameters = { type = "object", properties = { to = { type = "string" } }, required = ["to"] }
@@ -89,7 +105,7 @@ builtin = "hitl"
   await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  t.after(() => { sanitizer.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
+  t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
@@ -714,6 +730,45 @@ builtin = "hitl"
     assert.equal(response.output_source, 'runtime');
     assert.match(response.approved_output, /no record of releasing a call/);
     assert.ok(!response.approved_output.includes('Authorized'));
+  });
+
+  await t.test('an external consult is stored under the dispatching organization with its join keys', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
+
+    const { rows } = await client.query(
+      'SELECT c.*, s.root AS session_root FROM openappa_external_consults c JOIN openappa_sessions s ON s.organization_id = c.organization_id AND s.session_id = c.session_id WHERE c.organization_id = $1',
+      [organization_id],
+    );
+    assert.equal(rows.length, 1);
+    const [row] = rows;
+    assert.deepEqual(
+      {
+        session_id: row.session_id, caller_id: row.caller_id, role: row.role, external_name: row.external_name,
+        backend: row.backend, outcome: row.outcome, http_status: row.http_status, root: row.root,
+        trajectory: row.trajectory, call_id: row.call_id, offer_id: row.offer_id,
+        raw_response: row.raw_response.toString(), diagnostics: row.diagnostics.toString(),
+        diagnostics_truncated: row.diagnostics_truncated, answer: row.answer, request_kind: row.request.kind,
+      },
+      {
+        session_id: session.session_id, caller_id: 'user:owner', role: 'annotator', external_name: 'gatekeeper',
+        backend: 'url', outcome: 'answered', http_status: 200, root: row.session_root,
+        trajectory: row.session_root, call_id: 'call:annotated-1', offer_id: null,
+        raw_response: annotation, diagnostics: 'model=m1',
+        diagnostics_truncated: false, answer: JSON.parse(annotation).answer, request_kind: 'annotation',
+      },
+    );
+    assert.match(row.id, /^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+    assert.match(row.call_digest, /^[0-9a-f]{64}$/);
+
+    // No organization row to file under: the record is lost, the ruling is not.
+    const unfiled = scope();
+    assert.equal((await call(unfiled, 'annotated-2', 'annotated_read', { a: 2 })).decision, 'allow_call');
+    const stored = await client.query('SELECT count(*) AS n FROM openappa_external_consults WHERE organization_id = $1', [unfiled.organization_id]);
+    assert.equal(Number(stored.rows[0].n), 0);
   });
 
   await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {

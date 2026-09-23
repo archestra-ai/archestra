@@ -48,11 +48,11 @@ For policy fields and examples, see the OpenAPPA [policy configuration reference
 
 ## Batteries
 
-A battery is a reusable OpenAPPA policy package for a provider's tools. Open **OpenAPPA → Batteries** to attach a bundled battery to a synced MCP server. You can also include one while setting up a matching server, ask the configuration agent to attach it, or upload your own package.
+A battery is a reusable OpenAPPA policy package. Open **OpenAPPA → Batteries** to attach a bundled battery to a synced MCP server. You can also include one while setting up a matching server, ask the configuration agent to attach it, or upload your own package. Annotator-only batteries apply across the organization and need no server.
 
 Attaching a battery adds its file to the policy's `include` list and binds its server alias. The root policy and included batteries compose into one effective policy. Root rules take precedence over included rules.
 
-Some batteries consult a provider. Bind each required variable to an organization runtime credential in the Batteries panel. An included battery may need a server, credential, or helper runtime before it becomes active. The panel shows its status and what to fix.
+Some batteries consult a provider. Bind each required variable to an organization runtime credential in the Batteries panel. An included battery may need a server, credential, or helper runtime before it becomes active. An annotator-only battery also needs a policy rule to route tools to its annotator. The panel shows its status and what to fix.
 
 ![Available batteries and their attachment actions](/docs/automated_screenshots/platform-openappa_batteries.webp)
 

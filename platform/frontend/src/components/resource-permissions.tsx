@@ -414,7 +414,7 @@ function PermissionsEditor({
           <Button
             type="button"
             size="sm"
-            variant="ghost"
+            variant="outline"
             aria-label="Discard changes"
             disabled={mutation.isPending}
             onClick={reset}

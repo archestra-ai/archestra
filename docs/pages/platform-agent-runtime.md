@@ -169,7 +169,7 @@ Archestra injects runtime configuration automatically. The main integration poin
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Assigned tools and user-scoped access. |
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Follow-up instructions for turn-boundary steering. |
 
-Custom images should use the proxy and gateway to retain platform controls. Send the run ID in `X-Archestra-Run-Id` and `X-Archestra-Session-Id` request headers. The [full reference](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#runtime-environment) covers native client aliases and continuation variables.
+Custom images should use the proxy and gateway to retain platform controls. Send the run ID in `X-Archestra-Run-Id` and `X-Archestra-Session-Id` request headers. Send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` in `X-Appa-Session-ID` so [Guardrails v2](/docs/platform-ai-tool-guardrails) keeps one session per conversation. The [full reference](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#runtime-environment) covers native client aliases and continuation variables.
 
 ### Configuration And Secrets
 

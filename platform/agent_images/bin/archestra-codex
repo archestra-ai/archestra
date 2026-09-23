@@ -199,6 +199,31 @@ HOOK
   chmod 0700 "${notify_script}"
   notify_config="notify = [$(jq -Rn --arg value "${notify_script}" '$value')]"
 fi
+# OpenAPPA governs only the tools a request declares, and refuses a session
+# whose tools are hidden behind a provider-side tool search or a code-mode
+# `exec` program. Every model in Codex's bundled catalog does one or both, so
+# a run launched under Guardrails v2 rewrites that catalog to direct tool mode
+# and turns off code mode and hosted web search.
+openappa_config=""
+openappa_features=""
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  model_catalog="${CODEX_HOME}/openappa-model-catalog.json"
+  if ! codex debug models --bundled 2>/dev/null \
+    | jq '.models |= map(.tool_mode = "direct" | .supports_search_tool = false)' \
+      > "${model_catalog}.tmp" \
+    || [[ ! -s "${model_catalog}.tmp" ]]; then
+    rm -f "${model_catalog}.tmp"
+    echo "archestra: Codex could not prepare its model catalog for OpenAPPA" >&2
+    "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+      "codex_openappa_catalog" "Codex could not prepare its model catalog for OpenAPPA."
+    exit 78
+  fi
+  mv "${model_catalog}.tmp" "${model_catalog}"
+  openappa_config="web_search = \"disabled\"
+model_catalog_json = $(jq -Rn --arg value "${model_catalog}" '$value')"
+  openappa_features="[features]
+code_mode_host = false"
+fi
 developer_instructions="$({
   printf '%s\n\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
   printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
@@ -210,6 +235,7 @@ approval_policy = "never"
 sandbox_mode = "danger-full-access"
 developer_instructions = ${developer_instructions}
 ${notify_config}
+${openappa_config}
 
 [model_providers.archestra]
 name = "Archestra"
@@ -220,6 +246,7 @@ wire_api = "responses"
 [model_providers.archestra.http_headers]
 "X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 "X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
+"X-Appa-Session-ID" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 
 [mcp_servers.archestra]
 url = $(jq -Rn --arg value "${ARCHESTRA_MCP_GATEWAY_URL:?}" '$value')
@@ -228,9 +255,12 @@ bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 [mcp_servers.archestra.http_headers]
 "X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 "X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
+"X-Appa-Session-ID" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 
 [projects.$(jq -Rn --arg value "${PWD}" '$value')]
 trust_level = "trusted"
+
+${openappa_features}
 EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
 

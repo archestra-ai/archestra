@@ -1,13 +1,12 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import { Globe, Key, Loader2, User, Users } from "lucide-react";
+import { Globe, Loader2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
-import { TerminalBlock } from "@/app/connection/terminal-block";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -32,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
+import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
 import {
   TeamVisibilityPicker,
   type VisibilityOption,
@@ -57,6 +57,7 @@ export type VirtualKeyType = NonNullable<
 >;
 type VirtualKeySummary =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
+type CreatedVirtualKey = archestraApiTypes.CreateVirtualApiKeyResponses["200"];
 
 /**
  * Self-contained variant for resource connection surfaces: gathers the option
@@ -169,10 +170,8 @@ export function CreateVirtualKeyDialog({
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
-  const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
-  const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
-    null,
-  );
+  const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
+  const createdKeyValue = createdKey?.value ?? null;
 
   const prevOpenRef = useRef(open);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -205,8 +204,7 @@ export function CreateVirtualKeyDialog({
     const wasOpen = prevOpenRef.current;
     prevOpenRef.current = open;
     if (open && !wasOpen) {
-      setCreatedKeyValue(null);
-      setCreatedKeyExpiresAt(null);
+      setCreatedKey(null);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
       );
@@ -306,8 +304,7 @@ export function CreateVirtualKeyDialog({
       });
       setNewKeyName("");
       if (result?.value) {
-        setCreatedKeyValue(result.value);
-        setCreatedKeyExpiresAt(expiresAt);
+        setCreatedKey(result);
       }
     } catch {
       // handled by mutation
@@ -353,26 +350,16 @@ export function CreateVirtualKeyDialog({
           className="space-y-4"
           data-testid={E2eTestId.VirtualKeyCreateDialog}
         >
-          {createdKeyValue ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Endpoint</h3>
-                <TerminalBlock code={`${connectionBaseUrl}/model-router`} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Key className="h-4 w-4" />
-                  Copy this key now. It won&apos;t be shown again.
-                </div>
-                <div data-testid={E2eTestId.VirtualKeyValue}>
-                  <TerminalBlock code={createdKeyValue} />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Expires:</span>{" "}
-                {formatExpiration(createdKeyExpiresAt)}
-              </div>
-            </div>
+          {createdKey ? (
+            <VirtualKeyConnectionGuide
+              keyValue={createdKey.value}
+              keyType={createdKey.keyType}
+              mappedProviderKeys={createdKey.providerApiKeys}
+              connectionBaseUrl={connectionBaseUrl}
+              name={createdKey.name}
+              expiration={formatExpiration(createdKey.expiresAt)}
+              visibleTo={getVisibleToLabel(createdKey, currentUser?.id)}
+            />
           ) : (
             <>
               <div className="space-y-2">
@@ -523,6 +510,19 @@ export function VirtualKeyVisibilityField({
       )}
     </VisibilitySelector>
   );
+}
+
+function getVisibleToLabel(
+  key: CreatedVirtualKey,
+  currentUserId: string | undefined,
+): string | null {
+  if (key.keyType === "passthrough") return null;
+  if (key.scope === "org") return "Everyone in the organization";
+  if (key.scope === "team")
+    return key.teams.map((team) => team.name).join(", ");
+  return key.authorId === currentUserId
+    ? "Only you"
+    : `Only ${key.authorName ?? "the owner"}`;
 }
 
 export function formatExpiration(date: Date | string | null): string {

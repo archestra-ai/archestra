@@ -85593,6 +85593,8 @@ export type GetOpenappaBatteriesResponses = {
         source: 'bundled' | 'upload';
         contentHash: string | null;
         namespaces: Array<string>;
+        annotators: Array<string>;
+        scope: 'catalogs' | 'organization';
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -85600,9 +85602,9 @@ export type GetOpenappaBatteriesResponses = {
             id: string;
             organizationId: string;
             batteryName: string;
-            catalogId: string;
+            catalogId: string | null;
             enabled: boolean;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
             packageHash: string | null;
             lastError: string | null;
             credentialBindings: {
@@ -85698,7 +85700,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             name: string;
             source: 'bundled' | 'upload';
             packageHash: string | null;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+            scope: 'catalogs' | 'organization';
+            composed: boolean;
             line: number;
             servers: Array<{
                 target: string;
@@ -85906,9 +85910,9 @@ export type GetOpenappaBatteryMatchesResponses = {
                 id: string;
                 organizationId: string;
                 batteryName: string;
-                catalogId: string;
+                catalogId: string | null;
                 enabled: boolean;
-                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
                 packageHash: string | null;
                 lastError: string | null;
                 credentialBindings: {
@@ -85926,7 +85930,7 @@ export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesRespons
 export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
-        catalogId: string;
+        catalogId?: string;
         packageHash?: string | null;
     };
     path?: never;
@@ -86008,7 +86012,9 @@ export type CreateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -86198,7 +86204,9 @@ export type UpdateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -86389,6 +86397,7 @@ export type UploadOpenappaBatteryPackageResponses = {
         contentHash: string;
         entry: string;
         namespaces: Array<string>;
+        annotators: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -86481,6 +86490,137 @@ export type DeleteOpenappaBatteryPackageResponses = {
 };
 
 export type DeleteOpenappaBatteryPackageResponse = DeleteOpenappaBatteryPackageResponses[keyof DeleteOpenappaBatteryPackageResponses];
+
+export type GetOpenappaExternalConsultsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        externalName?: string;
+        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+        outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+        /**
+         * Recorded on or after this time (ISO 8601)
+         */
+        from?: string;
+        /**
+         * Recorded on or before this time (ISO 8601)
+         */
+        to?: string;
+        root?: string;
+        sessionId?: string;
+        /**
+         * `jsonl` streams up to 10000 rows as application/x-ndjson, one consult per line, ignoring `limit`
+         */
+        format?: 'json' | 'jsonl';
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/openappa/external-consults';
+};
+
+export type GetOpenappaExternalConsultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultsError = GetOpenappaExternalConsultsErrors[keyof GetOpenappaExternalConsultsErrors];
+
+export type GetOpenappaExternalConsultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            sessionId: string | null;
+            callerId: string | null;
+            createdAt: string;
+            startedAt: string;
+            durationMs: number;
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+            externalName: string;
+            backend: 'url' | 'command' | 'module' | 'llm' | 'claude_code' | 'hitl';
+            request: unknown;
+            outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+            answer: unknown;
+            rawResponse: string | null;
+            httpStatus: number | null;
+            diagnostics: string | null;
+            diagnosticsTruncated: boolean;
+            root: string;
+            trajectory: string;
+            callId: string | null;
+            offerId: string | null;
+            callDigest: string | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultsResponse = GetOpenappaExternalConsultsResponses[keyof GetOpenappaExternalConsultsResponses];
 
 export type GetAppaGithubSyncData = {
     body?: never;

@@ -262,6 +262,63 @@ describe("battery helper bridge", () => {
     expect(response.statusCode).toBe(502);
   });
 
+  test("the last line a helper wrote to stderr is passed through as X-Appa-Diagnostics", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    const cases = [
+      {
+        result: {
+          exitCode: 3,
+          stdout: "",
+          stderr: "starting\nrate limited\n\n",
+        },
+        status: 502,
+        diagnostics: "rate limited",
+      },
+      {
+        result: {
+          exitCode: 0,
+          stdout: JSON.stringify({ version: 1, answer: {} }),
+          stderr: "cache miss",
+        },
+        status: 200,
+        diagnostics: "cache miss",
+      },
+      { result: { exitCode: 3, stdout: "", stderr: "" }, status: 502 },
+    ];
+    for (const { result, status, diagnostics } of cases) {
+      stubSandbox(result);
+      const response = await consult({
+        installId: install.id,
+        authorization: bridgeBearer(),
+      });
+      expect(response.statusCode).toBe(status);
+      expect(response.headers["x-appa-diagnostics"]).toBe(diagnostics);
+      vi.restoreAllMocks();
+    }
+  });
+
+  test("a last stderr line that is not a whole, valid header value is dropped", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    for (const stderr of [
+      "carriage\rreturn",
+      "not latin1: \u{1F4A5}",
+      `short\n${"a".repeat(9 * 1024)}`,
+    ]) {
+      stubSandbox({ exitCode: 3, stdout: "", stderr });
+      const response = await consult({
+        installId: install.id,
+        authorization: bridgeBearer(),
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.headers["x-appa-diagnostics"]).toBeUndefined();
+      vi.restoreAllMocks();
+    }
+  });
+
   test("the bound credential reaches the helper's environment and nothing else", async ({
     makeInternalMcpCatalog,
   }) => {

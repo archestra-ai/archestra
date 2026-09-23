@@ -139,6 +139,7 @@ const STATUS_NOTES: Record<InstallStatus, string> = {
   missing_credentials: "Needs a credential before its helpers can run.",
   naming_conflict: "Off: its tool names clash with another battery.",
   server_missing: "Off: it is bound to no server this deployment carries.",
+  unrouted: "Composed, but no policy rule routes a tool to its annotators.",
   refused: "Off: the policy it composes into was refused.",
   unavailable: "Off: the battery package is gone.",
 };

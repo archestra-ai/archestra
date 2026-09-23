@@ -42,7 +42,12 @@ const declarations = {
   managedInGithub: false,
   heldPull: null,
 };
-function battery(name: string, status: string, line: number) {
+function battery(
+  name: string,
+  status: string,
+  line: number,
+  composed = status === "active",
+) {
   return {
     entry: `${name}/policy.toml`,
     name,
@@ -50,6 +55,7 @@ function battery(name: string, status: string, line: number) {
     packageHash: null,
     status,
     line,
+    composed,
     servers: [],
     credentials: [],
     helpers: [],
@@ -372,6 +378,8 @@ test("the composed view names the batteries that fold in as empty stubs", async 
           battery("acme", "active", 3),
           battery("globex", "missing_credentials", 5),
           battery("initech", "server_missing", 7),
+          // An organization-wide battery composes though no rule routes to it.
+          battery("hooli", "unrouted", 9, true),
         ],
       }),
     ),
@@ -384,6 +392,7 @@ test("the composed view names the batteries that fold in as empty stubs", async 
   expect(stubs).toHaveTextContent("globex");
   expect(stubs).toHaveTextContent("initech");
   expect(stubs).not.toHaveTextContent("acme");
+  expect(stubs).not.toHaveTextContent("hooli");
 });
 
 test("the composed view lists no stub while every battery is active", async () => {

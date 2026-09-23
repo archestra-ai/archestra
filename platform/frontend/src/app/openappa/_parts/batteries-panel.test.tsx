@@ -68,6 +68,8 @@ const githubBattery = (installs: Install[] = []): Battery => ({
   source: "bundled",
   contentHash: null,
   namespaces: ["github"],
+  annotators: [],
+  scope: "catalogs",
   helpers: ["github_read_repo"],
   credentials: ["APPA_PROVIDER_GITHUB_TOKEN"],
   setup: null,
@@ -81,6 +83,8 @@ const declaredGithub = (
   source: "bundled",
   packageHash: null,
   status: "missing_credentials",
+  scope: "catalogs",
+  composed: false,
   line: 4,
   servers: [{ target: "code", catalogId }],
   credentials: [
@@ -477,6 +481,116 @@ test("attaching a bundled battery that is not included yet names no package", as
   await attach("github", "Code");
   await waitFor(() =>
     expect(body).toEqual({ batteryName: "github", catalogId }),
+  );
+});
+
+/** A battery made of annotators alone: it governs the organization, not a server. */
+const jevBattery = (installs: Install[] = []): Battery => ({
+  name: "jev",
+  description: "Jev annotator",
+  source: "bundled",
+  contentHash: null,
+  namespaces: [],
+  annotators: ["jev.tool-call"],
+  scope: "organization",
+  helpers: ["jev-annotator.py"],
+  credentials: ["APPA_PROVIDER_JEV_API_KEY"],
+  setup: null,
+  installs,
+});
+const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
+  entry: "batteries/jev/appa.toml",
+  name: "jev",
+  source: "bundled",
+  packageHash: null,
+  status: "missing_credentials",
+  scope: "organization",
+  composed: true,
+  line: 2,
+  servers: [],
+  credentials: [
+    { variable: "APPA_PROVIDER_JEV_API_KEY", key: null, readers: ["jev"] },
+  ],
+  helpers: ["jev-annotator.py"],
+  ...fields,
+});
+
+test("a battery governing the organization is attached with no server, even before one is installed", async () => {
+  let body: unknown;
+  declarations = emptyDeclarations();
+  batteries = [githubBattery(), jevBattery()];
+  server.use(
+    http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
+    http.post(
+      `${baseUrl}/api/openappa/battery-installs`,
+      async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(declaredJev());
+      },
+    ),
+  );
+  show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
+  // With nothing installed, only the battery that needs no server is offered.
+  expect(
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual(["jev"]);
+  await user.click(screen.getByRole("option", { name: "jev" }));
+  expect(
+    screen.queryByRole("combobox", { name: "Server" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Attach" }));
+  await waitFor(() => expect(body).toEqual({ batteryName: "jev" }));
+});
+
+test("an included battery governing the organization says so and binds its credential on its one row", async () => {
+  let body: unknown;
+  batteries = [
+    jevBattery([
+      install({ id: "jev-row", batteryName: "jev", catalogId: null }),
+    ]),
+  ];
+  declarations = emptyDeclarations({ batteries: [declaredJev()] });
+  server.use(
+    http.patch(
+      `${baseUrl}/api/openappa/battery-installs/jev-row`,
+      async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(declaredJev({ status: "active" }));
+      },
+    ),
+  );
+  show();
+  const row = await entry("jev");
+  expect(within(row).getByText("Organization-wide")).toBeVisible();
+  const user = userEvent.setup();
+  await user.click(
+    within(row).getByRole("combobox", { name: "APPA_PROVIDER_JEV_API_KEY" }),
+  );
+  await user.click(screen.getByRole("option", { name: "GitHub token" }));
+  await waitFor(() =>
+    expect(body).toEqual({
+      credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "github-token" },
+    }),
+  );
+});
+
+test("a battery governing the organization that no rule routes to says how to route it", async () => {
+  batteries = [
+    jevBattery([
+      install({ id: "jev-row", batteryName: "jev", catalogId: null }),
+    ]),
+  ];
+  declarations = emptyDeclarations({
+    batteries: [declaredJev({ status: "unrouted" })],
+  });
+  show();
+  const row = await entry("jev");
+  expect(row).toHaveTextContent("Not used by any rule");
+  expect(row).not.toHaveTextContent("Active");
+  expect(within(row).getByRole("code")).toHaveTextContent(
+    'annotator = "jev.tool-call"',
   );
 });
 

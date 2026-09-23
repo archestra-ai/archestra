@@ -25,6 +25,7 @@ const native = vi.hoisted(() => ({
     include: [],
     serverAliases: [],
     credentials: [],
+    routedAnnotators: [],
     errors: [],
   })),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({

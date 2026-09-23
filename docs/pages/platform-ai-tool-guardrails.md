@@ -68,6 +68,8 @@ Nothing includes a battery on its own. You add one in three places:
 
 A server takes a battery once its tools are synced. Until then the checkbox and the server list say so.
 
+An annotator-only battery, such as `jev`, declares no tool rules of its own and governs no server. It adds an annotator your rules route to with `annotator = "<name>"`, for example on the `*` rule. Attach it without picking a server; the panel shows it as organization-wide.
+
 ![The setup wizard offering the matching battery](/docs/automated_screenshots/platform-ai-tool-guardrails_wizard-battery.webp)
 
 Each included battery shows a status:
@@ -77,6 +79,7 @@ Each included battery shows a status:
 | Active | The battery governs its server. |
 | Needs a credential | A credential the battery reads is not bound, or its organization value is missing. |
 | No server bound | The alias names no installed server. |
+| Not used by any rule | An annotator-only battery is composed, but no rule routes a tool to its annotators. Add one, such as `annotator = "jev.tool-call"`. |
 | Tool name conflict | Two servers share the tool prefix, or the prefix contains `__`. |
 | Package missing | The include line names no known battery, so it governs nothing. |
 | Not enforced | The policy failed to compose. No battery is enforced until it composes again. |
@@ -89,7 +92,7 @@ You can upload your own battery package. The policy includes an upload by its co
 
 While a GitHub repository owns the policy, the panel is read-only and the repository text decides which batteries are included. A pull that binds a credential variable to a new key is held instead of published, and so is one that drops a battery your deployment declared before its declarations first reached the repository. The panel shows the held pull with its reasons; **Accept repository text** publishes it under your permissions.
 
-The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. A battery that is not active folds in as an empty stub, and the tab names each one with the reason. When the current text fails to compose, the tab shows the last document that opened and says so.
+The editor marks each include line and each unused alias with the status of what it names. The **Effective policy** tab shows the composed document the runtime enforces. A battery that is not active folds in as an empty stub, and the tab names each one with the reason. An annotator-only battery is the exception: it composes while no rule routes to it, and while it needs a credential, so a rule that routes to it never stops the policy from composing. Without its credential the annotator answers nothing, and the calls routed to it are refused. When the current text fails to compose, the tab shows the last document that opened and says so.
 
 ![The policy editor with a status mark on the include line](/docs/automated_screenshots/platform-ai-tool-guardrails_policy-annotations.webp)
 
@@ -98,6 +101,10 @@ The editor marks each include line and each unused alias with the status of what
 Lumen Cartography installs the GitHub MCP server for its agents. The setup wizard recognizes the server's image and offers the `github` battery. An administrator turns the checkbox on, and the policy gains an include line and an alias for the new server. The battery shows "Needs a credential" until the administrator binds `APPA_PROVIDER_GITHUB_TOKEN` to the organization's GitHub token in the Batteries panel. From then on the battery consults GitHub before an agent writes to a repository.
 
 Later the team moves the policy into a GitHub repository. A pull request points `APPA_PROVIDER_GITHUB_TOKEN` at a different key. The next pull is held with the reason "changes credentials" instead of handing the battery that key on its own. An administrator with the credential permission reads the held pull in the panel and accepts it, or asks for the change to be reverted.
+
+### External Consult Records
+
+APPA records every consult it makes to an annotator, authority, sanitizer, or other external. A record holds the request, the answer or no-answer outcome, the raw response, and the timing. It also holds the session, trajectory, and tool call the consult served. A helper script's last stderr line is kept as diagnostics. Only users with `log:admin` can read the records. Export them from `GET /api/openappa/external-consults` — add `?format=jsonl` for one record per line. Records expire with `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
 
 ## The Lethal Trifecta
 

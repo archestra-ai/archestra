@@ -1,6 +1,7 @@
 //! Battery packages as the host sees them: the ones bundled with the pinned
 //! OpenAPPA checkout, and the ones an organization uploads, both read through the
 //! same package validation the marketplace applies.
+use crate::policy::{policy_entries, routed_annotators};
 use appa_package::{Role, bundled_batteries, validate_package};
 use appa_runtime_api::CanonicalTool;
 use std::{path::Component, sync::OnceLock};
@@ -26,6 +27,9 @@ pub(crate) struct BatteryInfo {
     pub name: String,
     pub description: String,
     pub namespaces: Vec<String>,
+    pub annotators: Vec<String>,
+    /// The annotators its own tool rules route calls to.
+    pub routed_annotators: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
@@ -34,7 +38,7 @@ pub(crate) struct BatteryInfo {
     pub files: Vec<BatteryFile>,
 }
 
-/// Every bundled battery that governs MCP tools, inspected once per process.
+/// Every bundled battery this host serves, inspected once per process.
 pub(crate) fn bundled() -> &'static [BatteryInfo] {
     static BUNDLED: OnceLock<Vec<BatteryInfo>> = OnceLock::new();
     BUNDLED.get_or_init(|| {
@@ -45,7 +49,7 @@ pub(crate) fn bundled() -> &'static [BatteryInfo] {
                     Role::Battery(declared) => battery
                         .file(declared.policy.as_str())
                         .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
-                        .is_none_or(|document| governs_mcp_tools(&document)),
+                        .is_none_or(|document| serves_this_host(&document)),
                     Role::Plugin(_) => false,
                 },
                 // A bundle this host cannot read is not quietly left out: inspection
@@ -114,16 +118,24 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
             )
         })?;
     let document: toml::Table = toml::from_str(&policy).map_err(|error| error.to_string())?;
-    if !governs_mcp_tools(&document) {
+    if !serves_this_host(&document) {
         return Err(format!(
-            "battery {} names no MCP tool, and MCP tools are the tools this host serves",
+            "battery {} governs no MCP tool and is not an annotator-only battery, so this host has nothing for it to govern",
             package.name
         ));
     }
     Ok(BatteryInfo {
         name: package.name.to_string(),
         description: package.description.clone(),
-        namespaces: battery.namespaces.iter().map(ToString::to_string).collect(),
+        // The manifest defaults a battery's namespace to its own name; one without a
+        // tool rule governs no namespace, so no server alias points it anywhere.
+        namespaces: if policy_entries(&document, "tool").is_empty() {
+            Vec::new()
+        } else {
+            battery.namespaces.iter().map(ToString::to_string).collect()
+        },
+        annotators: annotator_names(&document),
+        routed_annotators: routed_annotators(&document),
         externals: helper_externals(&document)?,
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
@@ -134,21 +146,25 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
 }
 
 /// Whether a battery has anything to say under this host: a rule names an MCP tool,
-/// the only kind of tool Archestra serves. A battery written for another host's own
-/// tools composes but never matches here, so it is not offered.
-fn governs_mcp_tools(document: &toml::Table) -> bool {
-    document
-        .get("policy")
-        .and_then(toml::Value::as_table)
-        .and_then(|policy| policy.get("tool"))
-        .and_then(toml::Value::as_array)
-        .is_some_and(|rules| {
-            rules.iter().any(|rule| {
-                rule.get("name")
-                    .and_then(toml::Value::as_str)
-                    .is_some_and(governs_an_mcp_tool)
-            })
-        })
+/// the only kind of tool Archestra serves, or it declares no tool rule and only
+/// annotators, which a root rule routes a tool to by name. A battery written for
+/// another host's own tools composes but never matches here, so it is not offered.
+fn serves_this_host(document: &toml::Table) -> bool {
+    let rules = policy_entries(document, "tool");
+    let governs_mcp_tools = rules.iter().any(|rule| {
+        rule.get("name")
+            .and_then(toml::Value::as_str)
+            .is_some_and(governs_an_mcp_tool)
+    });
+    governs_mcp_tools || (rules.is_empty() && !annotator_names(document).is_empty())
+}
+
+fn annotator_names(document: &toml::Table) -> Vec<String> {
+    policy_entries(document, "annotator")
+        .iter()
+        .filter_map(|annotator| annotator.get("name").and_then(toml::Value::as_str))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Whether a rule's name before its selector, as the runtime reads it, is a canonical
@@ -207,6 +223,12 @@ mod tests {
         );
         assert!(
             github
+                .routed_annotators
+                .iter()
+                .any(|annotator| annotator == "github.repository-visibility")
+        );
+        assert!(
+            github
                 .helpers
                 .iter()
                 .any(|helper| helper == "repository-visibility.py")
@@ -221,6 +243,76 @@ mod tests {
             bundled()
                 .iter()
                 .all(|battery| battery.name != "claude-code")
+        );
+    }
+
+    #[test]
+    fn the_bundled_jev_battery_is_served_as_annotators_alone() {
+        let jev = bundled()
+            .iter()
+            .find(|battery| battery.name == "jev")
+            .expect("an annotator-only battery is served");
+        assert!(jev.namespaces.is_empty());
+        assert_eq!(jev.annotators, vec!["jev.tool-call".to_owned()]);
+        // A battery with no tool rule routes nothing to its own annotator.
+        assert!(jev.routed_annotators.is_empty());
+        assert_eq!(
+            jev.credentials,
+            vec!["APPA_PROVIDER_JEV_API_KEY".to_owned()]
+        );
+        assert!(jev.externals.iter().any(|external| {
+            external.kind == "annotators"
+                && external.name == "jev.tool-call"
+                && external.token_env.as_deref() == Some("APPA_PROVIDER_JEV_API_KEY")
+        }));
+    }
+
+    #[test]
+    fn an_uploaded_annotator_only_package_is_served_unless_it_names_another_hosts_tools() {
+        let manifest = "schema = 1\nname = \"tagger\"\ndescription = \"Tags calls\"\n[battery]\npolicy = \"appa.toml\"\nhosts = [\"claude-code\"]\nhelpers = [\"tag.py\"]\n";
+        let annotator = "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"tagger.call\"\nranks = [\"suspicious\", \"trusted\"]\naudiences = [\"self\"]\nmarks = []\n[externals.annotators.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n";
+        let files = |policy: String| {
+            vec![
+                BatteryFile {
+                    path: MANIFEST_FILE.to_owned(),
+                    text: manifest.to_owned(),
+                },
+                BatteryFile {
+                    path: "appa.toml".to_owned(),
+                    text: policy,
+                },
+                BatteryFile {
+                    path: "tag.py".to_owned(),
+                    text: "print('{}')\n".to_owned(),
+                },
+            ]
+        };
+        let info = inspect(&files(annotator.to_owned())).unwrap();
+        assert!(info.namespaces.is_empty());
+        assert_eq!(info.annotators, vec!["tagger.call".to_owned()]);
+        assert!(
+            inspect(&files(format!(
+                "{annotator}[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {{}}\n"
+            )))
+            .is_err()
+        );
+        assert!(
+            inspect(&files(format!(
+                "{annotator}token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n"
+            )))
+            .is_err()
+        );
+        assert!(
+            inspect(&files(format!(
+                "{annotator}[externals.authorities.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n"
+            )))
+            .is_err()
+        );
+        assert!(
+            inspect(&files(
+                "[policy]\nversion = 2\n[externals.annotators.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n".to_owned()
+            ))
+            .is_err()
         );
     }
 

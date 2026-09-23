@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-21"
+lastUpdated: "2026-09-23"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -165,11 +165,14 @@ Archestra injects runtime configuration automatically. The main integration poin
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Task and Agent instructions. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL` | Selected model. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime configuration and transcript directory. |
+| `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE` | Short-lived credentials. Re-read it before each authenticated request. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL`, `ARCHESTRA_VIRTUAL_KEY` | Model connection and runtime authentication. |
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Assigned tools and user-scoped access. |
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Follow-up instructions for turn-boundary steering. |
 
 Custom images should use the proxy and gateway to retain platform controls. Send the run ID in the `X-Archestra-Run-Id` request header. Send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` in `X-Archestra-Session-Id` and `X-Appa-Session-ID` — logs and [Guardrails v2](/docs/platform-ai-tool-guardrails) then keep one session per conversation, follow-ups included. The [full reference](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#runtime-environment) covers native client aliases and continuation variables.
+
+When [Guardrails v2](/docs/platform-ai-tool-guardrails) is on, `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` is `1`. Your client must then declare every tool in each model request. Guardrails refuses provider-side tool search and code mode. A subagent sends its own session ID and names its parent in `X-Appa-Parent-ID`. The proxy returns HTTP 500 with `x-should-retry: false` when the organization's guardrails policy is invalid. Do not retry it — an administrator must fix the policy. HTTP 503 with `Retry-After` is temporary, so retry after the delay.
 
 ### Configuration And Secrets
 

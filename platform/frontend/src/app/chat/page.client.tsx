@@ -3687,7 +3687,7 @@ export function ChatPageContent({
                         );
                       })()}
                     >
-                      <div className="space-y-3">
+                      <div>
                         {/* Shared-element pair with the conversation composer —
                             see the bottom-anchored ViewTransition above. */}
                         <ViewTransition
@@ -3707,11 +3707,10 @@ export function ChatPageContent({
                             ) : (
                               <>
                                 {newChatAgentId && !isInitialRuntimeMode && (
-                                  <div className="mb-3">
-                                    <AgentConnectionNotice
-                                      agentId={newChatAgentId}
-                                    />
-                                  </div>
+                                  <AgentConnectionNotice
+                                    agentId={newChatAgentId}
+                                    className="mb-3"
+                                  />
                                 )}
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}

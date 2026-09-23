@@ -257,9 +257,7 @@ describe("APPA Guide feature availability", () => {
 
     // P04: Distinguish available, matched, and included batteries with declarations
     expect(content).toContain("A battery is available when it exists");
-    expect(content).toContain(
-      "It is included when the serving policy composes it",
-    );
+    expect(content).toContain("It is declared by `include`");
     expect(content).toContain("under 20 words");
     expect(content).toContain("effective.batteries");
     expect(content).toContain("include");

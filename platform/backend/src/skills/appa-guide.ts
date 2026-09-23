@@ -16,7 +16,7 @@ Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client
 
 If the request says \`diagnose\` and \`inspect only\`, do not propose or make changes. Inspect the host and report **Health** for runtime, policy, agents, and tool servers. Report an optional **Unavailable** section, one **OpenAPPA pieces** line, and then **No changes applied.** Do not mention battery matches or suggested includes in the report.
 
-You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, propose rules in plain English, wait for approval, apply the rules, and make sure they work. The database stores the policy and shares it with the OpenAPPA editor in Studio. A local file, client setting, or shell command does not change this policy.
+You run inside Archestra or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). Every host follows the same flow: inspect tools, propose rules in plain English, wait for approval, apply the rules, and check the result. The database stores the policy and shares it with the OpenAPPA editor in Studio. A local file, client setting, or shell command does not change this policy.
 
 ## Platform tools in Archestra
 
@@ -44,7 +44,7 @@ If the request makes the mode clear, start in that mode. Otherwise, show these t
 
 If the operator asks to view or explain the policy (for example \`show policy\`, \`explain policy\`, or \`what is the current policy?\`):
 1. Call \`archestra__get_guardrails_policy\`.
-2. Summarize active rules, protected tools, and included batteries in plain language.
+2. Summarize active rules, protected tools, and included batteries in plain language. If asked about subagents, distinguish tool-call rules from the separate child-return boundary.
 3. Do not propose changes.
 
 If the operator chooses \`adjust\` without details, ask what they want OpenAPPA to do differently.
@@ -67,7 +67,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Use Information Flow Control (IFC) labels first. Express boundaries with trust and audience labels. Do not use effects or human approvals when labels express the requirement. Trusted data flowing within its audience stays autonomous.
 - A battery gives maintained defaults. Never edit a battery. Override a tool contract with a root rule.
 - A battery is declared in this same policy document. \`include\` names it — either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package — \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
-- A battery is available when it exists in the bundled or organization battery layer. It is included when the serving policy composes it. Say "include" rather than "install" when you propose that change.
+- A battery is available when it exists in the bundled or organization battery layer. It is declared by \`include\` and governs calls only when \`effective.batteries\` marks it \`active\`. Say "include" rather than "install" when you propose that change.
 - Read before you propose. Show the complete proposed behavior in plain English. Wait for approval before you update the policy. Ask for approval again if a correction changes that behavior.
 - An initial request for a change is not approval to execute it. End the first turn with the proposal. Act only after a later message approves that exact proposal.
 - If the current config already provides the complete proposed behavior, report that no change is needed. Do not ask for approval or update an unchanged config.
@@ -80,6 +80,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Show TOML only when the operator asks for it.
 - Ask one focused question at a time.
 - Configure only installed OpenAPPA features. If documented configuration cannot express the requested behavior, explain what is missing.
+- For CLI subagents, inspect the spawn tool, the child's tool rules, and the return boundary separately. A rule on the spawn tool or the child's reads does not make its final answer safe for the parent. See \`references/contracts.md\` before proposing return protection.
 - Do not configure the configuring actor: skip the agent that runs this skill and the runtime control tools \`execute_remedy_plan\` and \`get_remedy_plans\`.
 - Call \`execute_remedy_plan\` only when the previous tool result quoted \`offer_id: "<hex>"\`. Copy that hex string exactly. Never invent an offer id. Never ask the operator for an offer id.
 - When the operator sends approval (such as "Approve", "Approved", or "yes"), apply the waiting proposal immediately. If the operator approves when no proposal is waiting, state that nothing needs applying.
@@ -94,19 +95,19 @@ After a successful update, summarize the active behavior in one to three short s
 ### Inspect
 
 1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), and \`effective\` (enforced policy). Note declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
-   - \`active\`: battery governs its servers.
+   - \`active\`: battery's rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: \`[credentials]\` does not bind required helper variables.
    - \`server_missing\`: alias target resolves to no server.
    - \`naming_conflict\`: alias target is ambiguous.
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: runtime rejected composition.
-   Report every non-\`active\` battery or \`effective.error\` as a problem to fix.
+   Report every non-\`active\` battery or \`effective.error\` as a problem to fix. If composition fails, the last policy that opened remains in effect; do not claim the new text is enforced.
 2. Read the root policy text and effective policy. Note which rules come from batteries.
 3. Call \`archestra__list_mcp_server_deployments\` to find all deployed MCP servers.
 4. For each distinct Catalog ID, call \`archestra__get_mcp_server_tools\` with \`{ "mcpServerId": "<Catalog ID>" }\`. Use the Catalog ID, not the deployment ID.
-5. Call \`archestra__search_tools\` to find tools assigned to the calling agent.
-6. Cross-check all sources. In Archestra, MCP tools use \`<catalog>__<tool>\` (canonical \`mcp/<catalog>/<tool>\`), platform tools use \`archestra__<name>\`, and client built-ins use \`host/archestra/<name>\`.
+5. Call \`archestra__search_tools\` to find tools visible to the calling agent. Missing search results do not prove a server has no tools.
+6. Cross-check all sources. In Archestra, MCP tools use \`<catalog>__<tool>\` (canonical \`mcp/<catalog>/<tool>\`), and platform tools use \`archestra__<name>\`. Native client tools may be evaluated as \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Match actual evaluated names, not a guessed translation.
    This inspection reads stored tool metadata only. Do not execute tools or read private content to classify them.
 7. Compare installed tools with existing root rules. Existing root rules take priority.
 
@@ -115,6 +116,7 @@ After a successful update, summarize the active behavior in one to three short s
 Batteries supply pre-packaged security rules for popular MCP servers. In Archestra, batteries are declared in the root policy text:
 
 - Check which batteries are declared in \`include\` and active in \`effective.batteries\`.
+- An organization-wide annotator-only battery governs no server. It is \`unrouted\` until a tool rule names its annotator. Check that rule before calling it active. If it needs a credential, calls routed to it are refused until the credential is bound.
 - When you propose a battery, write one short sentence stating what it covers, what it protects, and any key assumption. Keep it under 20 words. Examples:
   > Slack battery — Keeps Slack data private and asks before publishing it.
   > GitHub battery — Assumes every repository is public and prevents private data from leaking to GitHub.
@@ -154,6 +156,7 @@ Group the proposal by server. Show:
 - how remaining installed tools will behave;
 - tools left undeclared (covered by \`name = "*"\` if present, refused otherwise);
 - every configured MCP server whose tools could not be detected.
+- any requested subagent return boundary that the connected host cannot support or verify.
 
 Add one short \`OpenAPPA pieces: <primitives>\` line.
 
@@ -166,11 +169,11 @@ End with: **Approve, or tell me what to change.** Wait for the reply.
 After approval:
 
 1. Call \`archestra__get_guardrails_policy\` again. Read the latest \`revision\`. If the policy changed since the proposal, revise the proposal and ask for approval again.
-2. Validate proposed TOML with \`archestra__validate_guardrails_policy\` using \`{ "content": "<complete proposed TOML>" }\`. Validation composes \`include\` batteries and returns warnings for unmapped entries. Fix errors and report warnings.
+2. Validate proposed TOML with \`archestra__validate_guardrails_policy\` using \`{ "content": "<complete proposed TOML>" }\`. Validation composes \`include\` batteries and can return warnings for unavailable entries. Fix errors and report warnings. Validation cannot prove external services work.
 3. If the text already provides the requested behavior, report that no change is needed.
 4. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`, where N is the revision from the read tool.
 5. If the save reports a conflict, someone saved a newer copy. Read it again, merge your change, validate, and retry. Never increase N without reading the new text.
-6. Check \`effective.error\` and \`effective.batteries\`. Report any non-\`active\` battery or composition error as a problem to fix.
+6. Read the saved policy back. Check \`effective.error\` and \`effective.batteries\`. Report any non-\`active\` battery or composition error as a problem to fix. If composition failed, the last policy that opened remains in effect.
 7. Report the outcome in a brief summary of the active behavior. Add:
    > Saved policies apply to new conversations; this conversation keeps the policy it started with.
 
@@ -186,10 +189,10 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 4. If a battery helps, propose adding it to \`include\` with the one-sentence rule used in \`init\` mode. Existing root rules keep priority.
 5. End with: **Approve, or tell me what to change.** Wait for the reply.
 6. Call \`archestra__get_guardrails_policy\` again. If the revision changed, revise the proposal and ask for approval again.
-7. Call \`archestra__validate_guardrails_policy\` with \`{ "content": "<complete proposed TOML>" }\`.
+7. Call \`archestra__validate_guardrails_policy\` with \`{ "content": "<complete proposed TOML>" }\`. Fix errors and report warnings; validation cannot prove external services work.
 8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`, where N is the revision from step 6.
 9. If the save reports a conflict, read the newer policy, merge your change, validate, and retry.
-10. Check \`effective.error\` and \`effective.batteries\`. Report any problem to fix. Otherwise, report the result in one to three short sentences.
+10. Read the saved policy back and check \`effective.error\` and \`effective.batteries\`. If composition failed, the last policy that opened remains in effect. Report any problem to fix. Otherwise, report the result in one to three short sentences.
 11. Add:
     > Saved policies apply to new conversations; this conversation keeps the policy it started with.
 
@@ -202,6 +205,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - The supported editor format is \`[policy]\` plus \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change deployment settings through this skill.
+- A refused policy keeps Guardrails v2 off. Report the policy error rather than suggesting a retry or claiming the draft is active.
 `,
   files: [
     {
@@ -378,8 +382,9 @@ The wildcard entry \`name = "*"\` covers unlisted tools.
 In Archestra:
 - MCP tools: \`<catalog>__<tool>\` ↔ \`mcp/<catalog>/<tool>\`
 - Platform tools: \`archestra__<name>\` ↔ \`mcp/archestra/<name>\` or \`host/archestra/<name>\`
-- Client built-ins: \`host/archestra/<name>\`
+- Native client built-ins: \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Match the name the runtime evaluates, not a guessed translation.
 - Search without catch-all: declare \`archestra__search_tools\` with \`delta = {}\`.
+- Command tools such as \`bash\`, \`shell\`, \`exec_command\`, and \`run_command\` can use \`command\` or \`cmd\` arguments. The proxy normalizes these variants; check the evaluated tool name when writing an argument-specific rule.
 
 ### Information Flow Control (IFC)
 
@@ -398,6 +403,24 @@ In Archestra:
 For resources scoped to channels, repos, or projects:
 - Read: \`delta = { audience = ["@slack:channel/$channel_id"] }\`
 - Write: \`requires = { trust = "trusted", audience = { contains = ["@slack:channel/$channel_id"] } }\`
+
+### Subagent returns
+
+Claude Code, Codex, and OpenCode can protect native CLI subagent returns through the Archestra proxy. A child inherits its parent's restrictions, but its tool-call rules do not by themselves protect the answer it sends back. The parent must choose a return contract before spawning the child. The proxy withholds the child's final answer, including a tool-free answer, until OpenAPPA admits it. An available output sanitizer can replace it with an approved summary. The parent receives only a verified return; if verification fails, the return stays blocked.
+
+The root policy can declare that the integration controls child context and returns:
+
+\`\`\`toml
+[policy]
+version = 2
+
+[policy.deployment]
+context_control = true
+\`\`\`
+
+This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation; never claim the child is protected. Confirm the deployment can issue signed lineage and return receipts without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
+
+This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 
 ### Batteries in Archestra
 

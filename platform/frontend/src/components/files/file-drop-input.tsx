@@ -78,11 +78,7 @@ export function FileDropInput({
       {directory ? (
         <>
           <FolderUp className="size-8 text-muted-foreground" />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => inputRef.current?.click()}
-          >
+          <Button type="button" onClick={() => inputRef.current?.click()}>
             Choose folder
           </Button>
         </>

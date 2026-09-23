@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * The bordered file picker plus its hidden input. Document uploads accept
- * drops; directory uploads use the same picker surface with a folder button.
+ * The bordered file picker plus its hidden input. The entire surface opens the
+ * picker; document uploads also accept drops.
  *
  * Selection state lives in the caller; this only reports files. Pair with
  * `StagedFileList` to show what has been picked.
@@ -22,7 +22,7 @@ export function FileDropInput({
 }: {
   /** The input's `accept` attribute, e.g. ".pdf,.docx,.txt". */
   accept?: string;
-  /** Human-readable version of `accept`, shown under the prompt. */
+  /** Supporting text shown under the picker prompt. */
   typesLabel: string;
   onFiles: (files: File[]) => void;
   directory?: boolean;
@@ -60,44 +60,40 @@ export function FileDropInput({
   );
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the drop target is a region; the nested button and input carry the keyboard path.
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
-        directory
-          ? "border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50"
-          : dragActive
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25",
-      )}
-      onDragEnter={directory ? undefined : handleDrag}
-      onDragLeave={directory ? undefined : handleDrag}
-      onDragOver={directory ? undefined : handleDrag}
-      onDrop={directory ? undefined : handleDrop}
-    >
-      {directory ? (
-        <>
-          <FolderUp className="size-8 text-muted-foreground" />
-          <Button type="button" onClick={() => inputRef.current?.click()}>
-            Choose folder
-          </Button>
-        </>
-      ) : (
-        <>
-          <Upload className="h-8 w-8 text-muted-foreground/50" />
-          <p className="text-muted-foreground text-sm">
-            Drag documents here, or{" "}
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              browse
-            </button>
-          </p>
-        </>
-      )}
-      <p className="text-muted-foreground/70 text-xs">{typesLabel}</p>
+    <>
+      <button
+        type="button"
+        aria-label={directory ? "Choose folder" : undefined}
+        className={cn(
+          "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          directory
+            ? "border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50"
+            : dragActive
+              ? "border-primary bg-primary/5"
+              : "border-muted-foreground/25 hover:border-muted-foreground/50",
+        )}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={directory ? undefined : handleDrag}
+        onDragLeave={directory ? undefined : handleDrag}
+        onDragOver={directory ? undefined : handleDrag}
+        onDrop={directory ? undefined : handleDrop}
+      >
+        {directory ? (
+          <>
+            <FolderUp className="size-8 text-muted-foreground" />
+            <span className="text-sm font-medium">Choose folder</span>
+          </>
+        ) : (
+          <>
+            <Upload className="size-8 text-muted-foreground/50" />
+            <span className="text-sm text-muted-foreground">
+              Drag documents here, or{" "}
+              <span className="font-medium text-primary">browse</span>
+            </span>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground/70">{typesLabel}</span>
+      </button>
       <input
         id={inputId}
         ref={inputRef}
@@ -112,7 +108,7 @@ export function FileDropInput({
           event.target.value = "";
         }}
       />
-    </div>
+    </>
   );
 }
 

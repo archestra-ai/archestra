@@ -869,7 +869,8 @@ test("uploading a package sends the picked files by their path inside the folder
   });
   const folderInput = screen.getByLabelText("Package folder");
   const openFolderPicker = vi.spyOn(folderInput, "click");
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+  expect(screen.getByRole("button", { name: "Choose folder" })).toBeVisible();
+  fireEvent.click(screen.getByText("Select the whole package directory."));
   expect(openFolderPicker).toHaveBeenCalledOnce();
   const file = new File(["schema = 1"], "battery.toml", {
     type: "application/toml",

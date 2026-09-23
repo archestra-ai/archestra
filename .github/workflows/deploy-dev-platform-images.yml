@@ -98,13 +98,8 @@ jobs:
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
-      # Cold PR evidence: 11m36s on 4-vCPU ubuntu-latest versus 3m26s for the
-      # complete full-image build on this 16-vCPU runner. Use it for every
-      # compile-bound amd64 Platform build, including PR/manual multi-arch runs.
-      amd64_runner: blacksmith-16vcpu-ubuntu-2404
-      # 16-vCPU ARM measured 5m11s after cache/export optimization; use the
-      # native 32-vCPU tier to keep the complete job below the five-minute budget.
-      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
+      amd64_runner: hetzner-amd64
+      arm64_runner: mac-mini-1
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.
       export_cache: ${{ github.event_name != 'pull_request' }}

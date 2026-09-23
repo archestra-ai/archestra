@@ -193,21 +193,6 @@ export default class ResourcePermissionPolicyModel {
     });
   }
 
-  /** A migrated policy is authoritative even when its grant list is empty. */
-  static legacySharingCondition(params: {
-    organizationId: string | SQLWrapper;
-    resource: ScopedResource;
-    scopeColumn: SQLWrapper;
-  }) {
-    return sql`NOT EXISTS (
-      SELECT 1 FROM resource_permission_policies migrated_policy
-      WHERE migrated_policy.organization_id = ${params.organizationId}
-        AND migrated_policy.resource = ${params.resource}
-        AND migrated_policy.scope IN (( ${params.scopeColumn})::text, '*')
-        AND migrated_policy.legacy_sharing_migrated
-    )`;
-  }
-
   /**
    * Organization-wide publication and shared credentials, for principals that
    * carry no role of their own.
@@ -217,17 +202,21 @@ export default class ResourcePermissionPolicyModel {
    * other when that policy carries the legacy organization-audience marker.
    * Explicit role grants on new resources do not publish them to role-less
    * credentials.
+   *
+   * The marker is the one piece of the retired visibility model still read
+   * here, and deliberately: the conversion turned "visible to the whole
+   * organization" into role grants, and a principal with no role would lose
+   * every object it could reach without it. Retiring it needs its own
+   * decision about how an object is published to role-less principals.
    */
   static organizationAccessCondition(params: {
     organizationId: string | SQLWrapper;
     resource: ScopedResource;
     scopeColumn: SQLWrapper;
     action: ResourcePermissionAction;
-    legacyCondition: SQLWrapper;
   }) {
     return sql`(
-      (${ResourcePermissionPolicyModel.legacySharingCondition(params)} AND ${params.legacyCondition})
-      OR EXISTS (
+      EXISTS (
         SELECT 1 FROM resource_permission_policies organization_access_policy,
           jsonb_array_elements(organization_access_policy.grants) organization_grant
         WHERE organization_access_policy.organization_id = ${params.organizationId}
@@ -243,20 +232,6 @@ export default class ResourcePermissionPolicyModel {
           AND (organization_grant->'actions') ? ${params.action}
       )
     )`;
-  }
-
-  /** Extra list fence while old visibility columns remain during the cutover. */
-  static migratedAccessCondition(params: {
-    organizationId: string | SQLWrapper;
-    resource: ScopedResource;
-    scopeColumn: SQLWrapper;
-    userId: string;
-    action: ResourcePermissionAction;
-  }) {
-    return or(
-      ResourcePermissionPolicyModel.legacySharingCondition(params),
-      ResourcePermissionPolicyModel.grantCondition(params),
-    );
   }
 
   static async deleteForTarget(params: {

@@ -45,7 +45,6 @@ export default class KbDocumentAccessModel {
         : ResourcePermissionPolicyModel.organizationAccessCondition({
             ...context,
             action: "use",
-            legacyCondition: sql`false`,
           });
     return sql`CASE
       WHEN EXISTS (SELECT 1 FROM kb_file_document permission_file WHERE permission_file.kb_document_id = ${params.documentId})

@@ -30,7 +30,6 @@ class SkillTeamModel {
                 resource: "skill",
                 scopeColumn: schema.skillsTable.id,
                 action: "read",
-                legacyCondition: eq(schema.skillsTable.scope, "org"),
               })
             : ResourcePermissionPolicyModel.grantCondition({
                 organizationId,

@@ -139,6 +139,8 @@ export const BatterySummarySchema = z.object({
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
+  /** When the newest stored package was uploaded; null when bundled. */
+  createdAt: z.coerce.date().nullable(),
   installs: z.array(BatteryInstallSchema),
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;

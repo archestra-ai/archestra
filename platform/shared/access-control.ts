@@ -1960,6 +1960,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ConsultOpenappaBatteryHelper]: {},
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Read-only views of what the policy covers; nothing here changes state.
+  [RouteId.GetOpenappaCoverageSummary]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageServers]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageServer]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageTools]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageAgents]: { toolPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

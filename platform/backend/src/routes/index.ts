@@ -55,6 +55,7 @@ export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
 export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
 export { default as openappaBatteriesRoutes } from "./openappa-batteries/openappa-batteries.routes";
+export { default as openappaCoverageRoutes } from "./openappa-coverage/openappa-coverage.routes";
 export { default as openappaExternalConsultsRoutes } from "./openappa-external-consults/openappa-external-consults.routes";
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";

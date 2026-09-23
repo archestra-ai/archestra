@@ -83,11 +83,12 @@ class OpenAppaBatteriesService {
     }
     const available = await this.availableBatteries(organizationId);
     return [...available.values()]
-      .map(({ source, contentHash, package: battery }) => ({
+      .map(({ source, contentHash, createdAt, package: battery }) => ({
         name: battery.name,
         description: battery.description,
         source,
         contentHash,
+        createdAt,
         namespaces: battery.namespaces,
         annotators: battery.annotators,
         scope: batteryScope(battery),
@@ -1056,6 +1057,7 @@ class OpenAppaBatteriesService {
       available.set(bundled.name, {
         source: "bundled",
         contentHash: null,
+        createdAt: null,
         package: bundled,
       });
     // One stored package's bytes say nothing about another's, so the newest
@@ -1073,11 +1075,12 @@ class OpenAppaBatteriesService {
         }),
     );
     inspected.forEach((result, index) => {
-      const name = newest[index]?.name;
-      if (result.status === "rejected" || !result.value || !name) return;
-      available.set(name, {
+      const stored = newest[index];
+      if (result.status === "rejected" || !result.value || !stored) return;
+      available.set(stored.name, {
         source: "upload",
         contentHash: result.value.contentHash,
+        createdAt: stored.createdAt,
         package: result.value.battery,
       });
     });
@@ -1478,6 +1481,8 @@ type AvailableBatteries = Map<
   {
     source: BatterySummary["source"];
     contentHash: string | null;
+    /** When the stored package was uploaded; null when bundled. */
+    createdAt: Date | null;
     package: NativeBatteryPackage;
   }
 >;

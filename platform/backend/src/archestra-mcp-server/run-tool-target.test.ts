@@ -75,6 +75,15 @@ describe("resolveRunToolDispatch", () => {
         loose: true,
       }),
     ).toEqual({ kind: "unresolved" });
+    expect(
+      resolveRunToolDispatch({
+        toolName: "archestra__run_tool",
+        args: {
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        },
+      }),
+    ).toEqual({ kind: "unresolved" });
   });
 
   test("does not mistake a third-party tool named run_tool for the wrapper", () => {

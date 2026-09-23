@@ -308,6 +308,43 @@ describe("azureResponsesAdapterFactory", () => {
     expect(adapter.getFinishReasons()).toEqual(["tool_calls"]);
   });
 
+  test("replaces a non-streaming governed response with admitted text", () => {
+    const adapter = azureResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_replace",
+      object: "response",
+      created_at: 123,
+      model: "gpt-4.1",
+      status: "completed",
+      output: [
+        {
+          id: "msg_raw",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            { type: "output_text", text: "RAW CHILD RETURN", annotations: [] },
+          ],
+        },
+      ],
+    } as never);
+
+    const replaced = adapter.withReplacedText?.("ADMITTED CHILD RETURN");
+
+    expect(replaced).toMatchObject({
+      id: "resp_replace",
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "ADMITTED CHILD RETURN" }],
+        },
+      ],
+    });
+    expect(JSON.stringify(replaced)).not.toContain("RAW CHILD RETURN");
+  });
+
   test("keeps the namespace a call names", () => {
     const adapter = azureResponsesAdapterFactory.createResponseAdapter({
       id: "resp_ns",
@@ -520,5 +557,46 @@ describe("azureResponsesAdapterFactory", () => {
     expect(persisted.id).toBe("resp_1");
     expect(persisted.output).toHaveLength(1);
     expect(JSON.stringify(persisted.output)).toContain("the answer");
+  });
+
+  test("adds the stream prefix when the completed response has no text block", () => {
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+    const prefix = "started subagent ABC-1234";
+    adapter.setTextSuffix?.(() => prefix);
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: "msg_1",
+      output_index: 0,
+      content_index: 0,
+      sequence_number: 1,
+      delta: "answer",
+    } as never);
+
+    const completed = adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_1",
+        object: "response",
+        created_at: 1,
+        model: "gpt-4.1",
+        status: "completed",
+        output: [
+          {
+            id: "msg_1",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [],
+          },
+        ],
+      },
+    } as never);
+    const completion = JSON.parse(
+      String(completed.sseData).replace(/^data: /, ""),
+    ) as { response: { output: unknown[] } };
+
+    expect(JSON.stringify(completion.response.output)).toContain(prefix);
+    expect(completion.response.output).toHaveLength(2);
   });
 });

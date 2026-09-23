@@ -28,6 +28,8 @@ export interface OpenAiStubOptions {
 export interface AnthropicStubOptions {
   interruptAtChunk?: number;
   includeToolUse?: boolean;
+  /** Assistant text for a response without tool calls. */
+  responseText?: string;
   /** Report `input_tokens: 0` (like z.ai's Anthropic-compatible endpoint) to exercise the input-token fallback. */
   zeroInputTokens?: boolean;
   /** Report `output_tokens: 0` to exercise the fallback's output>0 guard. */
@@ -174,7 +176,9 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
               : [
                   {
                     type: "text",
-                    text: "Hello! How can I help you today?",
+                    text:
+                      options.responseText ??
+                      "Hello! How can I help you today?",
                     citations: [],
                   },
                 ],
@@ -560,7 +564,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         delta: {
           type: "text_delta",
-          text: "How can I help you today?",
+          text: options.responseText ?? "How can I help you today?",
         },
       },
       {

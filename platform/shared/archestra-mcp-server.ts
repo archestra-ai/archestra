@@ -1041,6 +1041,22 @@ export function isAlwaysExposedArchestraToolShortName(
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+export function buildElicitationMandateInstruction(params?: {
+  askUserToolName?: string;
+  nativeQuestionToolName?: string;
+}): string {
+  const tools: string[] = [];
+  if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
+  if (params?.askUserToolName && !tools.includes(params.askUserToolName)) {
+    tools.push(params.askUserToolName);
+  }
+  const toolName =
+    tools.length > 1
+      ? `${tools[0]} (or ${tools[1]})`
+      : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
+  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+}
+
 /**
  * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
  * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.

@@ -2,6 +2,7 @@ import {
   ADVISOR_CONSULT_INSTRUCTION,
   ADVISOR_DELEGATION_TOOL_NAME,
   type ArchestraToolShortName,
+  buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
@@ -331,7 +332,7 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
 /** Appended to the denial instruction for a run that can show a question. */
 function buildAskUserChoiceInstruction(): string {
   const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
-  return `If you offer them choices, use ${askUser}, never a plain-text multiple-choice question.`;
+  return buildElicitationMandateInstruction({ askUserToolName: askUser });
 }
 
 const INVISIBLE_CHARACTERS = /[\p{Cf}\u2028\u2029]/gu;

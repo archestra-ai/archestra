@@ -1,5 +1,9 @@
 import config from "@/config";
 import logger from "@/logging";
+import {
+  isDelegationMarkerItem,
+  isDelegationMarkerLine,
+} from "@/openappa/delegation";
 import { canonicalJson } from "@/openappa/wire";
 import type {
   CommonToolResult,
@@ -58,6 +62,11 @@ type LlmProxyToolCall = {
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
   toolCalls: readonly LlmProxyToolCall[];
+  /**
+   * True when the transport can re-emit tool calls returned by plugins.
+   * If false, the client receives raw streamed calls and plugins must not alter approved calls.
+   */
+  canRewriteToolCalls?: boolean;
 };
 
 /** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
@@ -72,15 +81,27 @@ export type LlmProxyToolCallRefusal = {
 };
 
 /**
- * `blocked` names calls a plugin replaced rather than released — APPA renders a
- * denied call as a call to its notice tool, so the client still sees a call
- * where the model made one. The proxy keeps recording those as blocked.
+ * Record of content appended to an approved tool call by a finalizer.
+ * Contains either a text delegation marker or a structured marker item.
+ */
+export type LlmProxyToolCallAnnotation = {
+  id: string;
+  name: string;
+  field: string;
+  appended: string | Record<string, unknown>;
+};
+
+/**
+ * Outcome of plugin tool call evaluation.
+ * `blocked` lists calls replaced with notice calls.
+ * `annotated` lists approved calls with appended delegation markers.
  */
 export type LlmProxyToolCallsOutcome =
   | {
       decision: "allow";
       toolCalls: readonly LlmProxyToolCall[];
       blocked?: readonly { id: string; name: string; reason: string }[];
+      annotated?: readonly LlmProxyToolCallAnnotation[];
     }
   | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
@@ -126,6 +147,16 @@ export type LlmProxyModelResponseContext = LlmProxyRequestContext & {
   response: unknown;
 };
 
+export type LlmProxyBufferedModelResponseContext =
+  LlmProxyModelResponseContext & {
+    /** Complete assistant response text gathered before releasing bytes to client. */
+    responseText: string;
+  };
+
+export type LlmProxyBufferedModelResponseOutcome =
+  | { decision: "release" }
+  | { decision: "replace"; responseText: string };
+
 export type LlmProxyCompleteContext = LlmProxyRequestContext & {
   response?: unknown;
 };
@@ -157,6 +188,12 @@ export interface LlmProxyPlugin {
   onHostedToolCalls?(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined>;
+  /** Returns true if this request buffers model output before release. */
+  buffersModelResponse?(context: LlmProxyRequestContext): boolean;
+  /** Evaluates buffered response text before sending content to client. */
+  onBufferedModelResponse?(
+    context: LlmProxyBufferedModelResponseContext,
+  ): Promise<LlmProxyBufferedModelResponseOutcome | undefined>;
   /**
    * Runs before a non-streaming response is released. Streaming responses are
    * observable only after their already-forwarded chunks are assembled; returned
@@ -299,14 +336,11 @@ export class LlmProxyPluginRegistry {
         toolCalls,
       })) ?? { decision: "allow" as const, toolCalls };
       if (result.decision === "refuse") return result;
-      // A finalizer may substitute a call it denied with the notice tool that
-      // carries the denial to the model. That is not a validated call slipping
-      // past the ordinary policies: the denied call never runs, and the tool
-      // put in its place is the platform's own, governed by the finalizer
-      // itself. What a finalizer still cannot do is let a call through that
-      // the policies above never saw, so that is checked rather than trusted:
-      // every call it returns is one of the calls it was given, either
-      // untouched or reported as blocked.
+      // A finalizer cannot release a tool call that policies never evaluated.
+      // Every returned call must match one of the input calls:
+      // - Untouched
+      // - Reported as blocked (replaced with a platform notice call)
+      // - Reported as annotated (with only an approved delegation marker appended)
       for (const entry of result.blocked ?? []) {
         // Validate that reported blocked calls were part of the input batch.
         if (given.get(entry.id)?.name !== entry.name) {
@@ -318,6 +352,19 @@ export class LlmProxyPluginRegistry {
       const blockedIds = new Set(
         (result.blocked ?? []).map((entry) => entry.id),
       );
+      const annotations = new Map<string, LlmProxyToolCallAnnotation>();
+      for (const entry of result.annotated ?? []) {
+        if (
+          given.get(entry.id)?.name !== entry.name ||
+          blockedIds.has(entry.id) ||
+          annotations.has(entry.id)
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} reported an annotation on a call the policies never saw: ${entry.id}`,
+          );
+        }
+        annotations.set(entry.id, entry);
+      }
       const returned = new Set<string>();
       for (const call of result.toolCalls) {
         const original = given.get(call.id);
@@ -331,11 +378,30 @@ export class LlmProxyPluginRegistry {
           original.name === call.name &&
           original.namespace === call.namespace &&
           original.arguments === canonicalJson(call.arguments);
-        if (!untouched && !blockedIds.has(call.id)) {
+        if (untouched || blockedIds.has(call.id)) continue;
+        const annotation = annotations.get(call.id);
+        if (
+          !annotation ||
+          original.name !== call.name ||
+          original.namespace !== call.namespace ||
+          !appendsOnlyMarker({
+            before: original.arguments,
+            after: canonicalJson(call.arguments),
+            annotation,
+          })
+        ) {
           throw new Error(
             `Finalizer ${plugin.id} rewrote a call it did not report as blocked: ${call.id}`,
           );
         }
+        annotations.delete(call.id);
+      }
+      // Validates that all reported annotations were applied to returned calls.
+      const unapplied = annotations.keys().next();
+      if (!unapplied.done) {
+        throw new Error(
+          `Finalizer ${plugin.id} reported an annotation it did not make: ${unapplied.value}`,
+        );
       }
       toolCalls = result.toolCalls;
       if (result.blocked?.length) blocked = [...blocked, ...result.blocked];
@@ -377,6 +443,32 @@ export class LlmProxyPluginRegistry {
     return this.getSessionPlugins(context).some(
       (plugin) => plugin.governsHostedToolCalls?.(context) === true,
     );
+  }
+
+  buffersModelResponse(context: LlmProxyRequestContext): boolean {
+    return this.getSessionPlugins(context).some(
+      (plugin) => plugin.buffersModelResponse?.(context) === true,
+    );
+  }
+
+  async onBufferedModelResponse(
+    context: LlmProxyBufferedModelResponseContext,
+  ): Promise<LlmProxyBufferedModelResponseOutcome> {
+    let responseText = context.responseText;
+    let replaced = false;
+    for (const plugin of this.getSessionPlugins(context)) {
+      if (plugin.buffersModelResponse?.(context) !== true) continue;
+      const result = await this.invoke(plugin, "onBufferedModelResponse", {
+        ...context,
+        responseText,
+      });
+      if (result?.decision !== "replace") continue;
+      responseText = result.responseText;
+      replaced = true;
+    }
+    return replaced
+      ? { decision: "replace", responseText }
+      : { decision: "release" };
   }
 
   /** The first plugin to withhold the provider-run part of the turn decides. */
@@ -496,6 +588,11 @@ export class LlmProxyPluginRegistry {
     phase: "onModelResponse",
     context: LlmProxyModelResponseContext,
   ): Promise<{ response: unknown } | undefined>;
+  private async invoke(
+    plugin: LlmProxyPlugin,
+    phase: "onBufferedModelResponse",
+    context: LlmProxyBufferedModelResponseContext,
+  ): Promise<LlmProxyBufferedModelResponseOutcome | undefined>;
   private async invoke<
     TPhase extends keyof LlmProxyPlugin,
     TContext extends LlmProxyRequestContext,
@@ -578,6 +675,64 @@ export function registerLlmProxyPlugin(plugin: LlmProxyPlugin): () => void {
 /** Returns the proxy's process-wide plugin registry. */
 export function getLlmProxyPluginRegistry(): LlmProxyPluginRegistry {
   return defaultLlmProxyPluginRegistry;
+}
+
+/**
+ * Returns true if `after` differs from `before` only by the appended delegation marker.
+ * Compares canonical JSON representations to prevent unverified mutations.
+ */
+function appendsOnlyMarker(params: {
+  before: string;
+  after: string;
+  annotation: LlmProxyToolCallAnnotation;
+}): boolean {
+  const before = argumentRecord(params.before);
+  const after = argumentRecord(params.after);
+  if (!before || !after) return false;
+  const { field, appended } = params.annotation;
+  const keys = Object.keys(before).sort();
+  if (canonicalJson(keys) !== canonicalJson(Object.keys(after).sort()))
+    return false;
+  for (const key of keys) {
+    if (
+      key !== field &&
+      canonicalJson(before[key]) !== canonicalJson(after[key])
+    )
+      return false;
+  }
+  const was = before[field];
+  const now = after[field];
+  if (typeof appended === "string") {
+    return (
+      typeof was === "string" &&
+      was.trim().length > 0 &&
+      appended.startsWith("\n\n") &&
+      isDelegationMarkerLine(appended.slice(2)) &&
+      now === was + appended
+    );
+  }
+  return (
+    Array.isArray(was) &&
+    was.length > 0 &&
+    isDelegationMarkerItem(appended) &&
+    canonicalJson(now) === canonicalJson([...was, appended])
+  );
+}
+
+/** A call's arguments from its snapshot: an object, or JSON text of one. */
+function argumentRecord(snapshot: string): Record<string, unknown> | undefined {
+  try {
+    const value: unknown = JSON.parse(snapshot);
+    const parsed: unknown =
+      typeof value === "string" ? JSON.parse(value) : value;
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function loadConfiguredLlmProxyPlugins(): Promise<

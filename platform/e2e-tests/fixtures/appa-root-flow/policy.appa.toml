@@ -3,10 +3,10 @@
 # Install it as the organization guardrails policy and run the scenarios as
 # described in this directory's README.md. It carries no credentials.
 #
-# One policy, three stock clients. The proxy submits each client's own tool
-# names, so every scenario is named three times — Claude Code's `host/claude-code/*`,
-# Codex's `builtin:*`, OpenCode's `builtin:*` — and the gateway's own tools by
-# their platform names.
+# One policy for three clients. Claude Code tools use `host/claude-code/*`.
+# Codex and OpenCode tools use bare names or `builtin:`. The Archestra runtime
+# converts them to `host/archestra/<name>`. Each Codex and OpenCode tool is listed
+# under `host/archestra/*` and as `builtin:*` for backward compatibility.
 #
 # The scenario files below are absolute paths, seeded by `setup-lab.sh`. They
 # name the default lab directory, `${APPA_LAB_HOME:-/tmp/appa-root-flow}/lab`;
@@ -27,6 +27,10 @@
 #   S3 output    reading /tmp/appa-root-flow/lab/report.txt stages its output
 #                behind the `summarize` output sanitizer, which returns the
 #                admitted value.
+#   S3c return   Reading /tmp/appa-root-flow/lab/return.txt restricts only the
+#                child trajectory. Its tool result remains in the child.
+#                The summarize sanitizer governs the final ChildEnd return
+#                into the parent session.
 #   S4 authority publishing needs the `operator` authority, a URL fixture this
 #                run controls (approve / deny / timeout / no answer).
 #   S5 planless  a tool the policy does not name is blocked with no plan.
@@ -50,6 +54,18 @@ name = "host/claude-code/TodoWrite"
 delta = {}
 
 [[policy.tool]]
+name = "host/claude-code/Task"
+delta = {}
+
+[[policy.tool]]
+name = "host/claude-code/Agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/claude-code/Skill"
+delta = {}
+
+[[policy.tool]]
 name = "builtin:list"
 delta = {}
 
@@ -65,6 +81,38 @@ delta = {}
 name = "builtin:todowrite"
 delta = {}
 
+[[policy.tool]]
+name = "builtin:spawn_agent"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:send_input"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:wait_agent"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:resume_agent"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:close_agent"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:interrupt_agent"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:task"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:skill"
+delta = {}
+
 # --- S1: a read that restricts the session ----------------------------------
 
 [[policy.tool]]
@@ -73,6 +121,14 @@ delta = { audience = ["lab@archestra.local"] }
 
 [[policy.tool]]
 name = "builtin:read(filePath:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:Read(file_path:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:Read(path:/tmp/appa-root-flow/lab/secret.txt)"
 delta = { audience = ["lab@archestra.local"] }
 
 [[policy.tool]]
@@ -98,6 +154,24 @@ delta = { trust = "untrusted" }
 name = "builtin:exec_command(cmd:*report.txt*)"
 delta = { trust = "untrusted" }
 
+# --- S3c: child-only data, sanitized only at the return boundary ------------
+
+[[policy.tool]]
+name = "host/claude-code/Bash(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "builtin:shell(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "builtin:bash(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "builtin:exec_command(cmd:*return.txt*)"
+delta = { trust = "untrusted" }
+
 # --- ordinary reads ----------------------------------------------------------
 
 [[policy.tool]]
@@ -106,6 +180,10 @@ delta = {}
 
 [[policy.tool]]
 name = "builtin:read"
+delta = {}
+
+[[policy.tool]]
+name = "builtin:Read"
 delta = {}
 
 # --- S2: the sink that carries content out ----------------------------------
@@ -122,6 +200,29 @@ delta = {}
 
 [[policy.tool]]
 name = "builtin:apply_patch"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+# The child-lineage smoke test writes to this destination. This rule covers
+# shell tools and write tools. The model cannot bypass the governed sink by
+# choosing a different tool.
+[[policy.tool]]
+name = "host/claude-code/Bash(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "builtin:shell(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "builtin:bash(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "builtin:exec_command(cmd:*out-child.txt*)"
 requires = { audience = { contains = ["public"] } }
 delta = {}
 
@@ -209,6 +310,251 @@ name = "builtin:apply_patch"
 requires = { audience = { contains = ["public"] } }
 delta = {}
 
+# --- Codex / OpenCode as evaluated by the runtime ----------------------------
+#
+# Bare names and `builtin:` derive to `host/archestra/<name>`. A policy that
+# lists only `builtin:*` refuses `spawn_agent` and `exec_command` as undeclared tools.
+
+[[policy.tool]]
+name = "host/archestra/Glob"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/glob"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Grep"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/grep"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/list"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/todowrite"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/spawn_agent"
+delta = {}
+
+# Claude Code local tools use bare names. The Archestra runtime derives
+# them under `host/archestra/<name>` and preserves capitalization.
+[[policy.tool]]
+name = "host/archestra/Agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Task"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Skill"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/SendMessage"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/ListAgents"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/TaskStop"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/send_input"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/wait_agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/resume_agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/close_agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/interrupt_agent"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/task"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/skill"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*secret.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/shell(command:*secret.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/read(filePath:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/read(path:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/Read(file_path:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/Read(path:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*report.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/shell(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/bash(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/Bash(command:*return.txt*)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/read(filePath:/tmp/appa-root-flow/lab/report.txt)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
+name = "host/archestra/read"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Read"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/write"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Write"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/apply_patch"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/shell(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/bash(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Bash(command:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*out-child.txt*)"
+requires = { audience = { contains = ["public"] } }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*appa-publish*)"
+requires = { attention = ["operator-signoff"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/shell(command:*appa-publish*)"
+requires = { attention = ["operator-signoff"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/bash(command:*appa-publish*)"
+requires = { attention = ["operator-signoff"] }
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/shell"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/bash"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/Bash"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/write_stdin"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/view_image"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/request_user_input"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/list_mcp_resources"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/list_mcp_resource_templates"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/read_mcp_resource"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/get_goal"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/create_goal"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/update_goal"
+delta = {}
+
 # --- Archestra Chat, under the gateway tool names the proxy submits for it ---
 #
 # Chat has no filesystem tools of its own, so it reaches S1 through a gateway
@@ -251,11 +597,13 @@ on = ["tool_output"]
 [policy.sanitizer.permits]
 trust = { from = "untrusted", to = "trusted" }
 
-# The result points an output sanitizer may apply to: reading the report stages
-# its output until the session accepts the summarized value. Codex reads with
-# its shell tool, so that tool is a result point too.
+# Result points for output sanitizers: Reading report.txt stages output until
+# the session accepts the summarized value. Shell results stay unconfined so
+# return.txt remains visible in the child. The sanitizer applies only when
+# ChildEnd returns the answer to the parent.
 [policy.deployment]
-confined_results = ["host/claude-code/Read", "builtin:read", "builtin:exec_command"]
+context_control = true
+confined_results = ["host/claude-code/Read", "builtin:read", "host/archestra/read", "host/archestra/Read"]
 
 [[policy.authority]]
 name = "operator"

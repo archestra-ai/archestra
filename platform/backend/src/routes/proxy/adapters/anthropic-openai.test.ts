@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { makeAnthropicOpenaiAdapterFactory } from "./anthropic-openai";
 import type { AnthropicOpenaiContext } from "./anthropic-openai-translator";
+import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-chat";
 
 const ctx: AnthropicOpenaiContext = {
   chatcmplId: "chatcmpl-test",
@@ -18,6 +19,50 @@ const ctx: AnthropicOpenaiContext = {
 
 function makeAdapter() {
   return makeAnthropicOpenaiAdapterFactory(ctx).createStreamAdapter();
+}
+
+function feedRawTextAndReasoning(
+  adapter: Pick<ReturnType<typeof makeAdapter>, "processChunk">,
+): string {
+  const process = (chunk: unknown) =>
+    adapter.processChunk(chunk as Parameters<typeof adapter.processChunk>[0]);
+  return [
+    process({
+      type: "message_start",
+      message: {
+        id: "msg_raw",
+        model: "claude-test",
+        usage: { input_tokens: 5, output_tokens: 2 },
+      },
+    }).sseData,
+    process({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    }).sseData,
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "RAW reasoning" },
+    }).sseData,
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig-raw" },
+    }).sseData,
+    process({
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "text", text: "" },
+    }).sseData,
+    process({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "text_delta", text: "RAW" },
+    }).sseData,
+    process({ type: "content_block_stop", index: 1 }).sseData,
+    process({ type: "message_stop" }).sseData,
+  ].join("");
 }
 
 function feedParallelToolCalls(adapter: ReturnType<typeof makeAdapter>) {
@@ -193,5 +238,127 @@ describe("AnthropicOpenaiStreamAdapter tool-call release", () => {
         .toProviderResponse()
         .content.filter((block) => block.type === "tool_use"),
     ).toMatchObject([{ id: "toolu_A" }, { id: "toolu_B" }]);
+  });
+});
+
+describe("AnthropicOpenaiStreamAdapter response replacement", () => {
+  it("drops the buffered raw text and reasoning from the admitted transcript", () => {
+    const adapter = makeAdapter();
+    expect(feedRawTextAndReasoning(adapter)).toContain("RAW");
+    expect(JSON.stringify(adapter.toProviderResponse())).toContain(
+      "RAW reasoning",
+    );
+
+    adapter.prepareResponseReplacement?.();
+    const admittedFrames = [
+      ...adapter.formatCompleteTextSSE("ADMITTED"),
+      adapter.formatEndSSE(),
+    ].join("");
+
+    expect(admittedFrames).toContain("ADMITTED");
+    expect(admittedFrames).not.toContain("RAW");
+    expect(adapter.toProviderResponse().content).toEqual([
+      { type: "text", text: "ADMITTED", citations: null },
+    ]);
+  });
+});
+
+describe("ResponsesFromChatStreamAdapter response replacement", () => {
+  it("restarts the Responses transcript and drops inner raw text and reasoning", () => {
+    const adapter = makeResponsesFromChatAdapterFactory(
+      makeAnthropicOpenaiAdapterFactory(ctx),
+      {
+        responseId: "resp-test",
+        createdUnix: 0,
+        requestedModel: "archestra:test",
+      },
+    ).createStreamAdapter();
+    const rawFrames = feedRawTextAndReasoning(adapter);
+    expect(rawFrames).toContain("RAW");
+    expect(rawFrames).toContain("response.completed");
+
+    adapter.prepareResponseReplacement?.();
+    expect(adapter.state.text).toBe("");
+    const admittedWire = [
+      ...adapter.formatCompleteTextSSE("ADMITTED"),
+      adapter.formatEndSSE(),
+    ].join("");
+    const admittedEvents = admittedWire
+      .split("\n")
+      .filter((line) => line.startsWith("data: {") && line !== "data: [DONE]")
+      .map(
+        (line) =>
+          JSON.parse(line.slice("data: ".length)) as {
+            type: string;
+            delta?: string;
+            response?: { output: unknown[]; [key: string]: unknown };
+          },
+      );
+    const loggedResponse = adapter.toProviderResponse() as unknown as {
+      output: unknown[];
+      [key: string]: unknown;
+    };
+    const completed = admittedEvents.find(
+      (event) => event.type === "response.completed",
+    );
+
+    expect(admittedEvents.map((event) => event.type)).toEqual([
+      "response.created",
+      "response.output_item.added",
+      "response.content_part.added",
+      "response.output_text.delta",
+      "response.output_text.done",
+      "response.content_part.done",
+      "response.output_item.done",
+      "response.completed",
+    ]);
+    expect(
+      admittedEvents.find(
+        (event) => event.type === "response.output_text.delta",
+      )?.delta,
+    ).toBe("ADMITTED");
+    expect(completed?.response).toMatchObject(loggedResponse);
+    expect(completed?.response?.output).toEqual(loggedResponse.output);
+    expect(JSON.stringify({ admittedEvents, loggedResponse })).not.toContain(
+      "RAW",
+    );
+  });
+});
+
+describe("ResponsesFromChatAdapter response replacement", () => {
+  it("replaces in the native Anthropic domain before translating to Responses", () => {
+    const factory = makeResponsesFromChatAdapterFactory(
+      makeAnthropicOpenaiAdapterFactory(ctx),
+      {
+        responseId: "resp-test",
+        createdUnix: 0,
+        requestedModel: "archestra:test",
+      },
+    );
+    const adapter = factory.createResponseAdapter({
+      id: "msg-test",
+      type: "message",
+      role: "assistant",
+      model: "claude-test",
+      content: [{ type: "text", text: "RAW", citations: null }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 2 },
+    });
+
+    expect(adapter.getText()).toBe("RAW");
+    expect(adapter.withReplacedText?.("ADMITTED")).toMatchObject({
+      object: "response",
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "ADMITTED" }],
+        },
+      ],
+    });
+    expect(adapter.getLoggedResponse?.()).toMatchObject({
+      type: "message",
+      content: [{ type: "text", text: "ADMITTED" }],
+    });
   });
 });

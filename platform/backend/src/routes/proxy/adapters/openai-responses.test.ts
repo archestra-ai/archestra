@@ -1,6 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { unwrapCompactionCarriersFromRequest } from "@/openappa/compaction-carrier";
 import { CommonToolCallSchema, type OpenAi } from "@/types";
-import { openAiResponsesAdapterFactory } from "./openai-responses";
+import {
+  openAiResponsesAdapterFactory,
+  openAiResponsesCompactAdapterFactory,
+} from "./openai-responses";
 import { responsesToOpenaiChat } from "./openai-responses-translator";
 
 describe("CommonToolCallSchema", () => {
@@ -61,6 +65,109 @@ describe("responsesToOpenaiChat", () => {
     ]);
   });
 });
+
+describe("OpenAI Responses compaction", () => {
+  const proof =
+    "started subagent ABC-1234\n[appa] child trajectory appact2-c2lnbmVk.cafebabe.";
+
+  test("wraps the done item and completed output with the same opaque context", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.setCompactionContext?.(proof);
+    const item = {
+      id: "cmp_1",
+      type: "compaction" as const,
+      encrypted_content: "opaque-provider-ciphertext",
+    };
+    const done = adapter.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      sequence_number: 1,
+      item,
+    });
+    const completed = adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_compact",
+        object: "response",
+        created_at: 1,
+        model: "gpt-5.6-sol",
+        output: [item],
+        status: "completed",
+        usage: {
+          input_tokens: 2,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens: 1,
+          output_tokens_details: { reasoning_tokens: 0 },
+          total_tokens: 3,
+        },
+      } as never,
+    });
+
+    const doneFrame = parseSse(done.sseData) as { item: typeof item };
+    const completedFrame = parseSse(completed.sseData) as {
+      response: { output: Array<typeof item> };
+    };
+    const doneRequest = { input: [doneFrame.item] };
+    const completedRequest = { input: [completedFrame.response.output[0]] };
+    const recordedRequest = { input: [adapter.toProviderResponse().output[0]] };
+    expect(unwrapCompactionCarriersFromRequest(doneRequest)).toEqual([proof]);
+    expect(unwrapCompactionCarriersFromRequest(completedRequest)).toEqual([
+      proof,
+    ]);
+    expect(unwrapCompactionCarriersFromRequest(recordedRequest)).toEqual([]);
+    expect(doneRequest.input[0]).toEqual(item);
+    expect(completedRequest.input[0]).toEqual(item);
+    expect(recordedRequest.input[0]).toEqual(item);
+    expect(adapter.state.text).toBe("");
+  });
+
+  test("calls the SDK compact method with only supported request fields", async () => {
+    const response = {
+      id: "resp_compact",
+      object: "response.compaction" as const,
+      created_at: 1,
+      output: [],
+      usage: {
+        input_tokens: 2,
+        input_tokens_details: { cached_tokens: 0 },
+        output_tokens: 1,
+        output_tokens_details: { reasoning_tokens: 0 },
+        total_tokens: 3,
+      },
+    };
+    const compact = vi.fn().mockResolvedValue(response);
+    const request = {
+      model: "gpt-5.6-sol",
+      input: "history",
+      instructions: "compact",
+      previous_response_id: "resp_previous",
+      prompt_cache_key: "cache-key",
+      stream: true,
+      tools: [{ type: "function", name: "must-not-leak" }],
+    } as never;
+
+    await expect(
+      openAiResponsesCompactAdapterFactory.execute(
+        { responses: { compact } },
+        request,
+      ),
+    ).resolves.toBe(response);
+    expect(compact).toHaveBeenCalledWith({
+      model: "gpt-5.6-sol",
+      input: "history",
+      instructions: "compact",
+      previous_response_id: "resp_previous",
+      prompt_cache_key: "cache-key",
+    });
+  });
+});
+
+function parseSse(data: string | Uint8Array | null): unknown {
+  if (data === null) throw new Error("expected an SSE event");
+  const text = typeof data === "string" ? data : Buffer.from(data).toString();
+  return JSON.parse(text.replace(/^data: /, "").trim());
+}
 
 describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   // The AI SDK emits Responses "easy input" messages: role/content with no
@@ -419,6 +526,39 @@ describe("OpenAiResponsesResponseAdapter.getToolCalls", () => {
   });
 });
 
+describe("OpenAiResponsesResponseAdapter.withReplacedText", () => {
+  // The wire/SDK convenience string `output_text` aggregates the raw output
+  // text at the top level; replacing `output` while spreading the original
+  // response would leave the withheld text readable there.
+  test("replaces the top-level output_text convenience string along with output", () => {
+    const rawText = "withheld raw text";
+    const adapter = openAiResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_1",
+      object: "response",
+      created_at: 0,
+      model: "gpt-5.3-codex",
+      status: "completed",
+      output_text: rawText,
+      output: [
+        {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: rawText, annotations: [] }],
+        },
+      ],
+    } as never);
+
+    const replaced = adapter.withReplacedText?.("approved replacement") as
+      | { output_text?: string }
+      | undefined;
+
+    expect(replaced?.output_text).toBe("approved replacement");
+    expect(JSON.stringify(replaced)).not.toContain(rawText);
+  });
+});
+
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   // Reasoning turns (`store: false`) finish with `response.completed` carrying
   // an empty `output`, even though the text arrived in delta chunks. Persisting
@@ -608,6 +748,79 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
       released.indexOf("response.completed"),
     );
   });
+
+  test("omits a filtered call from the final completion while preserving a released sibling", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const allowed = {
+      id: "call_read",
+      name: "read",
+      arguments: '{"path":"README.md"}',
+      namespace: "functions",
+    };
+    const filtered = {
+      id: "call_foreign",
+      name: "archestra__execute_remedy_plan",
+      arguments: '{"offer_id":"foreign"}',
+      namespace: "mcp__foreign",
+    };
+    const output = [
+      {
+        id: "fc_read",
+        call_id: allowed.id,
+        type: "function_call",
+        name: allowed.name,
+        namespace: allowed.namespace,
+        arguments: allowed.arguments,
+        status: "completed",
+      },
+      {
+        id: "fc_foreign",
+        call_id: filtered.id,
+        type: "function_call",
+        name: filtered.name,
+        namespace: filtered.namespace,
+        arguments: filtered.arguments,
+        status: "completed",
+      },
+    ];
+
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 1,
+      response: {
+        id: "resp_mixed",
+        object: "response",
+        status: "completed",
+        model: "gpt-5.3-codex",
+        output,
+        usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    const frames = adapter.formatToolCallsSSE?.([allowed]) ?? [];
+    const response = adapter.toProviderResponse();
+
+    expect(response.output).toHaveLength(1);
+    expect(response.output[0]).toMatchObject({
+      call_id: allowed.id,
+      name: allowed.name,
+      namespace: allowed.namespace,
+    });
+    expect(response.output).not.toContainEqual(
+      expect.objectContaining({ call_id: filtered.id }),
+    );
+    expect(response.usage).toMatchObject({ total_tokens: 5 });
+    const terminalFrame = frames.at(-1);
+    if (!terminalFrame) throw new Error("expected final completion frame");
+    const terminalText =
+      typeof terminalFrame === "string"
+        ? terminalFrame
+        : new TextDecoder().decode(terminalFrame);
+    const completion = JSON.parse(terminalText.replace(/^data: /, "")) as {
+      response: { output: unknown };
+    };
+    expect(completion.response.output).toEqual(response.output);
+  });
 });
 
 describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
@@ -720,6 +933,8 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
 
   test("a held turn reaches the client as the notice, without what the search brought in", () => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const prefix = "started subagent ABC-1234";
+    adapter.setTextSuffix?.(() => prefix);
     adapter.withholdHostedToolCalls?.();
     for (const chunk of turn) adapter.processChunk(chunk);
     const notice = {
@@ -731,16 +946,83 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     const frames = adapter.formatHeldHostedToolCallsSSE?.([notice]) ?? [];
 
     expect(frameTypes(frames).at(-1)).toBe("response.completed");
-    const output = adapter.toProviderResponse().output;
+    const response = adapter.toProviderResponse();
+    const output = response.output;
+    const completedFrame = JSON.parse(
+      String(frames.at(-1)).replace(/^data: /, ""),
+    ) as { response: typeof response };
+    expect(completedFrame.response).toEqual(response);
+    expect(JSON.stringify(completedFrame.response)).toContain(prefix);
     expect(output.map((item) => item.type)).toEqual([
+      "message",
       "message",
       "function_call",
     ]);
-    expect(output[1]).toMatchObject({
+    expect(output[2]).toMatchObject({
       call_id: "ws_1",
       name: "archestra__get_remedy_plans",
     });
+    const addedFrame = frames
+      .map(
+        (frame) =>
+          JSON.parse(String(frame).replace(/^data: /, "")) as {
+            type: string;
+            output_index?: number;
+            item?: { id?: string };
+          },
+      )
+      .find((frame) => frame.type === "response.output_item.added");
+    expect(addedFrame?.output_index).toBe(2);
+    expect(addedFrame?.item?.id).toBe(output[2]?.id);
     expect(adapter.state.text).toBe("Let me look. ");
     expect(adapter.state.toolCalls).toEqual([notice]);
+  });
+
+  test("wraps compaction context only on the synthesized held completion wire", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const proof = "protected child context";
+    const compaction = {
+      type: "compaction",
+      encrypted_content: "opaque-provider-ciphertext",
+    };
+    adapter.setCompactionContext?.(proof);
+    adapter.withholdHostedToolCalls?.();
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 1,
+      sequence_number: 1,
+      item: { ...searchItem, status: "in_progress" },
+    } as unknown as Chunk);
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_search",
+        object: "response",
+        status: "completed",
+        model: "gpt-5.2",
+        output: [compaction, searchItem],
+      },
+    } as unknown as Chunk);
+
+    const frames =
+      adapter.formatHeldHostedToolCallsSSE?.([
+        {
+          id: "ws_1",
+          name: "archestra__get_remedy_plans",
+          arguments: "{}",
+        },
+      ]) ?? [];
+    const completion = JSON.parse(
+      String(frames.at(-1)).replace(/^data: /, ""),
+    ) as { response: { output: unknown[] } };
+    const clientResponse = structuredClone(completion.response);
+    const recordedResponse = adapter.toProviderResponse();
+
+    expect(
+      unwrapCompactionCarriersFromRequest({ input: clientResponse.output }),
+    ).toEqual([proof]);
+    expect(clientResponse).toEqual(recordedResponse);
+    expect(recordedResponse.output).toContainEqual(compaction);
   });
 });

@@ -315,6 +315,15 @@ class BedrockInvokeResponseAdapter
   ): AnthropicResponse {
     return this.inner.toRefusalResponse(refusalMessage, contentMessage);
   }
+
+  withReplacedText(text: string): AnthropicResponse {
+    if (!this.inner.withReplacedText) {
+      throw new Error(
+        "Bedrock Invoke response adapter cannot replace response text",
+      );
+    }
+    return this.inner.withReplacedText(text);
+  }
 }
 
 // =============================================================================
@@ -376,6 +385,10 @@ class BedrockInvokeStreamAdapter
     return this.inner
       .formatCompleteTextSSE(text)
       .map((event) => sseToInvokeEventStream(innerSse(event)));
+  }
+
+  prepareResponseReplacement(): void {
+    this.inner.prepareResponseReplacement?.();
   }
 
   formatToolCallsSSE(

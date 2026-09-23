@@ -249,6 +249,7 @@ class AnthropicRequestAdapter
     }
 
     messages = this.convertToolResultContent(messages);
+    messages = stripEmptyTextBlocks(messages);
 
     return {
       ...this.request,
@@ -385,7 +386,7 @@ class AnthropicRequestAdapter
         const updatedContent = message.content.map((contentBlock) => {
           if (
             contentBlock.type === "tool_result" &&
-            updates[contentBlock.tool_use_id]
+            Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
             appliedCount++;
             logger.debug(
@@ -602,6 +603,14 @@ class AnthropicResponseAdapter
       stop_reason: "end_turn",
     };
   }
+
+  withReplacedText(text: string): AnthropicResponse {
+    return {
+      ...this.response,
+      content: [{ type: "text", text, citations: [] }],
+      stop_reason: "end_turn",
+    };
+  }
 }
 
 // =============================================================================
@@ -660,8 +669,8 @@ class AnthropicStreamAdapter
   private textByBlock = new Map<number, string>();
   private pendingTextBlockStop = "";
   private pendingTextBlockIndex: number | null = null;
-  private pendingTextBlockText = "";
   private getTextSuffix: ((completedText: string) => string) | null = null;
+  private textPrefixIssued = false;
 
   private startReasoningBlock(
     index: number,
@@ -752,6 +761,7 @@ class AnthropicStreamAdapter
     let sseData: string | null = null;
     let isToolCallChunk = false;
     let isFinal = false;
+    let isResponsePreamble = false;
 
     switch (chunk.type) {
       case "message_start":
@@ -770,10 +780,32 @@ class AnthropicStreamAdapter
           };
         }
         sseData = `event: message_start\ndata: ${JSON.stringify(chunk)}\n\n`;
+        isResponsePreamble = true;
         break;
 
       case "content_block_start":
         if (chunk.content_block.type === "tool_use") {
+          let prefixSse = "";
+          if (!this.textPrefixIssued && this.getTextSuffix) {
+            const prefix = this.resolveTextPrefix("");
+            if (prefix) {
+              this.textPrefixIssued = true;
+              this.state.text = prefix;
+              const textIndex = this.nextOutIndex++;
+              prefixSse = `event: content_block_start\ndata: ${JSON.stringify({
+                type: "content_block_start",
+                index: textIndex,
+                content_block: { type: "text", text: "" },
+              })}\n\nevent: content_block_delta\ndata: ${JSON.stringify({
+                type: "content_block_delta",
+                index: textIndex,
+                delta: { type: "text_delta", text: prefix },
+              })}\n\nevent: content_block_stop\ndata: ${JSON.stringify({
+                type: "content_block_stop",
+                index: textIndex,
+              })}\n\n`;
+            }
+          }
           this.toolUseBlockIndices.add(chunk.index);
           this.currentToolCallIndex = this.state.toolCalls.length;
           this.state.toolCalls.push({
@@ -784,6 +816,9 @@ class AnthropicStreamAdapter
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
+          if (prefixSse) {
+            sseData = prefixSse;
+          }
         } else {
           if (chunk.content_block.type === "text") {
             this.textBlockIndices.add(chunk.index);
@@ -815,15 +850,35 @@ class AnthropicStreamAdapter
         } else {
           // input_json_delta outside a tool_use block belongs to a
           // server-side tool and is not subject to invocation policies.
+          let prefixSse = "";
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
             this.textByBlock.set(
               chunk.index,
               `${this.textByBlock.get(chunk.index) ?? ""}${chunk.delta.text}`,
             );
+            if (!this.textPrefixIssued && this.getTextSuffix) {
+              const prefix = this.resolveTextPrefix(chunk.delta.text);
+              this.textPrefixIssued = true;
+              if (prefix) {
+                prefixSse = `event: content_block_delta\ndata: ${JSON.stringify(
+                  this.withOutIndex({
+                    ...chunk,
+                    delta: { ...chunk.delta, text: prefix },
+                  }),
+                )}\n\n`;
+                chunk = {
+                  ...chunk,
+                  delta: {
+                    ...chunk.delta,
+                    text: `\n\n${chunk.delta.text}`,
+                  },
+                };
+              }
+            }
           }
           this.appendReasoningDelta(chunk.index, chunk.delta);
-          sseData = `event: content_block_delta\ndata: ${JSON.stringify(
+          sseData = `${prefixSse}event: content_block_delta\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
         }
@@ -834,13 +889,7 @@ class AnthropicStreamAdapter
           const event = `event: content_block_stop\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
-          if (this.getTextSuffix && this.textBlockIndices.has(chunk.index)) {
-            this.pendingTextBlockStop = event;
-            this.pendingTextBlockIndex = this.outIndexFor(chunk.index);
-            this.pendingTextBlockText = this.textByBlock.get(chunk.index) ?? "";
-          } else {
-            sseData = event;
-          }
+          sseData = event;
         } else {
           // A tool called with no input streams no `partial_json`; its input
           // is `{}`, not the empty string policy evaluation would reject.
@@ -875,7 +924,7 @@ class AnthropicStreamAdapter
       sseData = this.flushPendingTextBlockStop(sseData);
     }
 
-    return { sseData, isToolCallChunk, isFinal };
+    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -997,6 +1046,26 @@ class AnthropicStreamAdapter
     ];
   }
 
+  prepareResponseReplacement(): void {
+    this.outIndexByUpstream.clear();
+    this.nextOutIndex = 0;
+    // A governed replacement is the only assistant content for this turn.
+    // Clears raw output, tool calls, block state, and stop reason.
+    // Unadmitted content must not cross the child return boundary.
+    this.reasoningBlocks.clear();
+    this.state.text = "";
+    this.state.toolCalls = [];
+    this.state.rawToolCallEvents = [];
+    this.state.stopReason = "end_turn";
+    this.toolCallsReleased = false;
+    this.toolUseBlockIndices.clear();
+    this.textBlockIndices.clear();
+    this.textByBlock.clear();
+    this.pendingTextBlockStop = "";
+    this.pendingTextBlockIndex = null;
+    this.currentToolCallIndex = 0;
+  }
+
   formatEndSSE(): string {
     const events: string[] = [];
 
@@ -1042,7 +1111,10 @@ class AnthropicStreamAdapter
     }
 
     // Only tool calls the client actually received.
-    for (const toolCall of this.toolCallsReleased ? this.state.toolCalls : []) {
+    for (const toolCall of !this.responseReplacedWithText &&
+    this.toolCallsReleased
+      ? this.state.toolCalls
+      : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);
@@ -1151,16 +1223,16 @@ class AnthropicStreamAdapter
     };
   }
 
+  private resolveTextPrefix(firstText: string): string {
+    if (!this.getTextSuffix || this.responseReplacedWithText) {
+      return "";
+    }
+    return this.getTextSuffix(firstText);
+  }
+
   private formatPendingTextBlockStop(): string | null {
     if (!this.pendingTextBlockStop) return null;
-    const suffix =
-      this.getTextSuffix &&
-      !this.responseReplacedWithText &&
-      this.state.toolCalls.length === 0 &&
-      isCompleteTextStopReason(this.state.stopReason) &&
-      this.pendingTextBlockText
-        ? this.getTextSuffix(this.pendingTextBlockText)
-        : "";
+    const suffix = "";
     const textEvent = suffix
       ? `event: content_block_delta\ndata: ${JSON.stringify({
           type: "content_block_delta",
@@ -1171,7 +1243,6 @@ class AnthropicStreamAdapter
     const stop = this.pendingTextBlockStop;
     this.pendingTextBlockStop = "";
     this.pendingTextBlockIndex = null;
-    this.pendingTextBlockText = "";
     return `${textEvent}${stop}`;
   }
 
@@ -1180,7 +1251,6 @@ class AnthropicStreamAdapter
     const pending = this.pendingTextBlockStop;
     this.pendingTextBlockStop = "";
     this.pendingTextBlockIndex = null;
-    this.pendingTextBlockText = "";
     return `${pending}${sseData}`;
   }
 
@@ -1196,18 +1266,6 @@ class AnthropicStreamAdapter
     this.outIndexByUpstream.set(upstreamIndex, assigned);
     return assigned;
   }
-}
-
-function isCompleteTextStopReason(stopReason: string | null): boolean {
-  // content_block_stop arrives before message_delta, so a missing stop reason
-  // is not evidence of an incomplete turn. Suppress only known non-text ends.
-  return ![
-    "max_tokens",
-    "model_context_window_exceeded",
-    "pause_turn",
-    "refusal",
-    "tool_use",
-  ].includes(stopReason ?? "");
 }
 
 // =============================================================================
@@ -1399,6 +1457,7 @@ export const anthropicAdapterFactory: LLMProvider<
       run: (req) => {
         const params = {
           ...req,
+          messages: stripEmptyTextBlocks(req.messages),
           stream: false,
         } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming;
 
@@ -1443,6 +1502,7 @@ export const anthropicAdapterFactory: LLMProvider<
       run: (req) =>
         anthropicClient.messages.create({
           ...req,
+          messages: stripEmptyTextBlocks(req.messages),
           stream: true,
         } as AnthropicProvider.Messages.MessageCreateParamsStreaming),
     });
@@ -1582,4 +1642,30 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Removes empty text blocks so Anthropic API does not reject the request
+ * with "messages: text content blocks must be non-empty" (HTTP 400).
+ */
+function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message;
+    const filtered = message.content.filter((part) => {
+      const record = part as Record<string, unknown>;
+      if (
+        record.type === "text" &&
+        typeof record.text === "string" &&
+        record.text.trim().length === 0
+      ) {
+        return false;
+      }
+      return true;
+    });
+    return {
+      ...message,
+      content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
+    };
+  });
 }

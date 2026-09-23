@@ -10,9 +10,18 @@ import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
+  openAiResponsesCompactAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
-import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import {
+  CHAT_COMPLETIONS_SUFFIX,
+  EMBEDDINGS_SUFFIX,
+  OPENAI_HANDLED_ENDPOINT_SUFFIXES,
+  PROXY_API_PREFIX,
+  PROXY_BODY_LIMIT,
+  RESPONSES_COMPACT_SUFFIX,
+  RESPONSES_SUFFIX,
+} from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   extractBearerToken,
@@ -25,9 +34,6 @@ import { createProxyPreHandler } from "./proxy-prehandler";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
-  const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
-  const RESPONSES_SUFFIX = "/responses";
-  const EMBEDDINGS_SUFFIX = "/embeddings";
 
   logger.info("[UnifiedProxy] Registering unified OpenAI routes");
 
@@ -37,11 +43,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
-      endpointSuffix: [
-        CHAT_COMPLETIONS_SUFFIX,
-        RESPONSES_SUFFIX,
-        EMBEDDINGS_SUFFIX,
-      ],
+      endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
     }),
@@ -157,6 +159,67 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         openAiResponsesAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}${RESPONSES_COMPACT_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiResponsesCompactWithDefaultAgent,
+        description: "Compact an OpenAI response (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.ResponsesCompactRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ResponsesCompactedResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling OpenAI responses compact request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.ResponsesCompactRequest,
+        request,
+        reply,
+        openAiResponsesCompactAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${RESPONSES_COMPACT_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiResponsesCompactWithAgent,
+        description: "Compact an OpenAI response for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.ResponsesCompactRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ResponsesCompactedResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling OpenAI responses compact request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.ResponsesCompactRequest,
+        request,
+        reply,
+        openAiResponsesCompactAdapterFactory,
       );
     },
   );

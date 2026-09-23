@@ -68,6 +68,10 @@ The repository owns the policy text while sync is configured. Battery changes mu
 
 When an agent uses [Load tools when needed](./platform-agents#load-tools-when-needed), it calls `run_tool` to dispatch a selected tool. OpenAPPA evaluates the selected tool and its arguments, just as it does for a direct call. A refused dispatch names the selected tool.
 
+## Protected Session Mark
+
+The proxy can add a two-line mark to a protected session's first reply and to compaction summaries. It identifies the session that authored the reply. Spawned subagents show a related mark when they start and finish. The proxy removes these marks before sending requests to the model provider and before writing logs; most replies have no mark. Signed tool-call IDs provide separate lineage evidence.
+
 ## Use Case: Support Search and Ticket Updates
 
 At fictional Example Co, `support-assistant` searches public troubleshooting pages and updates internal tickets. Its administrator asks the OpenAPPA Configuration Agent to mark web search results as suspicious and require trusted context before ticket updates.

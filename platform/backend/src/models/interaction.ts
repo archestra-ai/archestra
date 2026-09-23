@@ -257,12 +257,15 @@ function computeOpenCodeRequestType(request: unknown): "main" | "subagent" {
   ].join("\n");
   if (/title generator/i.test(system)) return "subagent";
 
-  const toolNames = (req.tools ?? []).flatMap((tool) => [
-    tool.function?.name ?? tool.name ?? "",
-    ...(tool.functionDeclarations ?? []).map(
-      (declaration) => declaration.name ?? "",
-    ),
-  ]);
+  const toolNames = (req.tools ?? [])
+    .flatMap((tool) => [
+      tool.function?.name ?? tool.name ?? "",
+      ...(tool.functionDeclarations ?? []).map(
+        (declaration) => declaration.name ?? "",
+      ),
+    ])
+    .filter((name) => name.length > 0);
+  if (toolNames.length === 0) return "subagent";
   const hasSpawn = toolNames.some(
     (name) =>
       name === "task" || name.endsWith(":task") || name.endsWith(".task"),

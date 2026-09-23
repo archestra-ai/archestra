@@ -103,6 +103,62 @@ describe("OpenAI chat formatToolCallsSSE", () => {
     ]);
   });
 
+  test("streams the text of a chunk that also carries a call, and holds only the call", () => {
+    // Forwarding the whole chunk would hand the client a fragment of the call
+    // before the policies ruled on it, and a second copy of it once the batch
+    // is re-emitted: a client accumulating by index would see it twice.
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-mixed",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            content: "Delegating.",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_0",
+                type: "function",
+                function: { name: "task", arguments: '{"prompt":' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+
+    const [forwarded] = sseData<OpenAiFrame>(
+      result.sseData ? [result.sseData] : [],
+    );
+    expect(forwarded.choices[0].delta).toEqual({
+      role: "assistant",
+      content: "Delegating.",
+    });
+    expect(adapter.state.text).toBe("Delegating.");
+    // The raw replay carries the call alone; the text is not sent twice.
+    const held = sseData<OpenAiFrame>(adapter.getRawToolCallEvents());
+    expect(held).toHaveLength(1);
+    expect(held[0].choices[0].delta).not.toHaveProperty("content");
+    expect(held[0].choices[0].delta.tool_calls?.[0]).toMatchObject({
+      id: "call_0",
+    });
+    // A re-emitted batch is the only copy of the call the client receives.
+    const reemitted = sseData<OpenAiFrame>(
+      adapter.formatToolCallsSSE?.(REWRITTEN) ?? [],
+    );
+    expect(
+      [forwarded, ...reemitted].flatMap(
+        (frame) => frame.choices[0].delta.tool_calls ?? [],
+      ),
+    ).toHaveLength(1);
+  });
+
   test("the reconstructed turn names the rewritten call, not the original", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.state.toolCalls.push({

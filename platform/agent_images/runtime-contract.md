@@ -149,8 +149,14 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the run exits. |
 | `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` | `1` when Guardrails v2 (OpenAPPA) governed the deployment at launch. A client must then declare every tool inline: OpenAPPA refuses a session that hides tools behind a provider-side tool search or a code-mode program. The Codex image turns off tool search, code mode, and hosted web search. |
 
-Send `X-Archestra-Run-Id` and `X-Archestra-Session-Id`, both set to `ARCHESTRA_AGENT_RUNTIME_TASK_ID`, on every LLM proxy and MCP gateway request. This groups model interactions and tool calls with the run in logs and traces. The maintained catalog images configure these headers automatically.
+Send these headers on every LLM proxy and MCP gateway request. The maintained catalog images configure them automatically.
 
-Also send `X-Appa-Session-ID`, set to `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, on the same requests. OpenAPPA keys a conversation's trust restrictions and pending calls by this ID. The workspace ID stays the same for follow-ups, so a resumed conversation keeps its restrictions. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent. While OpenAPPA is on, the proxy also groups the run's requests in its logs by this ID.
+| Header | Value | Purpose |
+| --- | --- | --- |
+| `X-Archestra-Run-Id` | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Groups one turn's model interactions and tool calls in logs and traces. |
+| `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
+| `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
+
+The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
 
 Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. Custom images receive a standard virtual key: send `ARCHESTRA_VIRTUAL_KEY` as the provider API key to `ARCHESTRA_LLM_PROXY_URL`. The maintained Claude Code subscription mode receives a personal passthrough key instead. Its wrapper sends that key in `X-Archestra-Virtual-Key`, its OAuth bearer token in `Authorization`, and model requests to the proxy URL. The passthrough key authenticates the run's user while the bearer token authenticates to Anthropic.

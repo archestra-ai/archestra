@@ -4,7 +4,6 @@ import {
   providerDisplayNames,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
-  SESSION_ID_HEADER,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
@@ -436,8 +435,9 @@ function claudeCodeCustomHeaders(params: {
   passthroughKey?: string;
 }): string {
   return [
+    // The image adds the session headers: they name the workspace, which
+    // pod-run assigns after this spec is built.
     `${RUN_ID_HEADER}: ${params.taskId}`,
-    `${SESSION_ID_HEADER}: ${params.taskId}`,
     ...(params.passthroughKey
       ? [`X-Archestra-Virtual-Key: ${params.passthroughKey}`]
       : []),

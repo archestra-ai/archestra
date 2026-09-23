@@ -359,7 +359,7 @@ class GeminiRequestAdapter
                   ? functionResponse.id
                   : syntheticToolCallId(contentIndex, partIndex);
 
-              if (this.toolResultUpdates[id]) {
+              if (Object.hasOwn(this.toolResultUpdates, id)) {
                 // Update the function response with sanitized content
                 // Spread the original part to preserve top-level fields like
                 // thought and thoughtSignature which Gemini 3 requires

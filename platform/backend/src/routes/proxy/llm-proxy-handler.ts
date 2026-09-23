@@ -2753,9 +2753,7 @@ async function handleStreaming<
         response,
         responseText:
           toolInvocationRefusal?.contentMessage ??
-          stripChildTrajectoryReceipts(
-            provider.createResponseAdapter(response).getText(),
-          ).text,
+          stripChildTrajectoryReceipts(streamAdapter.state.text).text,
       });
       if (bufferedOutcome.decision === "replace") {
         streamAdapter.prepareResponseReplacement?.();
@@ -3302,20 +3300,19 @@ async function handleNonStreaming<
         pluginContext &&
         pluginRegistry.buffersModelResponse(pluginContext)
       ) {
-        const refusalAdapter = provider.createResponseAdapter(refusalResponse);
         const bufferedOutcome = await pluginRegistry.onBufferedModelResponse({
           ...pluginContext,
           response: refusalResponse,
-          responseText: refusalAdapter.getText(),
+          responseText: contentMessage,
         });
         if (bufferedOutcome.decision === "replace") {
-          if (!refusalAdapter.withReplacedText) {
+          if (!responseAdapter.withReplacedText) {
             throw new ApiError(
               503,
               "LLM provider cannot safely replace a governed child response",
             );
           }
-          refusalResponse = refusalAdapter.withReplacedText(
+          refusalResponse = responseAdapter.withReplacedText(
             bufferedOutcome.responseText,
           );
         }
@@ -3381,7 +3378,7 @@ async function handleNonStreaming<
         providerType: provider.interactionType,
         request: originalRequest,
         processedRequest: request,
-        response: refusalResponse,
+        response: responseAdapter.getLoggedResponse?.() ?? refusalResponse,
         actualModel,
         usage,
         costs,
@@ -3424,26 +3421,27 @@ async function handleNonStreaming<
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
         : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
+  let bufferedResponseReplaced = false;
   if (
     pluginRegistry &&
     pluginContext &&
     pluginRegistry.buffersModelResponse(pluginContext)
   ) {
-    const clientResponseAdapter =
-      provider.createResponseAdapter(clientResponse);
     const bufferedOutcome = await pluginRegistry.onBufferedModelResponse({
       ...pluginContext,
       response: clientResponse,
-      responseText: clientResponseAdapter.getText(),
+      responseText: stripChildTrajectoryReceipts(responseAdapter.getText())
+        .text,
     });
     if (bufferedOutcome.decision === "replace") {
-      if (!clientResponseAdapter.withReplacedText) {
+      if (!responseAdapter.withReplacedText) {
         throw new ApiError(
           503,
           "LLM provider cannot safely replace a governed child response",
         );
       }
-      clientResponse = clientResponseAdapter.withReplacedText(
+      bufferedResponseReplaced = true;
+      clientResponse = responseAdapter.withReplacedText(
         bufferedOutcome.responseText,
       );
     }
@@ -3574,7 +3572,9 @@ async function handleNonStreaming<
     return reply.send(clientResponse);
   }
   const outboundResponse = structuredClone(clientResponse);
-  if (childTrajectoryReceipt) {
+  const completedProtectedChildReturn =
+    bufferedResponseReplaced || containsChildReturnProof(rewrittenToolCalls);
+  if (childTrajectoryReceipt && !completedProtectedChildReturn) {
     appendChildTrajectoryReceiptToResponse({
       family: childTrajectoryReceipt.family,
       response: outboundResponse,
@@ -3590,6 +3590,16 @@ async function handleNonStreaming<
     if (appended) markSessionReceiptIssued(sessionReceipt);
   }
   return reply.send(outboundResponse);
+}
+
+function containsChildReturnProof(
+  toolCalls: readonly AccumulatedToolCall[] | null,
+): boolean {
+  return Boolean(
+    toolCalls?.some((call) =>
+      String(call.arguments).includes("[appa] child return appar-"),
+    ),
+  );
 }
 
 async function evaluateProxyPluginToolCalls(

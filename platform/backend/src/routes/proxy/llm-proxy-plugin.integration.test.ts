@@ -11,8 +11,14 @@ import {
   registerLlmProxyPlugin,
 } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
-import { openaiAdapterFactory } from "./adapters";
+import {
+  createAnthropicTestClient,
+  createOpenAiTestClient,
+} from "@/test/llm-provider-stubs";
+import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import { makeAnthropicOpenaiAdapterFactory } from "./adapters/anthropic-openai";
+import { makeResponsesFromChatAdapterFactory } from "./adapters/openai-responses-from-chat";
+import { handleLLMProxy } from "./llm-proxy-handler";
 import openAiProxyRoutes from "./routes/openai";
 
 describe("LLM proxy plugin lifecycle", () => {
@@ -114,6 +120,84 @@ describe("LLM proxy plugin lifecycle", () => {
 
     expect(response.statusCode, response.body).toBeGreaterThanOrEqual(400);
     expect(response.body).toContain("provider unavailable");
+  });
+
+  test.for([
+    false,
+    true,
+  ])("buffers and replaces a routed Anthropic Responses answer in its native adapter domain (stream=%s)", async (stream, {
+    makeAgent,
+  }) => {
+    const rawText = "RAW WRAPPED ANSWER";
+    const admittedText = "ADMITTED WRAPPED ANSWER";
+    const observedText: string[] = [];
+    const unregister = registerLlmProxyPlugin({
+      id: `test-buffered-wrapped-response-${crypto.randomUUID()}`,
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse({ responseText }) {
+        observedText.push(responseText);
+        return { decision: "replace", responseText: admittedText };
+      },
+    });
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient({ responseText: rawText }) as never,
+    );
+    const provider = makeResponsesFromChatAdapterFactory(
+      makeAnthropicOpenaiAdapterFactory({
+        chatcmplId: "chatcmpl-wrapped",
+        createdUnix: 1,
+        requestedModel: "routed-claude",
+      }),
+      {
+        responseId: "resp-wrapped",
+        createdUnix: 1,
+        requestedModel: "routed-claude",
+      },
+    );
+    app.post("/test/wrapped/:agentId", async (request, reply) =>
+      handleLLMProxy(
+        request.body as Parameters<typeof provider.createRequestAdapter>[0],
+        request,
+        reply,
+        provider,
+      ),
+    );
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-wrapped",
+      provider: "anthropic",
+      modelId: "claude-wrapped",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/test/wrapped/${agent.id}`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "claude-wrapped",
+          max_tokens: 128,
+          messages: [{ role: "user", content: "hello" }],
+          stream,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(observedText).toEqual([stream ? `Hello! ${rawText}` : rawText]);
+      expect(response.body).toContain(admittedText);
+      expect(response.body).not.toContain(rawText);
+      expect(response.body).toContain(
+        stream ? '"type":"response.completed"' : '"object":"response"',
+      );
+    } finally {
+      unregister();
+    }
   });
 
   test("runs generic request and response hooks for a non-APPA request", async ({

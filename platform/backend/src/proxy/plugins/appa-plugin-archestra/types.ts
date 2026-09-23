@@ -121,7 +121,7 @@ export type AppaClientAdapter = {
     sessionId: string,
   ): string | undefined;
   /** True when this local tool starts a delegated child run. */
-  isSpawnTool(name: string): boolean;
+  isSpawnTool(name: string, namespace?: string): boolean;
   /**
    * Classifies a native spawn launch result. A successful launch stays
    * pending until the child binds the prepared fork. A failed launch closes

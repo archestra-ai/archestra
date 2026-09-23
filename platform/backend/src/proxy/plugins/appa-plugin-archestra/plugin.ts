@@ -243,7 +243,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           verifiedNativeQuestionResults,
         }),
       classifySpawnResult: (answer) => {
-        if (!binding.adapter?.isSpawnTool(answer.name)) return undefined;
+        if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
+          return undefined;
         if (binding.request.restoredNoticeCallIds?.has(answer.id))
           return "pending";
         return (
@@ -633,7 +634,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // the child's admitted return. A correctly prefixed id is not proof
         // that reading those bytes is safe.
         if (
-          !binding.adapter.isSpawnTool(call.name) &&
+          !binding.adapter.isSpawnTool(call.name, call.namespace) &&
           binding.adapter.childTranscriptPaths &&
           referencesChildTranscriptPath({
             arguments: call.arguments,
@@ -651,7 +652,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             arguments: call.arguments,
           }),
           rootId,
-          spawn: binding.adapter.isSpawnTool(call.name),
+          spawn: binding.adapter.isSpawnTool(call.name, call.namespace),
         });
       }
     }
@@ -672,7 +673,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             }
             return isUserQuestionCall(binding, name);
           },
-          isSpawn: (name) => binding.adapter?.isSpawnTool(name) === true,
+          isSpawn: (name, namespace) =>
+            binding.adapter?.isSpawnTool(name, namespace) === true,
           supportsDelegation: binding.adapter !== undefined && !binding.chat,
           ...(binding.request.tools
             ? {
@@ -1116,7 +1118,7 @@ async function approveChildReturnCarriers(params: {
   >();
   const directSpawnResults = new Set(
     params.results
-      .filter((result) => adapter?.isSpawnTool(result.name))
+      .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
       .map((result) => envelopeIdOf(result.id)),
   );
   for (const receipt of receipts) {
@@ -1178,7 +1180,8 @@ async function approveChildReturnCarriers(params: {
       );
     }
     updates[result.id] =
-      verified.length === 1 && adapter?.isSpawnTool(result.name)
+      verified.length === 1 &&
+      adapter?.isSpawnTool(result.name, result.namespace)
         ? verified[0].value
         : JSON.stringify({
             status: Object.fromEntries(
@@ -1376,6 +1379,7 @@ function withDelegationMarker(params: {
   mint: (prompt: string, callId: string) => string | undefined;
 }): { call: ToolCall; annotation: LlmProxyToolCallAnnotation } | undefined {
   const { call } = params;
+  if (!params.adapter.isSpawnTool(call.name, call.namespace)) return undefined;
   const args = argumentRecordOf(call.arguments);
   const spawn = args && params.adapter.spawnPromptField(call.name, args);
   if (!args || !spawn) return undefined;
@@ -1419,10 +1423,10 @@ function withDelegationMarker(params: {
  * Tests with sample arguments if actual arguments cannot be parsed.
  */
 function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
+  if (!adapter.isSpawnTool(call.name, call.namespace)) return false;
   const args = argumentRecordOf(call.arguments);
   if (args && adapter.spawnPromptField(call.name, args)) return true;
   return (
-    adapter.isSpawnTool(call.name) &&
     adapter.spawnPromptField(call.name, {
       prompt: "probe",
       message: "probe",

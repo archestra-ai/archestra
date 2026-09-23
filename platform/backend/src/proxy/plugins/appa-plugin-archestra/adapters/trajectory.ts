@@ -88,7 +88,7 @@ export function bindMintedChildTrajectory(params: {
     recordedNativeParent({ context: params.context, childNativeId });
 
   if (!parentNativeId) {
-    if (!childNativeId && !claims.parentId) return undefined;
+    if (!claims.parentId) return undefined;
     throw correlationError(
       "OpenAPPA child trajectory is missing a server-minted parent id",
     );

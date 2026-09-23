@@ -4,7 +4,6 @@ import type {
   LLMProvider,
   LLMResponseAdapter,
   LLMStreamAdapter,
-  OpenAi,
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
@@ -33,9 +32,9 @@ class AnthropicOpenaiResponseAdapter
 {
   readonly provider = "anthropic" as const;
   private inner: LLMResponseAdapter<AnthropicResponse>;
-  // The inner (logged-shape) response after a dispatch-mode repair, so
-  // getLoggedResponse persists the rewritten turn rather than the original.
-  private rewrittenInner: AnthropicResponse | null = null;
+  // The inner provider-native response after a policy mutation. Client output
+  // is translated separately, while interaction logs retain this native view.
+  private modifiedInner: AnthropicResponse | null = null;
   private ctx: AnthropicOpenaiContext;
 
   constructor(response: AnthropicResponse, ctx: AnthropicOpenaiContext) {
@@ -77,7 +76,7 @@ class AnthropicOpenaiResponseAdapter
   }
 
   getLoggedResponse(): AnthropicResponse {
-    return this.rewrittenInner ?? this.inner.getOriginalResponse();
+    return this.modifiedInner ?? this.inner.getOriginalResponse();
   }
 
   getFinishReasons(): string[] {
@@ -96,7 +95,7 @@ class AnthropicOpenaiResponseAdapter
     const inner =
       this.inner.withRewrittenToolCalls?.(toolCalls) ??
       this.inner.getOriginalResponse();
-    this.rewrittenInner = inner;
+    this.modifiedInner = inner;
     return anthropicResponseToOpenai(
       inner,
       this.ctx,
@@ -104,30 +103,29 @@ class AnthropicOpenaiResponseAdapter
   }
 
   toRefusalResponse(
-    _refusalMessage: string,
+    refusalMessage: string,
     contentMessage: string,
   ): AnthropicResponse {
-    const usage = this.inner.getUsage();
-    const response: OpenAi.Types.ChatCompletionsResponse = {
-      id: this.ctx.chatcmplId,
-      object: "chat.completion",
-      created: this.ctx.createdUnix,
-      model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          logprobs: null,
-          finish_reason: "stop",
-          message: {
-            role: "assistant",
-            content: contentMessage,
-          },
-        },
-      ],
-      usage: anthropicUsageViewToOpenai(usage),
-    };
+    const inner = this.inner.toRefusalResponse(refusalMessage, contentMessage);
+    this.modifiedInner = inner;
+    return anthropicResponseToOpenai(
+      inner,
+      this.ctx,
+    ) as unknown as AnthropicResponse;
+  }
 
-    return response as unknown as AnthropicResponse;
+  withReplacedText(text: string): AnthropicResponse {
+    if (!this.inner.withReplacedText) {
+      throw new Error(
+        "Anthropic response adapter cannot replace response text",
+      );
+    }
+    const inner = this.inner.withReplacedText(text);
+    this.modifiedInner = inner;
+    return anthropicResponseToOpenai(
+      inner,
+      this.ctx,
+    ) as unknown as AnthropicResponse;
   }
 }
 

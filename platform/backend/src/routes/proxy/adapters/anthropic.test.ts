@@ -486,6 +486,51 @@ describe("AnthropicRequestAdapter", () => {
       }>;
       expect(content[0].content).toBe('{"modified": "data", "extra": "field"}');
     });
+
+    test("an empty semantic update removes every raw tool-result content block", () => {
+      const messages = [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "spawn",
+              name: "wait_agent",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "spawn",
+              content: [
+                { type: "text", text: "RAW child return" },
+                { type: "text", text: "RAW unsigned sibling" },
+              ],
+              is_error: false,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages),
+      );
+
+      adapter.applyToolResultUpdates({ spawn: "" });
+      const forwarded = adapter.toProviderRequest();
+      const resultContent = forwarded.messages[1].content as Array<{
+        type: string;
+        content?: unknown;
+      }>;
+
+      expect(JSON.stringify(forwarded)).not.toContain("RAW");
+      expect(resultContent).toEqual([
+        expect.objectContaining({ type: "tool_result", content: "" }),
+      ]);
+    });
   });
 
   describe("toProviderRequest - MCP image handling", () => {

@@ -3150,6 +3150,28 @@ describe("delegation markers", () => {
             ]),
           ),
         ).rejects.toBeInstanceOf(ApiError);
+        await expect(
+          codex.onToolCalls(
+            toolCalls(codexContext, [
+              {
+                id: "call_foreign",
+                name: "spawn_agent",
+                namespace: "mcp__foreign",
+                arguments: JSON.stringify({ message: SPAWN_PROMPT }),
+              },
+            ]),
+          ),
+        ).resolves.toMatchObject({
+          decision: "allow",
+          toolCalls: [
+            {
+              id: "call_foreign",
+              name: "spawn_agent",
+              namespace: "mcp__foreign",
+              arguments: JSON.stringify({ message: SPAWN_PROMPT }),
+            },
+          ],
+        });
         expect(cancel).toHaveBeenCalledTimes(4);
       } finally {
         cancel.mockRestore();

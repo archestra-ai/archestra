@@ -7,7 +7,9 @@ import {
   mintChildReturnReceipt,
   verifyChildReturnReceipt,
 } from "./child-return";
+import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { stampToolCallId } from "./trajectory-stamp";
+import { appendChildTrajectoryReceiptToResponse } from "./wire";
 
 const SECRET = "child-return-test-secret-0123456789abcdef";
 const RETURN = {
@@ -73,6 +75,68 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(nativeResultContent(body)).toBe(
       JSON.stringify({ status: { child: { completed: "RAW" } } }),
     );
+  });
+
+  test("leaves foreign namespaced wait payloads byte-exact", () => {
+    config.openappa.offerSigningSecret = "";
+    const output =
+      ' { "status": { "job": { "completed": "FOREIGN" } }, "total": 1 } ';
+    const body = {
+      input: [
+        {
+          type: "function_call",
+          call_id: "foreign-wait",
+          name: "wait_agent",
+          namespace: "mcp__foreign",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "foreign-wait",
+          output,
+        },
+      ],
+    };
+    const before = structuredClone(body);
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(body).toEqual(before);
+    expect(body.input[1].output).toBe(output);
+    expect(collected).toEqual({ receipts: [], completions: [] });
+  });
+
+  test("keeps flat and native Codex namespaces eligible for completion", () => {
+    for (const namespace of [undefined, "functions", "multi_agent_v1"]) {
+      const body = {
+        input: [
+          {
+            type: "function_call",
+            call_id: `native-${namespace ?? "flat"}`,
+            name: "wait_agent",
+            ...(namespace ? { namespace } : {}),
+            arguments: "{}",
+          },
+          {
+            type: "function_call_output",
+            call_id: `native-${namespace ?? "flat"}`,
+            output: JSON.stringify({
+              status: { child: { completed: "RAW" } },
+              total: 1,
+            }),
+          },
+        ],
+      };
+
+      const collected = collectAndStripChildReturns(body);
+
+      expect(collected.completions).toEqual([
+        expect.objectContaining({ childNativeId: "child", value: "RAW" }),
+      ]);
+      expect(body.input[1].output).toBe(
+        JSON.stringify({ status: { child: { completed: "RAW" } } }),
+      );
+    }
   });
 
   test("mints one display marker followed by a self-contained machine proof", () => {
@@ -248,6 +312,19 @@ describe("OpenAPPA stateless child-return receipts", () => {
       `${exact}\nUNSIGNED-SUFFIX`,
     );
     expect(verify(suffixReceipt, returned)).toBeNull();
+  });
+
+  test("strips a nested trajectory proof from a complete direct return before hash verification", () => {
+    const fullCarrier = completeResponseCarrier(RETURN);
+    const result = collectNativeResult(fullCarrier, "Task");
+    const [receipt] = result.collected.receipts;
+
+    expect(nativeResultContent(result.body)).toBe(RETURN.value);
+    expect(nativeResultContent(result.body)).not.toContain("appact2-");
+    expect(verify(receipt)).toMatchObject({
+      childId: RETURN.childId,
+      value: RETURN.value,
+    });
   });
 
   test("uses signed claims rather than the display code and rejects proof mutations", () => {
@@ -504,6 +581,32 @@ function requiredMarker(
 
 function carrier(marker: string, value: string = RETURN.value): string {
   return `${value}\n\n${marker}`;
+}
+
+function completeResponseCarrier(
+  returned: Parameters<typeof mintChildReturnReceipt>[0],
+): string {
+  const trajectory = mintChildTrajectoryReceipt({
+    organizationId: returned.organizationId,
+    callerId: returned.callerId,
+    parentId: returned.parentId,
+    childId: returned.childId,
+    childNativeId: returned.childNativeId,
+    spawnerNativeId: "root-native",
+    spawnCallId: returned.spawnCallId,
+  });
+  if (!trajectory) throw new Error("expected a child-trajectory marker");
+  const response = { content: [{ type: "text", text: returned.value }] };
+  if (
+    !appendChildTrajectoryReceiptToResponse({
+      family: "anthropic:messages",
+      response,
+      footer: trajectory,
+    })
+  ) {
+    throw new Error("expected a complete child response carrier");
+  }
+  return `${response.content[0].text}\n\n${requiredMarker(returned)}`;
 }
 
 function nativeToolCall(id: string, name: string) {

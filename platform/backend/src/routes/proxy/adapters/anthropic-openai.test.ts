@@ -324,3 +324,41 @@ describe("ResponsesFromChatStreamAdapter response replacement", () => {
     );
   });
 });
+
+describe("ResponsesFromChatAdapter response replacement", () => {
+  it("replaces in the native Anthropic domain before translating to Responses", () => {
+    const factory = makeResponsesFromChatAdapterFactory(
+      makeAnthropicOpenaiAdapterFactory(ctx),
+      {
+        responseId: "resp-test",
+        createdUnix: 0,
+        requestedModel: "archestra:test",
+      },
+    );
+    const adapter = factory.createResponseAdapter({
+      id: "msg-test",
+      type: "message",
+      role: "assistant",
+      model: "claude-test",
+      content: [{ type: "text", text: "RAW", citations: null }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 2 },
+    });
+
+    expect(adapter.getText()).toBe("RAW");
+    expect(adapter.withReplacedText?.("ADMITTED")).toMatchObject({
+      object: "response",
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "ADMITTED" }],
+        },
+      ],
+    });
+    expect(adapter.getLoggedResponse?.()).toMatchObject({
+      type: "message",
+      content: [{ type: "text", text: "ADMITTED" }],
+    });
+  });
+});

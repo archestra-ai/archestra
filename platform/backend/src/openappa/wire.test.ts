@@ -8,6 +8,11 @@ import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-na
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { openappaActor } from "./actor";
+import {
+  collectAndStripChildReturns,
+  mintChildReturnReceipt,
+  verifyChildReturnReceipt,
+} from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { mintDelegationMarker } from "./delegation";
 import {
@@ -332,6 +337,69 @@ describe("child trajectory receipt text carriers", () => {
       prepared.childTrajectoryReceipts?.map((receipt) => receipt.parentId),
     ).toEqual(["s1:a1", "s1:a2"]);
     expect(JSON.stringify(body)).not.toContain("appact2-");
+  });
+
+  test("strips but never adopts a child trajectory proof nested in a return notification", () => {
+    config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
+    const scope = {
+      organizationId: "org-envelope",
+      callerId: "user:alice",
+      parentId: "s1",
+      childId: "s1:a1",
+      childNativeId: "a1",
+      spawnCallId: "spawn-a1",
+    } as const;
+    const admitted = "SUMMARY(18 characters): safe";
+    const trajectory = mintChildTrajectoryReceipt({
+      ...scope,
+      spawnerNativeId: "s1",
+    });
+    const returned = mintChildReturnReceipt({ ...scope, value: admitted });
+    if (!trajectory || !returned) throw new Error("expected signed carriers");
+    const response = { content: [{ type: "text", text: admitted }] };
+    expect(
+      appendChildTrajectoryReceiptToResponse({
+        family: "anthropic:messages",
+        response,
+        footer: trajectory,
+      }),
+    ).toBe(true);
+    const directContext = {
+      messages: [{ role: "user", content: response.content[0].text }],
+    };
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body: directContext,
+      }),
+    ).toEqual([expect.objectContaining({ childId: scope.childId })]);
+    expect(directContext.messages[0].content).toBe(admitted);
+
+    const completeResponse = `${response.content[0].text}\n\n${returned}`;
+    const notifications = [
+      `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>spawn-a1</tool-use-id>\n<status>completed</status>\n<result>${completeResponse}</result>\n</task-notification>`,
+      `<subagent_notification>\n${JSON.stringify({ agent_id: "a1", tool_use_id: "spawn-a1", status: { completed: completeResponse } })}\n</subagent_notification>`,
+    ];
+    for (const content of notifications) {
+      const body = { messages: [{ role: "user", content }] };
+      const trajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body,
+      });
+      const childReturns = collectAndStripChildReturns(body);
+
+      expect(trajectoryReceipts).toEqual([]);
+      expect(JSON.stringify(body)).not.toContain("appact2-");
+      expect(childReturns.receipts).toHaveLength(1);
+      expect(
+        verifyChildReturnReceipt({
+          receipt: childReturns.receipts[0],
+          organizationId: scope.organizationId,
+          callerId: scope.callerId,
+          parentId: scope.parentId,
+        }),
+      ).toMatchObject({ childId: scope.childId, value: admitted });
+    }
   });
 });
 

@@ -29,6 +29,9 @@ describe("APPA child trajectory adapters", () => {
     expect(codex.isSpawnTool("spawn_agent")).toBe(true);
     expect(codex.isSpawnTool("functions.spawn_agent")).toBe(true);
     expect(codex.isSpawnTool("builtin:spawn_agent")).toBe(true);
+    expect(codex.isSpawnTool("spawn_agent", "functions")).toBe(true);
+    expect(codex.isSpawnTool("spawn_agent", "multi_agent_v1")).toBe(true);
+    expect(codex.isSpawnTool("spawn_agent", "mcp__foreign")).toBe(false);
     expect(codex.isSpawnTool("wait_agent")).toBe(false);
     expect(codex.isSpawnTool("resume_agent")).toBe(false);
   });
@@ -55,6 +58,15 @@ describe("APPA child trajectory adapters", () => {
         id: "rejected",
         name: "spawn_agent",
         content: "The selected model does not support this reasoning effort",
+        isError: false,
+      }),
+    ).toBeUndefined();
+    expect(
+      codex.classifySpawnResult?.({
+        id: "foreign-spawn",
+        name: "spawn_agent",
+        namespace: "mcp__foreign",
+        content: '{"agent_id":"foreign"}',
         isError: false,
       }),
     ).toBeUndefined();
@@ -191,6 +203,32 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         isError: false,
       }),
     ).toBe(false);
+    const foreignPayload = {
+      status: { job: { completed: "FOREIGN" } },
+      total: 1,
+    };
+    const beforeForeign = JSON.stringify(foreignPayload);
+    expect(
+      codex.isChildCompletionResult?.({
+        id: "foreign-wait",
+        name: "wait_agent",
+        namespace: "mcp__foreign",
+        content: foreignPayload,
+        isError: false,
+      }),
+    ).toBe(false);
+    expect(JSON.stringify(foreignPayload)).toBe(beforeForeign);
+    for (const namespace of [undefined, "functions", "multi_agent_v1"]) {
+      expect(
+        codex.isChildCompletionResult?.({
+          id: `native-${namespace ?? "flat"}`,
+          name: "wait_agent",
+          ...(namespace ? { namespace } : {}),
+          content: '{"status":{"t1":{"completed":"SUMMARY(...)"}}}',
+          isError: false,
+        }),
+      ).toBe(true);
+    }
     const openCodeResult = {
       id: "opencode-spawn",
       name: "task",
@@ -423,6 +461,24 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       sessionId: "sess-parent:sess-child",
       parentId: "sess-parent",
     });
+  });
+
+  test("leaves ordinary Codex and OpenCode roots unbound without a parent", () => {
+    expect(
+      codex.bindChildTrajectory({
+        headers: { "user-agent": "codex_cli_rs/0.99.0" },
+        requestBody: { client_metadata: { thread_id: "codex-root" } },
+      }),
+    ).toBeUndefined();
+    expect(
+      openCode.bindChildTrajectory({
+        headers: {
+          "user-agent": "opencode/1.18.31",
+          "x-opencode-session": "opencode-root",
+        },
+        requestBody: {},
+      }),
+    ).toBeUndefined();
   });
 
   test("rejects absent, duplicate, reused, and cross-parent correlation headers", () => {

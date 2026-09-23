@@ -331,7 +331,10 @@ class MinimaxRequestAdapter
     // Apply any pending tool result updates
     if (Object.keys(this.toolResultUpdates).length > 0) {
       messages = messages.map((msg) => {
-        if (msg.role === "tool" && this.toolResultUpdates[msg.tool_call_id]) {
+        if (
+          msg.role === "tool" &&
+          Object.hasOwn(this.toolResultUpdates, msg.tool_call_id)
+        ) {
           return {
             ...msg,
             content: this.toolResultUpdates[msg.tool_call_id],

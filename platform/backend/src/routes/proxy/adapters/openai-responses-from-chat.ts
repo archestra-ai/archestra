@@ -25,8 +25,9 @@ class ResponsesFromChatAdapter<TResponse>
 {
   readonly provider: SupportedProvider;
   private inner: LLMResponseAdapter<TResponse>;
-  // The inner (logged-shape) response after a dispatch-mode repair.
-  private rewrittenInner: TResponse | null = null;
+  // The inner logged-domain response after a policy mutation. For nested
+  // translators this stays provider-native, not OpenAI Chat or Responses.
+  private modifiedInner: TResponse | null = null;
   private ctx: OpenaiResponsesContext;
 
   constructor(
@@ -70,8 +71,8 @@ class ResponsesFromChatAdapter<TResponse>
   }
 
   getLoggedResponse(): TResponse {
-    if (this.rewrittenInner !== null) {
-      return this.rewrittenInner;
+    if (this.modifiedInner !== null) {
+      return this.modifiedInner;
     }
     return this.inner.getLoggedResponse
       ? this.inner.getLoggedResponse()
@@ -89,7 +90,7 @@ class ResponsesFromChatAdapter<TResponse>
     const inner =
       this.inner.withRewrittenToolCalls?.(toolCalls) ??
       this.inner.getOriginalResponse();
-    this.rewrittenInner = inner;
+    this.modifiedInner = this.inner.getLoggedResponse?.() ?? inner;
     return chatCompletionToResponses(
       inner as unknown as OpenAiResponse,
       this.ctx,
@@ -105,8 +106,21 @@ class ResponsesFromChatAdapter<TResponse>
       refusalMessage,
       contentMessage,
     );
+    this.modifiedInner = this.inner.getLoggedResponse?.() ?? refusal;
     return chatCompletionToResponses(
       refusal as unknown as OpenAiResponse,
+      this.ctx,
+    ) as unknown as TResponse;
+  }
+
+  withReplacedText(text: string): TResponse {
+    if (!this.inner.withReplacedText) {
+      throw new Error("Wrapped response adapter cannot replace response text");
+    }
+    const inner = this.inner.withReplacedText(text);
+    this.modifiedInner = this.inner.getLoggedResponse?.() ?? inner;
+    return chatCompletionToResponses(
+      inner as unknown as OpenAiResponse,
       this.ctx,
     ) as unknown as TResponse;
   }

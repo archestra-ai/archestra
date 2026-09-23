@@ -140,14 +140,16 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       : undefined;
   }
 
-  isSpawnTool(name: string): boolean {
-    return SPAWN_TOOLS.has(localToolName(name));
+  isSpawnTool(name: string, namespace?: string): boolean {
+    return (
+      isNativeCodexNamespace(namespace) && SPAWN_TOOLS.has(localToolName(name))
+    );
   }
 
   classifySpawnResult(
     result: CommonToolResult,
   ): "pending" | "failed" | undefined {
-    if (!this.isSpawnTool(result.name)) return undefined;
+    if (!this.isSpawnTool(result.name, result.namespace)) return undefined;
     if (result.isError) return "failed";
     const output =
       typeof result.content === "string"
@@ -159,7 +161,11 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
-    if (localToolName(result.name) !== "wait_agent" || result.isError)
+    if (
+      !isNativeCodexNamespace(result.namespace) ||
+      localToolName(result.name) !== "wait_agent" ||
+      result.isError
+    )
       return false;
     const output =
       typeof result.content === "string"
@@ -173,7 +179,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
 
   normalizeChildLaunchResult(result: CommonToolResult): string | undefined {
     if (
-      !this.isSpawnTool(result.name) ||
+      !this.isSpawnTool(result.name, result.namespace) ||
       this.classifySpawnResult(result) === "failed"
     )
       return undefined;
@@ -263,6 +269,14 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       "parent_id",
     ]);
   }
+}
+
+function isNativeCodexNamespace(namespace: string | undefined): boolean {
+  return (
+    namespace === undefined ||
+    namespace === "functions" ||
+    namespace === "multi_agent_v1"
+  );
 }
 
 /**

@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { TextDecoder } from "node:util";
 import config from "@/config";
+import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 
@@ -349,16 +350,20 @@ function stripReceipt(
     throw new ApiError(400, "OpenAPPA child-return carrier exceeds its limit");
   }
 
+  // A complete child reply can carry its own trajectory proof before the
+  // signed return. That proof is transport metadata, not part of the admitted
+  // value and never lineage evidence for the parent processing this return.
+  const returnValue = stripChildTrajectoryReceipts(value).text;
   const pattern = new RegExp(MARKER.source, "g");
-  const matches = [...value.matchAll(pattern)];
+  const matches = [...returnValue.matchAll(pattern)];
   if (matches.length === 0) {
-    if (completionCarrier && hasReceiptMarker(value)) {
+    if (completionCarrier && hasReceiptMarker(returnValue)) {
       throw new ApiError(
         400,
         "OpenAPPA received a malformed child-return receipt",
       );
     }
-    return { value };
+    return { value: returnValue };
   }
   if (matches.length !== 1) {
     throw new ApiError(400, "OpenAPPA child-return carrier is ambiguous");
@@ -374,9 +379,9 @@ function stripReceipt(
     );
   }
   const matchStart = match.index ?? 0;
-  const markerStart = receiptSeparatorStart(value, matchStart);
+  const markerStart = receiptSeparatorStart(returnValue, matchStart);
   const markerEnd = matchStart + match[0].length;
-  const stripped = `${value.slice(0, markerStart)}${value.slice(markerEnd)}`;
+  const stripped = `${returnValue.slice(0, markerStart)}${returnValue.slice(markerEnd)}`;
   return {
     value: stripped,
     receipt: {
@@ -865,6 +870,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         ids,
         stringField(toolCall?.id),
         stringField(fn?.name) ?? stringField(toolCall?.name),
+        stringField(fn?.namespace) ?? stringField(toolCall?.namespace),
       );
     }
     for (const block of Array.isArray(record.content) ? record.content : []) {
@@ -874,6 +880,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         ids,
         stringField(toolUse.id),
         stringField(toolUse.name),
+        stringField(toolUse.namespace),
       );
     }
   }
@@ -887,6 +894,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         ids,
         stringField(call.call_id) ?? stringField(call.id),
         stringField(call.name),
+        stringField(call.namespace),
       );
     }
   }
@@ -897,14 +905,24 @@ function addNativeResultCallId(
   ids: Set<string>,
   callId: string | undefined,
   name: string | undefined,
+  namespace: string | undefined,
 ): void {
   if (
     !callId ||
     !name ||
+    !isNativeToolNamespace(namespace) ||
     !NATIVE_COMPLETION_TOOLS.has(localNativeToolName(name))
   )
     return;
   ids.add(normalizeCallId(callId) ?? callId);
+}
+
+function isNativeToolNamespace(namespace: string | undefined): boolean {
+  return (
+    namespace === undefined ||
+    namespace === "functions" ||
+    namespace === "multi_agent_v1"
+  );
 }
 
 function localNativeToolName(name: string): string {

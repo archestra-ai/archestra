@@ -698,7 +698,10 @@ export class OpenAIRequestAdapter
 
     let appliedCount = 0;
     const result = messages.map((message) => {
-      if (message.role === "tool" && updates[message.tool_call_id]) {
+      if (
+        message.role === "tool" &&
+        Object.hasOwn(updates, message.tool_call_id)
+      ) {
         appliedCount++;
         logger.debug(
           { toolCallId: message.tool_call_id },

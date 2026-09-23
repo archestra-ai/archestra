@@ -358,8 +358,10 @@ export function appendSessionReceiptToResponse(params: {
 }
 
 /**
- * Removes child-trajectory carriers before forwarding requests.
- * Returns unverified proofs for request binding. The code is for display only.
+ * Removes child-trajectory carriers before forwarding requests. Returns only
+ * proofs carried as the current conversation's context. A proof nested inside
+ * a native child-return notification is transport metadata for that returned
+ * value, not lineage evidence for the parent processing the notification.
  */
 export function stripChildTrajectoryReceiptsFromRequest(params: {
   family: AppaWireFamily;
@@ -367,9 +369,12 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
 }): AppaChildTrajectoryReceipt[] {
   const receipts: AppaChildTrajectoryReceipt[] = [];
   for (const site of historyTextSites(params.family, params.body)) {
-    const stripped = stripChildTrajectoryReceipts(site.get());
+    const text = site.get();
+    const stripped = stripChildTrajectoryReceipts(text);
     site.set(stripped.text);
-    receipts.push(...stripped.receipts);
+    if (!isChildReturnEnvelopeSite(site, text)) {
+      receipts.push(...stripped.receipts);
+    }
   }
   return receipts;
 }
@@ -1259,7 +1264,11 @@ export function chatMessages(body: unknown): Record<string, unknown>[] {
   return messages;
 }
 
-type TextSite = { get: () => string; set: (text: string) => void };
+type TextSite = {
+  get: () => string;
+  set: (text: string) => void;
+  role?: "user" | "assistant";
+};
 
 /**
  * Text that a client may carry between turns. This accepts only the documented
@@ -1268,8 +1277,10 @@ type TextSite = { get: () => string; set: (text: string) => void };
 function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
   const sites: TextSite[] = [];
   const addContent = (message: Record<string, unknown>) => {
+    const role = message.role as "user" | "assistant";
     if (typeof message.content === "string") {
       sites.push({
+        role,
         get: () => message.content as string,
         set: (text) => {
           message.content = text;
@@ -1286,6 +1297,7 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
       )
         continue;
       sites.push({
+        role,
         get: () => record.text as string,
         set: (text) => {
           record.text = text;
@@ -1298,6 +1310,7 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
     const record = asRecord(body);
     if (typeof record?.input === "string") {
       sites.push({
+        role: "user",
         get: () => record.input as string,
         set: (text) => {
           record.input = text;
@@ -1321,6 +1334,17 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
     addContent(message);
   }
   return sites;
+}
+
+function isChildReturnEnvelopeSite(site: TextSite, text: string): boolean {
+  if (site.role !== "user") return false;
+  const trimmed = text.trim();
+  return (
+    (trimmed.startsWith("<task-notification>") &&
+      trimmed.endsWith("</task-notification>")) ||
+    (trimmed.startsWith("<subagent_notification>") &&
+      trimmed.endsWith("</subagent_notification>"))
+  );
 }
 
 /** Text parts the proxy may return as model-visible assistant content. */

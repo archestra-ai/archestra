@@ -572,7 +572,7 @@ export async function evaluateToolCalls(
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
-    isSpawn?: (name: string) => boolean;
+    isSpawn?: (name: string, namespace?: string) => boolean;
     /** Whether this client can carry child-return declarations. */
     supportsDelegation?: boolean;
   },
@@ -648,7 +648,7 @@ export async function evaluateToolCalls(
           tool,
           JSON.parse(target.toolCallArgs),
         ),
-        spawn: options.isSpawn?.(call.name) === true,
+        spawn: options.isSpawn?.(call.name, call.namespace) === true,
       };
       const decision = await dispatch(session, event);
       if (

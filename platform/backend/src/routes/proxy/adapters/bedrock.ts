@@ -871,7 +871,7 @@ class BedrockRequestAdapter
           if (
             isToolResultBlock(contentBlock) &&
             contentBlock.toolResult.toolUseId &&
-            updates[contentBlock.toolResult.toolUseId]
+            Object.hasOwn(updates, contentBlock.toolResult.toolUseId)
           ) {
             appliedCount++;
             logger.debug(

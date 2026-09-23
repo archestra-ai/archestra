@@ -3493,6 +3493,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(child.body).toContain(admitted);
       expect(child.body).not.toContain(rawMarker);
       expect(child.body).not.toContain("protected session");
+      if (!stream) expect(child.body).not.toContain("appact2-");
       expect(events.filter((event) => event.event === "child_end")).toEqual([
         expect.objectContaining({
           session_id: `user:${userId}|${session}:a1`,
@@ -3533,6 +3534,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(toolFreeChild.statusCode, toolFreeChild.body).toBe(200);
       expect(toolFreeChild.body).toContain(admitted);
       expect(toolFreeChild.body).not.toContain(rawMarker);
+      expect(toolFreeChild.body).not.toContain("appact2-");
       expect(events.filter((event) => event.event === "child_end")).toEqual([
         expect.objectContaining({ output: expect.stringContaining(rawMarker) }),
         expect.objectContaining({ output: admitted }),

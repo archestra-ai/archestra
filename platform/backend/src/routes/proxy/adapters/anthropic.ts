@@ -386,7 +386,7 @@ class AnthropicRequestAdapter
         const updatedContent = message.content.map((contentBlock) => {
           if (
             contentBlock.type === "tool_result" &&
-            updates[contentBlock.tool_use_id]
+            Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
             appliedCount++;
             logger.debug(

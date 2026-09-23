@@ -344,7 +344,6 @@ export const CreateAppSchema = z.object({
   // Omitted: derived from the name (AppModel.generateUniqueSlug).
   slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
-  scope: AppScopeSchema.optional(),
   // html is optional: supply it to seed explicitly, otherwise the single
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
@@ -356,7 +355,7 @@ export const CreateAppSchema = z.object({
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),
   // Display icon (emoji or base64 image data URL). Omitted/null = the generic
-  // app glyph. Stored on the app's backing catalog, like its scope.
+  // app glyph. Stored on the app's backing catalog.
   icon: AppIconSchema.optional(),
   // Key-value labels for organization/categorization. Omitted = none.
   labels: z.array(LabelWithDetailsSchema).optional(),
@@ -373,9 +372,6 @@ export const ScaffoldAppSchema = z.strictObject({
     .max(APP_DESCRIPTION_MAX_LENGTH)
     .optional()
     .describe("Optional description."),
-  scope: AppScopeSchema.optional().describe(
-    "Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned.",
-  ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
   ),

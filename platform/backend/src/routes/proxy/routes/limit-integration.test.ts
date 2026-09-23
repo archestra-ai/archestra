@@ -1,3 +1,4 @@
+import AgentTeamModel from "@/models/agent-team";
 /**
  * Integration tests for end-to-end LLM proxy limit enforcement.
  *
@@ -393,8 +394,6 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       name: "Org Limit Agent",
-      scope: "org",
-      teams: [],
     });
 
     await LimitModel.create({
@@ -588,9 +587,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       name: "Team All-Models Agent",
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
+    // Team limits follow the agent's team assignment, not its grants.
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create team-level all-models limit (model: null)
     const teamLimit = await LimitModel.create({
@@ -643,9 +643,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       name: "Multi-Team All-Models Agent",
-      teams: [team1.id, team2.id],
-      scope: "team",
+      access: { teams: [team1.id, team2.id] },
     });
+    // Team limits follow the agent's team assignment, not its grants.
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
 
     // Create all-models limit on team1 ONLY
     const team1Limit = await LimitModel.create({
@@ -728,9 +729,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       name: "Team All-Models Blocked Agent",
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
+    // Team limits follow the agent's team assignment, not its grants.
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create team all-models limit with threshold of 1
     await LimitModel.create({

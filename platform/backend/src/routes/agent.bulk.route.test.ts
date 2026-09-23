@@ -162,7 +162,7 @@ describe("agents bulk routes", () => {
         agentType: "mcp_gateway",
         isPersonalGateway: true,
         authorId: user.id,
-        scope: "personal",
+        access: "personal",
       });
       const ordinary = await makeAgent({ organizationId, name: "ordinary" });
 
@@ -241,7 +241,7 @@ describe("agents bulk routes", () => {
       const theirs = await makeAgent({
         organizationId,
         name: "not-mine",
-        scope: "personal",
+        access: "personal",
         authorId: other.id,
       });
 

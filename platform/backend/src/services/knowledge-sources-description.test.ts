@@ -24,8 +24,6 @@ describe("buildKnowledgeSourcesDescription", () => {
     await makeTeamMember(team.id, member.id);
     const kb = await makeKnowledgeBase(org.id, {
       name: "Restricted handbook",
-      visibility: "team-scoped",
-      teamIds: [team.id],
     });
     await makeKnowledgeBaseConnector(kb.id, org.id);
     const agent = await makeAgent({
@@ -363,7 +361,7 @@ for (const auto of [true, false]) {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const owner = await makeUser();
-    const team = await makeTeam(org.id, owner.id);
+    await makeTeam(org.id, owner.id);
     const env = await EnvironmentModel.create({
       organizationId: org.id,
       name: "Other environment",
@@ -379,8 +377,6 @@ for (const auto of [true, false]) {
     const hidden = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Hidden Jira",
       description: "Restricted details",
-      visibility: "team-scoped",
-      teamIds: [team.id],
     });
     const elsewhere = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Elsewhere Jira",

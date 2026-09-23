@@ -91,6 +91,8 @@ class VirtualApiKeyModel {
     providerApiKeys?: ProviderApiKeyInput[];
     /** Explicit starting audience; omitted derives one from the scope. */
     initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -158,8 +160,7 @@ class VirtualApiKeyModel {
         scope: createdVirtualKey.id,
         grants: params.initialPermissionGrants,
         authorId: createdVirtualKey.authorId,
-        visibility: scope,
-        teams: teamIds.map((id) => ({ id })),
+        publishToOrganization: params.publishToOrganization,
       });
       // SPDX-SnippetEnd
 

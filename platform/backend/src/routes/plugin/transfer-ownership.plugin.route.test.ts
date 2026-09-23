@@ -28,7 +28,6 @@ describe("POST /api/plugins/:id/transfer-ownership", () => {
           displayName: name,
           description: "Test handoff",
           clientType: "claude-code",
-          scope: "personal",
           files: [
             {
               path: "README.md",

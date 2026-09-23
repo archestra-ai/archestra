@@ -23,7 +23,7 @@ test("catalog admin scope preserves a read-only custom role without manufacturin
   await makeMember(user.id, org.id, { role: role.role });
   const catalog = await makeInternalMcpCatalog({
     organizationId: org.id,
-    scope: "personal",
+    access: "personal",
   });
   await removeObjectPolicies(org.id);
   const access = {
@@ -107,7 +107,7 @@ test("installation-only catalog administrators keep use, widened to the use pres
   await makeMember(user.id, org.id, { role: role.role });
   const catalog = await makeInternalMcpCatalog({
     organizationId: org.id,
-    scope: "personal",
+    access: "personal",
   });
   await removeObjectPolicies(org.id);
   const access = {

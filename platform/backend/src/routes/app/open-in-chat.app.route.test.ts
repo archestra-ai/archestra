@@ -479,7 +479,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const foreignPersonal = await makeAgent({
       organizationId,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       authorId: other.id,
     });
     await OrganizationModel.patch(organizationId, {

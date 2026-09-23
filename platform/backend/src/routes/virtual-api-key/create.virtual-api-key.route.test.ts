@@ -1,6 +1,5 @@
 import { hasArchestraTokenPrefix } from "@archestra/shared";
 import { vi } from "vitest";
-import { LlmProviderApiKeyModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -21,10 +20,13 @@ describe("POST /api/llm-virtual-keys", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    // Grants resolve subjects through membership; a non-member reaches no
+    // shared provider key.
+    await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 
@@ -49,35 +51,6 @@ describe("POST /api/llm-virtual-keys", () => {
     await app.close();
   });
 
-  test("POST /api/llm-virtual-keys rejects org scope without llmVirtualKey admin", async ({
-    makeLlmProviderApiKey,
-    makeSecret,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
-    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-virtual-keys",
-      payload: {
-        name: "Org Key",
-        providerApiKeys: [
-          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
-        ],
-        scope: "org",
-        teams: [],
-      },
-    });
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({
-      error: {
-        message:
-          "You need llmVirtualKey:admin permission to create org-scoped virtual keys",
-      },
-    });
-  });
-
   test("per-user provider (github-copilot): allows a personal self-mapped virtual key", async ({
     makeLlmProviderApiKey,
     makeSecret,
@@ -85,7 +58,6 @@ describe("POST /api/llm-virtual-keys", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_self" } });
     const copilotKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "github-copilot",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -97,25 +69,23 @@ describe("POST /api/llm-virtual-keys", () => {
         providerApiKeys: [
           { provider: "github-copilot", providerApiKeyId: copilotKey.id },
         ],
-        scope: "personal",
-        teams: [],
       },
     });
 
     expect(response.statusCode).toBe(200);
   });
 
-  test("per-user provider: rejects shared (org-scoped) virtual keys containing it", async ({
+  test("per-user provider: rejects a virtual key shared with the organization", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
     const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
     const copilotKey = await makeLlmProviderApiKey(
       organizationId,
       copilotSecret.id,
-      { provider: "github-copilot", scope: "personal", userId: user.id },
+      { provider: "github-copilot", userId: user.id },
     );
 
     const orgScoped = await app.inject({
@@ -126,32 +96,35 @@ describe("POST /api/llm-virtual-keys", () => {
         providerApiKeys: [
           { provider: "github-copilot", providerApiKeyId: copilotKey.id },
         ],
-        scope: "org",
-        teams: [],
+        initialGrants: [
+          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        ],
       },
     });
     expect(orgScoped.statusCode).toBe(400);
-    expect(orgScoped.json().error.message).toContain("per-user");
+    expect(orgScoped.json().error.message).toContain(
+      "Personal account credentials cannot be shared",
+    );
   });
 
   test("per-user provider: allows it alongside other providers in a personal model-router key", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    // Personal scope — not mapping count — is what keeps the token unshared, so
+    // An unshared key — not mapping count — is what keeps the token private, so
     // a Copilot key may ride in the owner's own multi-provider router key. That
     // is the point of the router: one endpoint reaching every provider.
     const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
     const copilotKey = await makeLlmProviderApiKey(
       organizationId,
       copilotSecret.id,
-      { provider: "github-copilot", scope: "personal", userId: user.id },
+      { provider: "github-copilot", userId: user.id },
     );
     const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const openaiKey = await makeLlmProviderApiKey(
       organizationId,
       openaiSecret.id,
-      { provider: "openai", scope: "org" },
+      { provider: "openai" },
     );
 
     const response = await app.inject({
@@ -163,8 +136,6 @@ describe("POST /api/llm-virtual-keys", () => {
           { provider: "github-copilot", providerApiKeyId: copilotKey.id },
           { provider: "openai", providerApiKeyId: openaiKey.id },
         ],
-        scope: "personal",
-        teams: [],
       },
     });
 
@@ -183,13 +154,13 @@ describe("POST /api/llm-virtual-keys", () => {
     const otherCopilotKey = await makeLlmProviderApiKey(
       organizationId,
       copilotSecret.id,
-      { provider: "github-copilot", scope: "personal", userId: otherUser.id },
+      { provider: "github-copilot", userId: otherUser.id },
     );
     const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const openaiKey = await makeLlmProviderApiKey(
       organizationId,
       openaiSecret.id,
-      { provider: "openai", scope: "org" },
+      { provider: "openai" },
     );
 
     const response = await app.inject({
@@ -201,8 +172,6 @@ describe("POST /api/llm-virtual-keys", () => {
           { provider: "github-copilot", providerApiKeyId: otherCopilotKey.id },
           { provider: "openai", providerApiKeyId: openaiKey.id },
         ],
-        scope: "personal",
-        teams: [],
       },
     });
 
@@ -212,13 +181,13 @@ describe("POST /api/llm-virtual-keys", () => {
     );
   });
 
-  test("ChatGPT-subscription (Codex) openai key: rejected in a shared org-scoped virtual key", async ({
+  test("ChatGPT-subscription (Codex) openai key: rejected in a virtual key shared with the organization", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
     // A codex credential lives on the `openai` provider but is one person's
     // ChatGPT account, so it must get the same per-user treatment as Copilot.
-    mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
     const codexSecret = await makeSecret({
       secret: {
@@ -231,7 +200,7 @@ describe("POST /api/llm-virtual-keys", () => {
     const codexKey = await makeLlmProviderApiKey(
       organizationId,
       codexSecret.id,
-      { provider: "openai", scope: "personal", userId: user.id },
+      { provider: "openai", userId: user.id },
     );
 
     const orgScoped = await app.inject({
@@ -242,16 +211,18 @@ describe("POST /api/llm-virtual-keys", () => {
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: codexKey.id },
         ],
-        scope: "org",
-        teams: [],
+        initialGrants: [
+          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        ],
       },
     });
     expect(orgScoped.statusCode).toBe(400);
-    expect(orgScoped.json().error.message).toContain("per-user");
-    expect(orgScoped.json().error.message).toContain("ChatGPT Subscription");
+    expect(orgScoped.json().error.message).toContain(
+      "Personal account credentials cannot be shared",
+    );
   });
 
-  test("POST /api/llm-virtual-keys allows llmVirtualKey admins to assign any team", async ({
+  test("POST /api/llm-virtual-keys lets llmVirtualKey admins share with any team", async ({
     makeLlmProviderApiKey,
     makeSecret,
     makeTeam,
@@ -275,17 +246,28 @@ describe("POST /api/llm-virtual-keys", () => {
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
-        scope: "team",
-        teams: [otherTeam.id],
+        initialGrants: [
+          {
+            subject: { type: "team", id: otherTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      name: "Team Key",
-      scope: "team",
-      teams: [expect.objectContaining({ id: otherTeam.id })],
+    expect(response.statusCode, response.body).toBe(200);
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "llmVirtualKey",
+      scope: response.json().id,
     });
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subject: { type: "team", id: otherTeam.id },
+        }),
+      ]),
+    );
   });
 
   test("POST /api/llm-virtual-keys returns the full token value once", async ({
@@ -499,18 +481,15 @@ describe("POST /api/llm-virtual-keys", () => {
     );
   });
 
-  test("POST /api/llm-virtual-keys supports keyless parent keys", async () => {
+  test("POST /api/llm-virtual-keys supports keyless parent keys", async ({
+    makeLlmProviderApiKey,
+  }) => {
     mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
-    const parentKey = await LlmProviderApiKeyModel.create({
-      organizationId,
-      secretId: null,
+    const parentKey = await makeLlmProviderApiKey(organizationId, null, {
       name: "Keyless Parent",
       provider: "ollama",
-      scope: "org",
-      userId: null,
-      teamId: null,
     });
 
     const response = await app.inject({
@@ -581,7 +560,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Key for member",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -611,7 +589,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Key for member",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -642,7 +619,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Key for outsider",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -670,7 +646,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "My own key",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -695,7 +670,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "My own key",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -728,7 +702,6 @@ describe("POST /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Cross-org key",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -864,8 +837,6 @@ describe("scoped virtual key grants", () => {
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
-        scope: "personal",
-        teams: [],
         initialGrants: grants,
       },
     });
@@ -929,7 +900,6 @@ describe("scoped virtual key grants", () => {
           url: `/api/llm-virtual-keys/${id}`,
           payload: {
             name: "Not allowed",
-            scope: "personal",
             providerApiKeys: [
               { provider: parentKey.provider, providerApiKeyId: parentKey.id },
             ],
@@ -967,7 +937,6 @@ describe("scoped virtual key grants", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_private" } });
     const privateKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: recipient.id,
     });
     const privateMapping = await app.inject({
@@ -975,7 +944,6 @@ describe("scoped virtual key grants", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Invalid private mapping",
-        scope: "personal",
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: privateKey.id },
         ],
@@ -985,7 +953,7 @@ describe("scoped virtual key grants", () => {
     const subscription = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "github-copilot", scope: "personal", userId: user.id },
+      { provider: "github-copilot", userId: user.id },
     );
     for (const body of [
       {
@@ -1001,7 +969,6 @@ describe("scoped virtual key grants", () => {
         url: "/api/llm-virtual-keys",
         payload: {
           name: "Invalid shared credential",
-          scope: "personal",
           initialGrants: grants,
           ...body,
         },

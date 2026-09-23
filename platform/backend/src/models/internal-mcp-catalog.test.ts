@@ -651,7 +651,7 @@ describe("InternalMcpCatalogModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
 
       const catalog = await makeInternalMcpCatalog({
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: author.id,
       });
@@ -693,9 +693,8 @@ describe("InternalMcpCatalogModel", () => {
       const team2 = await makeTeam(org.id, user.id);
 
       const catalog = await makeInternalMcpCatalog({
-        scope: "team",
+        access: { teams: [team1.id] },
         organizationId: org.id,
-        teams: [team1.id],
       });
 
       const updated = await InternalMcpCatalogModel.update(catalog.id, {
@@ -717,7 +716,7 @@ describe("InternalMcpCatalogModel", () => {
 
       await makeInternalMcpCatalog({
         name: "searchscope-personal-item",
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: author.id,
       });

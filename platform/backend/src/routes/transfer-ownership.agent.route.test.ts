@@ -44,7 +44,7 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
       systemPrompt: "Help with reports",
     });
     const response = await transfer(agent.id);
@@ -88,7 +88,7 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
       organizationId,
       authorId: owner.id,
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
     });
     expect((await transfer(agent.id)).statusCode).toBe(200);
     expect(await AgentModel.findById(agent.id, undefined, true)).toMatchObject({
@@ -103,7 +103,6 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: recipient.id,
-      scope: "org",
     });
     expect((await transfer(agent.id, user.id)).statusCode).toBe(403);
     expect(await AgentModel.findById(agent.id, undefined, true)).toMatchObject({
@@ -179,7 +178,7 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -200,7 +199,6 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "org",
     });
     expect((await transfer(agent.id)).statusCode).toBe(200);
     expect(await AgentModel.findById(agent.id, undefined, true)).toMatchObject({
@@ -244,7 +242,7 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     const key = {
       organizationId,
@@ -267,13 +265,12 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
   }) => {
     const secret = await makeSecret();
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      scope: "personal",
       userId: user.id,
     });
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
       llmApiKeyId: key.id,
     });
     const response = await transfer(agent.id);
@@ -290,7 +287,7 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     expect((await transfer(agent.id)).statusCode).toBe(200);
     expect(

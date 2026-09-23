@@ -30,7 +30,15 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "@/test";
 import type { ConnectorConfig, User } from "@/types";
 
 describe("knowledge base routes", () => {
@@ -77,18 +85,16 @@ describe("knowledge base routes", () => {
       const created = await app.inject({
         method: "POST",
         url: "/api/knowledge-bases",
-        payload: { name: "Research notes", visibility: "private" },
+        payload: { name: "Research notes" },
       });
       expect(created.statusCode).toBe(200);
       const id = created.json().id;
       expect(await KnowledgeBaseModel.findById(id)).toMatchObject({
-        visibility: "private",
         createdBy: owner.id,
         teamIds: [],
       });
       const hiddenOwner = await makeUser();
       const hidden = await makeKnowledgeBase(organizationId, {
-        visibility: "private",
         createdBy: hiddenOwner.id,
       });
       const list = await app.inject({
@@ -154,16 +160,13 @@ describe("knowledge base routes", () => {
       const other = await makeUser();
       const team = await makeTeam(organizationId, user.id);
       const own = await makeKnowledgeBase(organizationId, {
-        visibility: "private",
         createdBy: user.id,
       });
       const theirs = await makeKnowledgeBase(organizationId, {
-        visibility: "private",
         createdBy: other.id,
       });
       const shared = await makeKnowledgeBase(organizationId, {
-        visibility: "team-scoped",
-        teamIds: [team.id],
+        access: { teams: [team.id] },
       });
       const org = await makeKnowledgeBase(organizationId);
       // The personal / team / org label comes from each base's own grants.
@@ -221,7 +224,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { visibility: "team-scoped", teamIds: [engineering.id] },
+        { legacy: { visibility: "team-scoped", teamIds: [engineering.id] } },
       );
       const response = await app.inject({
         method: "PUT",
@@ -284,12 +287,10 @@ describe("knowledge base routes", () => {
       await makeTeamMember(child.id, user.id);
       const sibling = await makeTeam(organizationId, owner.id);
       const visible = await makeKnowledgeBase(organizationId, {
-        visibility: "team-scoped",
-        teamIds: [parent.id, sibling.id],
+        access: { teams: [parent.id, sibling.id] },
       });
       const hidden = await makeKnowledgeBase(organizationId, {
-        visibility: "team-scoped",
-        teamIds: [sibling.id],
+        access: { teams: [sibling.id] },
       });
       const response = await app.inject({
         method: "GET",
@@ -310,22 +311,12 @@ describe("knowledge base routes", () => {
       expect(await KnowledgeBaseModel.findById(hidden.id)).not.toBeNull();
     });
 
-    test("rejects empty teams, foreign teams, and unlicensed team scope", async ({
+    test("refuses the retired visibility and teamIds fields on create", async ({
       makeTeam,
-      makeOrganization,
     }) => {
-      const foreign = await makeTeam((await makeOrganization()).id, user.id);
-      for (const teamIds of [[], [foreign.id]]) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/knowledge-bases",
-          payload: { name: "Restricted", visibility: "team-scoped", teamIds },
-        });
-        expect(response.statusCode).toBe(400);
-      }
+      // Who can reach a new base is its initial grants alone; the old sharing
+      // fields are refused rather than silently dropped.
       const team = await makeTeam(organizationId, user.id);
-      config.enterpriseFeatures.knowledgeBase = false;
-      enterpriseTier.setUserCountForTesting(100);
       const response = await app.inject({
         method: "POST",
         url: "/api/knowledge-bases",
@@ -335,13 +326,13 @@ describe("knowledge base routes", () => {
           teamIds: [team.id],
         },
       });
-      expect(response.statusCode).toBe(403);
+      expect(response.statusCode).toBe(400);
       expect(
         await KnowledgeBaseModel.countByOrganization({ organizationId }),
       ).toBe(0);
     });
 
-    test("creates a KB shared with multiple teams and clears teams when made organization-wide", async ({
+    test("creates a KB shared with multiple teams and clears the retired teams when made organization-wide", async ({
       makeTeam,
       makeMember,
     }) => {
@@ -353,12 +344,24 @@ describe("knowledge base routes", () => {
         url: "/api/knowledge-bases",
         payload: {
           name: "Shared",
-          visibility: "team-scoped",
-          teamIds: [first.id, second.id],
+          initialGrants: [first.id, second.id].map((id) => ({
+            subject: { type: "team" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
         },
       });
       expect(response.statusCode).toBe(200);
-      expect(response.json().teamIds).toEqual([first.id, second.id]);
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "knowledgeBase",
+        scope: response.json().id,
+      });
+      expect(
+        policy?.grants
+          .filter((grant) => grant.subject.type === "team")
+          .map((grant) => grant.subject.id)
+          .sort(),
+      ).toEqual([first.id, second.id].sort());
       const updated = await app.inject({
         method: "PUT",
         url: `/api/knowledge-bases/${response.json().id}`,
@@ -1138,15 +1141,17 @@ describe("knowledge base routes", () => {
   });
 
   describe("POST /api/connectors", () => {
-    test("rejects team-scoped connectors without teamIds", async () => {
+    test("refuses the retired visibility and teamIds fields on create", async () => {
+      // Who can reach a new connector is its initial grants alone; the old
+      // sharing fields are refused rather than silently dropped.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Invalid Scoped Connector",
+          name: "Retired Fields Connector",
           connectorType: "jira",
           visibility: "team-scoped",
-          teamIds: [],
+          teamIds: [crypto.randomUUID()],
           config: {
             type: "jira",
             jiraBaseUrl: "https://test.atlassian.net",
@@ -1161,9 +1166,11 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toContain(
-        "At least one team must be selected for team-scoped connectors",
-      );
+      expect(
+        await KnowledgeBaseConnectorModel.findByOrganization({
+          organizationId,
+        }),
+      ).toHaveLength(0);
     });
 
     test("rejects an M-Files connector while its beta gate is off", async () => {
@@ -1339,50 +1346,6 @@ describe("knowledge base routes", () => {
       expect(response.json().name).toBe("Renamed Vault");
     });
 
-    test("rejects team-scoped connector creation without enterprise license", async () => {
-      const original = config.enterpriseFeatures.knowledgeBase;
-      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
-        value: false,
-        writable: true,
-        configurable: true,
-      });
-      enterpriseTier.setUserCountForTesting(9999);
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/connectors",
-          payload: {
-            name: "Enterprise Scoped Connector",
-            connectorType: "jira",
-            visibility: "team-scoped",
-            teamIds: [crypto.randomUUID()],
-            config: {
-              type: "jira",
-              jiraBaseUrl: "https://test.atlassian.net",
-              isCloud: true,
-              projectKey: "TEST",
-            },
-            credentials: {
-              email: "user@example.com",
-              apiToken: "token",
-            },
-          },
-        });
-
-        expect(response.statusCode).toBe(403);
-        expect(response.json().error.message).toContain(
-          "Team-scoped connectors require an enterprise license",
-        );
-      } finally {
-        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
-          value: original,
-          writable: true,
-          configurable: true,
-        });
-        enterpriseTier.setUserCountForTesting(0);
-      }
-    });
-
     test("rejects auto-sync-permissions connector creation without enterprise license", async () => {
       const original = config.enterpriseFeatures.knowledgeBase;
       Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
@@ -1398,8 +1361,7 @@ describe("knowledge base routes", () => {
           payload: {
             name: "Auto-sync Connector",
             connectorType: "jira",
-            visibility: "auto-sync-permissions",
-            teamIds: [],
+            syncPermissionsFromSource: true,
             config: {
               type: "jira",
               jiraBaseUrl: "https://test.atlassian.net",
@@ -1441,8 +1403,7 @@ describe("knowledge base routes", () => {
           payload: {
             name: "Auto-sync GitHub Connector",
             connectorType: "github",
-            visibility: "auto-sync-permissions",
-            teamIds: [],
+            syncPermissionsFromSource: true,
             config: {
               type: "github",
               githubUrl: "https://api.github.com",
@@ -1477,8 +1438,7 @@ describe("knowledge base routes", () => {
         payload: {
           name: "Auto-sync Web Crawler",
           connectorType: "web_crawler",
-          visibility: "auto-sync-permissions",
-          teamIds: [],
+          syncPermissionsFromSource: true,
           config: { type: "web_crawler", startUrl: "https://example.com" },
           credentials: { apiToken: "token" },
         },
@@ -1502,8 +1462,7 @@ describe("knowledge base routes", () => {
         payload: {
           name: "Member Auto-sync",
           connectorType: "github",
-          visibility: "auto-sync-permissions",
-          teamIds: [],
+          syncPermissionsFromSource: true,
           config: {
             type: "github",
             githubUrl: "https://api.github.com",
@@ -1530,8 +1489,7 @@ describe("knowledge base routes", () => {
         payload: {
           name: "Admin Auto-sync",
           connectorType: "github",
-          visibility: "auto-sync-permissions",
-          teamIds: [],
+          syncPermissionsFromSource: true,
           config: {
             type: "github",
             githubUrl: "https://api.github.com",
@@ -1543,7 +1501,7 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().visibility).toBe("auto-sync-permissions");
+      expect(response.json().syncPermissionsFromSource).toBe(true);
     });
 
     test("creates a perforce connector and normalizes depot paths", async () => {
@@ -1697,7 +1655,7 @@ describe("knowledge base routes", () => {
       const kb = await makeKnowledgeBase(organizationId);
       const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
         connectorType: "github",
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const orgWide = await makeKnowledgeBaseConnector(kb.id, organizationId);
 
@@ -1739,7 +1697,7 @@ describe("knowledge base routes", () => {
       const kb = await makeKnowledgeBase(organizationId);
       const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
         connectorType: "github",
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
 
       const list = await app.inject({
@@ -2093,18 +2051,21 @@ describe("knowledge base routes", () => {
       // Default member role: knowledgeSource update, but no
       // knowledgeSourceAutoSync grants.
       await makeMember(user.id, organizationId);
-      const connector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        name: "Member Switch Connector",
-        connectorType: "github",
-        config: {
-          type: "github",
-          githubUrl: "https://api.github.com",
-          owner: "test-org",
-          authMethod: "pat",
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Member Switch Connector",
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
         },
-        visibility: "org-wide",
-      });
+        // The member reaches the connector; only the auto-sync gate refuses.
+        accessGrants("org"),
+      );
 
       const response = await app.inject({
         method: "PUT",
@@ -2339,8 +2300,6 @@ describe("knowledge base routes", () => {
         url: "/api/connectors",
         payload: {
           name: "GHES Connector",
-          visibility: "org-wide",
-          teamIds: [],
           connectorType: "github",
           // the form may leave the default github.com host; the saved connector
           // must inherit the App config's host so the minted token matches
@@ -2376,8 +2335,6 @@ describe("knowledge base routes", () => {
         url: "/api/connectors",
         payload: {
           name: "App Connector",
-          visibility: "org-wide",
-          teamIds: [],
           connectorType: "github",
           config: {
             type: "github",
@@ -2400,8 +2357,6 @@ describe("knowledge base routes", () => {
         url: "/api/connectors",
         payload: {
           name: "App Connector",
-          visibility: "org-wide",
-          teamIds: [],
           connectorType: "github",
           config: {
             type: "github",
@@ -2545,19 +2500,23 @@ describe("knowledge base routes", () => {
         name: "Scoped Team",
       });
       await makeTeamMember(team.id, user.id);
-      const connector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        name: "Team Connector",
-        connectorType: "jira",
-        visibility: "team-scoped",
-        teamIds: [team.id],
-        config: {
-          type: "jira",
-          jiraBaseUrl: "https://test.atlassian.net",
-          isCloud: true,
-          projectKey: "TEST",
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Team Connector",
+          connectorType: "jira",
+          visibility: "team-scoped",
+          teamIds: [team.id],
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
         },
-      });
+        // The retired columns say team-scoped; the grant lets the member in.
+        accessGrants({ teams: [team.id] }),
+      );
 
       const original = config.enterpriseFeatures.knowledgeBase;
       Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
@@ -3304,7 +3263,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
 
@@ -3330,7 +3289,6 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "org-wide",
         },
       );
 
@@ -3357,7 +3315,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "web_crawler",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
 
@@ -3386,7 +3344,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
       // One directly tagged doc + one still fail-closed (awaiting a pass).
@@ -3486,7 +3444,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
       await ConnectorRunModel.claim({
@@ -3515,7 +3473,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
       // A manual trigger enqueues a task; the run row appears only when the
@@ -3542,7 +3500,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "github", visibility: "org-wide" },
+        { connectorType: "github" },
       );
 
       const response = await app.inject({
@@ -3571,7 +3529,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
 
@@ -3705,7 +3663,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "mfiles",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
       await KbExternalGroupModel.upsertMany([
@@ -3749,7 +3707,7 @@ describe("knowledge base routes", () => {
         organizationId,
         {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         },
       );
       // carol exists but is a member of a DIFFERENT org — must not resolve.
@@ -3794,7 +3752,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "github", visibility: "org-wide" },
+        { connectorType: "github" },
       );
 
       const response = await app.inject({
@@ -3824,7 +3782,7 @@ describe("knowledge base routes", () => {
       const connector = await fixtures.makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "jira", visibility: "auto-sync-permissions" },
+        { connectorType: "jira", syncPermissionsFromSource: true },
       );
       await KbExternalUserGroupModel.upsertMany([
         {
@@ -3886,7 +3844,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "jira", visibility: "auto-sync-permissions" },
+        { connectorType: "jira", syncPermissionsFromSource: true },
       );
       const alice = await makeUser({ email: "alice@example.com" });
       await makeMember(alice.id, organizationId);
@@ -3951,7 +3909,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "jira", visibility: "org-wide" },
+        { connectorType: "jira" },
       );
       const alice = await makeUser({ email: "alice@example.com" });
       await makeMember(alice.id, organizationId);
@@ -4144,7 +4102,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "jira", visibility: "auto-sync-permissions" },
+        { connectorType: "jira", syncPermissionsFromSource: true },
       );
       config.kb.autoSyncPermissionsEnabled = false;
 
@@ -4154,8 +4112,7 @@ describe("knowledge base routes", () => {
         payload: {
           name: "Auto-sync Connector",
           connectorType: "jira",
-          visibility: "auto-sync-permissions",
-          teamIds: [],
+          syncPermissionsFromSource: true,
           config: {
             type: "jira",
             jiraBaseUrl: "https://test.atlassian.net",
@@ -4193,7 +4150,7 @@ describe("knowledge base routes", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        { connectorType: "jira", visibility: "auto-sync-permissions" },
+        { connectorType: "jira", syncPermissionsFromSource: true },
       );
       config.kb.autoSyncPermissionsEnabled = false;
 
@@ -4384,7 +4341,7 @@ describe("knowledge base permission configuration", () => {
       makeUser,
     }) => {
       const hiddenOwner = await makeUser();
-      const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id, {
+      await makeTeam(organizationId, hiddenOwner.id, {
         name: "Hidden Team",
       });
 
@@ -4422,8 +4379,6 @@ describe("knowledge base permission configuration", () => {
         organizationId,
         {
           name: "Hidden Connector On Visible KB",
-          visibility: "team-scoped",
-          teamIds: [hiddenTeam.id],
           connectorType: "gitlab",
         },
       );
@@ -4483,12 +4438,12 @@ describe("knowledge base permission configuration", () => {
         organizationId,
         {
           name: "Visible Connector",
+          access: "org",
         },
       );
       await makeKnowledgeBaseConnector(kb.id, organizationId, {
         name: "Hidden Connector",
-        visibility: "team-scoped",
-        teamIds: [hiddenTeam.id],
+        access: { teams: [hiddenTeam.id] },
       });
 
       const response = await app.inject({
@@ -4523,10 +4478,7 @@ describe("knowledge base permission configuration", () => {
       const hiddenConnector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
-        {
-          visibility: "team-scoped",
-          teamIds: [hiddenTeam.id],
-        },
+        { access: { teams: [hiddenTeam.id] } },
       );
 
       const response = await app.inject({
@@ -4561,14 +4513,12 @@ describe("knowledge base permission configuration", () => {
         organizationId,
         {
           name: "Inherited Connector",
-          visibility: "team-scoped",
-          teamIds: [parent.id],
+          access: { teams: [parent.id] },
         },
       );
       const hidden = await makeKnowledgeBaseConnector(kb.id, organizationId, {
         name: "Sibling Connector",
-        visibility: "team-scoped",
-        teamIds: [sibling.id],
+        access: { teams: [sibling.id] },
       });
 
       const listResponse = await app.inject({

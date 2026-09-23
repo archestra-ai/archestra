@@ -54,7 +54,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("a metadata-only edit updates fields without forking a version", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -72,7 +72,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("toggles the fullscreen-by-default display preference", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     expect(created.openInFullscreen).toBe(false);
 
     const enabled = await app.inject({
@@ -107,7 +107,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("sets and clears the icon, storing it on the app's backing catalog", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     expect(created.icon).toBeNull();
 
     const set = await app.inject({
@@ -144,7 +144,7 @@ describe("PATCH /api/apps/:appId", () => {
     // The icon is not an `apps` column, so it reaches the audit snapshot only
     // because that snapshot reads the catalog-joined query. Without it, setting
     // an icon would record an audit entry showing nothing changed.
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -176,7 +176,7 @@ describe("PATCH /api/apps/:appId", () => {
     // An emoji is short enough to audit verbatim; a data URL is not. Embedding
     // one would copy it into both sides of EVERY later app audit event, so it
     // collapses to a digest that still changes when the image does.
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const dataUrl = `data:image/png;base64,${"A".repeat(4096)}`;
 
     const response = await app.inject({
@@ -205,7 +205,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {
     // The settings form sends name/description on every save; an omitted icon
     // must not be read as "clear it".
-    const created = await makeApp({ organizationId, scope: "org", icon: "🚀" });
+    const created = await makeApp({ organizationId, icon: "🚀" });
 
     const response = await app.inject({
       method: "PATCH",
@@ -217,7 +217,7 @@ describe("PATCH /api/apps/:appId", () => {
   });
 
   test("supplying html forks a new version", async ({ makeApp }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -240,7 +240,7 @@ describe("PATCH /api/apps/:appId", () => {
     await makeMember(otherAuthor.id, organizationId);
     const foreign = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -262,7 +262,6 @@ describe("PATCH /api/apps/:appId", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
     });
     await AppModel.setEnabled(created.id, false);
@@ -299,7 +298,7 @@ describe("PATCH /api/apps/:appId", () => {
     await makeMember(otherAuthor.id, organizationId);
     const foreign = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -325,12 +324,12 @@ describe("PATCH /api/apps/:appId", () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Taken", html: "<p/>", scope: "org" },
+      payload: { name: "Taken", html: "<p/>" },
     });
     const second = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Other", html: "<p/>", scope: "org" },
+      payload: { name: "Other", html: "<p/>" },
     });
     const secondId = second.json().id as string;
 
@@ -345,7 +344,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("rejects changing uiPermissions without supplying html (400)", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -361,7 +360,7 @@ describe("PATCH /api/apps/:appId", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
@@ -390,7 +389,7 @@ describe("PATCH /api/apps/:appId", () => {
       organizationId,
       name: "production",
     });
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const bound = await app.inject({
       method: "PATCH",
@@ -423,11 +422,7 @@ describe("PATCH /api/apps/:appId", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted App",
-        scope: "org",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted App", environmentId: restricted.id },
     });
     expect(created.statusCode).toBe(200);
     const appId = created.json().id;
@@ -470,7 +465,7 @@ describe("PATCH /api/apps/:appId", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const colleague = await makeUser();
@@ -522,8 +517,8 @@ describe("PATCH /api/apps/:appId — slug", () => {
   test("409s a slug another app in the organization holds", async ({
     makeApp,
   }) => {
-    await makeApp({ organizationId, scope: "org", name: "Taken" });
-    const mine = await makeApp({ organizationId, scope: "org", name: "Mine" });
+    await makeApp({ organizationId, name: "Taken" });
+    const mine = await makeApp({ organizationId, name: "Mine" });
 
     const response = await app.inject({
       method: "PATCH",
@@ -541,7 +536,6 @@ describe("PATCH /api/apps/:appId — slug", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Sales Dashboard",
     });
 

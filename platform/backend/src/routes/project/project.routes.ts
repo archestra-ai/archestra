@@ -147,10 +147,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: body.initialGrants,
-          visibility: "personal",
-        }),
+        initialPermissionGrants: body.initialGrants ?? [],
         // SPDX-SnippetEnd
       });
       const labels = await ProjectLabelModel.getLabelsFor(project.id);

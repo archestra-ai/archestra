@@ -6,7 +6,6 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   ResourcePermissionGrantSchema,
-  type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
@@ -200,20 +199,16 @@ const SkillCatalogResultSchema = z.object({
 });
 
 /**
- * Manual create/update payload: raw SKILL.md, resource files, and the skill's
- * visibility scope.
+ * Manual create/update payload: raw SKILL.md and resource files. Who can
+ * reach the skill is its resource permission policy: `initialGrants` on
+ * create, the permissions API afterwards.
  *
  * `files` is optional: on update, omitting it leaves the existing resource
- * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
- * `teamIds` is only meaningful for `scope = 'team'`.
+ * files untouched; passing `[]` clears them.
  */
 const SkillManifestFieldsSchema = z.object({
   content: SkillManifestContentSchema,
   files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
-  scope: ResourceVisibilityScopeSchema.optional(),
-  teamIds: z.array(z.string()).optional(),
-  /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
-  userIds: z.array(z.string()).optional(),
   environmentIds: z
     .array(UuidIdSchema)
     .optional()
@@ -241,7 +236,11 @@ const SkillManifestFieldsSchema = z.object({
 
 const SkillManifestInputSchema = SkillManifestFieldsSchema.extend({
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
-}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+})
+  // Strict: the retired scope/teamIds/userIds fields are refused, not
+  // silently dropped. Access is set with initialGrants.
+  .strict()
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 /**
  * Update payload: the manifest fields plus `baseVersion`, the compare-and-set
@@ -254,27 +253,18 @@ const SkillManifestInputSchema = SkillManifestFieldsSchema.extend({
  * `ZodEffects`, which cannot be `.extend()`ed — the shared fields have to live
  * in a plain object for the update schema to add to them.
  */
-const SkillManifestUpdateSchema = SkillManifestFieldsSchema.omit({
-  // Who can reach a skill is decided by its resource permission policy, which
-  // the permissions API writes on its own. The stored visibility columns are
-  // carried through an update untouched.
-  scope: true,
-  teamIds: true,
-  userIds: true,
-})
-  .extend({
-    baseVersion: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe(
-        "The skill's `latestVersion` when this edit was composed. Rejected " +
-          "with 409 if the skill has moved past it. Omit only when the payload " +
-          "owes nothing to a prior read of the skill.",
-      ),
-  })
-  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "The skill's `latestVersion` when this edit was composed. Rejected " +
+        "with 409 if the skill has moved past it. Omit only when the payload " +
+        "owes nothing to a prior read of the skill.",
+    ),
+}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)
@@ -461,7 +451,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let environmentId: string | null | undefined;
       let allowedSkillIds: string[] | undefined;
       let excludedSkillIds: string[] | undefined;
-      let effectiveScope = scope;
+      // The gateway views list what a gateway would publish: skills its
+      // grants publish to the whole organization, not the retired column.
+      let publishedToOrganization = false;
       let publishableOverMcp = false;
       if (forAgentId === undefined && mcpGatewayEnvironment !== undefined) {
         const agentChecker = await getAgentTypePermissionChecker({
@@ -476,7 +468,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userId: user.id,
         });
-        effectiveScope = "org";
+        publishedToOrganization = true;
         publishableOverMcp = true;
       } else if (forAgentId !== undefined) {
         const agent = await AgentModel.findById(forAgentId, user.id, true);
@@ -511,7 +503,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           if (agentSkillView === "eligible") {
-            effectiveScope = "org";
+            publishedToOrganization = true;
             if (mcpGatewayEnvironment !== undefined) {
               agentChecker.require(agent.agentType, "update");
               environmentId =
@@ -525,7 +517,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
             }
           } else if (agent.accessAllSkills) {
-            effectiveScope = "org";
+            publishedToOrganization = true;
             excludedSkillIds =
               await AgentExcludedSkillModel.findSkillIdsByAgent(forAgentId);
           } else {
@@ -582,7 +574,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Author filters are an admin oversight surface (mirrors the agents
       // list); non-admins are already restricted to their own scope.
       const scopeFilters = {
-        scope: effectiveScope,
+        scope,
+        publishedToOrganization,
         teamIds,
         authorIds: checker.isAdmin ? authorIds : undefined,
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
@@ -698,33 +691,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, organizationId, user }, reply) => {
       const parsed = parseManifestOrThrow(body.content);
-      const scope = body.scope ?? "personal";
-      const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
-      // Sharing with named people keeps the skill personal, so grants only
-      // apply to that scope; a team/org skill is already reachable more widely.
-      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.validateRecipients({
-        organizationId,
-        resource: "skill",
-        grants: [
-          ...userIds.map((id) => ({
-            subject: { type: "user" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-          ...teamIds.map((id) => ({
-            subject: { type: "team" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-        ],
-      });
-      // SPDX-SnippetEnd
-
       const environmentIds = dedupe(body.environmentIds ?? []);
-
-      await assertSkillTeams({ scope, teamIds, organizationId });
 
       // Always assert on create: an empty list makes the skill available in
       // every environment including the org default, which may itself be
@@ -749,9 +716,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: resourceId,
             name: parsed.name,
             authorId: user.id,
-            scope,
-            teams: teamIds.map((id) => ({ id })),
-            users: userIds.map((id) => ({ id })),
+            scope: "personal",
+            teams: [],
+            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -759,29 +726,20 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const skill = await withTeamFkErrorMapped(() =>
         SkillModel.createWithFiles({
-          initialPermissionGrants: ResourcePermissions.grantsForCreation({
-            grants: body.initialGrants,
-            visibility: scope,
-          }),
+          initialPermissionGrants: body.initialGrants ?? [],
           skill: {
             ...toSkillInsertFields(parsed),
             organizationId,
             authorId: user.id,
             allowedTools: resolveAllowedTools(body, parsed),
             sourceType: "manual",
-            scope,
           },
           files: toSkillFiles(body.files ?? []),
-          teamIds,
-          userIds,
           environmentIds,
         }),
       );
       if (!skill) {
         throw skillNameConflict(parsed.name);
-      }
-      if (userIds.length > 0) {
-        await SkillUserModel.syncSkillUsers(skill.id, userIds);
       }
       if (body.labels?.length) {
         await SkillLabelModel.syncLabels(skill.id, body.labels);
@@ -1622,10 +1580,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .array(ResourcePermissionGrantSchema)
               .max(200)
               .optional(),
-            scope: ResourceVisibilityScopeSchema.optional(),
-            teamIds: z.array(z.string()).optional(),
-            /** Only meaningful for `scope = 'personal'`. */
-            userIds: z.array(z.string()).optional(),
             sync: z
               .object({ interval: SkillGithubSyncIntervalSchema })
               .default({ interval: "1d" })
@@ -1635,6 +1589,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   "disconnected. Defaults to daily.",
               ),
           })
+          // Strict: the retired scope/teamIds/userIds fields are refused, not
+          // silently dropped. Access is set with initialGrants.
+          .strict()
           .refine(hasSingleGithubAuth, singleGithubAuthError)
           .refine((body) => !body.githubToken, {
             message:
@@ -1665,35 +1622,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { body, organizationId, user } = request;
       await assertOnlineSkillCatalogEnabled(organizationId);
-      // Imported skills carry an explicit scope, authorized like manual create;
-      // when omitted they default to `personal` so a bulk import is never
-      // silently published org-wide.
-      const scope = body.scope ?? "personal";
-      const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
-      // Sharing with named people keeps a skill personal, so grants only apply
-      // to that scope; every skill in this import gets the same set.
-      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
-
-      await assertSkillTeams({ scope, teamIds, organizationId });
-
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.validateRecipients({
-        organizationId,
-        resource: "skill",
-        grants: [
-          ...userIds.map((id) => ({
-            subject: { type: "user" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-          ...teamIds.map((id) => ({
-            subject: { type: "team" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-        ],
-      });
-      // SPDX-SnippetEnd
+      // Every skill in this import starts with the same grants; without any,
+      // only the importer reaches them, so a bulk import is never silently
+      // published org-wide.
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1706,9 +1637,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: crypto.randomUUID(),
           name: "Imported skill",
           authorId: user.id,
-          scope,
-          teams: teamIds.map((id) => ({ id })),
-          users: userIds.map((id) => ({ id })),
+          scope: "personal",
+          teams: [],
+          users: [],
         },
       });
       // SPDX-SnippetEnd
@@ -1742,7 +1673,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               sourceRef: item.sourceRef,
               sourceOrigin: item.sourceOrigin,
               sourceCommit: item.sourceCommit,
-              scope,
               // every import is synced: record the schedule, tracking ref
               // (null = default branch), and the stored credential scheduled
               // pulls reuse (App config or saved PAT).
@@ -1752,12 +1682,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               githubPatId: body.githubPatId ?? null,
             },
             files: item.files,
-            teamIds,
-            userIds,
-            initialPermissionGrants: ResourcePermissions.grantsForCreation({
-              grants: body.initialGrants,
-              visibility: scope,
-            }),
+            initialPermissionGrants: body.initialGrants ?? [],
             // version 1 is exactly what the repo held at this commit.
             versionSourceCommit: item.sourceCommit,
           }),
@@ -2115,39 +2040,6 @@ function sameIdSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
   return a.every((id) => setB.has(id));
-}
-
-/**
- * Validate a skill's team assignments before persisting. Only meaningful for
- * `team` scope: such a skill must have at least one team (otherwise it is
- * invisible to everyone, including its author), and every team must exist
- * within the organization — a stale/deleted id fails with a clean 400 instead
- * of an FK violation mid-transaction.
- */
-async function assertSkillTeams(params: {
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-  organizationId: string;
-}): Promise<void> {
-  if (params.scope !== "team") return;
-
-  if (params.teamIds.length === 0) {
-    throw new ApiError(
-      400,
-      "A team-scoped skill must be assigned to at least one team",
-    );
-  }
-
-  const teams = await TeamModel.findByIds(params.teamIds);
-  const validIds = new Set(
-    teams
-      .filter((team) => team.organizationId === params.organizationId)
-      .map((team) => team.id),
-  );
-  const missing = params.teamIds.filter((id) => !validIds.has(id));
-  if (missing.length > 0) {
-    throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
-  }
 }
 
 /**

@@ -1,7 +1,14 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { EnvironmentModel, SkillModel } from "@/models";
-import { afterAll, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { Agent } from "@/types";
 import { buildSkillCatalogPrompt } from "./skill-catalog-prompt";
 
@@ -21,9 +28,9 @@ async function seedSkill(organizationId: string) {
       content: "# PDF Processing\nUse pdftotext.",
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
 }
 
@@ -132,9 +139,9 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         content: "Default env instructions.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     await SkillModel.createWithFiles({
       skill: {
@@ -144,10 +151,10 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         content: "Other env instructions.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
       environmentIds: [otherEnv.id],
+      ...accessGrants("org"),
     });
     // built-in skills are exempt from environment isolation, mirroring the
     // built-in catalog exemption on tools.
@@ -160,9 +167,9 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         metadata: {},
         sourceType: "built_in",
         sourceRef: "built-in-skill",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const defaultCatalog = await buildSkillCatalogPrompt({
@@ -207,9 +214,9 @@ describe("buildSkillCatalogPrompt agent-designated skills", () => {
         agentName: "Research Bot",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const prompt = await buildSkillCatalogPrompt({

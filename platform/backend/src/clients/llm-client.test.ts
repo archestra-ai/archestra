@@ -1305,7 +1305,7 @@ describe("createLLMModel", () => {
 
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ name: "Azure Chat Agent", teams: [] });
+    const agent = await makeAgent({ name: "Azure Chat Agent" });
     const fallbackSecret = await makeSecret({
       secret: { apiKey: "sk-fallback" },
     });
@@ -1409,7 +1409,7 @@ describe("createLLMModel", () => {
     const org = await makeOrganization();
     const owner = await makeUser();
     const otherUser = await makeUser();
-    const agent = await makeAgent({ name: "Codex Agent", teams: [] });
+    const agent = await makeAgent({ name: "Codex Agent" });
     const secret = await makeSecret({
       secret: {
         apiKey: encodeOpenAiCodexCredential({
@@ -1572,7 +1572,7 @@ describe("createLLMModel", () => {
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
-      const agent = await makeAgent({ name: `${provider} agent`, teams: [] });
+      const agent = await makeAgent({ name: `${provider} agent` });
 
       // The whole point of the self-hosted providers: no key exists, and
       // `resolveProviderApiKey` deliberately returns `apiKey: undefined` for

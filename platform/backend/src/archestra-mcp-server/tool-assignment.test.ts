@@ -164,7 +164,7 @@ describe("tool assignment tool execution", () => {
       name: "Protected Personal Agent",
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const tool = await makeTool({ name: "protected_assign_tool" });
 
@@ -249,7 +249,7 @@ describe("tool assignment tool execution", () => {
     const agent = await makeAgent({
       name: "Editor Agent",
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: editor.id,
     });
     const tool = await makeTool({ name: "forbidden-test-tool" });
@@ -413,7 +413,7 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
       name: "Protected Personal Agent",
       organizationId: orgId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const tool = await makeTool({ name: "protected_remove_tool" });
 

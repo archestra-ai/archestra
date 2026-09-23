@@ -216,21 +216,4 @@ describe("service-account authorship across resource models", () => {
       ),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
-
-  test("rejects private file ownership for a service account", async () => {
-    await expect(
-      KbFileModel.create({
-        organizationId,
-        directoryId: null,
-        filename: "private.md",
-        mimeType: "text/markdown",
-        sizeBytes: 5,
-        contentHash: "abc",
-        data: Buffer.from("notes"),
-        visibility: "private",
-        teamIds: [],
-        uploadedBy: actorId,
-      }),
-    ).rejects.toMatchObject({ statusCode: 400 });
-  });
 });

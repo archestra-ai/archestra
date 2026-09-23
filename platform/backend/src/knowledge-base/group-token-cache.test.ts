@@ -39,7 +39,7 @@ describe("findAccessTokensForUserCached", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
     const lookup = () =>
@@ -74,11 +74,11 @@ describe("findAccessTokensForUserCached", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const a = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
     const b = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
     await grantGroup({
@@ -114,7 +114,7 @@ describe("findAccessTokensForUserCached", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "jira",
     });
     const alice = await makeUser({ email: "alice@example.com" });
@@ -169,7 +169,7 @@ describe("findAccessTokensForUserCached", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "jira",
     });
     // The upstream account's email resolves to alice, an org member — the
@@ -223,7 +223,7 @@ describe("findAccessTokensForUserCached", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
     // One over the 2000-token cap; the query inputs must stay bounded.

@@ -10,7 +10,7 @@ import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
-import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
 import { manifestNamed, useSkillRouteTestApp } from "./skill.test-helpers";
 
@@ -100,7 +100,6 @@ describe("scoped skill grants", () => {
         content: manifestNamed("scoped-skill"),
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });
@@ -114,9 +113,9 @@ describe("scoped skill grants", () => {
         content: manifestNamed("other-skill"),
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     if (!other) throw new Error("Skill fixture creation failed");
     const policy = {

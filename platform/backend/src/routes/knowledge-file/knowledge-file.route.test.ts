@@ -1,11 +1,7 @@
 import { HttpResponse, http } from "msw";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import {
-  KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
-  OrganizationModel,
-} from "@/models";
+import { KnowledgeBaseModel, OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -193,9 +189,13 @@ describe("knowledge file routes", () => {
   describe("team-scoped visibility", () => {
     test("a team-scoped file is visible to team members and invisible to others", async ({
       makeUser,
+      makeMember,
       makeTeam,
       makeTeamMember,
     }) => {
+      // Sharing with a team is a delegation the uploader must be allowed to
+      // make, so the uploader is an administrator here.
+      await makeMember(user.id, organizationId, { role: "admin" });
       const team = await makeTeam(organizationId, user.id, {
         name: "Security",
       });
@@ -203,10 +203,15 @@ describe("knowledge file routes", () => {
       await makeTeamMember(team.id, member.id);
       const outsider = await makeUser({ email: "outsider@test.com" });
 
+      // The grant decides who lists the file; the visibility still sets the
+      // indexed documents' audience.
       const uploaded = await upload({
         filename: "soc2-report.txt",
         visibility: "team-scoped",
         teamIds: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       });
       expect(uploaded.statusCode).toBe(200);
       const fileId = uploaded.json().id;
@@ -323,18 +328,19 @@ describe("knowledge file routes", () => {
   describe("scanned PDFs and OCR", () => {
     const server = useMswServer();
 
-    async function configureOcr(
-      makeSecret: (over: object) => Promise<{ id: string }>,
-    ) {
+    async function configureOcr(fixtures: {
+      makeSecret: (over: object) => Promise<{ id: string }>;
+      makeLlmProviderApiKey: (
+        organizationId: string,
+        secretId: string,
+        overrides: { name: string; provider: "anthropic" },
+      ) => Promise<{ id: string }>;
+    }) {
+      const { makeSecret, makeLlmProviderApiKey } = fixtures;
       const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
-      const key = await LlmProviderApiKeyModel.create({
-        organizationId,
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         name: "Vision Key",
         provider: "anthropic",
-        secretId: secret.id,
-        scope: "org",
-        userId: null,
-        teamId: null,
       });
       await OrganizationModel.patch(organizationId, {
         ocrChatApiKeyId: key.id,
@@ -359,8 +365,9 @@ describe("knowledge file routes", () => {
 
     test("accepts a scanned PDF and indexes its transcription when OCR is configured", async ({
       makeSecret,
+      makeLlmProviderApiKey,
     }) => {
-      await configureOcr(makeSecret);
+      await configureOcr({ makeSecret, makeLlmProviderApiKey });
       // The vision model is the only fake — the real Anthropic adapter
       // serializes the one-page sub-PDF and MSW answers at the wire.
       server.use(
@@ -402,8 +409,9 @@ describe("knowledge file routes", () => {
 
     test("a scanned file fails indexing with a named reason when its transcription fails", async ({
       makeSecret,
+      makeLlmProviderApiKey,
     }) => {
-      await configureOcr(makeSecret);
+      await configureOcr({ makeSecret, makeLlmProviderApiKey });
       server.use(
         http.post("https://api.anthropic.com/v1/messages", () =>
           HttpResponse.json(

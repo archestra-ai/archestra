@@ -104,8 +104,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-gw",
             agentType: "mcp_gateway",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -120,8 +118,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -136,8 +132,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-proxy",
             agentType: "llm_proxy",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -194,8 +188,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-proxy",
             agentType: "llm_proxy",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -246,8 +238,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "runtime-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -271,8 +261,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "privileged-runtime-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -346,13 +334,11 @@ describe("agent type permission isolation (routes)", () => {
       const proxy = await makeAgent({
         organizationId,
         agentType: "llm_proxy",
-        scope: "org",
         authorId: adminUser.id,
       });
       const gateway = await makeAgent({
         organizationId,
         agentType: "mcp_gateway",
-        scope: "org",
         authorId: adminUser.id,
       });
 
@@ -472,8 +458,12 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name,
             agentType: "agent",
-            teams: [teamId],
-            scope: "team",
+            initialGrants: [
+              {
+                subject: { type: "team", id: teamId },
+                actions: ["read", "use"],
+              },
+            ],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -577,8 +567,12 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: `admin-team-${agentType}`,
             agentType,
-            teams: [team.id],
-            scope: "team",
+            initialGrants: [
+              {
+                subject: { type: "team", id: team.id },
+                actions: ["read", "use"],
+              },
+            ],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -593,11 +587,16 @@ describe("agent type permission isolation (routes)", () => {
           url: `/api/agents/${created.id}`,
         });
         expect(getRes.statusCode).toBe(200);
-        const agent = getRes.json();
-        expect(agent.teams).toContainEqual(
-          expect.objectContaining({ id: team.id }),
-        );
-        expect(agent.scope).toBe("team");
+        // The team reaches the agent through the grant the create wrote.
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: agentType === "agent" ? "agent" : "mcpGateway",
+          scope: created.id,
+        });
+        expect(policy?.grants).toContainEqual({
+          subject: { type: "team", id: team.id },
+          actions: ["read", "use"],
+        });
       }
     });
 
@@ -634,8 +633,12 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `team-admin-${agentType}`,
               agentType,
-              teams: [team.id],
-              scope: "team",
+              initialGrants: [
+                {
+                  subject: { type: "team", id: team.id },
+                  actions: ["read", "use"],
+                },
+              ],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
@@ -661,8 +664,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "team-admin-org-agent",
             agentType: "agent",
-            scope: "org",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -712,8 +713,12 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `non-admin-team-${agentType}`,
               agentType,
-              teams: [team.id],
-              scope: "team",
+              initialGrants: [
+                {
+                  subject: { type: "team", id: team.id },
+                  actions: ["read", "use"],
+                },
+              ],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
@@ -730,8 +735,6 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `personal-${agentType}`,
               agentType,
-              scope: "personal",
-              teams: [],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
@@ -790,7 +793,6 @@ describe("agent type permission isolation (routes)", () => {
       await makeAgent({
         organizationId,
         agentType: "agent",
-        scope: "org",
         name: "Policy Configuration Subagent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,

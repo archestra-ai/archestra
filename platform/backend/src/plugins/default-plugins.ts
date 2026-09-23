@@ -150,12 +150,13 @@ export async function seedDefaultPlugins(): Promise<void> {
       const created = await PluginModel.create({
         organizationId,
         userId: approver.id,
+        // A default plugin ships to every member of the organization.
+        publishToOrganization: true,
         input: {
           displayName: "OpenAPPA",
           description: "Open Agent Policy Protocol integration for Claude Code",
           clientType: "claude-code",
           supportedPlatforms: ["posix"],
-          scope: "org",
           files: imported.files,
         },
         source: {

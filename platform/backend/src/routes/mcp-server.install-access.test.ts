@@ -88,7 +88,7 @@ describe("MCP Server Install - catalog access", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });
@@ -116,8 +116,7 @@ describe("MCP Server Install - catalog access", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: member.id,
-      scope: "team",
-      teams: [{ id: team.id, level: "use" }],
+      access: { teams: [team.id] },
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });
@@ -146,8 +145,7 @@ describe("MCP Server Install - catalog access", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: member.id,
-      scope: "team",
-      teams: [{ id: parent.id, level: "use" }],
+      access: { teams: [parent.id] },
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });
@@ -173,8 +171,7 @@ describe("MCP Server Install - catalog access", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: teamAdmin.id,
-      scope: "team",
-      teams: [{ id: team.id, level: "use" }],
+      access: { teams: [team.id] },
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });
@@ -203,8 +200,8 @@ describe("MCP Server Install - catalog access", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: teamAdmin.id,
-      scope: "team",
-      teams: [{ id: team.id, level: "write" }],
+      access: { teams: [team.id], level: "edit" },
+      legacy: { scope: "team", teams: [{ id: team.id, level: "write" }] },
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });
@@ -231,7 +228,6 @@ describe("MCP Server Install - catalog access", () => {
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });

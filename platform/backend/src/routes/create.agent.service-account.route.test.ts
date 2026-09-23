@@ -4,6 +4,7 @@ import { authPlugin } from "@/auth/fastify-plugin";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel, AuditLogModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -105,14 +106,13 @@ describe("Resource creation with service-account authentication", () => {
     },
     {
       url: "/api/apps",
-      payload: { name: "Automation dashboard", scope: "org" },
+      payload: { name: "Automation dashboard" },
     },
     {
       url: "/api/plugins",
       payload: {
         displayName: "Automation plugin",
         clientType: "claude-code",
-        scope: "org",
         files: [{ path: "README.md", content: "Automation instructions" }],
       },
     },
@@ -122,19 +122,19 @@ describe("Resource creation with service-account authentication", () => {
         name: "Automation tools",
         serverType: "remote",
         serverUrl: "https://tools.example.invalid/mcp",
-        scope: "org",
       },
     },
     {
       url: "/api/llm-virtual-keys",
-      payload: { name: "Automation key", scope: "org", keyType: "standard" },
+      payload: { name: "Automation key", keyType: "standard" },
     },
     {
       url: "/api/llm-provider-api-keys",
       payload: {
         name: "Local inference",
         provider: "ollama",
-        scope: "org",
+        // A service account owns no key of its own; it creates shared ones.
+        shared: true,
         baseUrl: "http://127.0.0.1:1",
       },
     },
@@ -144,12 +144,11 @@ describe("Resource creation with service-account authentication", () => {
       payload: {
         content:
           "---\nname: automation-guide\ndescription: A shared automation guide.\n---\nUse this guide to prepare a release.",
-        scope: "org",
       },
     },
     {
       url: "/api/knowledge-bases",
-      payload: { name: "Automation knowledge", visibility: "org-wide" },
+      payload: { name: "Automation knowledge" },
     },
     {
       url: "/api/service-accounts",
@@ -169,7 +168,7 @@ describe("Resource creation with service-account authentication", () => {
           name: "Local provider",
           provider: "ollama",
           baseUrl: "http://127.0.0.1:1",
-          scope: "org",
+          shared: true,
         },
       });
       expect(provider.statusCode, provider.body).toBe(200);
@@ -234,12 +233,7 @@ describe("Resource creation with service-account authentication", () => {
       method: "POST",
       url: "/api/agents",
       headers: { authorization },
-      payload: {
-        name: "Release helper",
-        agentType: "agent",
-        scope: "org",
-        teams: [],
-      },
+      payload: { name: "Release helper", agentType: "agent" },
     });
     expect(response.statusCode, response.body).toBe(200);
     const agent = response.json();
@@ -247,7 +241,6 @@ describe("Resource creation with service-account authentication", () => {
       name: "Release helper",
       organizationId,
       authorId: null,
-      scope: "org",
       builtIn: false,
     });
     expect(await AgentModel.findById(agent.id)).toMatchObject({
@@ -293,10 +286,7 @@ describe("Resource creation with service-account authentication", () => {
           actorType: "service_account",
           outcome: "success",
           before: null,
-          after: expect.objectContaining({
-            name: "Release helper",
-            scope: "org",
-          }),
+          after: expect.objectContaining({ name: "Release helper" }),
         }),
       ]);
   });
@@ -314,8 +304,6 @@ describe("Resource creation with service-account authentication", () => {
           name: "Organization boundary probe",
           organizationId: foreignOrganization.id,
           agentType,
-          scope: "org",
-          teams: [],
         },
       });
       expect(response.statusCode, response.body).toBe(403);
@@ -349,7 +337,7 @@ describe("Resource creation with service-account authentication", () => {
           method: "POST",
           url: "/api/agents",
           headers: { authorization },
-          payload: { name, agentType: "agent", scope: "org", teams: [] },
+          payload: { name, agentType: "agent" },
         });
         expect(response.statusCode, response.body).toBe(200);
         const agent = response.json();
@@ -456,29 +444,6 @@ describe("Resource creation with service-account authentication", () => {
     });
   }
 
-  test("rejects personal scope rather than creating an ownerless personal agent", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/agents",
-      headers: { authorization },
-      payload: {
-        name: "Personal automation",
-        agentType: "agent",
-        scope: "personal",
-        teams: [],
-      },
-    });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      "Service accounts cannot create personal agents. Use org or team scope.",
-    );
-    const agents = await db
-      .select()
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.name, "Personal automation"));
-    expect(agents).toHaveLength(0);
-  });
-
   // The requested scope no longer decides who may create: visibility comes
   // from the grants a creator sets on what they just created, so org scope is
   // not an admin-only act any more. The role restriction that survives is the
@@ -493,12 +458,7 @@ describe("Resource creation with service-account authentication", () => {
       method: "POST",
       url: "/api/agents",
       headers: { authorization },
-      payload: {
-        name: "Restricted automation",
-        agentType: "agent",
-        scope: "org",
-        teams: [],
-      },
+      payload: { name: "Restricted automation", agentType: "agent" },
     });
     expect(allowed.statusCode, allowed.body).toBe(200);
 
@@ -512,12 +472,7 @@ describe("Resource creation with service-account authentication", () => {
       method: "POST",
       url: "/api/agents",
       headers: { authorization },
-      payload: {
-        name: "Refused automation",
-        agentType: "agent",
-        scope: "org",
-        teams: [],
-      },
+      payload: { name: "Refused automation", agentType: "agent" },
     });
     expect(refused.statusCode).toBe(403);
     expect(
@@ -541,15 +496,23 @@ describe("Resource creation with service-account authentication", () => {
       payload: {
         name: "Shared automation gateway",
         agentType: "mcp_gateway",
-        scope: "team",
-        teams: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({
-      authorId: null,
-      scope: "team",
-      teams: [expect.objectContaining({ id: team.id })],
+    const gateway = response.json();
+    expect(gateway).toMatchObject({ authorId: null });
+    // The team is reached through the grant the create wrote.
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpGateway",
+      scope: gateway.id,
+    });
+    expect(policy?.grants).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
     });
   });
 });

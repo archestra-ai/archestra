@@ -529,7 +529,6 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_real_token" } });
     const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "github-copilot",
-      scope: "personal",
       userId: owner.id,
     });
     const { value } = await VirtualApiKeyModel.create({

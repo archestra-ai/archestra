@@ -1,18 +1,18 @@
-import { SkillModel, SkillTeamModel, SkillUserModel } from "@/models";
+import { SkillModel, SkillTeamModel } from "@/models";
 import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
 import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 
 /**
- * Sharing a skill with named people. Such a skill stays `scope = 'personal'`
- * and carries grants beside it, so these cover the round trip the scope alone
- * cannot express, and the boundary where widening the scope drops the grants.
+ * Sharing a skill with named people: user grants given at create, and edits
+ * that must leave them alone.
  */
 describe("per-user skill sharing", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
 
-  test("creating a personal skill with userIds grants and returns them", async ({
+  test("creating a skill with a user grant shares it with that user", async ({
     makeUser,
     makeMember,
   }) => {
@@ -22,16 +22,14 @@ describe("per-user skill sharing", () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [grantee.id] },
+      payload: {
+        content: MANIFEST,
+        initialGrants: [shareWith(grantee.id)],
+      },
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.scope).toBe("personal");
-    expect(body.users).toEqual([
-      { id: grantee.id, name: grantee.name, email: grantee.email },
-    ]);
-    expect(await SkillUserModel.userHasGrant(body.id, grantee.id)).toBe(true);
+    expect(await userGrantIds(response.json().id)).toEqual([grantee.id]);
   });
 
   test("a grantee reaches the skill the author kept personal", async ({
@@ -43,7 +41,10 @@ describe("per-user skill sharing", () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [grantee.id] },
+      payload: {
+        content: MANIFEST,
+        initialGrants: [shareWith(grantee.id)],
+      },
     });
     const skillId = created.json().id;
 
@@ -70,7 +71,10 @@ describe("per-user skill sharing", () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [first.id] },
+      payload: {
+        content: MANIFEST,
+        initialGrants: [shareWith(first.id)],
+      },
     });
     const skillId = created.json().id;
 
@@ -83,11 +87,10 @@ describe("per-user skill sharing", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(await SkillUserModel.userHasGrant(skillId, first.id)).toBe(true);
-    expect(await SkillUserModel.userHasGrant(skillId, second.id)).toBe(false);
+    expect(await userGrantIds(skillId)).toEqual([first.id]);
   });
 
-  test("an edit that omits userIds leaves existing grants alone", async ({
+  test("a content-only edit leaves existing grants alone", async ({
     makeUser,
     makeMember,
   }) => {
@@ -96,7 +99,10 @@ describe("per-user skill sharing", () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [grantee.id] },
+      payload: {
+        content: MANIFEST,
+        initialGrants: [shareWith(grantee.id)],
+      },
     });
     const skillId = created.json().id;
 
@@ -108,9 +114,7 @@ describe("per-user skill sharing", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(
-      response.json().users.map((user: { id: string }) => user.id),
-    ).toEqual([grantee.id]);
+    expect(await userGrantIds(skillId)).toEqual([grantee.id]);
   });
 
   test("retired visibility writes are ignored and preserve existing grants", async ({
@@ -122,7 +126,10 @@ describe("per-user skill sharing", () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [grantee.id] },
+      payload: {
+        content: MANIFEST,
+        initialGrants: [shareWith(grantee.id)],
+      },
     });
     const skillId = created.json().id;
     await MemberModel.updateRole(ctx.user.id, ctx.organizationId, "admin");
@@ -135,57 +142,31 @@ describe("per-user skill sharing", () => {
 
     expect(response.statusCode).toBe(200);
     expect((await SkillModel.findById(skillId))?.scope).toBe("personal");
-    expect(await SkillUserModel.userHasGrant(skillId, grantee.id)).toBe(true);
-  });
-
-  test("userIds on a team-scoped create are ignored", async ({
-    makeUser,
-    makeMember,
-    makeTeam,
-  }) => {
-    const grantee = await makeUser({ email: "ignored@test.com" });
-    await makeMember(grantee.id, ctx.organizationId);
-    await MemberModel.updateRole(ctx.user.id, ctx.organizationId, "admin");
-    const team = await makeTeam(ctx.organizationId, ctx.user.id);
-
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: {
-        content: MANIFEST,
-        scope: "team",
-        teamIds: [team.id],
-        userIds: [grantee.id],
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().users).toEqual([]);
-  });
-
-  test("the list payload carries grantees so a shared skill reads as shared", async ({
-    makeUser,
-    makeMember,
-  }) => {
-    const grantee = await makeUser({ email: "listed@test.com" });
-    await makeMember(grantee.id, ctx.organizationId);
-    await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: { content: MANIFEST, userIds: [grantee.id] },
-    });
-
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: "/api/skills",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const skill = response
-      .json()
-      .data.find((item: { name: string }) => item.name === "pdf-processing");
-    expect(skill.users).toEqual([
-      { id: grantee.id, name: grantee.name, email: grantee.email },
-    ]);
+    expect(await userGrantIds(skillId)).toEqual([grantee.id]);
   });
 });
+
+/** A user grant at the `use` preset, as the create form sends it. */
+function shareWith(userId: string) {
+  return {
+    subject: { type: "user" as const, id: userId },
+    actions: ["read" as const, "use" as const],
+  };
+}
+
+/** The users a skill's permission policy grants, other than its author. */
+async function userGrantIds(skillId: string): Promise<string[]> {
+  const skill = await SkillModel.findById(skillId);
+  if (!skill) throw new Error("skill not found");
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: skill.organizationId,
+    resource: "skill",
+    scope: skillId,
+  });
+  return (policy?.grants ?? [])
+    .filter(
+      (grant) =>
+        grant.subject.type === "user" && grant.subject.id !== skill.authorId,
+    )
+    .map((grant) => grant.subject.id);
+}

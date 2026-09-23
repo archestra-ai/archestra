@@ -30,35 +30,31 @@ describe("GET /api/skills/source-repos", () => {
       organizationId: ctx.organizationId,
       name: "org-imported",
       sourceRef: "shared/org-repo@main:SKILL.md",
-      scope: "org",
+      access: "org",
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "own-imported",
       sourceRef: "mine/personal-repo@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "team-imported",
       sourceRef: "team/team-repo@main:SKILL.md",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "inaccessible-team-imported",
       sourceRef: "secret/team-repo@main:SKILL.md",
-      scope: "team",
-      teamIds: [inaccessibleTeam.id],
+      access: { teams: [inaccessibleTeam.id] },
     });
 
     const response = await ctx.app.inject({
@@ -88,13 +84,12 @@ describe("GET /api/skills/source-repos", () => {
       organizationId: ctx.organizationId,
       name: "org-imported",
       sourceRef: "shared/org-repo@main:SKILL.md",
-      scope: "org",
+      access: "org",
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -131,7 +126,7 @@ describe("GET /api/skills/source-repos", () => {
       organizationId: ctx.organizationId,
       name: "org-imported",
       sourceRef: "shared/org-repo@main:SKILL.md",
-      scope: "org",
+      access: "org",
     });
 
     const response = await ctx.app.inject({
@@ -160,7 +155,6 @@ describe("GET /api/skills/source-repos", () => {
       organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 

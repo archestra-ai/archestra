@@ -92,8 +92,6 @@ class ProjectModel {
           scope: row.id,
           grants: options?.initialPermissionGrants,
           authorId: row.userId,
-          // A new project carries no share row, so its audience is its owner.
-          visibility: "personal",
         });
         // SPDX-SnippetEnd
         return row;
@@ -181,7 +179,6 @@ class ProjectModel {
         resource: "project",
         scope: project.id,
         authorId: project.userId,
-        visibility: "personal",
       });
       // SPDX-SnippetEnd
 

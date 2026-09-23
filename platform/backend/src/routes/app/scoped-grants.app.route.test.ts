@@ -94,14 +94,14 @@ describe("scoped app grants", () => {
     const target = await makeApp({
       organizationId: ctx.organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
       name: "Shared app",
     });
     const other = await makeApp({
       organizationId: ctx.organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
       name: "Other app",
     });

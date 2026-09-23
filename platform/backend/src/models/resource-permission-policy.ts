@@ -289,9 +289,14 @@ export default class ResourcePermissionPolicyModel {
     scope: string;
     grants?: ResourcePermissionGrant[];
     authorId: string | null;
-    visibility?: "personal" | "team" | "org";
-    teams?: { id: string; level?: "use" | "write" }[];
-    users?: string[];
+    /**
+     * Publish the new object to the whole organization, for callers that
+     * speak for the system rather than for a person: built-in skills, the
+     * seeded provider key, default plugins, demo apps. Request-driven creation
+     * never sets it; a person shares through explicit `grants`, which the
+     * routes bound by what the creator may delegate.
+     */
+    publishToOrganization?: boolean;
   }) {
     // Every object gets a policy, always. This used to wait for the
     // organization's wildcard policy to be converted, because writing one
@@ -299,88 +304,49 @@ export default class ResourcePermissionPolicyModel {
     // fields still decided access elsewhere. The conversion is unconditional
     // now and runs before the server accepts a request, so the object that
     // skipped its policy would simply be unreachable by its own author.
-    const initialGrants: ResourcePermissionGrant[] = params.grants ?? [];
-    if (params.grants === undefined) {
-      if (params.visibility === "org") {
-        // Organization-wide visibility was two rules, not one, and the halves
-        // were gated differently. Finding the object went through a route that
-        // asked for this resource's read action, so a role which withheld it
-        // never saw the object; that half becomes a grant to the roles which
-        // hold read. Working with the object asked for no such thing — chatting
-        // went through chat permissions, and an unrestricted model through
-        // nothing at all — so for the three resources that have a "work with
-        // it" path, use goes to the organization at large. Granting only the
-        // readers would take chat from a role built for exactly that.
-        //
-        // Request-driven creation reaches neither half. Publishing to the
-        // organization is a delegation act and `canDelegateScopedPermissions`
-        // has to bound it, so the routes send an empty list for this
-        // visibility through `ResourcePermissions.grantsForCreation` — for
-        // this visibility only, because team and named-user sharing at create
-        // names recipients those routes already validate. This branch serves
-        // the callers that speak for the system rather than for a person.
-        const [predefined, custom] = await Promise.all([
-          Promise.resolve(predefinedRolesWithReadAccess(params.resource)),
-          params.tx
-            .select({ id: schema.organizationRolesTable.id })
-            .from(schema.organizationRolesTable)
-            .where(
-              and(
-                eq(
-                  schema.organizationRolesTable.organizationId,
-                  params.organizationId,
-                ),
-                sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${params.resource}, '[]'::jsonb) ? 'read'`,
-              ),
-            ),
-        ]);
-        initialGrants.push(
-          ...[
-            ...predefined,
-            ...custom.map((role: { id: string }) => role.id),
-          ].map((id) => ({
-            subject: { type: "role" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-          ...(USE_UNGATED_BY_ROLE.has(params.resource)
-            ? [
-                {
-                  subject: { type: "organization" as const, id: "*" as const },
-                  actions: ["use" as const],
-                },
-              ]
-            : []),
-        );
-      } else if (params.visibility === "team" && params.teams?.length) {
-        const teams = await params.tx
-          .select({ id: schema.teamsTable.id })
-          .from(schema.teamsTable)
+    const initialGrants: ResourcePermissionGrant[] = [...(params.grants ?? [])];
+    if (params.publishToOrganization) {
+      // Organization-wide visibility was two rules, not one, and the halves
+      // were gated differently. Finding the object went through a route that
+      // asked for this resource's read action, so a role which withheld it
+      // never saw the object; that half becomes a grant to the roles which
+      // hold read. Working with the object asked for no such thing — chatting
+      // went through chat permissions, and an unrestricted model through
+      // nothing at all — so for the three resources that have a "work with
+      // it" path, use goes to the organization at large. Granting only the
+      // readers would take chat from a role built for exactly that.
+      const [predefined, custom] = await Promise.all([
+        Promise.resolve(predefinedRolesWithReadAccess(params.resource)),
+        params.tx
+          .select({ id: schema.organizationRolesTable.id })
+          .from(schema.organizationRolesTable)
           .where(
             and(
-              eq(schema.teamsTable.organizationId, params.organizationId),
-              inArray(
-                schema.teamsTable.id,
-                params.teams.map((team) => team.id),
+              eq(
+                schema.organizationRolesTable.organizationId,
+                params.organizationId,
               ),
+              sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${params.resource}, '[]'::jsonb) ? 'read'`,
             ),
-          );
-        for (const team of teams)
-          initialGrants.push({
-            subject: { type: "team", id: team.id },
-            actions: params.teams.some(
-              (entry) => entry.id === team.id && entry.level === "write",
-            )
-              ? ["read", "use", "update"]
-              : ["read", "use"],
-          });
-      } else if (params.visibility === "personal" && params.users?.length) {
-        initialGrants.push(
-          ...[...new Set(params.users)].map((id) => ({
-            subject: { type: "user" as const, id },
-            actions: ["read" as const, "use" as const],
-          })),
-        );
-      }
+          ),
+      ]);
+      initialGrants.push(
+        ...[
+          ...predefined,
+          ...custom.map((role: { id: string }) => role.id),
+        ].map((id) => ({
+          subject: { type: "role" as const, id },
+          actions: ["read" as const, "use" as const],
+        })),
+        ...(USE_UNGATED_BY_ROLE.has(params.resource)
+          ? [
+              {
+                subject: { type: "organization" as const, id: "*" as const },
+                actions: ["use" as const],
+              },
+            ]
+          : []),
+      );
     }
     const author: PermissionSubject | null = params.authorId
       ? params.authorId.startsWith("service-account:")
@@ -412,8 +378,9 @@ export default class ResourcePermissionPolicyModel {
       scope: params.scope,
       grants,
       legacySharingMigrated: true,
-      legacyOrganizationAudience:
-        params.grants === undefined && params.visibility === "org",
+      // The marker is how a published object reaches principals with no role
+      // of their own (see organizationAccessCondition).
+      legacyOrganizationAudience: params.publishToOrganization === true,
     });
   }
 

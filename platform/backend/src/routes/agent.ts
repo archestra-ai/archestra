@@ -6,7 +6,6 @@ import {
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
-  ResourcePermissionGrantSchema,
   RouteId,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
@@ -24,12 +23,8 @@ import {
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import {
-  type AgentTypePermissionChecker,
-  assertAgentTeams,
-} from "@/auth/agent-type-permissions";
+import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { isServiceAccountUserId } from "@/auth/utils";
 import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -91,11 +86,11 @@ import {
   ApiError,
   BuiltInAgentConfigSchema,
   CloneAgentBodySchema,
+  CreateAgentBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   ImportAgentResponseSchema,
-  InsertAgentSchema,
   PaginatedAgentActivationSkillsResponseSchema,
   PatchAgentActivationSkillPolicySchema,
   SelectAgentSchema,
@@ -591,12 +586,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateAgent,
         description: "Create a new agent",
         tags: ["Agents"],
-        body: InsertAgentSchema.extend({
-          initialGrants: z
-            .array(ResourcePermissionGrantSchema)
-            .max(200)
-            .optional(),
-        }),
+        body: CreateAgentBodySchema,
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
@@ -637,13 +627,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           403,
           "Cannot create an agent in another organization",
-        );
-      }
-      const isServiceAccount = isServiceAccountUserId(user.id);
-      if (isServiceAccount && body.scope === "personal") {
-        throw new ApiError(
-          400,
-          "Service accounts cannot create personal agents. Use org or team scope.",
         );
       }
       requireAgentRuntimePermission({
@@ -728,17 +711,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // A team-scoped agent with no teams is accessible to nobody (not even its
-      // author), so reject it, and reject teams outside this organization.
-      // Applies to admins too — they can otherwise reach this via the API/UI
-      // (issue #6624).
-      await assertAgentTeams({
-        scope: body.scope ?? "personal",
-        teamIds: body.teams,
-        organizationId,
-      });
-
-      // Omit teams if scope is not 'team' — scope takes precedence.
       // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
       // is a trust attribute (the advisor discriminator drives the delegation
       // environment exception), so a client-supplied value is dropped here.
@@ -755,8 +727,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: resourceId,
             name: body.name,
             authorId: user.id,
-            scope: body.scope ?? "personal",
-            teams: body.teams.map((id) => ({ id })),
+            scope: "personal",
+            teams: [],
             users: [],
           },
         });
@@ -768,7 +740,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         environmentId,
         builtInAgentConfig: null,
-        ...(body.scope !== "team" && { teams: [] }),
+        // The retired visibility column is NOT NULL; nothing reads it.
+        scope: "personal" as const,
       };
       // Whether a new record starts out able to consult the Advisor is decided
       // here, not by a follow-up write from the client: that second write
@@ -784,10 +757,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.create(createData, user.id, {
         defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: initialGrants,
-          visibility: body.scope,
-        }),
+        initialPermissionGrants: initialGrants ?? [],
       });
       if (body.activationSkillPolicy) {
         try {

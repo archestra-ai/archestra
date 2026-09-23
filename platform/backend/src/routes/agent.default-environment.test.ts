@@ -79,8 +79,6 @@ describe("Agent routes - configured default environment", () => {
       url: "/api/agents",
       payload: {
         name: `default-env-${crypto.randomUUID().slice(0, 8)}`,
-        scope: "org",
-        teams: [],
         ...payload,
       },
     });

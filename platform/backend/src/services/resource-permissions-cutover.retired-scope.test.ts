@@ -25,20 +25,19 @@ test("retired team-relative policies preserve current authority as individual ob
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "team",
-    teams: [team.id],
+    access: { teams: [team.id] },
   });
   const explicit = await makeAgent({
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   const unrelated = await makeAgent({
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   await runScopedResourcePermissionCutover();
   const key = { organizationId: org.id, resource: "agent" as const };
@@ -163,8 +162,7 @@ test("an explicitly empty migrated relative policy suppresses legacy Editor auth
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "team",
-    teams: [team.id],
+    access: { teams: [team.id] },
   });
   await db.insert(schema.resourcePermissionPoliciesTable).values({
     organizationId: org.id,

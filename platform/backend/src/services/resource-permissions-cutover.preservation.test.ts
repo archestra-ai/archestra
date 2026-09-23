@@ -18,7 +18,7 @@ import {
   assertCanAssignEnvironment,
   createEnvironment,
 } from "@/services/environments/environment";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import { ResourcePermissions } from "./resource-permissions";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
@@ -96,38 +96,41 @@ describe("upgrade access preservation", () => {
       personal: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         authorId: creator.id,
       }),
       shared: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         authorId: creator.id,
       }),
       oneTeam: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "team",
+        access: { teams: [] },
+        legacy: { scope: "team" },
         authorId: creator.id,
       }),
       twoTeams: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "team",
+        access: { teams: [] },
+        legacy: { scope: "team" },
         authorId: creator.id,
       }),
       orgWide: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "org",
+        legacy: { scope: "org" },
         authorId: creator.id,
       }),
       // Shared with nobody at all: a team scope with an empty team list.
       strandedTeam: await makeAgent({
         organizationId: org.id,
         agentType: "agent",
-        scope: "team",
+        access: { teams: [] },
+        legacy: { scope: "team" },
         authorId: creator.id,
       }),
     };
@@ -153,17 +156,18 @@ describe("upgrade access preservation", () => {
       personal: await makeInternalMcpCatalog({
         organizationId: org.id,
         authorId: creator.id,
-        scope: "personal",
+        access: "personal",
       }),
       team: await makeInternalMcpCatalog({
         organizationId: org.id,
         authorId: creator.id,
-        scope: "team",
+        access: { teams: [] },
+        legacy: { scope: "team" },
       }),
       orgWide: await makeInternalMcpCatalog({
         organizationId: org.id,
         authorId: creator.id,
-        scope: "org",
+        legacy: { scope: "org" },
       }),
     };
     await McpCatalogTeamModel.syncCatalogTeams(catalogs.team.id, [
@@ -173,7 +177,7 @@ describe("upgrade access preservation", () => {
     const app = await makeApp({
       organizationId: org.id,
       authorId: creator.id,
-      scope: "org",
+      legacy: { scope: "org" },
       enabled: true,
     });
 
@@ -575,12 +579,18 @@ async function seedSkill(
       description: "Seeded for the preservation matrix",
       content: "# Instructions",
       sourceType: "manual",
-      scope,
     },
     files: [],
+    // Create-time grants as the legacy create path derived them.
+    ...accessGrants(scope === "org" ? "org" : "personal"),
   });
   if (!skill) throw new Error("failed to seed skill");
-  return skill;
+  // The cutover converts the retired column, so the seed writes it directly.
+  await db
+    .update(schema.skillsTable)
+    .set({ scope })
+    .where(eq(schema.skillsTable.id, skill.id));
+  return { ...skill, scope };
 }
 
 /** Every stored policy verbatim, `revision` included. */

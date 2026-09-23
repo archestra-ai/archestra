@@ -214,7 +214,7 @@ describe("cutover idempotency", () => {
       .insert(schema.pluginTeamsTable)
       .values({ pluginId: plugin.id, teamId: team.id });
     const virtualKey = await makeVirtualApiKey(org.id, {
-      scope: "team",
+      access: "personal",
       authorId: owner.id,
     });
     await db
@@ -222,17 +222,10 @@ describe("cutover idempotency", () => {
       .values({ virtualApiKeyId: virtualKey.id, teamId: team.id });
     const secret = await makeSecret();
     await makeLlmProviderApiKey(org.id, secret.id, {
-      scope: "personal",
       userId: owner.id,
     });
-    const base = await makeKnowledgeBase(org.id, {
-      visibility: "team-scoped",
-      teamIds: [team.id],
-    });
-    await makeKnowledgeBaseConnector(base.id, org.id, {
-      visibility: "team-scoped",
-      teamIds: [team.id],
-    });
+    const base = await makeKnowledgeBase(org.id);
+    await makeKnowledgeBaseConnector(base.id, org.id, {});
     const [file] = await db
       .insert(schema.kbFilesTable)
       .values({

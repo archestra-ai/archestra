@@ -95,7 +95,11 @@ class LlmProviderApiKeyModel {
   static async create(
     data: InsertLlmProviderApiKey,
     /** Explicit starting audience; omitted derives one from the scope. */
-    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
+    options?: {
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
   ): Promise<LlmProviderApiKey> {
     return await db.transaction(async (tx) => {
       if (data.isPrimary) {
@@ -127,8 +131,7 @@ class LlmProviderApiKeyModel {
         grants: options?.initialPermissionGrants,
         // A provider key names its owner in `user_id`, not `created_by`.
         authorId: apiKey.userId,
-        visibility: apiKey.scope,
-        teams: apiKey.teamId ? [{ id: apiKey.teamId }] : undefined,
+        publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd
 

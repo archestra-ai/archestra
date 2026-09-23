@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   ResourcePermissionGrantSchema,
-  ResourceVisibilityScopeSchema,
   TOOL_CREATE_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
   TOOL_EDIT_PLUGIN_SHORT_NAME,
@@ -13,7 +12,6 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
-import { validatePluginVisibility } from "@/services/plugin-visibility";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -92,19 +90,6 @@ const CreatePluginToolSchema = z
       .min(1)
       .default(["posix"])
       .describe("Operating systems the payload supports."),
-    scope: ResourceVisibilityScopeSchema.default("personal").describe(
-      "Who can discover the plugin: personal (author plus named users), team, or org.",
-    ),
-    teamIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Teams a team-scoped plugin is shared with."),
-    userIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Organization members a personal plugin is shared with."),
     files: pluginFilesField.describe(
       "The plugin's files as { path, content, encoding?, mode? }. Hook " +
         "configuration bytes are stored verbatim — review them as code, " +
@@ -140,19 +125,6 @@ const UpdatePluginToolSchema = z
       .min(1)
       .optional()
       .describe("Operating systems the payload supports."),
-    scope: ResourceVisibilityScopeSchema.optional().describe(
-      "Who can discover the plugin: personal (author plus named users), team, or org.",
-    ),
-    teamIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Teams a team-scoped plugin is shared with."),
-    userIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Organization members a personal plugin is shared with."),
     baseContentHash: z
       .string()
       .min(1)
@@ -351,9 +323,8 @@ const registry = defineArchestraTools([
     description:
       "Create a plugin from an explicit file set. Files are stored verbatim " +
       "and execute on developer machines once installed, so author them with " +
-      "the user and review every byte before persisting. The visibility " +
-      "scope defaults to personal; team scopes need at least one team, and " +
-      "personal shares must name organization members.",
+      "the user and review every byte before persisting. Only the author " +
+      "has access unless initialGrants share it further.",
     schema: CreatePluginToolSchema,
     async handler({ args, context }) {
       const disabled = pluginsDisabledError();
@@ -364,14 +335,6 @@ const registry = defineArchestraTools([
       }
       const permissionError = await pluginActionError(ctx, "create");
       if (permissionError) return permissionError;
-
-      const visibilityError = await checkVisibility({
-        organizationId: ctx.organizationId,
-        scope: args.scope,
-        teamIds: args.teamIds ?? [],
-        userIds: args.userIds ?? [],
-      });
-      if (visibilityError) return errorResult(visibilityError);
 
       if (args.initialGrants?.length) {
         // SPDX-SnippetBegin
@@ -386,9 +349,9 @@ const registry = defineArchestraTools([
             id: randomUUID(),
             name: args.displayName,
             authorId: ctx.userId,
-            scope: args.scope,
-            teams: (args.teamIds ?? []).map((id) => ({ id })),
-            users: (args.userIds ?? []).map((id) => ({ id })),
+            scope: "personal",
+            teams: [],
+            users: [],
           },
         });
         // SPDX-SnippetEnd
@@ -402,18 +365,12 @@ const registry = defineArchestraTools([
           description: args.description,
           clientType: args.clientType,
           supportedPlatforms: args.supportedPlatforms,
-          scope: args.scope,
-          teamIds: args.teamIds,
-          userIds: args.userIds,
           files: args.files,
         },
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: args.initialGrants,
-          visibility: args.scope,
-        }),
+        initialPermissionGrants: args.initialGrants ?? [],
         // SPDX-SnippetEnd
       });
       if (!plugin) {
@@ -455,14 +412,6 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
-
-      const visibilityError = await checkVisibility({
-        organizationId: ctx.organizationId,
-        scope: args.scope ?? existing.scope,
-        teamIds: args.teamIds ?? existing.teams.map((team) => team.id),
-        userIds: args.userIds ?? existing.users.map((member) => member.id),
-      });
-      if (visibilityError) return errorResult(visibilityError);
 
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({
@@ -725,19 +674,4 @@ function checkManualFilesUpdate(
     return githubReadOnlyMessage(plugin);
   }
   return null;
-}
-
-async function checkVisibility(params: {
-  organizationId: string;
-  scope: "personal" | "team" | "org";
-  teamIds: string[];
-  userIds: string[];
-}): Promise<string | null> {
-  try {
-    await validatePluginVisibility(params);
-    return null;
-  } catch (error) {
-    if (error instanceof ApiError) return error.message;
-    throw error;
-  }
 }

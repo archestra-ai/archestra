@@ -32,7 +32,6 @@ describe("GET /api/projects/:id/runs (project:read-all)", () => {
       organizationId,
       authorId: owner.id,
       name: "Run Agent",
-      teams: [],
     });
     actingUser = viewer;
 

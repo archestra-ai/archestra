@@ -19,8 +19,6 @@ describe("KnowledgeBaseConnectorModel", () => {
       // Each retired visibility contradicts the grants written below.
       const published = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Published",
-        visibility: "team-scoped",
-        teamIds: [crypto.randomUUID()],
       });
       const teamGranted = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Team granted",
@@ -29,7 +27,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Auto Sync",
         connectorType: "github",
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       for (const [connector, subject] of [
         [published, { type: "organization", id: "*" }],
@@ -174,11 +172,9 @@ describe("KnowledgeBaseConnectorModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const kb = await makeKnowledgeBase(org.id);
-      const team = await makeTeam(org.id, user.id);
+      await makeTeam(org.id, user.id);
       await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Restricted",
-        visibility: "team-scoped",
-        teamIds: [team.id],
       });
 
       const results = await KnowledgeBaseConnectorModel.findByOrganization({

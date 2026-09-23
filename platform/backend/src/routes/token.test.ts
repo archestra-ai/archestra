@@ -146,8 +146,7 @@ describe("shared token route authorization", () => {
     const agent = await makeAgent({
       organizationId,
       agentType: "agent",
-      scope: "team",
-      teams: [teamId],
+      access: { teams: [teamId] },
     });
     const { token } = await TeamTokenModel.createTeamToken(
       teamId,

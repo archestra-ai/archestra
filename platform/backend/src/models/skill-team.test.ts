@@ -1,15 +1,13 @@
 import { SkillModel, SkillTeamModel } from "@/models";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
-import { describe, expect, test } from "@/test";
-import type { ResourceVisibilityScope } from "@/types/visibility";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 async function seedSkill(params: {
   organizationId: string;
   name: string;
-  scope: ResourceVisibilityScope;
+  access?: TestAccess;
   authorId?: string | null;
-  teamIds?: string[];
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
@@ -20,10 +18,9 @@ async function seedSkill(params: {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: params.scope,
     },
     files: [],
-    teamIds: params.teamIds,
+    ...accessGrants(params.access),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
@@ -41,7 +38,6 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const skill = await seedSkill({
       organizationId: org.id,
       name: "role-shared-private-skill",
-      scope: "personal",
       authorId: author.id,
     });
     const key = {
@@ -75,7 +71,7 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const skill = await seedSkill({
       organizationId: org.id,
       name: "formerly-public-skill",
-      scope: "org",
+      access: "org",
       authorId: author.id,
     });
     await runScopedResourcePermissionCutover();
@@ -143,24 +139,21 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const ownSkill = await seedSkill({
       organizationId: org.id,
       name: "own-skill",
-      scope: "personal",
       authorId: user.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
     const othersPersonal = await seedSkill({
       organizationId: org.id,
       name: "others-skill",
-      scope: "personal",
       authorId: other.id,
     });
 
@@ -193,8 +186,7 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     const accessible = new Set(
@@ -220,19 +212,17 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const personalSkill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     const accessible = new Set(
@@ -258,7 +248,7 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     const accessible = new Set(
@@ -283,7 +273,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     const skill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     expect(
@@ -308,7 +298,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     const skill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
 
@@ -346,8 +335,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     const skill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     expect(
@@ -378,7 +366,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     // an org-scoped skill is open within its org but never cross-org, even
@@ -406,19 +394,17 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const personalSkill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     expect(

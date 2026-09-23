@@ -858,11 +858,9 @@ describe("AgentToolModel.findAll", () => {
 
       const catalog = await makeInternalMcpCatalog({
         organizationId: organization.id,
-        scope: "org",
       });
       const agent = await makeAgent({
         organizationId: organization.id,
-        scope: "org",
       });
       const tool = await makeTool({
         name: "org-installed-mcp-tool",
@@ -992,14 +990,12 @@ describe("AgentToolModel.findAll", () => {
       const agent1 = await makeAgent({
         organizationId: org.id,
         name: "Agent 1",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
       const agent2 = await makeAgent({
         organizationId: org.id,
         name: "Agent 2",
-        teams: [team2.id],
-        scope: "team",
+        access: { teams: [team2.id] },
       });
 
       // Add user to team1 via team membership

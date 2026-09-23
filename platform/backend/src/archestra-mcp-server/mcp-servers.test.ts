@@ -14,7 +14,6 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
-import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -355,7 +354,7 @@ describe("deploy_mcp_server", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
@@ -537,8 +536,7 @@ describe("deploy_mcp_server", () => {
     // Team-scoped item where the member's team holds only `use`.
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "team",
-      teams: [{ id: team.id, level: "use" }],
+      access: { teams: [team.id] },
     });
 
     const result = await executeArchestraTool(
@@ -576,8 +574,7 @@ describe("deploy_mcp_server", () => {
     };
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "team",
-      teams: [{ id: team.id, level: "write" }],
+      access: { teams: [team.id], level: "edit" },
     });
 
     const result = await executeArchestraTool(
@@ -919,7 +916,6 @@ describe("mcp-server tools — team-scope RBAC", () => {
   let organizationId: string;
 
   const CREATE = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;
-  const EDIT_DESC = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`;
 
   beforeEach(async ({ makeAgent, makeOrganization, makeUser, makeMember }) => {
     const org = await makeOrganization();
@@ -948,7 +944,7 @@ describe("mcp-server tools — team-scope RBAC", () => {
     return (result.content[0] as any).text as string;
   }
 
-  test("editor creates a team-scoped server for a team they administer", async ({
+  test("editor shares a new server with a team they administer through initialGrants", async ({
     makeTeam,
     makeTeamMember,
   }) => {
@@ -959,14 +955,18 @@ describe("mcp-server tools — team-scope RBAC", () => {
 
     const result = await executeArchestraTool(
       CREATE,
-      remoteArgs({ scope: "team", teams: [team.id] }),
+      remoteArgs({
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
+      }),
       ctx,
     );
-    expect(result.isError).toBe(false);
+    expect(result.isError, bodyText(result)).toBe(false);
     expect(bodyText(result)).toContain("Successfully created");
   });
 
-  test("editor cannot create a team server for a team they are not in", async ({
+  test("create refuses the retired scope and teams arguments", async ({
     makeTeam,
   }) => {
     const team = await makeTeam(organizationId, ctx.userId as string);
@@ -977,7 +977,6 @@ describe("mcp-server tools — team-scope RBAC", () => {
       ctx,
     );
     expect(result.isError).toBe(true);
-    expect(bodyText(result)).toMatch(/teams you are a member of/i);
   });
 
   test("editor cannot create an org-scoped server", async () => {
@@ -987,96 +986,6 @@ describe("mcp-server tools — team-scope RBAC", () => {
       ctx,
     );
     expect(result.isError).toBe(true);
-  });
-
-  test("editor promotes their own personal server to a team they administer via edit", async ({
-    makeTeam,
-    makeTeamMember,
-  }) => {
-    const team = await makeTeam(organizationId, ctx.userId as string);
-    await makeTeamMember(team.id, ctx.userId as string, {
-      role: ADMIN_ROLE_NAME,
-    });
-
-    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
-    expect(created.isError).toBe(false);
-    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
-    expect(id).toBeDefined();
-
-    const promoted = await executeArchestraTool(
-      EDIT_DESC,
-      { id, scope: "team", teams: [team.id] },
-      ctx,
-    );
-    expect(promoted.isError).toBe(false);
-    expect(bodyText(promoted)).toContain("Scope: team");
-  });
-
-  test("an id-only team edit preserves each team's stored access level", async ({
-    makeTeam,
-    makeTeamMember,
-    makeInternalMcpCatalog,
-  }) => {
-    const writeTeam = await makeTeam(organizationId, ctx.userId as string);
-    const useTeam = await makeTeam(organizationId, ctx.userId as string);
-    const addedTeam = await makeTeam(organizationId, ctx.userId as string);
-    for (const team of [writeTeam, useTeam, addedTeam]) {
-      await makeTeamMember(team.id, ctx.userId as string, {
-        role: ADMIN_ROLE_NAME,
-      });
-    }
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      authorId: ctx.userId as string,
-      scope: "team",
-      teams: [
-        { id: writeTeam.id, level: "write" },
-        { id: useTeam.id, level: "use" },
-      ],
-      serverType: "remote",
-      serverUrl: "https://example.test/mcp",
-    });
-
-    // The agent tool's schema carries bare team ids and cannot express a level.
-    // Adding a team rewrites the assignments, and the level-less ids of the
-    // teams already assigned must not silently promote `use` to `write`.
-    const edited = await executeArchestraTool(
-      EDIT_DESC,
-      {
-        id: catalog.id,
-        description: "touched",
-        teams: [writeTeam.id, useTeam.id, addedTeam.id],
-      },
-      ctx,
-    );
-    expect(edited.isError).toBe(false);
-
-    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-      catalog.id,
-    );
-    expect(Object.fromEntries(teams.map((t) => [t.id, t.level]))).toEqual({
-      [writeTeam.id]: "write",
-      [useTeam.id]: "use",
-      // A team assigned for the first time without a level defaults to `write`.
-      [addedTeam.id]: "write",
-    });
-  });
-
-  test("editor cannot edit-promote to a team they are not in", async ({
-    makeTeam,
-  }) => {
-    const team = await makeTeam(organizationId, ctx.userId as string);
-
-    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
-    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
-
-    const denied = await executeArchestraTool(
-      EDIT_DESC,
-      { id, scope: "team", teams: [team.id] },
-      ctx,
-    );
-    expect(denied.isError).toBe(true);
-    expect(bodyText(denied)).toMatch(/teams you are a member of/i);
   });
 });
 

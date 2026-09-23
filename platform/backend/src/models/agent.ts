@@ -617,7 +617,12 @@ class AgentModel {
       suggestedPrompts,
       activationSkillPolicy,
       ...agent
-    }: InsertAgent & {
+    }: Omit<InsertAgent, "scope"> & {
+      /**
+       * The retired visibility column; it defaults to "personal" and nothing
+       * reads it. The grants decide who reaches the agent.
+       */
+      scope?: InsertAgent["scope"];
       activationSkillMode?: AgentActivationSkillMode;
       isPersonalGateway?: boolean;
       // Server-owned like isPersonalGateway: omitted from the request schemas
@@ -635,6 +640,8 @@ class AgentModel {
        */
       skipExclusionPrefill?: boolean;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
       /**
        * Skip auto-assigning the creation-default built-in tool set. Used by
        * clone and import, which set their own authoritative assignment set
@@ -701,7 +708,10 @@ class AgentModel {
         ...(slug && { slug }),
         ...(authorId && { authorId }),
       },
-      { grants: options?.initialPermissionGrants, teams, users },
+      {
+        grants: options?.initialPermissionGrants,
+        publishToOrganization: options?.publishToOrganization,
+      },
     );
 
     // Assign teams to the agent if provided
@@ -4324,8 +4334,7 @@ class AgentModel {
     values: typeof schema.agentsTable.$inferInsert,
     permissions: {
       grants?: ResourcePermissionGrant[];
-      teams?: string[];
-      users?: string[];
+      publishToOrganization?: boolean;
     },
   ) {
     const maxRetries = 3;
@@ -4363,9 +4372,7 @@ class AgentModel {
             scope: row.id,
             grants: permissions.grants,
             authorId: row.authorId,
-            visibility: row.scope,
-            teams: permissions.teams?.map((id) => ({ id })),
-            users: permissions.users,
+            publishToOrganization: permissions.publishToOrganization,
           });
           // SPDX-SnippetEnd
           return rows;

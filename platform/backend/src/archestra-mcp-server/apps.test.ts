@@ -293,16 +293,13 @@ describe("app tool execution", () => {
     const personal = await scaffold({ name: "Mine" }, memberCtx);
     expect(personal.isError).toBe(false);
 
-    // ...but not an org-scoped one.
-    const orgCreate = await scaffold(
-      { name: "Shared", scope: "org" },
-      memberCtx,
-    );
+    // ...and a second one; sharing it is a separate grant.
+    const orgCreate = await scaffold({ name: "Shared" }, memberCtx);
     expect(orgCreate.isError).toBe(false);
 
     // An org app scaffolded by an admin (the suite context) cannot be deleted
     // by a plain member, even though it is visible to them.
-    const orgApp = await scaffold({ name: "AdminApp", scope: "org" });
+    const orgApp = await scaffold({ name: "AdminApp" });
     const orgAppId = structured(orgApp).id as string;
 
     const delAttempt = await executeArchestraTool(
@@ -420,9 +417,9 @@ describe("app tool execution", () => {
   });
 
   test("scaffold reports a name conflict cleanly", async () => {
-    const first = await scaffold({ name: "Dup", scope: "org" });
+    const first = await scaffold({ name: "Dup" });
     const firstId = structured(first).id as string;
-    const second = await scaffold({ name: "Dup", scope: "org" });
+    const second = await scaffold({ name: "Dup" });
     expect(second.isError).toBe(true);
     const text = (second.content[0] as any).text as string;
     // The duplicate error names the existing app but must NOT command editing
@@ -435,10 +432,11 @@ describe("app tool execution", () => {
     expect(text).toContain("confirm");
   });
 
-  test("scaffold rejects team scope", async () => {
+  test("scaffold refuses the retired scope argument", async () => {
+    // Who reaches a new app is its initialGrants alone.
     const result = await scaffold({ name: "TeamApp", scope: "team" });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("Team-scoped");
+    expect((result.content[0] as any).text).toContain("scope");
   });
 
   describe("finding an app by name", () => {
@@ -747,7 +745,7 @@ describe("read_app / edit_app", () => {
   }) => {
     const orgApp = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
-      { name: "Org App", scope: "org" },
+      { name: "Org App" },
       context,
     );
     const appId = structured(orgApp).id as string;
@@ -781,7 +779,7 @@ describe("read_app / edit_app", () => {
   test("publish_app cannot reach a disabled app; re-enabling first restores it", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
-      { name: "Shareable", scope: "personal" },
+      { name: "Shareable" },
       context,
     );
     const appId = structured(created).id as string;
@@ -926,7 +924,7 @@ describe("read_app / edit_app", () => {
       makeUser,
       makeMember,
     }) => {
-      const created = await scaffold({ name: "Org Wide", scope: "org" });
+      const created = await scaffold({ name: "Org Wide" });
       const appId = structured(created).id as string;
       // The retired `scope` field grants nobody at creation; the reach this
       // test needs as a precondition is an explicit organization grant.
@@ -964,7 +962,7 @@ describe("read_app / edit_app", () => {
       makeUser,
       makeMember,
     }) => {
-      const created = await scaffold({ name: "Org Editable", scope: "org" });
+      const created = await scaffold({ name: "Org Editable" });
       const appId = structured(created).id as string;
       const otherAdmin = await makeUser();
       await makeMember(otherAdmin.id, organizationId, {
@@ -3265,7 +3263,7 @@ describe("set_app_tools", () => {
 
     const app = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: userId,
       environmentId: env.id,
     });
@@ -3289,7 +3287,7 @@ describe("set_app_tools", () => {
     });
     const app = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: userId,
       environmentId: env.id,
     });
@@ -3327,7 +3325,7 @@ describe("set_app_tools", () => {
     await makeTool({ name: otherToolName, catalogId: otherCatalog.id });
     const app = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: userId,
       environmentId: appEnv.id,
     });
@@ -3342,7 +3340,7 @@ describe("set_app_tools", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await scaffold({ name: "OrgApp", scope: "org" });
+    const created = await scaffold({ name: "OrgApp" });
     const appId = structured(created).id as string;
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
@@ -3524,7 +3522,6 @@ describe("refine_app", () => {
   }) => {
     const app = await makeApp({
       organizationId,
-      scope: "org",
       html: "<!doctype html><title>Legacy Title</title>",
     });
     const result = await refine({ appId: app.id });
@@ -3668,7 +3665,6 @@ describe("validate_app", () => {
   }) => {
     const app = await makeApp({
       organizationId,
-      scope: "org",
       html: "<html><head><script>const x = window.__ARCHESTRA_APP_SDK_URL__;</script></head><body/></html>",
     });
     const result = await validate(app.id);
@@ -3685,7 +3681,6 @@ describe("validate_app", () => {
   }) => {
     const app = await makeApp({
       organizationId,
-      scope: "org",
       html: '<html><head><script src="https://evil.example.com/a.js"></script></head><body/></html>',
     });
     const result = await validate(app.id);
@@ -3701,7 +3696,6 @@ describe("validate_app", () => {
   }) => {
     const app = await makeApp({
       organizationId,
-      scope: "org",
       html: '<html><head><script>const v = await archestra.storage.get("k");</script></head><body/></html>',
     });
     const result = await validate(app.id);
@@ -3738,7 +3732,7 @@ describe("publish_app", () => {
     await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3782,7 +3776,7 @@ describe("publish_app", () => {
     await makeMember(user.id, agent.organizationId, { role: "member" });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3808,7 +3802,7 @@ describe("publish_app", () => {
     await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3837,7 +3831,7 @@ describe("publish_app", () => {
     });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3881,7 +3875,7 @@ describe("publish_app", () => {
     });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3925,7 +3919,7 @@ describe("publish_app", () => {
     });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -3968,7 +3962,7 @@ describe("publish_app", () => {
     });
     const app = await makeApp({
       organizationId: agent.organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -4011,7 +4005,7 @@ describe("publish_app", () => {
     await makeTeam(orgId, user.id, { name: "design" });
     const app = await makeApp({
       organizationId: orgId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -4041,7 +4035,7 @@ describe("publish_app", () => {
     await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: orgId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -4075,7 +4069,10 @@ describe("publish_app", () => {
     await makeMember(attacker.id, orgId, { role: EDITOR_ROLE_NAME });
     const team = await makeTeam(orgId, attacker.id, { name: "Attacker Team" });
     await makeTeamMember(team.id, attacker.id);
-    const app = await makeApp({ organizationId: orgId, scope: "org" });
+    const app = await makeApp({
+      organizationId: orgId,
+      legacy: { scope: "org" },
+    });
     const context: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
       organizationId: orgId,
@@ -4106,7 +4103,7 @@ describe("publish_app", () => {
     const team = await makeTeam(orgId, user.id, { name: "Stray Team" });
     const app = await makeApp({
       organizationId: orgId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {
@@ -4134,7 +4131,7 @@ describe("publish_app", () => {
     await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: orgId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const context: ArchestraContext = {

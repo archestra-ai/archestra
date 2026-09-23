@@ -170,7 +170,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     await InteractionModel.create({
       profileId: agent.id,
@@ -214,7 +213,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     const interaction = await InteractionModel.create({
       profileId: agent.id,
@@ -262,7 +260,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // Models fronted by OpenRouter can emit finish_reason values outside the
     // canonical OpenAI set; the stored row must still serialize on read-back.
@@ -311,7 +308,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // Persisted gemini rows exist whose request lacks `contents` (provider-
     // schema drift / partial delta reconstruction). The row must serialize
@@ -345,7 +341,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // A failed upstream LLM call is persisted with the provider's interaction
     // type but a response of `{ error }` (llm-proxy-handler.ts). The row must
@@ -381,7 +376,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // Provider-schema drift / partial-stream bodies / legacy shapes: a response
     // that is neither a valid provider response nor `{ error }` must not 500 the
@@ -417,7 +411,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     const interaction = await InteractionModel.create({
       profileId: agent.id,
@@ -449,7 +442,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // Gemini embeddings are persisted via the OpenAI-compatible embedding
     // client; the read schema must model this type or the whole list 500s.
@@ -481,7 +473,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     // Embedding interactions store a truncated vector preview: the first few
     // values plus `truncatedFrom` = the full length. The read schema must model
@@ -523,7 +514,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -590,7 +580,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
 
     const anthropicResponse = {
@@ -701,7 +690,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
 
     const openaiResp = {
@@ -780,7 +768,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
 
     const make = (sessionId: string | null) =>
@@ -838,7 +825,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     const create = (sessionId: string, createdAt: Date) =>
       InteractionModel.create({
@@ -901,7 +887,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
     await InteractionModel.create({
       profileId: agent.id,
@@ -938,7 +923,6 @@ describe("interaction routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "org",
     });
 
     const make = (sessionId: string | null, text: string, second: number) =>
@@ -1156,7 +1140,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       agentId = agent.id;
 
@@ -1275,7 +1258,6 @@ describe("interaction routes", () => {
       const foreignAgent = await makeAgent({
         organizationId: otherOrganization.id,
         authorId: otherUser.id,
-        scope: "org",
       });
       const foreignRow = await InteractionModel.create({
         profileId: foreignAgent.id,
@@ -1374,7 +1356,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const user = await makeUser({ email: "dev@example.com" });
       await seedSession({
@@ -1395,7 +1376,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       // An org-scoped virtual key never sets the interaction's user — only
       // personal ones carry an owner.
@@ -1417,7 +1397,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       await seedSession({
         profileId: agent.id,
@@ -1477,7 +1456,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const { virtualKey } = await VirtualApiKeyModel.create({
         organizationId,
@@ -1520,7 +1498,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const platform = await makeTeam(organizationId, currentUser.id, {
         name: "Platform",
@@ -1563,7 +1540,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const owner = await makeUser({ email: "solo@example.com" });
       const team = await makeTeam(organizationId, currentUser.id, {
@@ -1599,7 +1575,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const owner = await makeUser({
         email: "owner@example.com",
@@ -1638,7 +1613,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const { virtualKey: standard } = await VirtualApiKeyModel.create({
         organizationId,
@@ -1678,7 +1652,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       await seedInteraction({
         profileId: agent.id,
@@ -1694,7 +1667,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const { virtualKey: standard } = await VirtualApiKeyModel.create({
         organizationId,
@@ -1747,7 +1719,6 @@ describe("interaction routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       const otherOrg = await makeOrganization();
       const { virtualKey: foreign } = await VirtualApiKeyModel.create({

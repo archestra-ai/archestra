@@ -622,7 +622,6 @@ describe("OpenAI cost tracking", () => {
       name: "User OAuth OpenAI Proxy",
       agentType: "llm_proxy",
       isDefault: true,
-      scope: "org",
     });
     const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
     const oauthClientId = crypto.randomUUID();

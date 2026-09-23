@@ -331,14 +331,14 @@ describe("delegation tool execution", () => {
       name: "Parent Agent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const targetAgent = await makeAgent({
       name: "Delegated Agent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
@@ -552,7 +552,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Parent Agent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
     });
     if (fixtures.accessAllSubagents !== false) {
       await AgentModel.update(parent.id, { accessAllSubagents: true });
@@ -561,7 +560,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Research Bot",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
     });
     return { organization, user, parent, target };
   }
@@ -632,7 +630,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
     // Backs platform machinery rather than answering questions; delegating to
@@ -641,7 +638,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
     });
 
@@ -675,7 +671,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
       description: ADVISOR_AGENT_DESCRIPTION,
     });
@@ -838,7 +833,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Cross Env Bot",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: otherEnv.id,
     });
 
@@ -895,7 +889,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Cross Env Expert",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: otherEnv.id,
     });
 
@@ -951,7 +944,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Staging Parent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: env.id,
     });
     await AgentModel.update(parent.id, { accessAllSubagents: true });
@@ -959,7 +951,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
 
@@ -1015,7 +1006,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Env A Parent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: envA.id,
     });
     await AgentModel.update(parent.id, { accessAllSubagents: true });
@@ -1026,7 +1016,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: envB.id,
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
@@ -1060,7 +1049,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Org A Parent",
       agentType: "agent",
       organizationId: orgA.id,
-      scope: "org",
       environmentId: env.id,
     });
     await AgentModel.update(parent.id, { accessAllSubagents: true });
@@ -1070,7 +1058,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: orgB.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
 
@@ -1103,7 +1090,6 @@ describe("Auto-mode subagent delegation", () => {
       name: "Staging Parent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: env.id,
     });
     await AgentModel.update(parent.id, { accessAllSubagents: true });
@@ -1111,7 +1097,6 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
     await AgentExcludedSubagentModel.replaceForAgent(parent.id, [advisor.id]);
@@ -1157,14 +1142,12 @@ describe("Auto-mode subagent delegation", () => {
       name: "Staging Parent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: env.id,
     });
     const advisor = await makeAgent({
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
     const advisorTool = await ToolModel.findOrCreateDelegationTool(advisor.id);
@@ -1214,13 +1197,11 @@ describe("Auto-mode subagent delegation", () => {
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
     });
     const advisor = await makeAgent({
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
 

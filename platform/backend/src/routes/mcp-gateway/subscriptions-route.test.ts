@@ -39,7 +39,7 @@ describe("MCP Gateway - subscriptions/listen route", () => {
     makeOrganization: () => Promise<{ id: string }>;
   }) {
     const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id, scope: "org" });
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",

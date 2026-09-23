@@ -13,7 +13,7 @@ describe("serializeAgentForExport", () => {
       name: "Basic Export Agent",
       authorId: user.id,
       systemPrompt: "You are a helpful assistant",
-      scope: "personal",
+      access: "personal",
     });
 
     const fullAgent = await AgentModel.findById(agent.id, user.id, true);
@@ -90,10 +90,9 @@ describe("serializeAgentForExport", () => {
       agentType: "agent",
       organizationId: org.id,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
-      teams: [],
       labels: [{ key: "env", value: "prod" }],
     });
 

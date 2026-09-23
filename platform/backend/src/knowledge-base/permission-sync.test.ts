@@ -1915,7 +1915,7 @@ describe("a disabled connector runs no permission pass", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "perforce",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: false,
     });
 

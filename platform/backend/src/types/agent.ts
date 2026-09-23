@@ -30,6 +30,7 @@ import { SelectToolSchema } from "./tool";
 import {
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
+  RetiredSharingFieldSchema,
 } from "./visibility";
 
 /**
@@ -444,6 +445,25 @@ export const InsertAgentSchemaBase = createInsertSchema(
 export const InsertAgentSchema = InsertAgentSchemaBase.superRefine(
   validateIncomingEmailDomain,
 );
+
+/**
+ * The body of `POST /api/agents`. Who can reach the new agent is its
+ * `initialGrants` alone. The retired `scope`, `teams` and `users` fields are
+ * refused with a 400 rather than silently dropped, which would create an
+ * agent narrower than the caller asked for.
+ */
+export const CreateAgentBodySchema = InsertAgentSchemaBase.omit({
+  scope: true,
+  teams: true,
+  users: true,
+})
+  .extend({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
+    scope: RetiredSharingFieldSchema,
+    teams: RetiredSharingFieldSchema,
+    users: RetiredSharingFieldSchema,
+  })
+  .superRefine(validateIncomingEmailDomain);
 
 // Base schema without refinement - can be used with .partial()
 export const UpdateAgentSchemaBase = createUpdateSchema(

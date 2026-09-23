@@ -39,7 +39,7 @@ describe("POST /api/apps/:appId/screenshot", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Shots", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Shots", html: "<h1>v1</h1>" },
     });
     const appId = created.json().id as string;
 
@@ -75,7 +75,6 @@ describe("POST /api/apps/:appId/screenshot", () => {
       organizationId,
       authorId: user.id,
       name: "Canonical Shots",
-      scope: "org",
     });
     const appId = created.id;
 

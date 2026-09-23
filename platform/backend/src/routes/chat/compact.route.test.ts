@@ -117,7 +117,7 @@ describe("POST /api/chat/conversations/:id/compact", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeCompactableConversation(agent.id);
 
@@ -127,7 +127,6 @@ describe("POST /api/chat/conversations/:id/compact", () => {
       orgSecret.id,
       {
         provider: "ollama",
-        scope: "org",
         name: "Ollama",
       },
     );
@@ -141,7 +140,7 @@ describe("POST /api/chat/conversations/:id/compact", () => {
     const chatApiKey = await makeLlmProviderApiKey(
       organizationId,
       chatSecret.id,
-      { provider: "vllm", scope: "org", name: "vLLM" },
+      { provider: "vllm", name: "vLLM" },
     );
     const chatModel = await makeModelRow("vllm", "qwen3-32b");
     await db

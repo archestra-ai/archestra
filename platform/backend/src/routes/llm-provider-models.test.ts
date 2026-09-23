@@ -119,13 +119,11 @@ describe("chat model routes", () => {
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       name: "Personal subscription",
       provider: "github-copilot",
-      scope: "personal",
       userId: user.id,
     });
     await makeLlmProviderApiKey(organizationId, secret.id, {
       name: "Unavailable provider",
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue(
@@ -218,7 +216,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -297,7 +294,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -364,7 +360,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -431,7 +426,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -502,7 +496,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
@@ -556,7 +549,6 @@ describe("chat model routes", () => {
     const ownSecret = await makeSecret({ secret: { apiKey: "own-token" } });
     const ownKey = await makeLlmProviderApiKey(organizationId, ownSecret.id, {
       provider: "microsoft-365-copilot",
-      scope: "personal",
       userId: user.id,
       name: "Microsoft 365 Copilot",
     });
@@ -569,7 +561,6 @@ describe("chat model routes", () => {
       otherSecret.id,
       {
         provider: "microsoft-365-copilot",
-        scope: "personal",
         userId: otherUser.id,
         name: "Microsoft 365 Copilot",
       },
@@ -584,7 +575,6 @@ describe("chat model routes", () => {
       foreignSecret.id,
       {
         provider: "microsoft-365-copilot",
-        scope: "org",
         name: "Microsoft 365 Copilot",
       },
     );
@@ -661,7 +651,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({ apiKeyId: key.id });
@@ -677,7 +666,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({
@@ -698,7 +686,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({
@@ -719,7 +706,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "org",
     });
     const embeddingModel = await ModelModel.create({
       externalId: "gemini/gemini-embedding-001",
@@ -926,7 +912,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "org",
     });
     const geminiModel = await ModelModel.create({
       externalId: "gemini/gemini-embedding-001",
@@ -1210,17 +1195,17 @@ describe("chat model routes", () => {
     const staleOpenRouterKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "openrouter", scope: "personal", userId: user.id },
+      { provider: "openrouter", userId: user.id },
     );
     const freshOpenAiKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "openai", scope: "personal", userId: user.id },
+      { provider: "openai", userId: user.id },
     );
     const freshGeminiKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "gemini", scope: "personal", userId: user.id },
+      { provider: "gemini", userId: user.id },
     );
 
     vi.spyOn(
@@ -1272,7 +1257,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
@@ -1357,7 +1341,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
@@ -1417,7 +1400,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
@@ -1448,7 +1430,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { openModel, frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
@@ -1483,7 +1464,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,

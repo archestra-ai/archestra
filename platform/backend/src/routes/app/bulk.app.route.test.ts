@@ -39,9 +39,9 @@ describe("apps bulk routes", () => {
     test("soft-deletes every named app and leaves the rest alone", async ({
       makeApp,
     }) => {
-      const first = await makeApp({ organizationId, scope: "org" });
-      const second = await makeApp({ organizationId, scope: "org" });
-      const kept = await makeApp({ organizationId, scope: "org" });
+      const first = await makeApp({ organizationId });
+      const second = await makeApp({ organizationId });
+      const kept = await makeApp({ organizationId });
 
       const response = await bulkDelete([first.id, second.id]);
 
@@ -62,11 +62,10 @@ describe("apps bulk routes", () => {
     test("refuses a locked app but deletes the rest", async ({ makeApp }) => {
       const locked = await makeApp({
         organizationId,
-        scope: "org",
         name: "Locked App",
         locked: true,
       });
-      const ordinary = await makeApp({ organizationId, scope: "org" });
+      const ordinary = await makeApp({ organizationId });
 
       const response = await bulkDelete([locked.id, ordinary.id]);
 
@@ -85,7 +84,6 @@ describe("apps bulk routes", () => {
     }) => {
       const foreign = await makeApp({
         organizationId: (await makeOrganization()).id,
-        scope: "org",
       });
 
       const response = await bulkDelete([foreign.id]);
@@ -104,7 +102,6 @@ describe("apps bulk routes", () => {
     test("writes one audit record covering the batch", async ({ makeApp }) => {
       const target = await makeApp({
         organizationId,
-        scope: "org",
         name: "Audited App",
       });
 

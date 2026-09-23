@@ -303,7 +303,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -372,7 +371,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -489,7 +487,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -566,7 +563,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -649,7 +645,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -886,7 +881,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -959,7 +953,6 @@ describe("websocket Agent run authorization and cleanup", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",

@@ -205,7 +205,7 @@ test("clears the stopped pass's `running` stamp off the connector", async ({
   const org = await makeOrganization();
   const kb = await makeKnowledgeBase(org.id);
   const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-    visibility: "auto-sync-permissions",
+    syncPermissionsFromSource: true,
     enabled: true,
   });
   await makeConnectorRun(connector.id, {

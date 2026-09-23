@@ -498,7 +498,7 @@ describe("service account API authentication", () => {
       agentType: "agent",
       organizationId: organization.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const role = await makeCustomRole(organization.id, {
       permission: {
@@ -576,7 +576,6 @@ describe("service account API authentication", () => {
     const agent = await makeAgent({
       organizationId: organization.id,
       authorId: user.id,
-      scope: "org",
     });
     await makeInteraction(agent.id, {
       userId: user.id,

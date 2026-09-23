@@ -29,7 +29,6 @@ import {
   constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
-  type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   type User,
   VirtualApiKeyTypeSchema,
@@ -51,8 +50,6 @@ const VirtualApiKeyBodyObjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(256),
   keyType: VirtualApiKeyTypeSchema.default("standard"),
   expiresAt: z.coerce.date().nullable().optional(),
-  scope: ResourceVisibilityScopeSchema.default("org"),
-  teams: z.array(z.string()).default([]),
   providerApiKeys: z
     .array(
       z.object({
@@ -67,7 +64,7 @@ const VirtualApiKeyBodyObjectSchema = z.object({
 /**
  * Contextual validation: which fields are accepted depends on the key type.
  * Standard keys map provider API keys; passthrough keys never carry provider
- * credentials or team/org scope.
+ * credentials.
  */
 function refineVirtualApiKeyBody(
   value: z.infer<typeof VirtualApiKeyBodyObjectSchema>,
@@ -79,13 +76,6 @@ function refineVirtualApiKeyBody(
         code: "custom",
         path: ["providerApiKeys"],
         message: "Passthrough virtual keys cannot map provider API keys",
-      });
-    }
-    if (value.teams.length > 0) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["teams"],
-        message: "Passthrough virtual keys cannot be assigned to teams",
       });
     }
     return;
@@ -111,7 +101,11 @@ const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
    */
   ownerId: z.string().optional(),
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
-}).superRefine(refineVirtualApiKeyBody);
+})
+  // Strict: the retired scope/teams fields are refused, not silently
+  // dropped. Access is set with initialGrants.
+  .strict()
+  .superRefine(refineVirtualApiKeyBody);
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
@@ -422,16 +416,13 @@ async function createVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
-  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-    TeamModel.getUserTeamIds(user.id),
-    ResourcePermissions.allows({
-      userId: user.id,
-      organizationId: organizationId,
-      resource: "llmVirtualKey",
-      scope: "*",
-      action: "update",
-    }),
-  ]);
+  const isVirtualKeyAdmin = await ResourcePermissions.allows({
+    userId: user.id,
+    organizationId: organizationId,
+    resource: "llmVirtualKey",
+    scope: "*",
+    action: "update",
+  });
   const ownerId = await resolveKeyOwner({
     requestedOwnerId: body.ownerId,
     creatorId: user.id,
@@ -447,8 +438,6 @@ async function createVirtualApiKey(params: {
       organizationId,
       userId: user.id,
       ownerId,
-      scope: "personal",
-      teamIds: [],
     });
     const created = await VirtualApiKeyModel.create({
       organizationId,
@@ -460,10 +449,7 @@ async function createVirtualApiKey(params: {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      initialPermissionGrants: ResourcePermissions.grantsForCreation({
-        grants: body.initialGrants,
-        visibility: "personal",
-      }),
+      initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
 
@@ -478,18 +464,9 @@ async function createVirtualApiKey(params: {
     };
   }
 
-  await validateVirtualKeyScope({
-    scope: body.scope,
-    teamIds: body.teams,
-    userId: user.id,
-    organizationId,
-    userTeamIds,
-    isAdmin: isVirtualKeyAdmin,
-  });
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
-    scope: body.scope,
     userId: user.id,
   });
 
@@ -498,8 +475,6 @@ async function createVirtualApiKey(params: {
     organizationId,
     userId: user.id,
     ownerId,
-    scope: body.scope,
-    teamIds: body.teams,
   });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
@@ -508,17 +483,14 @@ async function createVirtualApiKey(params: {
       name: body.name,
       keyType: "standard",
       expiresAt: body.expiresAt ?? null,
-      scope: body.scope,
+      // The retired visibility column; the grants decide who reaches the key.
+      scope: "personal",
       authorId: ownerId,
-      teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      initialPermissionGrants: ResourcePermissions.grantsForCreation({
-        grants: body.initialGrants,
-        visibility: body.scope,
-      }),
+      initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
 
@@ -541,8 +513,6 @@ async function validateVirtualKeyInitialGrants(params: {
   organizationId: string;
   userId: string;
   ownerId: string;
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
 }): Promise<void> {
   await CredentialResourcePermissions.validateVirtual({
     keyType: params.body.keyType,
@@ -565,8 +535,8 @@ async function validateVirtualKeyInitialGrants(params: {
       id: randomUUID(),
       name: params.body.name,
       authorId: params.ownerId,
-      scope: params.scope,
-      teams: params.teamIds.map((id) => ({ id })),
+      scope: "personal",
+      teams: [],
       users: [],
     },
   });
@@ -624,7 +594,6 @@ async function updateVirtualApiKey(params: {
       ).map((key) => key.providerApiKeyId),
       mappings: body.providerApiKeys,
       organizationId,
-      scope: accessContext.scope,
       userId: user.id,
     });
     await CredentialResourcePermissions.validateVirtual({
@@ -743,66 +712,13 @@ async function resolveKeyOwner(params: {
   return requestedOwnerId;
 }
 
-async function validateVirtualKeyScope(params: {
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-  userId: string;
-  organizationId: string;
-  userTeamIds: string[];
-  isAdmin: boolean;
-}): Promise<void> {
-  const { scope, teamIds, userTeamIds, isAdmin } = params;
-
-  if (scope !== "team" && teamIds.length > 0) {
-    throw new ApiError(400, "Teams can only be assigned to team-scoped keys");
-  }
-
-  if (scope === "team" && teamIds.length === 0) {
-    throw new ApiError(400, "At least one team is required for team scope");
-  }
-
-  if (scope === "org") {
-    if (!isAdmin) {
-      throw new ApiError(
-        403,
-        "You need llmVirtualKey:admin permission to create org-scoped virtual keys",
-      );
-    }
-    return;
-  }
-
-  if (scope === "team") {
-    const uniqueTeamIds = [...new Set(teamIds)];
-    const teams = await TeamModel.findByIds(uniqueTeamIds);
-    if (teams.length !== uniqueTeamIds.length) {
-      throw new ApiError(400, "One or more selected teams do not exist");
-    }
-
-    if (isAdmin) {
-      return;
-    }
-
-    const userTeamIdSet = new Set(userTeamIds);
-    const canManageAllTeams = uniqueTeamIds.every((teamId) =>
-      userTeamIdSet.has(teamId),
-    );
-    if (!canManageAllTeams) {
-      throw new ApiError(
-        403,
-        "You can only assign virtual keys to teams you are a member of",
-      );
-    }
-  }
-}
-
 async function validateProviderApiKeys(params: {
   retainedProviderApiKeyIds?: string[];
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
-  scope: ResourceVisibilityScope;
   userId: string;
 }): Promise<void> {
-  const { mappings, organizationId, scope, userId } = params;
+  const { mappings, organizationId, userId } = params;
   if (mappings.length === 0) {
     return;
   }
@@ -853,10 +769,10 @@ async function validateProviderApiKeys(params: {
 
     // Per-user credentials (GitHub/Microsoft Copilot, or a ChatGPT-subscription
     // key on `openai`) are one individual's token, so a virtual key may only
-    // wrap one when it is the user's OWN personal key inside their OWN personal
-    // virtual key. Personal scope is what keeps the token unshared — the number
-    // of mappings does not, so a per-user credential may sit alongside other
-    // providers in a personal model-router key. Ownership is re-checked per
+    // wrap one when it is the user's OWN key inside a virtual key nobody else
+    // is granted (CredentialResourcePermissions.validateVirtual). The number of
+    // mappings does not matter, so a per-user credential may sit alongside
+    // other providers in an own model-router key. Ownership is re-checked per
     // mapping at request time in `llm-proxy-auth`.
     const secret = secretsById.get(mapping.providerApiKeyId);
     if (
@@ -869,13 +785,7 @@ async function validateProviderApiKeys(params: {
         provider: mapping.provider,
         apiKey: secret,
       });
-      if (scope !== "personal") {
-        throw new ApiError(
-          400,
-          `${label} is per-user: it can only be wrapped in your own personal virtual key, not a shared team- or org-scoped one.`,
-        );
-      }
-      if (apiKey.scope !== "personal" || apiKey.userId !== userId) {
+      if (apiKey.userId !== userId) {
         throw new ApiError(
           403,
           `You can only map your own personal ${label} key.`,

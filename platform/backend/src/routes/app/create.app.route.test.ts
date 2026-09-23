@@ -11,6 +11,7 @@ import {
 } from "@/models";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -61,7 +62,6 @@ describe("POST /api/apps", () => {
         name: "Dashboard",
         description: "A shared dashboard",
         html: "<html><head></head><body><h1>ok</h1></body></html>",
-        scope: "org",
       },
     });
 
@@ -69,7 +69,6 @@ describe("POST /api/apps", () => {
     expect(response.json()).toMatchObject({
       name: "Dashboard",
       description: "A shared dashboard",
-      scope: "org",
       latestVersion: 1,
     });
   });
@@ -78,7 +77,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Iconned", icon: "🚀", scope: "org" },
+      payload: { name: "Iconned", icon: "🚀" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().icon).toBe("🚀");
@@ -166,7 +165,7 @@ describe("POST /api/apps", () => {
     const orgApp = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Shared", html: "<p/>", scope: "org" },
+      payload: { name: "Shared", html: "<p/>" },
     });
     expect(orgApp.statusCode).toBe(200);
   });
@@ -192,14 +191,13 @@ describe("POST /api/apps", () => {
     expect(head).not.toBeNull();
   });
 
-  test("rejects a team-scoped app with no teamIds (400)", async () => {
+  test("refuses the retired scope and teamIds fields (400)", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Teamless", html: "<p/>", scope: "team" },
+      payload: { name: "Teamless", html: "<p/>", scope: "team", teamIds: [] },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("at least one teamId");
   });
 
   test("creates a team-scoped app with a valid team", async ({ makeTeam }) => {
@@ -211,12 +209,23 @@ describe("POST /api/apps", () => {
       payload: {
         name: "Team App",
         html: "<p/>",
-        scope: "team",
-        teamIds: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().scope).toBe("team");
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "app",
+      scope: response.json().id,
+    });
+    expect(
+      policy?.grants.some(
+        (grant) =>
+          grant.subject.type === "team" && grant.subject.id === team.id,
+      ),
+    ).toBe(true);
   });
 
   test("rejects a team id from another organization with 400", async ({
@@ -234,12 +243,18 @@ describe("POST /api/apps", () => {
       payload: {
         name: "Team App",
         html: "<p/>",
-        scope: "team",
-        teamIds: [foreignTeam.id],
+        initialGrants: [
+          {
+            subject: { type: "team", id: foreignTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("Unknown team");
+    expect(response.json().error.message).toContain(
+      "permission recipient does not exist",
+    );
   });
 
   test("binds a new app to an environment", async () => {
@@ -250,7 +265,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Bound", scope: "org", environmentId: prod.id },
+      payload: { name: "Bound", environmentId: prod.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(prod.id);
@@ -260,7 +275,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Default Env", scope: "org" },
+      payload: { name: "Default Env" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();
@@ -279,7 +294,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Configured Env", scope: "org" },
+      payload: { name: "Configured Env" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(launch.id);
@@ -298,7 +313,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Explicit Default", scope: "org", environmentId: null },
+      payload: { name: "Explicit Default", environmentId: null },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();
@@ -315,7 +330,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "X", scope: "org", environmentId: foreignEnv.id },
+      payload: { name: "X", environmentId: foreignEnv.id },
     });
     expect(response.statusCode).toBe(404);
   });
@@ -329,7 +344,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "R", scope: "org", environmentId: restricted.id },
+      payload: { name: "R", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
@@ -353,18 +368,14 @@ describe("POST /api/apps", () => {
     const baseline = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Baseline", scope: "personal" },
+      payload: { name: "Baseline" },
     });
     expect(baseline.statusCode).toBe(200);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted",
-        scope: "personal",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(403);
   });
@@ -392,11 +403,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted OK",
-        scope: "personal",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted OK", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
@@ -566,11 +573,7 @@ describe("POST /api/apps — the environment of the agent that builds it", () =>
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted Builder",
-        scope: "personal",
-        openInChat: true,
-      },
+      payload: { name: "Restricted Builder", openInChat: true },
     });
 
     expect(response.statusCode).toBe(200);
@@ -609,7 +612,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Sales Dashboard", scope: "org" },
+      payload: { name: "Sales Dashboard" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -620,7 +623,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Sales Dashboard", scope: "org", slug: "revenue" },
+      payload: { name: "Sales Dashboard", slug: "revenue" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -631,13 +634,13 @@ describe("POST /api/apps — slug", () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "First", scope: "org", slug: "shared-url" },
+      payload: { name: "First", slug: "shared-url" },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Second", scope: "org", slug: "shared-url" },
+      payload: { name: "Second", slug: "shared-url" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -650,13 +653,13 @@ describe("POST /api/apps — slug", () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Twice", scope: "org", slug: "first-url" },
+      payload: { name: "Twice", slug: "first-url" },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Twice", scope: "org", slug: "second-url" },
+      payload: { name: "Twice", slug: "second-url" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -669,7 +672,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Bad", scope: "org", slug: "Not A Slug" },
+      payload: { name: "Bad", slug: "Not A Slug" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -684,7 +687,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Governed", scope: "org" },
+      payload: { name: "Governed" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -695,7 +698,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Ungoverned", scope: "org" },
+      payload: { name: "Ungoverned" },
     });
 
     expect(response.statusCode).toBe(200);

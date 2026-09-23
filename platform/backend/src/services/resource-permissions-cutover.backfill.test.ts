@@ -34,7 +34,7 @@ describe("resource sharing grant backfill", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
+      legacy: { scope: "org" },
     });
     await runMigration();
     const access = { agentId: agent.id, userId: user.id, isAgentAdmin: false };
@@ -79,7 +79,6 @@ describe("resource sharing grant backfill", () => {
         content: "# Instructions",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });
@@ -155,8 +154,8 @@ describe("resource sharing grant backfill", () => {
     const gateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "org",
       authorId: owner.id,
+      legacy: { scope: "org" },
     });
     await runMigration();
     const key = {
@@ -223,7 +222,7 @@ describe("resource sharing grant backfill", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
+      legacy: { scope: "org" },
     });
     await removeObjectPolicies(org.id);
     const key = {
@@ -292,7 +291,7 @@ describe("resource sharing grant backfill", () => {
       organizationId: org.id,
       authorId: owner.id,
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
     });
     await AgentUserModel.syncAgentUsers(gateway.id, [
       { id: reader.id, level: "use" },
@@ -348,12 +347,13 @@ describe("resource sharing grant backfill", () => {
     const publicAgent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
+      legacy: { scope: "org" },
     });
     const restricted = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
+      access: { teams: [] },
+      legacy: { scope: "team" },
     });
     await AgentTeamModel.syncAgentTeams(restricted.id, [team.id]);
     await removeObjectPolicies(org.id);
@@ -518,7 +518,7 @@ describe("resource sharing grant backfill", () => {
     const app = await makeApp({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: false,
     });
     await runMigration();
@@ -574,14 +574,14 @@ describe("resource sharing grant backfill", () => {
       organizationId: org.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
+      legacy: { scope: "team", teams: [team.id] },
     });
     const other = await makeAgent({
       organizationId: org.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     await runMigration();
     const context = {
@@ -743,11 +743,19 @@ describe("resource sharing grant backfill", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: organization.id,
       authorId: owner.id,
-      scope: "team",
-      teams: [
-        { id: readers.id, level: "use" },
-        { id: writers.id, level: "write" },
-      ],
+      access: {
+        teams: [
+          { id: readers.id, level: "use" },
+          { id: writers.id, level: "edit" },
+        ],
+      },
+      legacy: {
+        scope: "team",
+        teams: [
+          { id: readers.id, level: "use" },
+          { id: writers.id, level: "write" },
+        ],
+      },
     });
     const account = await ServiceAccountModel.create({
       organizationId: organization.id,
@@ -896,7 +904,7 @@ describe("resource sharing grant backfill", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
+      legacy: { scope: "org" },
     });
     const model = await ModelModel.create({
       externalId: "openai/open-model",
@@ -951,13 +959,13 @@ describe("resource sharing grant backfill", () => {
     const app = await makeApp({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
     });
     const intact = await makeApp({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
     });
     const [row] = await db
@@ -1008,8 +1016,8 @@ describe("resource sharing grant backfill", () => {
       organizationId: org.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
+      legacy: { scope: "team", teams: [team.id] },
     });
     await AgentUserModel.syncAgentUsers(agent.id, [
       { id: named.id, level: "write" },
@@ -1063,7 +1071,6 @@ describe("resource sharing grant backfill", () => {
         content: "# Instructions",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });

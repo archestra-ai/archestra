@@ -13,7 +13,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Touch Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Touch Test Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -57,7 +57,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Exists Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Exists Test Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -96,7 +96,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Bulk Touch Test Agent",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -152,7 +151,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Multi Conv Touch Agent",
-        teams: [],
       });
 
       const conversation1 = await ConversationModel.create({
@@ -232,7 +230,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Test Agent" });
       const conversation = await ConversationModel.create({
         userId: user.id,
         organizationId: org.id,
@@ -268,7 +266,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Test Agent" });
       const conversation = await ConversationModel.create({
         userId: user.id,
         organizationId: org.id,
@@ -301,7 +299,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Test Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -346,7 +344,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Complex Content Agent",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -398,7 +395,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Content ID Agent", teams: [] });
+      const agent = await makeAgent({ name: "Content ID Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -436,7 +433,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Missing Content Agent",
-        teams: [],
       });
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -462,7 +458,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "AnyId UUID Agent", teams: [] });
+      const agent = await makeAgent({ name: "AnyId UUID Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -499,7 +495,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "AnyId Content Agent",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -537,7 +532,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "AnyId Missing Agent", teams: [] });
+      const agent = await makeAgent({ name: "AnyId Missing Agent" });
       const conversation = await ConversationModel.create({
         userId: user.id,
         organizationId: org.id,
@@ -562,7 +557,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Update Agent", teams: [] });
+      const agent = await makeAgent({ name: "Update Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -601,7 +596,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Multi-part Agent", teams: [] });
+      const agent = await makeAgent({ name: "Multi-part Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -642,7 +637,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Invalid Index Agent", teams: [] });
+      const agent = await makeAgent({ name: "Invalid Index Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -678,7 +673,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Negative Index Agent",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -720,7 +714,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Metadata Agent", teams: [] });
+      const agent = await makeAgent({ name: "Metadata Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -762,7 +756,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Empty String Agent", teams: [] });
+      const agent = await makeAgent({ name: "Empty String Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -793,7 +787,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Non-text Part Agent", teams: [] });
+      const agent = await makeAgent({ name: "Non-text Part Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -846,7 +840,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Edit Part Agent", teams: [] });
+      const agent = await makeAgent({ name: "Edit Part Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -901,7 +895,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Delete After Agent", teams: [] });
+      const agent = await makeAgent({ name: "Delete After Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -979,7 +973,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Most Recent Agent", teams: [] });
+      const agent = await makeAgent({ name: "Most Recent Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -1034,7 +1028,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Non-existent Message Agent",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -1059,7 +1052,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Isolation Agent", teams: [] });
+      const agent = await makeAgent({ name: "Isolation Agent" });
 
       const conversationA = await ConversationModel.create({
         userId: user.id,
@@ -1156,7 +1149,7 @@ describe("MessageModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Timestamp Agent", teams: [] });
+      const agent = await makeAgent({ name: "Timestamp Agent" });
 
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -1212,7 +1205,6 @@ describe("MessageModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Cross-conversation Agent",
-        teams: [],
       });
 
       // Create two separate conversations

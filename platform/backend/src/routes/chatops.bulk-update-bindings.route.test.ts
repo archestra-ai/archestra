@@ -34,13 +34,11 @@ describe("PATCH /api/chatops/bindings", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     targetAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     app = createFastifyInstance();
@@ -78,7 +76,6 @@ describe("PATCH /api/chatops/bindings", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     await ChatOpsChannelBindingModel.update(binding.id, {
       agentId: newerOwner.id,
@@ -107,7 +104,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
@@ -170,7 +166,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const response = await patch({
@@ -190,7 +185,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const gatewayAgent = await makeAgent({
       organizationId,
       agentType: "mcp_gateway",
-      scope: "org",
     });
 
     const response = await patch({
@@ -215,7 +209,7 @@ describe("PATCH /api/chatops/bindings", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId,

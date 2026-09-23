@@ -137,12 +137,12 @@ describe("0395 ex-member personal MCP credential purge", () => {
     await makeMember(member.id, org.id, { role: "member" });
 
     const exMemberApp = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: exMember.id,
       organizationId: org.id,
     });
     const memberApp = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: member.id,
       organizationId: org.id,
     });

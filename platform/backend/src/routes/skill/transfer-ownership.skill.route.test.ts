@@ -3,7 +3,14 @@ import config from "@/config";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, SkillModel } from "@/models";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
 
@@ -28,7 +35,6 @@ describe("POST /api/skills/:id/transfer-ownership", () => {
           name,
           description: "Test handoff",
           content: "# Report",
-          scope: "personal",
         },
         files: [],
       });
@@ -183,9 +189,9 @@ describe("POST /api/skills/:id/transfer-ownership", () => {
         description: "Built in",
         content: "Reports",
         sourceRef: "builtin:report",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     expect((await transfer(row?.id ?? "")).statusCode).toBe(400);
   });

@@ -29,16 +29,13 @@ import type { ResourceVisibilityScope } from "@/types/visibility";
  */
 export async function createAppBacking(params: {
   app: { id: string; name: string; description: string | null };
-  scope: ResourceVisibilityScope;
   environmentId: string | null;
   userId: string;
   organizationId: string;
-  teamIds: string[];
   /** The app's display icon; the catalog row is where an app's icon lives. */
   icon?: string | null;
 }): Promise<void> {
-  const { app, scope, environmentId, icon, userId, organizationId, teamIds } =
-    params;
+  const { app, environmentId, icon, userId, organizationId } = params;
   let catalog: { id: string } | undefined;
   let server: { id: string } | undefined;
   try {
@@ -47,11 +44,12 @@ export async function createAppBacking(params: {
         name: app.name,
         description: app.description ?? null,
         serverType: "app",
-        scope,
+        // The retired visibility column. Who reaches the app is its grants,
+        // written with the app row.
+        scope: "personal",
         environmentId,
         icon: icon ?? null,
         requiresAuth: false,
-        ...(scope === "team" && teamIds.length > 0 ? { teams: teamIds } : {}),
       },
       { organizationId, authorId: userId },
     );

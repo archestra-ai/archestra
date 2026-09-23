@@ -132,7 +132,7 @@ describe("agent version routes", () => {
       // team/author-filtered re-fetch does not
       const agent = await makeAgent({
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
       mockChecker({ canRead: true, isAdmin: false });

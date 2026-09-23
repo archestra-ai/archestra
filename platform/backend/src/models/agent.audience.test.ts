@@ -24,7 +24,6 @@ describe("agent audience from grants", () => {
       organizationId: org.id,
       agentType: "agent",
       authorId: admin.id,
-      scope: "org",
     });
     await replaceGrants(org.id, agent.id, [
       { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
@@ -70,7 +69,6 @@ describe("agent audience from grants", () => {
       organizationId: org.id,
       agentType: "agent",
       authorId: author.id,
-      scope: "org",
     });
     await replaceGrants(org.id, agent.id, []);
 

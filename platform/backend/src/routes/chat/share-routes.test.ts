@@ -71,7 +71,7 @@ describe("shared chats", () => {
     await makeMember(invitedUser.id, organizationId);
     await makeMember(outsider.id, organizationId);
 
-    const agent = await makeAgent({ organizationId, teams: [] });
+    const agent = await makeAgent({ organizationId });
     const conversation = await ConversationModel.create({
       userId: owner.id,
       organizationId,
@@ -111,7 +111,7 @@ describe("shared chats", () => {
     await makeMember(owner.id, organizationId);
     await makeMember(viewer.id, organizationId);
 
-    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+    const sharedAgent = await makeAgent({ organizationId });
     const conversation = await ConversationModel.create({
       userId: owner.id,
       organizationId,
@@ -162,7 +162,7 @@ describe("shared chats", () => {
     await makeMember(owner.id, organizationId);
     await makeMember(viewer.id, organizationId);
 
-    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+    const sharedAgent = await makeAgent({ organizationId });
     const project = await projectService.create({
       organizationId,
       userId: owner.id,
@@ -210,7 +210,7 @@ describe("shared chats", () => {
     await makeMember(owner.id, organizationId);
     await makeMember(viewer.id, organizationId);
 
-    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+    const sharedAgent = await makeAgent({ organizationId });
     // Owner-only project: the conversation is shared, but the project is not,
     // so the fork must not attach to a project the viewer cannot see (which
     // would be invisible and unmanageable to them).
@@ -257,11 +257,10 @@ describe("shared chats", () => {
     const ownerOnlyTeam = await makeTeam(organizationId, owner.id, {
       name: "Owner Only",
     });
-    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+    const sharedAgent = await makeAgent({ organizationId });
     const restrictedAgent = await makeAgent({
       organizationId,
-      scope: "team",
-      teams: [ownerOnlyTeam.id],
+      access: { teams: [ownerOnlyTeam.id] },
     });
     const conversation = await ConversationModel.create({
       userId: owner.id,

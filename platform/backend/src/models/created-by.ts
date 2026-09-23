@@ -26,8 +26,6 @@ class CreatedByModel {
     K extends "authorId" | "createdBy" | "uploadedBy" | "ownerId",
     const T extends {
       organizationId?: string;
-      scope?: string;
-      visibility?: string;
     } & Partial<Record<K, string | null>>,
   >({
     data,
@@ -50,12 +48,6 @@ class CreatedByModel {
         [userIdField]: actorId,
         createdByServiceAccountId: null,
       };
-    }
-    if (data.scope === "personal" || data.visibility === "private") {
-      throw new ApiError(
-        400,
-        "Service accounts cannot create personal resources. Use org or team scope.",
-      );
     }
     const serviceAccountId = actorId.slice(SERVICE_ACCOUNT_PREFIX.length);
     const [account] = await (transaction ?? db)

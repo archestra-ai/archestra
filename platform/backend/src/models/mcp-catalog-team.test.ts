@@ -18,9 +18,9 @@ test("getUserAccessibleCatalogIds returns team items to team members", async ({
   await makeTeamMember(team.id, member.id);
 
   const teamCatalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [team.id] },
     organizationId: org.id,
-    teams: [team.id],
   });
 
   const memberIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
@@ -48,7 +48,7 @@ test("getUserAccessibleCatalogIds returns all items for admin", async ({
   const org = await makeOrganization({ legacyPermissions: true });
 
   const personalCatalog = await makeInternalMcpCatalog({
-    scope: "personal",
+    access: "personal",
     organizationId: org.id,
     authorId: author.id,
   });
@@ -98,18 +98,17 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
   await makeTeamMember(team.id, teamMember.id);
 
   const orgCatalog = await makeInternalMcpCatalog({
-    scope: "org",
     organizationId: org.id,
   });
   const personalCatalog = await makeInternalMcpCatalog({
-    scope: "personal",
+    access: "personal",
     organizationId: org.id,
     authorId: author.id,
   });
   const teamCatalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [team.id] },
     organizationId: org.id,
-    teams: [team.id],
   });
 
   // Org scope: everyone has access
@@ -172,7 +171,6 @@ test("userHasCatalogAccess denies org-scoped catalog items from other organizati
   const org = await makeOrganization({ legacyPermissions: true });
   const otherOrg = await makeOrganization({ legacyPermissions: true });
   const otherOrgCatalog = await makeInternalMcpCatalog({
-    scope: "org",
     organizationId: otherOrg.id,
   });
 
@@ -229,9 +227,9 @@ test("syncCatalogTeams replaces team assignments", async ({
   const team2 = await makeTeam(org.id, user.id);
 
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team1.id] },
+    legacy: { scope: "team", teams: [team1.id] },
     organizationId: org.id,
-    teams: [team1.id],
   });
 
   let teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id);
@@ -260,9 +258,9 @@ test("syncCatalogTeams stores an explicit level and reads it back", async ({
   const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [team.id] },
     organizationId: org.id,
-    teams: [team.id],
   });
 
   await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [
@@ -286,9 +284,9 @@ test("a team assigned with a bare id defaults to write", async ({
   const team = await makeTeam(org.id, user.id);
   // A bare id carries no level, so it takes the column default.
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [team.id] },
     organizationId: org.id,
-    teams: [team.id],
   });
 
   const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
@@ -307,9 +305,9 @@ test("syncCatalogTeams preserves a stored level when re-synced with a bare id", 
   const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [{ id: team.id, level: "use" }] },
     organizationId: org.id,
-    teams: [{ id: team.id, level: "use" }],
   });
 
   // A level-less id must not reset the stored `use` back to the NULL default.
@@ -331,9 +329,9 @@ test("syncCatalogTeams applies an explicit level over the stored one", async ({
   const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [team.id] },
+    legacy: { scope: "team", teams: [{ id: team.id, level: "use" }] },
     organizationId: org.id,
-    teams: [{ id: team.id, level: "use" }],
   });
 
   await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [
@@ -357,9 +355,9 @@ test("syncCatalogTeams honors a mixed list, preserving each team's stored level"
   const keep = await makeTeam(org.id, user.id);
   const added = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
-    scope: "team",
+    access: { teams: [keep.id] },
+    legacy: { scope: "team", teams: [{ id: keep.id, level: "use" }] },
     organizationId: org.id,
-    teams: [{ id: keep.id, level: "use" }],
   });
 
   // `keep` echoed as a bare id (preserve `use`), `added` as a new object.
@@ -388,7 +386,6 @@ test("a catalog item is in front of the organization by its grants, not its reti
   const item = await makeInternalMcpCatalog({
     organizationId: org.id,
     authorId: author.id,
-    scope: "org",
   });
   const key = {
     organizationId: org.id,

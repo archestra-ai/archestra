@@ -40,7 +40,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const first = await createRemoteAgent(
       ctx.organizationId,
@@ -110,7 +109,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const remote = await createRemoteAgent(
       ctx.organizationId,
@@ -155,7 +153,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
       environmentId: environment.id,
     });
     const remote = await createRemoteAgent(
@@ -189,7 +186,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const disabled = await createRemoteAgent(
       ctx.organizationId,
@@ -235,7 +231,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: foreignOrganization.id,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const getResponse = await ctx.app.inject({
@@ -268,7 +263,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const remote = await createRemoteAgent(
       ctx.organizationId,
@@ -308,7 +302,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const first = await createRemoteAgent(ctx.organizationId, "Shared Name");
     const second = await createRemoteAgent(ctx.organizationId, "shared-name");
@@ -342,13 +335,11 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const localTarget = await makeAgent({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
       name: "Shared Delegate",
     });
     const remote = await createRemoteAgent(
@@ -386,7 +377,6 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
       accessAllSubagents: true,
     });
     const localTarget = await makeAgent({
@@ -394,7 +384,6 @@ describe("outbound A2A subagent assignments", () => {
       authorId: ctx.user.id,
       name: "Local Auto Target",
       agentType: "agent",
-      scope: "org",
     });
     const assignedRemote = await createRemoteAgent(
       ctx.organizationId,
@@ -450,7 +439,7 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: viewer.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const remote = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -489,7 +478,7 @@ describe("outbound A2A subagent assignments", () => {
       organizationId: ctx.organizationId,
       authorId: manager.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const hidden = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,

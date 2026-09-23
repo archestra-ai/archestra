@@ -20,7 +20,6 @@ import {
   AgentModel,
   InteractionModel,
   LlmOauthClientModel,
-  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OAuthAccessTokenModel,
@@ -29,7 +28,14 @@ import {
 } from "@/models";
 import authRoutes from "@/routes/auth";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -164,7 +170,6 @@ async function createModelRouterVirtualKey(params: {
     secret.id,
     {
       provider: params.provider,
-      scope: owner ? "personal" : "org",
       userId: owner?.id ?? null,
     },
   );
@@ -173,8 +178,9 @@ async function createModelRouterVirtualKey(params: {
     organizationId: params.organizationId,
     name: `${params.provider} model router virtual key`,
     expiresAt: params.expiresAt,
-    scope: owner ? "personal" : "org",
     authorId: owner?.id ?? null,
+    // An owner's key is theirs alone; without one it serves the organization.
+    ...accessGrants(owner ? "personal" : "org"),
     providerApiKeys: [
       {
         provider: params.provider,
@@ -1551,16 +1557,15 @@ describe("model router proxy routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
     const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
       provider,
-      scope: "personal",
       userId: owner.id,
     });
     await linkAllProviderModelsToApiKey(provider, chatApiKey.id);
     const { value } = await VirtualApiKeyModel.create({
       organizationId: organization.id,
       name: "legacy-shared-copilot-router",
-      scope: "org",
       authorId: owner.id,
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
+      ...accessGrants("org"),
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -1722,6 +1727,7 @@ describe("model router proxy routes", () => {
     makeOrganization,
     makeSecret,
     makeUser,
+    makeLlmProviderApiKey,
   }) => {
     const app = createFastifyApp();
     await app.register(modelRouterProxyRoutes);
@@ -1734,36 +1740,35 @@ describe("model router proxy routes", () => {
     const olderSecret = await makeSecret({
       secret: { apiKey: "sk-older-openai" },
     });
-    const olderKey = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
-      secretId: olderSecret.id,
-      name: "Older User OpenAI Key",
-      provider,
-      scope: "personal",
-      userId: user.id,
-      teamId: null,
-      isPrimary: false,
-    });
+    const olderKey = await makeLlmProviderApiKey(
+      organization.id,
+      olderSecret.id,
+      {
+        name: "Older User OpenAI Key",
+        provider,
+        userId: user.id,
+        isPrimary: false,
+      },
+    );
     await linkAllProviderModelsToApiKey(provider, olderKey.id);
     const primarySecret = await makeSecret({
       secret: { apiKey: "sk-primary-openai" },
     });
-    const primaryKey = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
-      secretId: primarySecret.id,
-      name: "Primary User OpenAI Key",
-      provider,
-      scope: "personal",
-      userId: user.id,
-      teamId: null,
-      isPrimary: true,
-    });
+    const primaryKey = await makeLlmProviderApiKey(
+      organization.id,
+      primarySecret.id,
+      {
+        name: "Primary User OpenAI Key",
+        provider,
+        userId: user.id,
+        isPrimary: true,
+      },
+    );
     await linkAllProviderModelsToApiKey(provider, primaryKey.id);
     const agent = await makeAgent({
       organizationId: organization.id,
       name: "User OAuth Model Router Agent",
       agentType: "llm_proxy",
-      scope: "org",
     });
     const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
     await OAuthClientModel.upsertFromCimd({
@@ -1917,6 +1922,7 @@ describe("model router proxy routes", () => {
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "regular-provider-vk",
+      ...accessGrants("org"),
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -2031,6 +2037,7 @@ describe("model router proxy routes", () => {
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: chatApiKey.id },
       ],
+      ...accessGrants("org"),
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -2097,6 +2104,7 @@ describe("model router proxy routes", () => {
     const { value } = await VirtualApiKeyModel.create({
       name: "model-router-gemini-system-vk",
       providerApiKeys: [{ provider: "gemini", providerApiKeyId: systemKey.id }],
+      ...accessGrants("org"),
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -2248,6 +2256,7 @@ describe("model router proxy routes", () => {
         { provider: "openai", providerApiKeyId: openaiKey.id },
         { provider: "groq", providerApiKeyId: groqKey.id },
       ],
+      ...accessGrants("org"),
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -2491,6 +2500,7 @@ describe("model router proxy routes", () => {
         { provider: "openai", providerApiKeyId: openaiKey.id },
         { provider: "groq", providerApiKeyId: groqKey.id },
       ],
+      ...accessGrants("org"),
     });
 
     const response = await app.inject({

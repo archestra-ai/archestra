@@ -38,7 +38,6 @@ import {
   AppModel,
   McpServerModel,
   McpToolCallModel,
-  SkillModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -380,6 +379,7 @@ describe("MCP Gateway (stateless mode)", () => {
   test("serves a skill:// read only while the skills surface is enabled", async ({
     makeAgent,
     makeOrganization,
+    makeSkill,
   }) => {
     // The read half of the reachability check above. `resources/read` is an
     // ordinary SDK request whose handler branches on the flag, so an inverted
@@ -396,15 +396,11 @@ describe("MCP Gateway (stateless mode)", () => {
       teamId: null,
       isOrganizationToken: true,
     });
-    await SkillModel.createWithFiles({
-      skill: {
-        organizationId: org.id,
-        name: "reachable-skill",
-        description: "Served over the gateway",
-        content: "# Instructions",
-        scope: "org",
-      },
-      files: [],
+    await makeSkill(org.id, {
+      name: "reachable-skill",
+      description: "Served over the gateway",
+      content: "# Instructions",
+      access: "org",
     });
 
     const readManifest = async () =>
@@ -499,13 +495,11 @@ describe("MCP Gateway (stateless mode)", () => {
     const target = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
       name: "Gateway Auto Target",
     });
     const excluded = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
       name: "Gateway Auto Excluded",
     });
     await AgentExcludedSubagentModel.replaceForAgent(caller.id, [excluded.id]);
@@ -543,6 +537,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeMember,
     makeOrganization,
     makeUser,
+    makeSkill,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -556,37 +551,28 @@ describe("MCP Gateway (stateless mode)", () => {
     const target = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
       name: "Gateway Skill Target",
     });
 
-    await SkillModel.createWithFiles({
-      skill: {
-        organizationId: org.id,
-        name: "gateway-delegated-skill",
-        description: "Runs in a subagent.",
-        content: "Do the thing.",
-        agentName: target.name,
-        metadata: {},
-        sourceType: "manual",
-        scope: "org",
-      },
-      files: [],
+    await makeSkill(org.id, {
+      name: "gateway-delegated-skill",
+      description: "Runs in a subagent.",
+      content: "Do the thing.",
+      agentName: target.name,
+      metadata: {},
+      sourceType: "manual",
+      access: "org",
     });
     // A skill designating a nonexistent agent: never advertised, and its
     // dispatch fails inside the skill-delegation resolver.
-    await SkillModel.createWithFiles({
-      skill: {
-        organizationId: org.id,
-        name: "gateway-orphan-skill",
-        description: "Designates a missing agent.",
-        content: "Do the thing.",
-        agentName: "Ghost Bot",
-        metadata: {},
-        sourceType: "manual",
-        scope: "org",
-      },
-      files: [],
+    await makeSkill(org.id, {
+      name: "gateway-orphan-skill",
+      description: "Designates a missing agent.",
+      content: "Do the thing.",
+      agentName: "Ghost Bot",
+      metadata: {},
+      sourceType: "manual",
+      access: "org",
     });
 
     const token = await UserTokenModel.create(user.id, org.id);
@@ -645,7 +631,6 @@ describe("MCP Gateway (stateless mode)", () => {
       organizationId: org.id,
       name: "Bug Tracker",
       serverType: "app",
-      scope: "org",
     });
     // The launch tool keeps its unique, id-suffixed slug name and stores no title.
     const launchTool = await makeTool({
@@ -664,7 +649,6 @@ describe("MCP Gateway (stateless mode)", () => {
       name: "Linear",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const remoteTool = await makeTool({
       catalogId: remoteCatalog.id,
@@ -849,7 +833,6 @@ describe("MCP Gateway (stateless mode)", () => {
     const disabledApp = await makeApp({
       organizationId: org.id,
       authorId: author.id,
-      scope: "org",
       enabled: false,
     });
     const server = mustExist(
@@ -924,7 +907,6 @@ describe("MCP Gateway (stateless mode)", () => {
     await makeApp({
       organizationId: org.id,
       authorId: author.id,
-      scope: "org",
       enabled: true,
     });
     const gatewayAgent = await makeAgent({
@@ -1561,8 +1543,10 @@ describe("MCP Gateway (stateless mode)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
+      // Tool-policy context reads the agent's team rows (agent_team), which
+      // creation no longer writes; seed them as a pre-upgrade agent had them.
+      legacy: { scope: "team", teams: [team.id] },
       toolExposureMode: "search_and_run_only",
     });
     await makeAgentTool(agent.id, tool.id);

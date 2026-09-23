@@ -73,7 +73,6 @@ describe("authenticated agent list organization scope", () => {
           name,
           agentType: "agent",
           organizationId: organization.id,
-          scope: "org",
           llmApiKeyId: localKey.id,
         }),
       );
@@ -82,7 +81,6 @@ describe("authenticated agent list organization scope", () => {
       name: "Unrelated assistant",
       agentType: "agent",
       organizationId: unrelatedOrganization.id,
-      scope: "org",
       llmApiKeyId: unrelatedKey.id,
     });
 

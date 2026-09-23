@@ -139,7 +139,7 @@ describe("project routes — audit trail", () => {
     makeInternalAgent,
   }) => {
     const project = await makeProject("audited-default-agent");
-    const agent = await makeInternalAgent({ organizationId, scope: "org" });
+    const agent = await makeInternalAgent({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",

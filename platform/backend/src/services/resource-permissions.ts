@@ -100,32 +100,6 @@ export class ResourcePermissions {
     await ResourcePermissions.validateRecipients(params);
   }
 
-  /**
-   * The grants a request-driven creation starts with.
-   *
-   * Publishing to the whole organization is a delegation act, and
-   * {@link canDelegateScopedPermissions} has to bound it. The audience
-   * `ResourcePermissionPolicyModel.createInitial` derives from the retired
-   * `scope` field skips that check, so a caller holding no authority to grant
-   * anything could publish a new resource organization-wide simply by posting
-   * the field. Explicit grants were validated, implicit ones were not, and that
-   * asymmetry is the hole: a route or tool asking for organization visibility
-   * starts the resource with the creator alone.
-   *
-   * Only that audience is suppressed. Team and named-user sharing reach
-   * recipients the create paths already validate, and creation is the one path
-   * that still honours those fields, so they keep deriving — passing a blanket
-   * empty list instead would silently drop named sharing for every client that
-   * is not the UI.
-   */
-  static grantsForCreation(params: {
-    grants?: ResourcePermissionGrant[];
-    visibility?: string | null;
-  }): ResourcePermissionGrant[] | undefined {
-    if (params.grants !== undefined) return params.grants;
-    return params.visibility === "org" ? [] : undefined;
-  }
-
   /** Load scoped capabilities once for a request that touches several targets. */
   static async resolveAll(params: {
     organizationId: string;

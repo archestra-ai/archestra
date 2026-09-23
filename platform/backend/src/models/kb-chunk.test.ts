@@ -331,7 +331,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
       });
       const allowedDoc = await KbDocumentModel.create(
@@ -391,7 +391,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
@@ -430,7 +430,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
@@ -488,7 +488,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
       });
       const alphaDoc = await KbDocumentModel.create(
@@ -655,7 +655,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         ftsLanguage: "german",
       });
       const doc = await KbDocumentModel.create(
@@ -691,7 +691,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
@@ -724,11 +724,11 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const german = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         ftsLanguage: "german",
       });
       const english = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
 
       const germanDoc = await KbDocumentModel.create(
@@ -780,7 +780,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
@@ -812,7 +812,7 @@ describe("KbChunkModel", () => {
       const org = await makeOrganization({ legacyPermissions: true });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
@@ -907,7 +907,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await seedCorpus(connector.id, org.id);
 
@@ -928,7 +928,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const { current, legacy } = await seedCorpus(connector.id, org.id);
 
@@ -952,7 +952,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const { current, otherSpace } = await seedCorpus(connector.id, org.id);
 
@@ -976,7 +976,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const { current } = await seedCorpus(connector.id, org.id);
 
@@ -999,7 +999,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const { current, legacy, otherSpace } = await seedCorpus(
       connector.id,
@@ -1029,7 +1029,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await seedCorpus(connector.id, org.id);
 
@@ -1051,7 +1051,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await seedCorpus(connector.id, org.id);
 
@@ -1073,7 +1073,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     // Shapes real connectors write: a JSON number and a JSON boolean, neither
@@ -1133,7 +1133,7 @@ describe("KbChunkModel document metadata filtering", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const readable = await KbDocumentModel.create(
       createDocumentData(connector.id, org.id, {

@@ -45,7 +45,7 @@ describe("catalog object grants", () => {
     const ownedApp = await makeApp({
       organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
     });
     if (!ownedApp.mcpServerId) throw new Error("Missing app backing server");
@@ -223,7 +223,6 @@ describe("catalog object grants", () => {
           name: "created-with-grants",
           serverType: "remote",
           serverUrl: "https://example.com/mcp",
-          scope: "personal",
         },
         initialGrants: grants,
       },

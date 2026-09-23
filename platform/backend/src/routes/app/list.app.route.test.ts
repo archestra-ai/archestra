@@ -42,7 +42,6 @@ describe("GET /api/apps", () => {
   test("returns owned apps with pagination metadata", async ({ makeApp }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       name: "Owned One",
     });
 
@@ -59,40 +58,33 @@ describe("GET /api/apps", () => {
   }) => {
     const percentName = await makeApp({
       organizationId,
-      scope: "org",
       name: "100% Ready",
     });
     const percentDescription = await makeApp({
       organizationId,
-      scope: "org",
       name: "Percent Description",
       description: "Contains a % marker",
     });
     const underscoreName = await makeApp({
       organizationId,
-      scope: "org",
       name: "Under_score Name",
     });
     const underscoreDescription = await makeApp({
       organizationId,
-      scope: "org",
       name: "Underscore Description",
       description: "Contains an _ marker",
     });
     const backslashName = await makeApp({
       organizationId,
-      scope: "org",
       name: "Back\\slash Name",
     });
     const backslashDescription = await makeApp({
       organizationId,
-      scope: "org",
       name: "Backslash Description",
       description: "Contains a \\ marker",
     });
     await makeApp({
       organizationId,
-      scope: "org",
       name: "Plain App",
       description: "Contains no special marker",
     });
@@ -146,7 +138,6 @@ describe("GET /api/apps", () => {
         description: params.catalogDescription,
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -226,9 +217,10 @@ describe("GET /api/apps", () => {
     await makeTeamMember(team.id, user.id);
     const owned = await makeApp({
       organizationId,
-      scope: "team",
+      access: { teams: [team.id] },
+      // The response's team list still reads the retired backing-catalog rows.
+      legacy: { scope: "team", teams: [team.id] },
       authorId: user.id,
-      teamIds: [team.id],
     });
 
     const res = await app.inject({
@@ -247,13 +239,11 @@ describe("GET /api/apps", () => {
   }) => {
     const withIcon = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
       icon: "🚀",
     });
     const withoutIcon = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
     });
 
@@ -276,7 +266,6 @@ describe("GET /api/apps", () => {
   }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       name: "My Owned App",
     });
     const catalog = await makeInternalMcpCatalog({
@@ -285,7 +274,6 @@ describe("GET /api/apps", () => {
       icon: "🕒",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -339,7 +327,6 @@ describe("GET /api/apps", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -389,7 +376,6 @@ describe("GET /api/apps", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
@@ -423,7 +409,6 @@ describe("GET /api/apps", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -463,7 +448,6 @@ describe("GET /api/apps", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -501,7 +485,6 @@ describe("GET /api/apps", () => {
       name: "Plain",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -533,13 +516,13 @@ describe("GET /api/apps", () => {
     await makeMember(otherAuthor.id, organizationId);
     const foreignPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
       name: "Someone Else's Personal App",
     });
     const ownPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       name: "My Personal App",
     });
@@ -570,13 +553,13 @@ describe("GET /api/apps", () => {
     await makeMember(otherAuthor.id, organizationId);
     const foreignPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
       name: "Someone Else's Personal App",
     });
     const ownPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       name: "My Personal App",
     });
@@ -607,13 +590,13 @@ describe("GET /api/apps", () => {
     await makeMember(ada.id, organizationId);
     const gracesApp = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: grace.id,
       name: "Grace App",
     });
     const adasApp = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: ada.id,
       name: "Ada App",
     });

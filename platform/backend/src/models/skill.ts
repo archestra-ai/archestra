@@ -299,6 +299,11 @@ class SkillModel {
      * Omit for management surfaces that list every environment.
      */
     environmentId?: string | null;
+    /**
+     * Only skills published to the whole organization for `use` by their
+     * grants — what a gateway serves in Auto mode.
+     */
+    publishedToOrganization?: boolean;
     scope?: ResourceVisibilityScope;
     /** Restrict team-scoped results to skills assigned to these teams. */
     teamIds?: string[];
@@ -345,6 +350,11 @@ class SkillModel {
     publishableOverMcp?: boolean;
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
+    /**
+     * Only skills published to the whole organization for `use` by their
+     * grants — what a gateway serves in Auto mode.
+     */
+    publishedToOrganization?: boolean;
     scope?: ResourceVisibilityScope;
     teamIds?: string[];
     authorIds?: string[];
@@ -801,16 +811,16 @@ class SkillModel {
    * Returns `null` when the author already has a live skill of that name
    * (`skills_org_author_name_idx`). The insert is atomic (`ON CONFLICT DO
    * NOTHING`), so this is race-free against concurrent creates.
-   * When `teamIds` / `environmentIds` are supplied the junction rows are
-   * inserted in the same transaction, so a failed assignment cannot leave a
-   * scoped skill orphaned.
+   * When `environmentIds` are supplied the junction rows are inserted in the
+   * same transaction, so a failed assignment cannot leave a restricted skill
+   * unrestricted. Who can reach the skill is its initial grants alone.
    */
   static async createWithFiles(params: {
-    skill: InsertSkill;
+    skill: Omit<InsertSkill, "scope">;
     initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
     files: Omit<InsertSkillFile, "skillId">[];
-    teamIds?: string[];
-    userIds?: string[];
     /** Environments the skill is restricted to; empty/omitted = every environment. */
     environmentIds?: string[];
     /**
@@ -826,7 +836,6 @@ class SkillModel {
           await CreatedByModel.forInsert({
             data: {
               ...params.skill,
-              scope: params.skill.scope ?? "personal",
               latestVersion: 1,
               // Publication artifacts are derived from the columns written in this
               // same statement, so a skill is publishable from the moment it exists.
@@ -850,9 +859,7 @@ class SkillModel {
         scope: skill.id,
         grants: params.initialPermissionGrants,
         authorId: skill.authorId,
-        visibility: skill.scope,
-        teams: params.teamIds?.map((id) => ({ id })),
-        users: params.userIds,
+        publishToOrganization: params.publishToOrganization,
       });
       // SPDX-SnippetEnd
 
@@ -869,14 +876,6 @@ class SkillModel {
             }),
           })),
         );
-      }
-
-      if (params.teamIds && params.teamIds.length > 0) {
-        await tx
-          .insert(schema.skillTeamsTable)
-          .values(
-            params.teamIds.map((teamId) => ({ skillId: skill.id, teamId })),
-          );
       }
 
       if (params.environmentIds && params.environmentIds.length > 0) {
@@ -1692,6 +1691,7 @@ function buildOrgFilters(params: {
   excludedSkillIds?: string[];
   publishableOverMcp?: boolean;
   environmentId?: string | null;
+  publishedToOrganization?: boolean;
   scope?: ResourceVisibilityScope;
   teamIds?: string[];
   authorIds?: string[];
@@ -1726,6 +1726,20 @@ function buildOrgFilters(params: {
     ...(params.environmentId !== undefined
       ? [skillInEnvironmentPredicate(params.environmentId)]
       : []),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ...(params.publishedToOrganization
+      ? [
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId: params.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            action: "use",
+          }),
+        ]
+      : []),
+    // SPDX-SnippetEnd
     ...(params.scope ? [eq(schema.skillsTable.scope, params.scope)] : []),
     ...(params.teamIds?.length
       ? [

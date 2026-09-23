@@ -340,8 +340,7 @@ describe("MCP OAuth client gateway authorization", () => {
     const gateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
@@ -386,8 +385,7 @@ describe("MCP OAuth client gateway authorization", () => {
     const gateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     // The client is scoped to that gateway, so authenticating through it grants
     // access.
@@ -432,14 +430,12 @@ describe("MCP OAuth client gateway authorization", () => {
     const grantedGateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const otherGateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,

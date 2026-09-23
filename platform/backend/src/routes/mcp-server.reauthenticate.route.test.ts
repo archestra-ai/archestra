@@ -168,7 +168,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });

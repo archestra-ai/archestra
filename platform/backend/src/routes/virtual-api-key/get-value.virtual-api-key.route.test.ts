@@ -3,7 +3,14 @@ import { vi } from "vitest";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -51,7 +58,6 @@ describe("GET /api/llm-virtual-keys/:id/value", () => {
       organizationId,
       name: "My passthrough",
       keyType: "passthrough",
-      scope: "personal",
       authorId: user.id,
     });
 
@@ -79,11 +85,11 @@ describe("GET /api/llm-virtual-keys/:id/value", () => {
     const { virtualKey } = await VirtualApiKeyModel.create({
       organizationId,
       name: "Org shared key",
-      scope: "org",
       authorId: author.id,
       providerApiKeys: [
         { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
+      ...accessGrants("org"),
     });
 
     const response = await app.inject({

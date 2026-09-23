@@ -14,15 +14,22 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
-  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/observability");
@@ -64,14 +71,16 @@ describe("agent routes", () => {
     await app.close();
   });
 
-  test("lists configured provider names and filters before pagination", async () => {
-    const selectedKey = await LlmProviderApiKeyModel.create({
+  test("lists configured provider names and filters before pagination", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const selectedKey = await makeLlmProviderApiKey(organizationId, null, {
       name: "Operations provider",
       provider: "openai",
-      organizationId,
       userId: user.id,
-      scope: "org",
       isPrimary: true,
+      access: "org",
     });
     const model = await ModelModel.create({
       externalId: "openai/gpt-4o",
@@ -81,20 +90,16 @@ describe("agent routes", () => {
       outputModalities: null,
     });
     for (const name of ["Alpha assistant", "Beta assistant"]) {
-      await AgentModel.create({
+      await makeAgent({
         name,
         organizationId,
-        scope: "org",
-        teams: [],
         llmApiKeyId: selectedKey.id,
         modelId: model.id,
       });
     }
-    const unconfigured = await AgentModel.create({
+    const unconfigured = await makeAgent({
       name: "Default assistant",
       organizationId,
-      scope: "org",
-      teams: [],
     });
     const response = await app.inject({
       method: "GET",
@@ -123,11 +128,9 @@ describe("agent routes", () => {
     });
 
     await OrganizationModel.patch(organizationId, { defaultModelId: model.id });
-    await AgentModel.create({
+    await makeAgent({
       name: "Legacy model-only assistant",
       organizationId,
-      scope: "org",
-      teams: [],
       modelId: model.id,
     });
     const inheritedResponse = await app.inject({
@@ -155,7 +158,6 @@ describe("agent routes", () => {
       name: string;
       agentType: "mcp_gateway";
       organizationId: string;
-      scope: "org";
       authorId: string;
       isPersonalGateway: boolean;
     }) => Promise<{ id: string }>,
@@ -165,7 +167,6 @@ describe("agent routes", () => {
       name: `${agentType} Delete ${suffix}`,
       agentType,
       organizationId,
-      scope: "org",
       authorId: user.id,
       isPersonalGateway: false,
     });
@@ -220,11 +221,7 @@ describe("agent routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
-        payload: {
-          name,
-          scope: "personal",
-          teams: [],
-        },
+        payload: { name },
       });
 
       expect(response.statusCode).toBe(200);
@@ -244,8 +241,6 @@ describe("agent routes", () => {
         payload: {
           name,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           suggestedPrompts: [
             { summaryTitle: "Quick start", prompt: "Get me started" },
           ],
@@ -284,8 +279,6 @@ describe("agent routes", () => {
           payload: {
             name: `Background Agent ${crypto.randomUUID().slice(0, 8)}`,
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime,
           },
         });
@@ -328,7 +321,7 @@ describe("agent routes", () => {
           organizationId,
           authorId: user.id,
           agentType: "agent",
-          scope: "personal",
+          access: "personal",
           llmApiKeyId: providerKey.id,
           modelId: model.id,
         });
@@ -397,8 +390,6 @@ describe("agent routes", () => {
           payload: {
             name: `Codex Gemini ${crypto.randomUUID().slice(0, 8)}`,
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             llmApiKeyId: providerKey.id,
             modelId: model.id,
             runtime: {
@@ -454,7 +445,7 @@ describe("agent routes", () => {
           organizationId,
           authorId: user.id,
           agentType: "agent",
-          scope: "personal",
+          access: "personal",
           llmApiKeyId: providerKey.id,
           modelId: unlinkedModel.id,
         });
@@ -497,8 +488,6 @@ describe("agent routes", () => {
           payload: {
             name: `Disabled Background Agent ${crypto.randomUUID().slice(0, 8)}`,
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -534,8 +523,6 @@ describe("agent routes", () => {
           payload: {
             name: `Gateway ${crypto.randomUUID().slice(0, 8)}`,
             agentType: "mcp_gateway",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -573,8 +560,6 @@ describe("agent routes", () => {
           payload: {
             name: `Privileged Background Agent ${crypto.randomUUID().slice(0, 8)}`,
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:1.0.0",
               command: null,
@@ -608,8 +593,6 @@ describe("agent routes", () => {
         payload: {
           name: `Half Pair Agent ${crypto.randomUUID().slice(0, 8)}`,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           modelId: crypto.randomUUID(),
         },
       });
@@ -624,8 +607,6 @@ describe("agent routes", () => {
         payload: {
           name: `Half Pair Agent ${crypto.randomUUID().slice(0, 8)}`,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           llmApiKeyId: crypto.randomUUID(),
         },
       });
@@ -640,8 +621,6 @@ describe("agent routes", () => {
         payload: {
           name: `Search Only Agent ${crypto.randomUUID().slice(0, 8)}`,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           toolExposureMode: "search_and_run_only",
         },
       });
@@ -651,18 +630,28 @@ describe("agent routes", () => {
       expect(agent.toolExposureMode).toBe("search_and_run_only");
     });
 
-    test("rejects a team-scoped agent with no teams", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name: `Orphan Team Agent ${crypto.randomUUID().slice(0, 8)}`,
-          scope: "team",
-          teams: [],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
+    test("refuses the retired scope, teams and users fields", async () => {
+      // Who can reach a new agent is its initialGrants alone; a caller still
+      // sending the old fields gets a 400 rather than a narrower agent.
+      const name = `Retired Sharing Agent ${crypto.randomUUID().slice(0, 8)}`;
+      for (const sharing of [
+        { scope: "org" },
+        { teams: [crypto.randomUUID()] },
+        { users: [user.id] },
+      ]) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: { name, ...sharing },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+      expect(
+        await db
+          .select()
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.name, name)),
+      ).toEqual([]);
     });
 
     test("creates a team-scoped agent when a team is assigned", async ({
@@ -675,14 +664,27 @@ describe("agent routes", () => {
         url: "/api/agents",
         payload: {
           name: `Team Agent ${crypto.randomUUID().slice(0, 8)}`,
-          scope: "team",
-          teams: [team.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: team.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
-      expect(agent.teams.map((t: { id: string }) => t.id)).toEqual([team.id]);
+      // The team reaches the agent through the grant the create wrote.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: agent.agentType === "agent" ? "agent" : "mcpGateway",
+        scope: agent.id,
+      });
+      expect(policy?.grants).toContainEqual({
+        subject: { type: "team", id: team.id },
+        actions: ["read", "use"],
+      });
     });
 
     test("rejects creating an llm_proxy agent", async () => {
@@ -692,8 +694,6 @@ describe("agent routes", () => {
         payload: {
           name: `Proxy Create ${crypto.randomUUID().slice(0, 8)}`,
           agentType: "llm_proxy",
-          scope: "org",
-          teams: [],
         },
       });
 
@@ -705,19 +705,22 @@ describe("agent routes", () => {
   describe("advisor delegation default", () => {
     /** The org-wide Advisor row, as the seeder writes it. */
     async function seedAdvisor() {
-      return AgentModel.create({
-        name: BUILT_IN_AGENT_NAMES.ADVISOR,
-        organizationId,
-        agentType: "agent",
-        scope: "org",
-        description: "Answers questions from other agents",
-        systemPrompt: "You are the advisor.",
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-        teams: [],
-        labels: [],
-        knowledgeBaseIds: [],
-        connectorIds: [],
-      });
+      return AgentModel.create(
+        {
+          name: BUILT_IN_AGENT_NAMES.ADVISOR,
+          organizationId,
+          agentType: "agent",
+          description: "Answers questions from other agents",
+          systemPrompt: "You are the advisor.",
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+          teams: [],
+          labels: [],
+          knowledgeBaseIds: [],
+          connectorIds: [],
+        },
+        undefined,
+        accessGrants("org"),
+      );
     }
 
     async function createAgent(payload: Record<string, unknown>) {
@@ -727,8 +730,6 @@ describe("agent routes", () => {
         payload: {
           name: `Advisor Default ${crypto.randomUUID().slice(0, 8)}`,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           ...payload,
         },
       });
@@ -786,7 +787,6 @@ describe("agent routes", () => {
       const source = await makeInternalAgent({
         organizationId,
         authorId: user.id,
-        scope: "org",
         accessAllSubagents: true,
       });
       expect(await getExclusions(source.id)).toEqual([]);
@@ -859,7 +859,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -884,7 +884,7 @@ describe("agent routes", () => {
       const otherAgent = await makeAgent({
         name: `Other Org Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId: otherOrg.id,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -914,7 +914,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent for Update ${suffix}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -937,7 +937,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Ordinary ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -959,8 +959,8 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Team Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "team",
-        teams: [team.id],
+        access: { teams: [team.id] },
+        legacy: { scope: "team", teams: [team.id] },
         authorId: user.id,
       });
 
@@ -986,7 +986,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Personal Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -1008,7 +1008,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent Half Pair Update ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -1027,14 +1027,14 @@ describe("agent routes", () => {
       const sourceAgent = await makeAgent({
         name: `Source Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
       const targetAgent = await makeAgent({
         name: `Target Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -1073,7 +1073,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent Prompt Test ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -1148,7 +1148,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent Exposure Test ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -1179,7 +1179,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent Access All Test ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -1212,7 +1212,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Agent for Delete ${suffix}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -1342,12 +1342,7 @@ describe("agent routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
-        payload: {
-          name,
-          scope: "personal",
-          teams: [],
-          isPersonalGateway: true,
-        },
+        payload: { name, isPersonalGateway: true },
       });
       expect(response.statusCode).toBe(200);
       const created = response.json();
@@ -1363,8 +1358,6 @@ describe("agent routes", () => {
         url: "/api/agents",
         payload: {
           name: `Impostor ${crypto.randomUUID().slice(0, 8)}`,
-          scope: "personal",
-          teams: [],
           builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
         },
       });
@@ -1382,7 +1375,7 @@ describe("agent routes", () => {
         name: `Restore Agent ${suffix}`,
         agentType: "agent",
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
       // The user's only personal chat agent is their personal default, which
@@ -1391,7 +1384,6 @@ describe("agent routes", () => {
         name: `Org Default ${suffix}`,
         agentType: "agent",
         organizationId,
-        scope: "org",
       });
       await OrganizationModel.patch(organizationId, {
         defaultAgentId: orgDefault.id,
@@ -1467,7 +1459,6 @@ describe("agent routes", () => {
         name: `Restore Gateway ${suffix}`,
         agentType: "mcp_gateway",
         organizationId,
-        scope: "org",
       });
 
       expect(
@@ -1496,7 +1487,6 @@ describe("agent routes", () => {
         name: `Restore Proxy ${suffix}`,
         agentType: "llm_proxy",
         organizationId,
-        scope: "org",
       });
       await AgentModel.delete(created.id);
 
@@ -1509,24 +1499,22 @@ describe("agent routes", () => {
       expect(restoreResponse.json().error.message).toContain("LLM Proxy page");
     });
 
-    test("returns 409 when restoring would create a duplicate active name", async () => {
+    test("returns 409 when restoring would create a duplicate active name", async ({
+      makeAgent,
+    }) => {
       const { default: AgentModel } = await import("@/models/agent");
       const suffix = crypto.randomUUID().slice(0, 8);
-      const deleted = await AgentModel.create({
+      const deleted = await makeAgent({
         name: `Deleted Slug ${suffix}`,
         agentType: "mcp_gateway",
         organizationId,
-        scope: "org",
-        teams: [],
         labels: [],
       });
       await AgentModel.delete(deleted.id);
-      await AgentModel.create({
+      await makeAgent({
         name: `Deleted Slug ${suffix}`,
         agentType: "mcp_gateway",
         organizationId,
-        scope: "org",
-        teams: [],
         labels: [],
       });
 
@@ -1553,7 +1541,6 @@ describe("agent routes", () => {
         name: `Permission Restore ${suffix}`,
         agentType: "agent",
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await AgentModel.delete(deleted.id);
@@ -1588,7 +1575,6 @@ describe("agent routes", () => {
       await makeAgent({
         name: `Paginated Agent ${suffix}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
 
@@ -1613,7 +1599,6 @@ describe("agent routes", () => {
       await makeAgent({
         name: `Alpha Shared ${suffix}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
 
@@ -1621,7 +1606,7 @@ describe("agent routes", () => {
       await makeAgent({
         name: `Zulu Personal ${suffix}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
 
@@ -1649,19 +1634,18 @@ describe("agent routes", () => {
       await makeAgent({
         name: `Own Personal ${suffix}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
       await makeAgent({
         name: `Other Personal ${suffix}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: otherUser.id,
       });
       await makeAgent({
         name: `Org Agent ${suffix}`,
         organizationId,
-        scope: "org",
         authorId: otherUser.id,
       });
 
@@ -1685,7 +1669,7 @@ describe("agent routes", () => {
         name: `No Knowledge ${suffix}`,
         agentType: "agent",
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -1720,7 +1704,6 @@ describe("agent routes", () => {
       const agent = await makeAgent({
         name: `Tool Ref Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       const tool = await makeTool({
@@ -1771,7 +1754,6 @@ describe("agent routes", () => {
       const agent = await makeAgent({
         name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       const tool = await makeTool({});
@@ -1806,7 +1788,6 @@ describe("agent routes", () => {
       const agent = await makeAgent({
         name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
         icon: embeddedIcon,
         systemPrompt,
@@ -1858,7 +1839,6 @@ describe("agent routes", () => {
       const agent = await makeAgent({
         name: `Non Built-in ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await seedAndAssignArchestraTools(agent.id);
@@ -1888,7 +1868,6 @@ describe("agent routes", () => {
         name: "Policy Configuration Subagent",
         organizationId,
         agentType: "agent",
-        scope: "org",
         authorId: user.id,
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -1899,7 +1878,6 @@ describe("agent routes", () => {
       const agent = await makeAgent({
         name: `Seed Target ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await seedAndAssignArchestraTools(agent.id);
@@ -2050,7 +2028,6 @@ describe("agent routes", () => {
         name: `Type Flip ${crypto.randomUUID().slice(0, 8)}`,
         agentType: "mcp_gateway",
         organizationId,
-        scope: "org",
       });
 
       const response = await app.inject({
@@ -2107,15 +2084,13 @@ describe("agent routes", () => {
     const memberUser = await makeUser();
     await makeMember(memberUser.id, organizationId, { role: "member" });
     const hiddenOwner = await makeUser();
-    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+    await makeTeam(organizationId, hiddenOwner.id);
     const kb = await makeKnowledgeBase(organizationId);
     const hiddenConnector = await makeKnowledgeBaseConnector(
       kb.id,
       organizationId,
       {
         name: "Hidden Connector",
-        visibility: "team-scoped",
-        teamIds: [hiddenTeam.id],
       },
     );
 
@@ -2142,8 +2117,6 @@ describe("agent routes", () => {
       url: "/api/agents",
       payload: {
         name: "Connector Assignment Test Agent",
-        scope: "personal",
-        teams: [],
         knowledgeBaseIds: [],
         connectorIds: [hiddenConnector.id],
       },
@@ -2171,22 +2144,18 @@ describe("agent routes", () => {
     const memberUser = await makeUser();
     await makeMember(memberUser.id, organizationId, { role: "member" });
     const hiddenOwner = await makeUser();
-    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+    await makeTeam(organizationId, hiddenOwner.id);
     const kb = await makeKnowledgeBase(organizationId);
     const hiddenConnector = await makeKnowledgeBaseConnector(
       kb.id,
       organizationId,
-      {
-        visibility: "team-scoped",
-        teamIds: [hiddenTeam.id],
-      },
+      {},
     );
     const agent = await makeAgent({
       organizationId,
       authorId: memberUser.id,
-      scope: "personal",
+      access: "personal",
       agentType: "mcp_gateway",
-      teams: [],
     });
 
     const memberApp = createFastifyInstance();
@@ -2234,8 +2203,6 @@ describe("agent routes", () => {
       payload: {
         name: `GW ${crypto.randomUUID().slice(0, 8)}`,
         agentType: "mcp_gateway",
-        scope: "org",
-        teams: [],
       },
     });
     expect(createRes.statusCode).toBe(200);
@@ -2276,7 +2243,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Export Test Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -2299,7 +2266,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Export No Knowledge ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "agent",
       });
@@ -2328,7 +2295,6 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: "Policy Configuration Subagent",
         organizationId,
-        scope: "org",
         authorId: user.id,
         agentType: "agent",
         builtInAgentConfig: {
@@ -2354,7 +2320,7 @@ describe("agent routes", () => {
       const created = await makeAgent({
         name: `Proxy Export Test`,
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
         agentType: "mcp_gateway",
       });

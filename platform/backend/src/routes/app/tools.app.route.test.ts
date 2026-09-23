@@ -40,7 +40,7 @@ describe("/api/apps/:appId/tools", () => {
     makeTool,
     makeInternalMcpCatalog,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -80,7 +80,7 @@ describe("/api/apps/:appId/tools", () => {
     makeOrganization,
   }) => {
     const otherOrg = await makeOrganization();
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const foreignCatalog = await makeInternalMcpCatalog({
       organizationId: otherOrg.id,
       name: "foreign-srv",
@@ -105,7 +105,7 @@ describe("/api/apps/:appId/tools", () => {
     makeTool,
     makeInternalMcpCatalog,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -131,7 +131,7 @@ describe("/api/apps/:appId/tools", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -169,7 +169,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const devCatalog = await makeInternalMcpCatalog({
@@ -205,7 +204,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const defaultCatalog = await makeInternalMcpCatalog({
@@ -238,7 +236,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const prodCatalog = await makeInternalMcpCatalog({

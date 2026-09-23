@@ -55,7 +55,6 @@ import {
   KnowledgeBaseModel,
   UserModel,
 } from "@/models";
-import { knowledgeScope } from "@/models/resource-permission-target";
 import * as metrics from "@/observability/metrics";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import {
@@ -102,8 +101,6 @@ const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
     initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
     name: InsertKnowledgeBaseSchema.shape.name.describe(
       "Name of the knowledge base.",
     ),
@@ -148,13 +145,12 @@ const ConnectorCreateToolArgsSchema = z
     description: InsertKnowledgeBaseConnectorSchema.shape.description
       .optional()
       .describe("Description of the knowledge connector."),
-    visibility: KnowledgeSourceVisibilitySchema.optional().describe(
-      "Visibility for the knowledge connector.",
-    ),
-    team_ids: z
-      .array(z.string())
+    sync_permissions_from_source: z
+      .boolean()
       .optional()
-      .describe("Team IDs allowed to access a team-scoped connector."),
+      .describe(
+        "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync connectors permission and a connector type that supports it.",
+      ),
   })
   .strict();
 
@@ -851,18 +847,6 @@ async function handleCreateKnowledgeBase(params: {
       return errorResult("Organization context not available");
     }
 
-    if (args.visibility === "private" && !context.userId) {
-      return errorResult(
-        "Personal knowledge bases require an authenticated user",
-      );
-    }
-
-    await validateKnowledgeBaseAccess({
-      organizationId: context.organizationId,
-      visibility: args.visibility ?? "org-wide",
-      teamIds: args.teamIds ?? [],
-    });
-    const scope = knowledgeScope(args.visibility ?? "org-wide");
     if (args.initialGrants?.length && context.userId) {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -876,8 +860,8 @@ async function handleCreateKnowledgeBase(params: {
           id: randomUUID(),
           name: args.name,
           authorId: null,
-          scope,
-          teams: (args.teamIds ?? []).map((id) => ({ id })),
+          scope: "personal",
+          teams: [],
           users: [],
         },
       });
@@ -888,21 +872,13 @@ async function handleCreateKnowledgeBase(params: {
         organizationId: context.organizationId,
         name: args.name,
         createdBy: context.userId ?? null,
-        visibility: args.visibility ?? "org-wide",
-        teamIds:
-          args.visibility === "team-scoped"
-            ? [...new Set(args.teamIds ?? [])]
-            : [],
         description: args.description ?? null,
       }),
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       {
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: args.initialGrants,
-          visibility: scope,
-        }),
+        initialPermissionGrants: args.initialGrants ?? [],
       },
       // SPDX-SnippetEnd
     );
@@ -1076,14 +1052,7 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const teamIds = args.team_ids ?? [];
-    const visibility = args.visibility ?? "org-wide";
-    if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
-      return errorResult(
-        "At least one team must be selected for team-scoped connectors",
-      );
-    }
-    if (visibility === "auto-sync-permissions") {
+    if (args.sync_permissions_from_source) {
       // connector_type is a free-form string arg; the gate needs a known type
       const parsedConnectorType = ConnectorTypeSchema.safeParse(
         args.connector_type,
@@ -1135,7 +1104,6 @@ async function handleCreateKnowledgeConnector(params: {
       context.agent.id,
     );
 
-    const scope = knowledgeScope(args.visibility ?? "org-wide");
     if (args.initialGrants?.length && context.userId) {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1149,8 +1117,8 @@ async function handleCreateKnowledgeConnector(params: {
           id: randomUUID(),
           name: args.name,
           authorId: null,
-          scope,
-          teams: (args.team_ids ?? []).map((id) => ({ id })),
+          scope: "personal",
+          teams: [],
           users: [],
         },
       });
@@ -1163,18 +1131,14 @@ async function handleCreateKnowledgeConnector(params: {
         connectorType: args.connector_type,
         config: { type: args.connector_type, ...args.config },
         description: args.description ?? null,
-        visibility: args.visibility,
-        teamIds: args.team_ids,
+        syncPermissionsFromSource: args.sync_permissions_from_source ?? false,
         environmentId: agentEnvironmentId,
       }),
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       {
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: args.initialGrants,
-          visibility: scope,
-        }),
+        initialPermissionGrants: args.initialGrants ?? [],
       },
       // SPDX-SnippetEnd
     );

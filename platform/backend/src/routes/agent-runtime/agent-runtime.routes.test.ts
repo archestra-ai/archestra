@@ -85,7 +85,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -183,7 +182,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         ...agent.runtime,
         command: ["archestra-claude-code"],
@@ -233,7 +231,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: { ...agent.runtime, image: "example.test/custom-claude:v2" },
     });
     const secondUrl = `/api/agents/${secondAgent.id}/runtime/claude-code/account`;
@@ -307,7 +304,7 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: privateOwner.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       runtime: agent.runtime,
     });
     const otherOrganization = await makeOrganization();
@@ -315,7 +312,6 @@ describe("Agent Runtime routes", () => {
       organizationId: otherOrganization.id,
       authorId: privateOwner.id,
       agentType: "agent",
-      scope: "org",
       runtime: agent.runtime,
     });
     user = await makeUser();
@@ -341,7 +337,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const selectedTask = await createTask(agent.id);
     const otherTask = await createTask(otherAgent.id);
@@ -1084,7 +1079,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       llmApiKeyId: providerKey.id,
       modelId: model.id,
       runtime: { ...agent.runtime, command: ["archestra-codex"] },
@@ -1140,7 +1134,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         ...agent.runtime,
         credentials: [
@@ -1251,7 +1244,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: { ...agent.runtime, ports: [3000, 3000, 9000] },
     });
     const task = await createTask(agent.id);

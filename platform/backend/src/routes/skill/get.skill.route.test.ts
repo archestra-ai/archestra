@@ -1,4 +1,3 @@
-import { SkillModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
 import { seedImportedSkill, useSkillRouteTestApp } from "./skill.test-helpers";
@@ -6,20 +5,18 @@ import { seedImportedSkill, useSkillRouteTestApp } from "./skill.test-helpers";
 describe("GET /api/skills/:id", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
 
-  test("a personal skill is hidden from non-authors", async ({ makeUser }) => {
+  test("a personal skill is hidden from non-authors", async ({
+    makeUser,
+    makeSkill,
+  }) => {
     const author = await makeUser();
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId: ctx.organizationId,
-        authorId: author.id,
-        name: "someone-elses-skill",
-        description: "private",
-        content: "# private",
-        metadata: {},
-        sourceType: "manual",
-        scope: "personal",
-      },
-      files: [],
+    const skill = await makeSkill(ctx.organizationId, {
+      authorId: author.id,
+      name: "someone-elses-skill",
+      description: "private",
+      content: "# private",
+      metadata: {},
+      sourceType: "manual",
     });
     if (!skill) throw new Error("seed failed");
 
@@ -77,22 +74,19 @@ describe("GET /api/skills/:id", () => {
       organizationId: ctx.organizationId,
       name: "parent-skill",
       sourceRef: "parent/repo@main:SKILL.md",
-      scope: "team",
-      teamIds: [parent.id],
+      access: { teams: [parent.id] },
     });
     const childSkill = await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "child-skill",
       sourceRef: "child/repo@main:SKILL.md",
-      scope: "team",
-      teamIds: [child.id],
+      access: { teams: [child.id] },
     });
     const siblingSkill = await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "sibling-skill",
       sourceRef: "sibling/repo@main:SKILL.md",
-      scope: "team",
-      teamIds: [sibling.id],
+      access: { teams: [sibling.id] },
     });
 
     const parentResponse = await ctx.app.inject({

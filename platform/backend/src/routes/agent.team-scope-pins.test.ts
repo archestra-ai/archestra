@@ -87,8 +87,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -133,8 +132,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -173,8 +171,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     // Resolve-at-call-time: the credential is chosen per caller, so there is
     // no pin to strand even though the row still names a server.
@@ -208,8 +205,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -240,8 +236,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -273,8 +268,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -315,8 +309,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [agentTeam.id],
+      access: { teams: [agentTeam.id] },
     });
     await makeAgentTool(agent.id, tool.id, {
       mcpServerId: connection.id,
@@ -356,8 +349,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     // The credential comes from the IdP, but the named server is still the
     // execution target the runtime routes to, so losing access to it matters.
@@ -410,8 +402,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: user.id,
-        scope: "team",
-        teams: [preservedTeam.id, ownTeam.id],
+        access: { teams: [preservedTeam.id, ownTeam.id] },
       });
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,
@@ -447,8 +438,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: user.id,
-        scope: "team",
-        teams: [preservedTeam.id, ownTeam.id],
+        access: { teams: [preservedTeam.id, ownTeam.id] },
       });
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,

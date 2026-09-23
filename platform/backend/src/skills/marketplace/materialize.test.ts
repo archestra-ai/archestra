@@ -6,7 +6,15 @@ import { promisify } from "node:util";
 import { SkillModel, SkillShareLinkModel } from "@/models";
 import SkillShareLinkRevisionModel from "@/models/skill-share-link-revision";
 import { parseSkillManifest } from "@/skills/parser";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "@/test";
 import {
   MarketplaceMaterializationConflictError,
   MarketplaceMaterializer,
@@ -69,9 +77,9 @@ async function seedLink(fx: {
       content: "# shared skill",
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   const { link } = await SkillShareLinkModel.create({

@@ -68,12 +68,10 @@ describe("McpToolCallModel", () => {
   });
 
   describe("date range filtering", () => {
-    test("filters by startDate", async ({ makeAdmin }) => {
+    test("filters by startDate", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -99,12 +97,10 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("filters by endDate", async ({ makeAdmin }) => {
+    test("filters by endDate", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -137,12 +133,11 @@ describe("McpToolCallModel", () => {
 
     test("filters by date range (startDate and endDate)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -180,11 +175,9 @@ describe("McpToolCallModel", () => {
   });
 
   describe("getAllMcpToolCallsForAgentPaginated with date filtering", () => {
-    test("filters by date range for specific agent", async () => {
-      const agent = await AgentModel.create({
+    test("filters by date range for specific agent", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -218,12 +211,11 @@ describe("McpToolCallModel", () => {
   describe("search filtering", () => {
     test("searches by mcpServerName (case insensitive)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -256,12 +248,13 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].mcpServerName).toBe("MyTestServer");
     });
 
-    test("searches by tool name (case insensitive)", async ({ makeAdmin }) => {
+    test("searches by tool name (case insensitive)", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -294,12 +287,10 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].toolCall?.name).toBe("FileSearchTool");
     });
 
-    test("searches by tool arguments", async ({ makeAdmin }) => {
+    test("searches by tool arguments", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -342,12 +333,11 @@ describe("McpToolCallModel", () => {
 
     test("searches by method field (case insensitive)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -390,12 +380,11 @@ describe("McpToolCallModel", () => {
 
     test("searches by toolResult content (case insensitive)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -433,12 +422,11 @@ describe("McpToolCallModel", () => {
 
     test("searches by toolResult with structured data", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -478,12 +466,13 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].mcpServerName).toBe("server1");
     });
 
-    test("search returns multiple matches", async ({ makeAdmin }) => {
+    test("search returns multiple matches", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -523,12 +512,13 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data).toHaveLength(2);
     });
 
-    test("search with no matches returns empty", async ({ makeAdmin }) => {
+    test("search with no matches returns empty", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -551,11 +541,11 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data).toHaveLength(0);
     });
 
-    test("search works with getAllMcpToolCallsForAgentPaginated", async () => {
-      const agent = await AgentModel.create({
+    test("search works with getAllMcpToolCallsForAgentPaginated", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -588,12 +578,13 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].mcpServerName).toBe("DatabaseServer");
     });
 
-    test("search combined with date filter", async ({ makeAdmin }) => {
+    test("search combined with date filter", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -624,12 +615,11 @@ describe("McpToolCallModel", () => {
   describe("preserves MCP tool calls when agent is deleted", () => {
     test("MCP tool call is preserved with null agentId when agent is deleted", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent To Delete",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 
@@ -664,6 +654,7 @@ describe("McpToolCallModel", () => {
       makeAdmin,
       makeOrganization,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
@@ -675,12 +666,11 @@ describe("McpToolCallModel", () => {
       const TeamModel = (await import("./team")).default;
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent To Delete",
         organizationId: org.id,
-        teams: [team.id],
-        scope: "team",
         knowledgeBaseIds: [],
+        access: { teams: [team.id] },
       });
 
       // Create an MCP tool call for the agent
@@ -723,18 +713,15 @@ describe("McpToolCallModel", () => {
 
     test("findAllPaginated includes MCP tool calls with deleted agents for admin", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agentToDelete = await AgentModel.create({
+      const agentToDelete = await makeAgent({
         name: "Agent To Delete",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
-      const agentToKeep = await AgentModel.create({
+      const agentToKeep = await makeAgent({
         name: "Agent To Keep",
-        scope: "org",
-        teams: [],
         knowledgeBaseIds: [],
       });
 

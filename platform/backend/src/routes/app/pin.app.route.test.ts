@@ -45,7 +45,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
       name: "Pinnable",
     });
@@ -77,7 +76,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -120,7 +118,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Tracker",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     const sharedUi = {
@@ -179,7 +176,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Tracker 404",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -238,7 +234,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     await makeMember(member.id, organizationId, {});
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
       name: "Org Shared",
     });
@@ -268,7 +263,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     const otherAuthor = await makeUser({ email: "app-pin-author@test.com" });
     const foreignPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
     const stranger = await makeUser({ email: "app-pin-stranger@test.com" });
@@ -294,7 +289,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Private PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
     const server = await makeMcpServer({
@@ -321,7 +316,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
     });
     await app.inject({ method: "PUT", url: `/api/apps/${owned.id}/pin` });

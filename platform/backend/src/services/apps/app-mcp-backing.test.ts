@@ -14,12 +14,12 @@ describe("purgePersonalAppsForUser", () => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const appInA = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       organizationId: orgA.id,
     });
     const appInB = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       organizationId: orgB.id,
     });
@@ -52,18 +52,17 @@ describe("purgePersonalAppsForUser", () => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const personalA = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       organizationId: orgA.id,
     });
     const personalB = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
       organizationId: orgB.id,
     });
     // Org-scoped apps outlive their author, like org-scoped installs.
     const shared = await makeApp({
-      scope: "org",
       authorId: user.id,
       organizationId: orgA.id,
     });
@@ -90,7 +89,7 @@ describe("app backing install scope", () => {
     await makeMember(author.id, org.id, { role: "member" });
     const team = await makeTeam(org.id, author.id);
     const app = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       organizationId: org.id,
     });
@@ -160,10 +159,9 @@ describe("app backing install scope", () => {
     const org = await makeOrganization();
     const author = await makeUser();
     const team = await makeTeam(org.id, author.id);
-    const orgApp = await makeApp({ scope: "org", organizationId: org.id });
+    const orgApp = await makeApp({ organizationId: org.id });
     const teamApp = await makeApp({
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
       authorId: author.id,
       organizationId: org.id,
     });

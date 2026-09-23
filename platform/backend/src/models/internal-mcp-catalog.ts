@@ -112,6 +112,8 @@ class InternalMcpCatalogModel {
       organizationId: string;
       authorId?: string;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
     },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
@@ -158,12 +160,7 @@ class InternalMcpCatalogModel {
           scope: row.id,
           grants: context?.initialPermissionGrants,
           authorId: row.authorId,
-          visibility: row.scope,
-          teams: teams?.map((team) =>
-            typeof team === "string"
-              ? { id: team, level: "write" as const }
-              : { ...team, level: team.level ?? "write" },
-          ),
+          publishToOrganization: context?.publishToOrganization,
         });
         // SPDX-SnippetEnd
       }

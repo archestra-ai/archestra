@@ -46,14 +46,13 @@ describe("MCP backing for apps", () => {
     await app.close();
   });
 
-  async function createApp(scope: "personal" | "org" = "org"): Promise<string> {
+  async function createApp(): Promise<string> {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
       payload: {
         name: "Dashboard",
         html: "<html><head></head><body><h1>ok</h1></body></html>",
-        scope,
       },
     });
     expect(response.statusCode).toBe(200);
@@ -97,7 +96,7 @@ describe("MCP backing for apps", () => {
       ?.resourceUri;
 
   test("a disabled app's launch tool is withheld from dynamic discovery until enabled", async () => {
-    const appId = await createApp("org");
+    const appId = await createApp();
     await AppModel.setEnabled(appId, false);
     const uri = getArchestraAppResourceUri(appId);
     const discovered = async () =>
@@ -117,7 +116,7 @@ describe("MCP backing for apps", () => {
   });
 
   test("a disabled app's launch tool stays assigned but hidden from the author's gateway, and reappears when enabled", async () => {
-    const appId = await createApp("org"); // auto-assigned to the author's gateway
+    const appId = await createApp(); // auto-assigned to the author's gateway
     await AppModel.setEnabled(appId, false);
     const uri = getArchestraAppResourceUri(appId);
     const personalGateway = await AgentModel.ensurePersonalMcpGateway({
@@ -144,7 +143,7 @@ describe("MCP backing for apps", () => {
     makeAppTool,
   }) => {
     // The source app owns the launch tool being consumed elsewhere.
-    const sourceAppId = await createApp("org");
+    const sourceAppId = await createApp();
     await AppModel.setEnabled(sourceAppId, false);
     const sourceServer = mustExist(
       await McpServerModel.findById(
@@ -187,7 +186,6 @@ describe("MCP backing for apps", () => {
         payload: {
           name: "Second Dashboard",
           html: "<html><head></head><body><h1>2</h1></body></html>",
-          scope: "org",
         },
       })
       .then((r) => r.json().id as string);
@@ -215,12 +213,10 @@ describe("MCP backing for apps", () => {
     // `<name>__open` or one shadows the other in a shared gateway profile.
     const first = await makeApp({
       name: "Dashboard",
-      scope: "org",
       organizationId,
     });
     const second = await makeApp({
       name: "Dashboard",
-      scope: "org",
       organizationId,
     });
     const nameFor = async (appId: string) => {
@@ -258,7 +254,7 @@ describe("MCP backing for apps", () => {
     makeUser,
     makeMember,
   }) => {
-    const appId = await createApp("personal"); // viewable only by `user`
+    const appId = await createApp(); // viewable only by `user`
     const uri = getArchestraAppResourceUri(appId);
     const personalGateway = await AgentModel.ensurePersonalMcpGateway({
       userId: user.id,
@@ -323,7 +319,7 @@ describe("MCP backing for apps", () => {
   });
 
   test("retired catalog sharing edits are ignored, leaving the app and backing server unchanged", async () => {
-    const appId = await createApp("personal");
+    const appId = await createApp();
     const created = mustExist(await AppModel.findById(appId));
     const server = mustExist(
       await McpServerModel.findById(mustExist(created.mcpServerId)),
@@ -356,7 +352,7 @@ describe("MCP backing for apps", () => {
   });
 
   test("editing an app via REST PATCH propagates its name to the backing catalog", async () => {
-    const appId = await createApp("personal");
+    const appId = await createApp();
     const created = mustExist(await AppModel.findById(appId));
     const mcpServerId = mustExist(created.mcpServerId);
     const catalogId = mustExist(

@@ -90,11 +90,12 @@ describe("0489 connector sync switch", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    // The migration reads the retired visibility column.
     const autoSync = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      legacy: { visibility: "auto-sync-permissions" },
     });
     const orgWide = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org-wide",
+      legacy: { visibility: "org-wide" },
     });
     // Rows written before the column existed carry the default.
     await db
@@ -392,15 +393,14 @@ describe("0489 app backing install scope", () => {
     const org = await makeOrganization();
     const author = await makeUser();
     const team = await makeTeam(org.id, author.id);
-    const orgApp = await makeApp({ scope: "org", organizationId: org.id });
+    const orgApp = await makeApp({ organizationId: org.id });
     const teamApp = await makeApp({
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
       authorId: author.id,
       organizationId: org.id,
     });
     const personalApp = await makeApp({
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       organizationId: org.id,
     });

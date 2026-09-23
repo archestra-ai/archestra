@@ -3,7 +3,7 @@ import db, { schema } from "@/database";
 import { EnvironmentModel } from "@/models";
 import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
 import SkillModel from "@/models/skill";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import type { Agent, InsertSkill, Skill } from "@/types";
 import {
   explainAssignmentRejection,
@@ -22,21 +22,21 @@ async function assignSkill(params: { agentId: string; skillId: string }) {
 
 async function makeSkill(
   organizationId: string,
-  overrides: Partial<InsertSkill> = {},
+  overrides: Partial<Omit<InsertSkill, "scope">> & { access?: TestAccess } = {},
   environmentIds: string[] = [],
 ): Promise<Skill> {
+  const { access = "org", ...skillOverrides } = overrides;
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId,
       name: `skill-${crypto.randomUUID().slice(0, 8)}`,
       description: "A test skill",
       content: "# Instructions",
-      scope: "org",
-      latestVersion: 1,
-      ...overrides,
-    } as InsertSkill,
+      ...skillOverrides,
+    },
     files: [],
     environmentIds,
+    ...accessGrants(access),
   });
   if (!skill) throw new Error("failed to create test skill");
   return skill;
@@ -90,8 +90,8 @@ test("Auto mode publishes org-scoped skills and honours exclusions", async ({
     organizationId: org.id,
     accessAllSkills: true,
   });
-  await makeSkill(org.id, { name: "org-a", scope: "org" });
-  const excluded = await makeSkill(org.id, { name: "org-b", scope: "org" });
+  await makeSkill(org.id, { name: "org-a" });
+  const excluded = await makeSkill(org.id, { name: "org-b" });
 
   await AgentExcludedSkillModel.replaceExclusions({
     agentId: agent.id,
@@ -117,11 +117,11 @@ test("Auto mode never publishes team skills, whoever is connecting", async ({
     accessAllSkills: true,
   });
 
-  await makeSkill(org.id, { name: "org-skill", scope: "org" });
-  await makeSkill(org.id, { name: "team-skill", scope: "team" });
+  await makeSkill(org.id, { name: "org-skill" });
+  await makeSkill(org.id, { name: "team-skill", access: "personal" });
   await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
 
@@ -142,7 +142,7 @@ test("an assigned personal skill is served on any gateway", async ({
   const agent = await makeAgent({ organizationId: org.id });
   const personal = await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
 
@@ -306,12 +306,15 @@ test("Auto mode resolves the same set by key as it lists", async ({
     accessAllSkills: true,
   });
 
-  const listed = await makeSkill(org.id, { name: "listed", scope: "org" });
-  const excluded = await makeSkill(org.id, { name: "excluded", scope: "org" });
-  const team = await makeSkill(org.id, { name: "team-skill", scope: "team" });
+  const listed = await makeSkill(org.id, { name: "listed" });
+  const excluded = await makeSkill(org.id, { name: "excluded" });
+  const team = await makeSkill(org.id, {
+    name: "team-skill",
+    access: "personal",
+  });
   const personal = await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   const templated = await makeSkill(org.id, {
@@ -344,15 +347,15 @@ test("Custom mode resolves the same set by key as it lists", async ({
   const author = await makeUser({ email: "author@test.com" });
   const agent = await makeAgent({ organizationId: org.id });
 
-  const assigned = await makeSkill(org.id, { name: "assigned", scope: "org" });
+  const assigned = await makeSkill(org.id, { name: "assigned" });
   const assignedTeam = await makeSkill(org.id, {
     name: "assigned-team",
-    scope: "team",
+    access: "personal",
     authorId: author.id,
   });
   const assignedPersonal = await makeSkill(org.id, {
     name: "assigned-personal",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   const unassigned = await makeSkill(org.id, { name: "unassigned" });
@@ -650,7 +653,7 @@ test("a skill in another organization is unreachable by key", async ({
     organizationId: org.id,
     accessAllSkills: true,
   });
-  await makeSkill(otherOrg.id, { name: "their-skill", scope: "org" });
+  await makeSkill(otherOrg.id, { name: "their-skill" });
 
   expect(
     await resolveExposedSkill({
@@ -701,7 +704,7 @@ test("a non-gateway agent publishes nothing in Auto mode either", async ({
     agentType: "agent",
     accessAllSkills: true,
   });
-  await makeSkill(org.id, { name: "org-wide", scope: "org" });
+  await makeSkill(org.id, { name: "org-wide" });
 
   expect(await exposedNames(agent.id)).toEqual([]);
   expect(

@@ -49,7 +49,6 @@ describe("Agent Runtime status callback", () => {
     const agent = await makeAgent({
       organizationId: organization.id,
       authorId: user.id,
-      scope: "org",
     });
     const taskId = await createRun({
       agentId: agent.id,
@@ -99,7 +98,6 @@ describe("Agent Runtime status callback", () => {
     const agent = await makeAgent({
       organizationId: organization.id,
       authorId: user.id,
-      scope: "org",
     });
     const taskId = await createRun({
       agentId: agent.id,

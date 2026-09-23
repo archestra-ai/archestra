@@ -412,7 +412,6 @@ describe("GET /api/llm-virtual-keys", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "std-key",
-        scope: "personal",
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: parentKey.id },
         ],

@@ -37,13 +37,11 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     targetAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
@@ -111,7 +109,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     await ChatOpsChannelBindingModel.update(second.id, {
       agentId: newerOwner.id,
@@ -149,7 +146,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const invalidSettings = await apply({
@@ -251,20 +247,19 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "mcp_gateway",
-      scope: "org",
     });
     const ownPersonalAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const otherUser = await makeUser();
     const otherPersonalAgent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const anotherUsersDm = await ChatOpsChannelBindingModel.create({
       organizationId,
@@ -405,7 +400,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
@@ -456,7 +450,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId: otherOrganization.id,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const first = await apply({
@@ -501,8 +494,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: teamOwner.id,
       agentType: "agent",
-      scope: "team",
-      teams: [privateTeam.id],
+      access: { teams: [privateTeam.id] },
     });
     const binding = await makeBinding(originalOwner.id);
     user = member;

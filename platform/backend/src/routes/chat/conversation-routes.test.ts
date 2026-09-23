@@ -108,7 +108,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const response = await app.inject({
@@ -133,7 +133,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     // What opening an app seeds (services/apps/app-chat-conversation.ts): an
     // `app_open` conversation whose only message is the assistant render.
@@ -183,7 +183,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -225,7 +225,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -274,7 +274,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -314,7 +314,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -370,7 +370,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -401,7 +401,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const response = await app.inject({
@@ -420,7 +420,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -470,7 +470,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -499,7 +499,6 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -553,7 +552,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const project = await projectService.create({
       organizationId,
@@ -591,7 +590,6 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -656,7 +654,6 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -697,7 +694,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const source = await ConversationModel.create({
       userId: currentUser.id,
@@ -791,7 +788,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const source = await ConversationModel.create({
       userId: currentUser.id,
@@ -804,7 +801,7 @@ describe("chat conversation and message routes", () => {
     const foreignAgent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const foreign = await ConversationModel.create({
       userId: otherUser.id,
@@ -875,7 +872,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const response = await app.inject({
@@ -904,7 +901,6 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -946,7 +942,6 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const conversation = await ConversationModel.create({
       userId: owner.id,
@@ -978,7 +973,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1055,7 +1050,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1107,7 +1102,7 @@ describe("chat conversation and message routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1201,7 +1196,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const { conversation, message } =
         await makeConversationWithAssistantMessage(agent.id);
@@ -1257,7 +1252,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const { conversation, message } =
         await makeConversationWithAssistantMessage(agent.id);
@@ -1298,7 +1293,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const conversation = await ConversationModel.create({
         userId: currentUser.id,
@@ -1338,7 +1333,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       // Two conversations whose assistant messages share the same content id
       const first = await makeConversationWithAssistantMessage(agent.id);
@@ -1365,7 +1360,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const conversation = await ConversationModel.create({
         userId: currentUser.id,
@@ -1390,7 +1385,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const { conversation, message } =
         await makeConversationWithAssistantMessage(agent.id);
@@ -1414,7 +1409,7 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       });
       const conversation = await ConversationModel.create({
         userId: currentUser.id,
@@ -1440,7 +1435,6 @@ describe("chat conversation and message routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: otherUser.id,
-        scope: "org",
       });
       const conversation = await ConversationModel.create({
         userId: otherUser.id,
@@ -1503,7 +1497,7 @@ describe("chat conversation creation in projects", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const response = await app.inject({
@@ -1530,7 +1524,7 @@ describe("chat conversation creation in projects", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const denied = await app.inject({
@@ -1568,7 +1562,7 @@ describe("project chats: read-only access for project members", () => {
       await makeAgent({
         organizationId,
         authorId: author.id,
-        scope: "personal",
+        access: "personal",
       })
     ).id;
 
@@ -1735,7 +1729,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     await ConversationModel.create({
       userId: currentUser.id,
@@ -1771,7 +1765,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1807,7 +1801,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: otherUser.id,
@@ -1842,7 +1836,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1888,7 +1882,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1938,7 +1932,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -1981,7 +1975,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -2014,7 +2008,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: otherUser.id,
@@ -2048,7 +2042,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -2088,7 +2082,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -2128,7 +2122,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -2180,7 +2174,7 @@ describe("conversation list projectName", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const active = await ConversationModel.create({
       userId: currentUser.id,

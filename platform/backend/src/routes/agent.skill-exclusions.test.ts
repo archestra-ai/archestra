@@ -10,7 +10,15 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SkillModel from "@/models/skill";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { ApiError, type InsertSkill, type Skill, type User } from "@/types";
 
 vi.mock("@/auth");
@@ -74,19 +82,21 @@ describe("agent skill-exclusions routes", () => {
   });
 
   async function makeSkill(
-    overrides: Partial<InsertSkill> = {},
+    overrides: Partial<Omit<InsertSkill, "scope">> & {
+      access?: TestAccess;
+    } = {},
   ): Promise<Skill> {
+    const { access = "org", ...skillOverrides } = overrides;
     const skill = await SkillModel.createWithFiles({
       skill: {
         organizationId,
         name: `skill-${crypto.randomUUID().slice(0, 8)}`,
         description: "A test skill",
         content: "# Instructions",
-        scope: "org",
-        latestVersion: 1,
-        ...overrides,
-      } as InsertSkill,
+        ...skillOverrides,
+      },
       files: [],
+      ...accessGrants(access),
     });
     if (!skill) throw new Error("failed to create test skill");
     return skill;
@@ -227,7 +237,7 @@ describe("agent skill-exclusions routes", () => {
     const agent = await makeAgent({ organizationId, accessAllSkills: true });
 
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     const key = {
       organizationId,
@@ -245,7 +255,7 @@ describe("agent skill-exclusions routes", () => {
 
     const colleague = await makeUser();
     const theirPersonalSkill = await makeSkill({
-      scope: "personal",
+      access: "personal",
       authorId: colleague.id,
     });
 
@@ -279,7 +289,7 @@ describe("agent skill-exclusions routes", () => {
     // editor outside that team.
     const agent = await makeAgent({ organizationId, accessAllSkills: true });
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     const key = {
       organizationId,
@@ -326,7 +336,7 @@ describe("agent skill-exclusions routes", () => {
   }) => {
     const agent = await makeAgent({ organizationId, accessAllSkills: true });
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     const key = {
       organizationId,
@@ -354,7 +364,7 @@ describe("agent skill-exclusions routes", () => {
     });
 
     // A skill admin reaches the same skill without belonging to the team.
-    const adminOnlySkill = await makeSkill({ scope: "team" });
+    const adminOnlySkill = await makeSkill({ access: "personal" });
     const otherTeam = await makeTeam(organizationId, user.id);
     await SkillTeamModel.syncSkillTeams(adminOnlySkill.id, [otherTeam.id]);
     await promoteCallerToSkillAdmin();

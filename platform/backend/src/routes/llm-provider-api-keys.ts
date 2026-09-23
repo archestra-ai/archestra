@@ -20,7 +20,7 @@ import { eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { hasPermission, userHasPermission } from "@/auth";
+import { userHasPermission } from "@/auth";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
@@ -62,7 +62,6 @@ import {
   type LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
-  ResourceVisibilityScopeSchema,
   type SelectSecret,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -446,8 +445,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .record(z.string(), z.string())
               .nullable()
               .optional(),
-            scope: ResourceVisibilityScopeSchema.default("personal"),
-            teamId: z.string().optional(),
+            shared: z
+              .boolean()
+              .default(false)
+              .describe(
+                "Omitted or false: the key is yours alone (you own it and " +
+                  "only you use it). True: a shared key with no owner, used " +
+                  "by whoever its initialGrants reach.",
+              ),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
@@ -469,6 +474,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .max(200)
               .optional(),
           })
+          // Strict: the retired scope/teamId fields are refused, not silently
+          // dropped. Ownership is `shared`, the audience initialGrants.
+          .strict()
           .refine(
             (data) => {
               const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
@@ -492,11 +500,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ body, organizationId, user, headers }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
+      // Decision: a key is either the caller's own ("just for me": they own
+      // it and only they use it) or shared (no owner; its grants are its
+      // audience). The retired column mirrors that until it is dropped.
+      const ownerId = body.shared ? null : user.id;
+      const scope: ResourceVisibilityScope = body.shared ? "org" : "personal";
       CredentialResourcePermissions.validateProvider({
         provider: body.provider,
         apiKey: body.apiKey,
-        ownerId: user.id,
+        ownerId,
         grants: body.initialGrants ?? [],
       });
       // Prevent creating Gemini API keys when Vertex AI is enabled
@@ -507,23 +520,24 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: body.provider,
       });
 
-      // Validate scope/teamId combination and authorization
-      await validateScopeAndAuthorization({
-        scope: body.scope,
-        teamId: body.teamId,
-        userId: user.id,
-        organizationId,
+      assertPerUserCredentialOwnership({
         provider: body.provider,
         apiKey: body.apiKey,
-        headers,
+        shared: body.shared,
       });
+      if (!body.shared && body.initialGrants?.length) {
+        throw new ApiError(
+          400,
+          "A key just for you is used by you alone, so it takes no grants. Create a shared key to give others access.",
+        );
+      }
 
-      // Personal-scoped keys are self-service: any authenticated user can
-      // connect their own account / create a key only they can use (this is
-      // what lets "basic users" link GitHub Copilot without elevated rights).
-      // Shareable scopes (team, org) still require the create permission — org
-      // additionally requires llmProviderApiKey:admin, enforced above.
-      if (body.scope !== "personal") {
+      // Own keys are self-service: any authenticated user can connect their
+      // own account / create a key only they can use (this is what lets
+      // "basic users" link GitHub Copilot without elevated rights). Shared
+      // keys require the create permission; who they reach is bounded by
+      // what the creator may delegate (validateInitialGrants below).
+      if (body.shared) {
         const canCreateSharedKeys = await userHasPermission(
           user.id,
           organizationId,
@@ -533,7 +547,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!canCreateSharedKeys) {
           throw new ApiError(
             403,
-            "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
+            "You need the llmProviderApiKey:create permission to create shared keys.",
           );
         }
       }
@@ -550,10 +564,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           target: {
             id: randomUUID(),
             name: body.name,
-            authorId: body.scope === "personal" ? user.id : null,
-            scope: body.scope,
-            teams:
-              body.scope === "team" && body.teamId ? [{ id: body.teamId }] : [],
+            authorId: ownerId,
+            scope,
+            teams: [],
             users: [],
           },
         });
@@ -592,11 +605,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             secretAccessKey: sigV4.secretAccessKey,
             ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
           },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       } else if (isByosEnabled()) {
         if (!body.vaultSecretPath || !body.vaultSecretKey) {
@@ -614,15 +623,15 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
           );
         }
-        assertPerUserCredentialScope({
+        assertPerUserCredentialOwnership({
           provider: body.provider,
           apiKey: actualApiKeyValue,
-          scope: body.scope,
+          shared: body.shared,
         });
         CredentialResourcePermissions.validateProvider({
           provider: body.provider,
           apiKey: actualApiKeyValue,
-          ownerId: user.id,
+          ownerId,
           grants: body.initialGrants ?? [],
         });
         // then test the API key
@@ -636,11 +645,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // then create the secret
         secret = await secretManager().createSecret(
           { apiKey: vaultReference },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       } else if (body.apiKey) {
         // When readonly_vault is disabled
@@ -662,11 +667,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         secret = await secretManager().createSecret(
           { apiKey: actualApiKeyValue },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       }
 
@@ -751,19 +752,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseUrl: body.baseUrl ?? null,
             inferenceBaseUrl: body.inferenceBaseUrl ?? null,
             extraHeaders: body.extraHeaders ?? null,
-            scope: body.scope,
-            userId: body.scope === "personal" ? user.id : null,
-            teamId: body.scope === "team" ? body.teamId : null,
+            scope,
+            userId: ownerId,
+            teamId: null,
             isPrimary: body.isPrimary ?? false,
           },
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           {
-            initialPermissionGrants: ResourcePermissions.grantsForCreation({
-              grants: body.initialGrants,
-              visibility: body.scope,
-            }),
+            initialPermissionGrants: body.initialGrants ?? [],
           },
           // SPDX-SnippetEnd
         );
@@ -1013,10 +1011,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // per-user credential (pasting an encoded ChatGPT-subscription
         // credential into a team/org key would share one person's account
         // with everyone), so classify the new value.
-        assertPerUserCredentialScope({
+        assertPerUserCredentialOwnership({
           provider: apiKeyFromDB.provider,
           apiKey: body.apiKey,
-          scope: newScope,
+          shared: apiKeyFromDB.userId === null,
         });
       }
 
@@ -1094,10 +1092,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "API key or vault reference is required");
         }
 
-        assertPerUserCredentialScope({
+        assertPerUserCredentialOwnership({
           provider: apiKeyFromDB.provider,
           apiKey: testValue,
-          scope: newScope,
+          shared: apiKeyFromDB.userId === null,
         });
         CredentialResourcePermissions.validateProvider({
           provider: apiKeyFromDB.provider,
@@ -1603,97 +1601,21 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 /**
- * Validates scope/teamId combination and checks user authorization for the scope.
- * Used for both creating and updating API keys.
- */
-async function validateScopeAndAuthorization(params: {
-  scope: ResourceVisibilityScope;
-  teamId: string | null | undefined;
-  userId: string;
-  organizationId: string;
-  provider: SupportedProvider;
-  apiKey?: string | null;
-  headers: IncomingHttpHeaders;
-}): Promise<void> {
-  const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
-    params;
-
-  assertPerUserCredentialScope({ provider, apiKey, scope });
-
-  // Validate scope-specific requirements
-  if (scope === "team" && !teamId) {
-    throw new ApiError(400, "teamId is required for team-scoped API keys");
-  }
-
-  if (scope === "personal" && teamId) {
-    throw new ApiError(
-      400,
-      "teamId should not be provided for personal-scoped API keys",
-    );
-  }
-
-  if (scope === "org" && teamId) {
-    throw new ApiError(
-      400,
-      "teamId should not be provided for org-wide API keys",
-    );
-  }
-
-  // For team-scoped keys, verify user has access to the team
-  if (scope === "team" && teamId) {
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
-      headers,
-    );
-
-    if (!canManageAllTeams) {
-      const isUserInTeam = await TeamModel.isUserInTeam(teamId, userId);
-      if (!isUserInTeam) {
-        throw new ApiError(
-          403,
-          "You must be a member of the team to use this scope",
-        );
-      }
-    }
-  }
-
-  // For org-wide keys, require the dedicated API-key admin permission
-  if (scope === "org") {
-    const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
-      userId: userId,
-      organizationId: organizationId,
-      resource: "llmProviderApiKey",
-      scope: "*",
-      action: "update",
-    });
-    if (!isLlmProviderApiKeyAdmin) {
-      throw new ApiError(
-        403,
-        "Only llmProviderApiKey admins can use organization-wide scope",
-      );
-    }
-  }
-}
-
-/**
  * Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
- * (Codex) key on `openai` — hold an individual's token, so team/org scope
- * would share one person's credential with everyone. Only personal keys are
- * allowed; each user links their own account.
+ * (Codex) key on `openai` — hold an individual's token, so a shared key would
+ * share one person's credential with everyone. Only own keys may hold them;
+ * each user links their own account.
  */
-function assertPerUserCredentialScope(params: {
+function assertPerUserCredentialOwnership(params: {
   provider: SupportedProvider;
   apiKey: string | null | undefined;
-  scope: ResourceVisibilityScope;
+  shared: boolean;
 }): void {
-  const { provider, apiKey, scope } = params;
-  if (
-    credentialRequiresPerUserScope({ provider, apiKey }) &&
-    scope !== "personal"
-  ) {
+  const { provider, apiKey, shared } = params;
+  if (credentialRequiresPerUserScope({ provider, apiKey }) && shared) {
     throw new ApiError(
       400,
-      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so they cannot be shared.`,
     );
   }
 }

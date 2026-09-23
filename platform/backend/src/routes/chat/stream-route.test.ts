@@ -28,7 +28,14 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { projectService } from "@/services/project";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 const TEST_TRACE_CONTEXT = {
@@ -2285,9 +2292,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
         content: "# PDF Processing\nUse pdftotext.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, { systemPrompt: "You are helpful." });
@@ -2333,9 +2340,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
         content: "# PDF Processing",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     // beforeEach resets getChatMcpTools to {}, so no load_skill is exposed
     mockStreamText.mockClear();
@@ -3153,9 +3160,9 @@ describe("POST /api/chat handler composition", () => {
         content: "# PDF Processing\nUse pdftotext.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     if (!skill) {
       throw new Error("Failed to create test skill");

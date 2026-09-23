@@ -28,6 +28,7 @@ import {
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
@@ -35,7 +36,7 @@ import {
   builtInSkillVersion,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import {
   decideEnvSeed,
   seedDefaultAppsForPristineOrgs,
@@ -546,8 +547,15 @@ describe("syncBuiltInSkills", () => {
         sourceRef,
       });
       expect(skill).not.toBeNull();
-      expect(skill?.scope).toBe("org");
       expect(skill?.authorId).toBeNull();
+      // Published to the whole organization by its grants, not a column.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "skill",
+        scope: skill?.id ?? "",
+      });
+      expect(policy?.legacyOrganizationAudience).toBe(true);
+      expect(policy?.grants.length).toBeGreaterThan(0);
       expect(skill?.content).toBe(BASE_SKILL.content);
 
       const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
@@ -576,13 +584,13 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "user's own skill",
         content: "# not the built-in",
         sourceType: "manual",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -610,7 +618,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "old description",
         content: "OLD",
@@ -619,6 +626,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: staleVersion,
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -641,7 +649,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "user description",
         content: "EDITED BY USER",
@@ -650,6 +657,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: builtInSkillVersion({ content: "OLD", files: [] }),
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -876,12 +884,13 @@ describe("seedDefaultAppsForPristineOrgs", () => {
       expect(app.templateId).toMatch(/^default-app:/);
     }
 
-    // Version 1 carries the shipped HTML and the backing is org-scoped.
+    // Version 1 carries the shipped HTML. Who reaches a demo app is its
+    // grants; the backing catalog's retired visibility column is not set.
     const [taskTracker] = apps.filter(
       (app) => app.name === "Demo Task Tracker",
     );
     const loaded = await AppModel.findById(taskTracker.id);
-    expect(loaded?.scope).toBe("org");
+    expect(loaded).not.toBeNull();
     const version = await AppVersionModel.findByAppAndVersion(
       taskTracker.id,
       1,

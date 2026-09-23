@@ -27,7 +27,7 @@ describe("resource permissions", () => {
       organizationId: org.id,
       authorId: user.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const context = {
       organizationId: org.id,

@@ -168,10 +168,8 @@ test("knowledge listing and source checks honor grants to private objects and re
   const recipient = await makeUser();
   const outsider = await makeUser();
   for (const user of [recipient, outsider]) await makeMember(user.id, org.id);
-  const kb = await makeKnowledgeBase(org.id, { visibility: "private" });
-  const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-    visibility: "org-wide",
-  });
+  const kb = await makeKnowledgeBase(org.id);
+  const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {});
   for (const [resource, scope] of [
     ["knowledgeBase", kb.id],
     ["knowledgeConnector", connector.id],
@@ -234,7 +232,7 @@ test("source permission sync keeps its per-document restriction even when connec
   await makeMember(user.id, org.id);
   const kb = await makeKnowledgeBase(org.id);
   const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-    visibility: "auto-sync-permissions",
+    syncPermissionsFromSource: true,
   });
   await db.transaction((tx) =>
     ResourcePermissionPolicyModel.createInitial({

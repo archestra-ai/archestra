@@ -54,7 +54,6 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -105,7 +104,6 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -139,7 +137,6 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     const agent = await makeAgent({
       organizationId,
       authorId: actingUser.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,

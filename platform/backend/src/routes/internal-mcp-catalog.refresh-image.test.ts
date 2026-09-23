@@ -11,7 +11,14 @@ import {
   autoReinstallServer,
   reinstallMultitenantCatalog,
 } from "@/services/mcp-reinstall";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -86,14 +93,13 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "restartable-pods",
         serverType: "local",
-        scope: "org",
         multitenant: true,
         catalogReinstallRequired: false,
         localConfig: {
           dockerImage: "registry.example.com/mcp:latest",
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
 
     const response = await app.inject({
@@ -119,14 +125,13 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "default-image",
         serverType: "local",
-        scope: "org",
         multitenant: true,
         localConfig: {
           command: "node",
           arguments: ["server.js"],
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
 
     const response = await app.inject({
@@ -149,10 +154,9 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "remote-server",
         serverType: "remote",
-        scope: "org",
         serverUrl: "https://example.com/mcp",
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
 
     const response = await app.inject({
@@ -186,13 +190,12 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "shared-local-server",
         serverType: "local",
-        scope: "org",
         multitenant: true,
         localConfig: {
           dockerImage: "registry.example.com/mcp:latest",
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
 
     // Act as a plain member: no mcpRegistry:team-admin and not an admin, so
@@ -216,13 +219,12 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "single-tenant-local-server",
         serverType: "local",
-        scope: "org",
         multitenant: false,
         localConfig: {
           dockerImage: "registry.example.com/mcp:latest",
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
     await McpServerModel.create({
       name: "single-tenant-local-server-a",
@@ -255,13 +257,12 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "single-tenant-crashing-server",
         serverType: "local",
-        scope: "org",
         multitenant: false,
         localConfig: {
           dockerImage: "registry.example.com/mcp:latest",
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
     await McpServerModel.create({
       name: "single-tenant-crashing-server-a",
@@ -291,11 +292,10 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "single-tenant-slow-server",
         serverType: "local",
-        scope: "org",
         multitenant: false,
         localConfig: { dockerImage: "registry.example.com/mcp:latest" },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
     await McpServerModel.create({
       name: "single-tenant-slow-server-a",
@@ -326,13 +326,12 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       {
         name: "single-tenant-throttled-server",
         serverType: "local",
-        scope: "org",
         multitenant: false,
         localConfig: {
           dockerImage: "registry.example.com/mcp:latest",
         },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
     await McpServerModel.create({
       name: "single-tenant-throttled-server-a",

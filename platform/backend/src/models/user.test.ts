@@ -168,11 +168,18 @@ describe("UserModel.delete personal skill cleanup", () => {
         name: params.name,
         description: "A personal skill",
         content: "# Instructions",
-        scope: params.scope ?? "personal",
       },
       files: [],
     });
     if (!skill) throw new Error(`seed failed for ${params.name}`);
+    // The cleanup still selects on the retired visibility column, so the
+    // seed writes it directly: create no longer sets it.
+    if (params.scope) {
+      await db
+        .update(schema.skillsTable)
+        .set({ scope: params.scope })
+        .where(eq(schema.skillsTable.id, skill.id));
+    }
     return skill;
   }
 

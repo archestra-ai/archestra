@@ -31,7 +31,7 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
         organizationId,
         authorId: ownerId,
         name,
-        scope: "personal",
+        access: "personal",
       });
     };
     app = createFastifyInstance();

@@ -25,7 +25,7 @@ describe("scoped grant delegation through assignments", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     await replacePolicy({
       organizationId: org.id,

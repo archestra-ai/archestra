@@ -188,7 +188,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "owned-by-target",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],

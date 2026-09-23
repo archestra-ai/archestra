@@ -37,7 +37,7 @@ describe("DELETE /api/apps/:appId", () => {
   test("an admin deletes an org-scoped app and it stops being viewable", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const deleted = await app.inject({
       method: "DELETE",
@@ -66,7 +66,7 @@ describe("DELETE /api/apps/:appId", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;

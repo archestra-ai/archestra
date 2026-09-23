@@ -3,8 +3,9 @@ import {
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
-import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
+import { EnvironmentModel, SkillModel } from "@/models";
 import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
@@ -336,17 +337,25 @@ describe("POST /api/skills", () => {
       expect(body.teams).toEqual([]);
     });
 
-    test("creators can share a new skill with the organization", async () => {
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/skills",
-        payload: { content: MANIFEST, scope: "org" },
-      });
-
-      expect(response.statusCode).toBe(200);
+    test("refuses the retired scope, teamIds and userIds fields", async () => {
+      for (const retired of [
+        { scope: "org" },
+        { teamIds: [] },
+        { userIds: [ctx.user.id] },
+      ]) {
+        const response = await ctx.app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: MANIFEST, ...retired },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+      expect(
+        await SkillModel.findAllByName(ctx.organizationId, "pdf-processing"),
+      ).toHaveLength(0);
     });
 
-    test("admins can create an org-scoped skill", async () => {
+    test("admins can publish a new skill to the organization with a grant", async () => {
       await MemberModel.updateRole(
         ctx.user.id,
         ctx.organizationId,
@@ -356,11 +365,21 @@ describe("POST /api/skills", () => {
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
-        payload: { content: MANIFEST, scope: "org" },
+        payload: {
+          content: MANIFEST,
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
+        },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().scope).toBe("org");
+      expect(await grantSubjects(response.json().id)).toContain(
+        "organization:*",
+      );
     });
 
     test("creators can share a new skill with any existing team in the organization", async ({
@@ -381,20 +400,28 @@ describe("POST /api/skills", () => {
         url: "/api/skills",
         payload: {
           content: manifestNamed("team-skill"),
-          scope: "team",
-          teamIds: [ownTeam.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: ownTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       expect(ok.statusCode).toBe(200);
-      expect(ok.json().teams).toHaveLength(1);
+      expect(await grantSubjects(ok.json().id)).toContain(`team:${ownTeam.id}`);
 
       const shared = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
           content: manifestNamed("foreign-team-skill"),
-          scope: "team",
-          teamIds: [foreignTeam.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: foreignTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       expect(shared.statusCode).toBe(200);
@@ -414,8 +441,12 @@ describe("POST /api/skills", () => {
         url: "/api/skills",
         payload: {
           content: manifestNamed("orphan-check"),
-          scope: "team",
-          teamIds: ["does-not-exist"],
+          initialGrants: [
+            {
+              subject: { type: "team", id: "does-not-exist" },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
 
@@ -425,59 +456,19 @@ describe("POST /api/skills", () => {
         await SkillModel.findAllByName(ctx.organizationId, "orphan-check"),
       ).toHaveLength(0);
     });
-
-    test("persists team assignments atomically with the skill", async ({
-      makeTeam,
-      makeTeamMember,
-    }) => {
-      await MemberModel.updateRole(
-        ctx.user.id,
-        ctx.organizationId,
-        EDITOR_ROLE_NAME,
-      );
-      const team = await makeTeam(ctx.organizationId, ctx.user.id);
-      await makeTeamMember(team.id, ctx.user.id);
-
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/skills",
-        payload: {
-          content: manifestNamed("atomic-team-skill"),
-          scope: "team",
-          teamIds: [team.id],
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const created = response.json();
-      expect(await SkillTeamModel.getTeamsForSkill(created.id)).toEqual([
-        team.id,
-      ]);
-    });
-
-    test("rejects a team-scoped skill created with no teams", async () => {
-      // admins bypass the team-membership check, so an empty team list is not
-      // caught there — the explicit team validation must reject it.
-      await MemberModel.updateRole(
-        ctx.user.id,
-        ctx.organizationId,
-        ADMIN_ROLE_NAME,
-      );
-
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/skills",
-        payload: {
-          content: manifestNamed("teamless-skill"),
-          scope: "team",
-          teamIds: [],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(
-        await SkillModel.findAllByName(ctx.organizationId, "teamless-skill"),
-      ).toHaveLength(0);
-    });
   });
 });
+
+/** The `type:id` subjects of a skill's permission policy. */
+async function grantSubjects(skillId: string): Promise<string[]> {
+  const skill = await SkillModel.findById(skillId);
+  if (!skill) throw new Error("skill not found");
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: skill.organizationId,
+    resource: "skill",
+    scope: skillId,
+  });
+  return (policy?.grants ?? []).map(
+    (grant) => `${grant.subject.type}:${grant.subject.id}`,
+  );
+}

@@ -14,8 +14,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import {
-  assertMcpCatalogTeams,
-  authorizeMcpCatalogScope,
   getMcpCatalogPermissionChecker,
   isMcpInstallationAdmin,
   withCatalogTeamFkErrorMapped,
@@ -78,10 +76,10 @@ import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  CreateInternalMcpCatalogBodySchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-  InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
@@ -91,7 +89,6 @@ import {
   type McpServerDismissibleAlertKind,
   McpServerDismissibleAlertKindSchema,
   MuteMcpServerAlertBodySchema,
-  normalizeCatalogTeamInput,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
   UnmuteMcpServerAlertQuerySchema,
@@ -418,7 +415,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateInternalMcpCatalogItem,
         description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertInternalMcpCatalogSchema.extend({
+        body: CreateInternalMcpCatalogBodySchema.extend({
           initialGrants: z
             .array(ResourcePermissionGrantSchema)
             .max(200)
@@ -469,43 +466,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
 
-      // Enforce scope restrictions (3-tier model shared with agents/skills):
-      // org → admin only; team → admin of one of the assigned teams, and
-      // membership in all of them; personal → the author.
       const checker = await getMcpCatalogPermissionChecker({
         userId: request.user.id,
         organizationId: request.organizationId,
       });
-
-      restBody.scope = restBody.scope ?? "personal";
-      const requestedTeams =
-        restBody.scope === "team"
-          ? normalizeCatalogTeamInput(restBody.teams ?? [])
-          : [];
-      const requestedTeamIds = requestedTeams.map((team) => team.id);
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(request.user.id);
-      authorizeMcpCatalogScope({
-        checker,
-        scope: restBody.scope,
-        authorId: request.user.id,
-        requestedTeamIds,
-        userTeamIds,
-
-        userId: request.user.id,
-      });
-      if (restBody.scope !== "team") {
-        delete restBody.teams;
-      } else {
-        restBody.teams = requestedTeams;
-      }
-      await assertMcpCatalogTeams({
-        scope: restBody.scope,
-        teamIds: requestedTeamIds,
-        organizationId: request.organizationId,
-      });
-
       if (initialGrants !== undefined) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -519,8 +483,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: crypto.randomUUID(),
             name: restBody.name,
             authorId: request.user.id,
-            scope: restBody.scope,
-            teams: requestedTeams,
+            scope: "personal",
+            teams: [],
             users: [],
           },
         });
@@ -728,14 +692,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.create(restBody, {
-          organizationId: request.organizationId,
-          authorId: request.user.id,
-          initialPermissionGrants: ResourcePermissions.grantsForCreation({
-            grants: initialGrants,
-            visibility: restBody.scope,
-          }),
-        }),
+        InternalMcpCatalogModel.create(
+          // Who can reach the new item is its initial grants alone. The
+          // retired visibility column is NOT NULL; nothing reads it.
+          { ...restBody, scope: "personal" },
+          {
+            organizationId: request.organizationId,
+            authorId: request.user.id,
+            initialPermissionGrants: initialGrants ?? [],
+          },
+        ),
       );
       return reply.send(catalogItem);
     },

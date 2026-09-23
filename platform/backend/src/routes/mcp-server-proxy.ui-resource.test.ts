@@ -89,7 +89,6 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -136,7 +135,6 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -212,7 +210,6 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -261,7 +258,6 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -307,7 +303,6 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({

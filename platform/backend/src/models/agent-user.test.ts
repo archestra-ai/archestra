@@ -15,7 +15,7 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
 
@@ -57,7 +57,7 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
 
@@ -83,12 +83,12 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const shared = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
       const other = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
 
@@ -113,7 +113,7 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
 
@@ -139,7 +139,7 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
       });
 
       await AgentUserModel.syncAgentUsers(agent.id, [colleague.id]);
@@ -162,7 +162,7 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
-        scope: "personal",
+        access: "personal",
       });
 
       await AgentUserModel.syncAgentUsers(agent.id, [

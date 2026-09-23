@@ -5,7 +5,7 @@ import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
 import SkillModel from "@/models/skill";
 import SkillFileModel from "@/models/skill-file";
 import { backfillSkillPublicationArtifacts } from "@/services/skill-publication-backfill";
-import { expect, test, vi } from "@/test";
+import { accessGrants, expect, type TestAccess, test, vi } from "@/test";
 import type { InsertSkill, Skill } from "@/types";
 import { handleSkillMethod, serveSkillResource as serveSkill } from "./skills";
 
@@ -24,29 +24,29 @@ async function serveSkillResource(params: { uri: string; agentId: string }) {
 
 async function makeSkill(
   organizationId: string,
-  overrides: Partial<InsertSkill> = {},
+  overrides: Partial<Omit<InsertSkill, "scope">> & { access?: TestAccess } = {},
   files: Array<{
     path: string;
     content: string;
     encoding?: "utf8" | "base64";
   }> = [],
 ): Promise<Skill> {
+  const { access = "org", ...skillOverrides } = overrides;
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId,
       name: `skill-${crypto.randomUUID().slice(0, 8)}`,
       description: "A test skill",
       content: "# Instructions\n\nDo the thing.",
-      scope: "org",
-      latestVersion: 1,
-      ...overrides,
-    } as InsertSkill,
+      ...skillOverrides,
+    },
     files: files.map((file) => ({
       path: file.path,
       content: file.content,
       encoding: file.encoding ?? "utf8",
       kind: "reference" as const,
     })),
+    ...accessGrants(access),
   });
   if (!skill) throw new Error("failed to create test skill");
   return skill;
@@ -422,7 +422,7 @@ test("skills/list omits an orphaned personal skill instead of failing", async ({
   const survivor = await makeSkill(org.id, { name: "survivor" });
   const personal = await makeSkill(org.id, {
     name: "orphaned-notes",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   await assignSkill({ agentId: agent.id, skillId: survivor.id });

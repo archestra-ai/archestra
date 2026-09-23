@@ -729,7 +729,7 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
     // connector is reached through its grants.
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     const docs = [
@@ -780,7 +780,7 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
     // connector is reached through its grants.
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     const readable = await KbDocumentModel.create(
@@ -828,7 +828,7 @@ describe("KbDocumentModel.findMetadataFacetValues", () => {
     // connector is reached through its grants.
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     for (let i = 0; i < 8; i++) {

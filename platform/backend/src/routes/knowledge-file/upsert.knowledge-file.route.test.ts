@@ -15,24 +15,27 @@ describe("PUT knowledge file content", () => {
   let organizationId: string;
   let knowledgeBaseId: string;
   const id = randomUUID();
-  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    organizationId = (await makeOrganization()).id;
-    user = await makeUser();
-    await makeMember(user.id, organizationId);
-    knowledgeBaseId = (
-      await KnowledgeBaseModel.create({
-        organizationId,
-        createdBy: user.id,
-        name: "Market research",
-      })
-    ).id;
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
-    });
-    registerAuditLogHook(app);
-    await app.register(routes);
-  });
+  beforeEach(
+    async ({ makeOrganization, makeUser, makeMember, makeKnowledgeBase }) => {
+      organizationId = (await makeOrganization()).id;
+      user = await makeUser();
+      await makeMember(user.id, organizationId);
+      // Organization-wide, as a base created without an audience used to be.
+      knowledgeBaseId = (
+        await makeKnowledgeBase(organizationId, {
+          createdBy: user.id,
+          name: "Market research",
+          access: "org",
+        })
+      ).id;
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        Object.assign(request, { user, organizationId });
+      });
+      registerAuditLogHook(app);
+      await app.register(routes);
+    },
+  );
   afterEach(async () => {
     await app.close();
   });
@@ -106,13 +109,15 @@ describe("PUT knowledge file content", () => {
     expect(JSON.stringify(audit)).not.toContain("Updated market report");
   });
 
-  test("preserves a private audience and refreshes every linked knowledge base", async () => {
+  test("preserves a private audience and refreshes every linked knowledge base", async ({
+    makeKnowledgeBase,
+  }) => {
     await put();
     await KbFileModel.update({ id, organizationId, visibility: "private" });
-    const otherKb = await KnowledgeBaseModel.create({
-      organizationId,
+    const otherKb = await makeKnowledgeBase(organizationId, {
       createdBy: user.id,
       name: "Second research base",
+      access: "org",
     });
     expect(
       (await put("Private report", { knowledgeBaseId: otherKb.id })).json()
@@ -133,16 +138,17 @@ describe("PUT knowledge file content", () => {
   test("refuses another uploader and leaves the original bytes intact", async ({
     makeUser,
     makeMember,
+    makeKnowledgeBase,
   }) => {
     await put();
     const owner = user;
     user = await makeUser();
     await makeMember(user.id, organizationId);
     knowledgeBaseId = (
-      await KnowledgeBaseModel.create({
-        organizationId,
+      await makeKnowledgeBase(organizationId, {
         createdBy: user.id,
         name: "Recipient base",
+        access: "org",
       })
     ).id;
     expect((await put("Unauthorized replacement")).statusCode).toBe(409);
@@ -171,16 +177,17 @@ describe("PUT knowledge file content", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    makeKnowledgeBase,
   }) => {
     await put();
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
     knowledgeBaseId = (
-      await KnowledgeBaseModel.create({
-        organizationId,
+      await makeKnowledgeBase(organizationId, {
         createdBy: user.id,
         name: "Other base",
+        access: "org",
       })
     ).id;
     expect((await put()).statusCode).toBe(409);

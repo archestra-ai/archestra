@@ -550,10 +550,8 @@ class AppModel {
       app: InsertApp;
       payload: VersionPayload;
       initialPermissionGrants?: ResourcePermissionGrant[];
-      initialVisibility?: {
-        scope: "personal" | "team" | "org";
-        teamIds: string[];
-      };
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
     },
     tx?: Transaction,
   ): Promise<AppRow> {
@@ -579,8 +577,7 @@ class AppModel {
         scope: app.id,
         grants: params.initialPermissionGrants,
         authorId: app.authorId,
-        visibility: params.initialVisibility?.scope ?? "personal",
-        teams: params.initialVisibility?.teamIds.map((id) => ({ id })),
+        publishToOrganization: params.publishToOrganization,
       });
       // SPDX-SnippetEnd
       await AppVersionModel.insertVersion(tx, {

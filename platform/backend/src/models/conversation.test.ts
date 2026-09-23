@@ -17,7 +17,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -48,7 +48,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Error Event Agent", teams: [] });
+    const agent = await makeAgent({ name: "Error Event Agent" });
     const conversation = await ConversationModel.create({
       userId: user.id,
       organizationId: org.id,
@@ -104,7 +104,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Find Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Find Test Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -134,7 +134,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "List Agent", teams: [] });
+    const agent = await makeAgent({ name: "List Agent" });
 
     await ConversationModel.create({
       userId: user.id,
@@ -170,7 +170,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Prompted Agent",
-      teams: [],
       systemPrompt: "A very long custom prompt",
     });
 
@@ -203,7 +202,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Bulk Agent", teams: [] });
+    const agent = await makeAgent({ name: "Bulk Agent" });
 
     // One over the cap; newest conversations win.
     for (let i = 0; i < 251; i++) {
@@ -226,7 +225,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Unread Agent", teams: [] });
+    const agent = await makeAgent({ name: "Unread Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -274,7 +273,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Tool Update Agent", teams: [] });
+    const agent = await makeAgent({ name: "Tool Update Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -316,7 +315,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Tie Agent", teams: [] });
+    const agent = await makeAgent({ name: "Tie Agent" });
     const conversation = await ConversationModel.create({
       userId: user.id,
       organizationId: org.id,
@@ -362,7 +361,7 @@ describe("ConversationModel", () => {
     const owner = await makeUser();
     const other = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Owner Agent", teams: [] });
+    const agent = await makeAgent({ name: "Owner Agent" });
 
     const conversation = await ConversationModel.create({
       userId: owner.id,
@@ -397,7 +396,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Update Agent", teams: [] });
+    const agent = await makeAgent({ name: "Update Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -431,7 +430,7 @@ describe("ConversationModel", () => {
     // would become eligible to be retitled behind the user's back.
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Default Agent", teams: [] });
+    const agent = await makeAgent({ name: "Default Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -452,7 +451,7 @@ describe("ConversationModel", () => {
     // typed, so it has to hold for every title write, not just the rename route.
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+    const agent = await makeAgent({ name: "Placeholder Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -484,7 +483,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+    const agent = await makeAgent({ name: "Placeholder Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -514,7 +513,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Delete Agent", teams: [] });
+    const agent = await makeAgent({ name: "Delete Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -553,7 +552,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Redelete Agent", teams: [] });
+    const agent = await makeAgent({ name: "Redelete Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -573,7 +572,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Order Agent", teams: [] });
+    const agent = await makeAgent({ name: "Order Agent" });
 
     // Create conversations with slight delays to ensure different timestamps
     const first = await ConversationModel.create({
@@ -610,7 +609,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Update Order Agent", teams: [] });
+    const agent = await makeAgent({ name: "Update Order Agent" });
 
     // Create first conversation
     const first = await ConversationModel.create({
@@ -659,7 +658,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Message Order Agent", teams: [] });
+    const agent = await makeAgent({ name: "Message Order Agent" });
 
     // Create first conversation
     const first = await ConversationModel.create({
@@ -727,7 +726,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Owned Agent", teams: [] });
+    const agent = await makeAgent({ name: "Owned Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -756,7 +755,7 @@ describe("ConversationModel", () => {
     const owner = await makeUser();
     const viewer = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Shared Agent", teams: [] });
+    const agent = await makeAgent({ name: "Shared Agent" });
 
     await makeMember(owner.id, org.id);
     await makeMember(viewer.id, org.id);
@@ -813,7 +812,7 @@ describe("ConversationModel", () => {
     const invitedUser = await makeUser();
     const outsider = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Private Share Agent", teams: [] });
+    const agent = await makeAgent({ name: "Private Share Agent" });
 
     await makeMember(owner.id, org.id);
     await makeMember(invitedUser.id, org.id);
@@ -855,7 +854,7 @@ describe("ConversationModel", () => {
     const viewer = await makeUser();
     const org = await makeOrganization();
     const otherOrg = await makeOrganization();
-    const agent = await makeAgent({ name: "Org Scoped Agent", teams: [] });
+    const agent = await makeAgent({ name: "Org Scoped Agent" });
 
     await makeMember(owner.id, org.id);
     await makeMember(viewer.id, org.id);
@@ -894,7 +893,7 @@ describe("ConversationModel", () => {
     const owner = await makeUser();
     const viewer = await makeUser();
     const org = await makeOrganization({ legacyPermissions: true });
-    const agent = await makeAgent({ name: "Project Agent", teams: [] });
+    const agent = await makeAgent({ name: "Project Agent" });
 
     const project = await ProjectModel.create({
       organizationId: org.id,
@@ -946,7 +945,7 @@ describe("ConversationModel", () => {
     const owner = await makeUser();
     const author = await makeUser();
     const org = await makeOrganization({ legacyPermissions: true });
-    const agent = await makeAgent({ name: "Owner Project Agent", teams: [] });
+    const agent = await makeAgent({ name: "Owner Project Agent" });
 
     const project = await ProjectModel.create({
       organizationId: org.id,
@@ -996,7 +995,7 @@ describe("ConversationModel", () => {
   }) => {
     const author = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Own Chat Agent", teams: [] });
+    const agent = await makeAgent({ name: "Own Chat Agent" });
 
     const project = await ProjectModel.create({
       organizationId: org.id,
@@ -1054,7 +1053,7 @@ describe("ConversationModel", () => {
     const user2 = await makeUser();
     const org1 = await makeOrganization();
     const org2 = await makeOrganization();
-    const agent = await makeAgent({ name: "Isolation Agent", teams: [] });
+    const agent = await makeAgent({ name: "Isolation Agent" });
 
     // Create conversation for user1 in org1
     await ConversationModel.create({
@@ -1102,7 +1101,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Empty Messages Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -1124,7 +1122,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "No Messages Agent", teams: [] });
+    const agent = await makeAgent({ name: "No Messages Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -1151,7 +1149,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "No Messages Agent", teams: [] });
+    const agent = await makeAgent({ name: "No Messages Agent" });
 
     await ConversationModel.create({
       userId: user.id,
@@ -1184,7 +1182,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "ID Merge Agent", teams: [] });
+    const agent = await makeAgent({ name: "ID Merge Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -1223,7 +1221,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Empty Bubble Agent", teams: [] });
+    const agent = await makeAgent({ name: "Empty Bubble Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -1303,7 +1301,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "ID Merge All Agent", teams: [] });
+    const agent = await makeAgent({ name: "ID Merge All Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -1355,7 +1353,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Order Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Order Test Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -1419,7 +1417,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Order All Agent", teams: [] });
+    const agent = await makeAgent({ name: "Order All Agent" });
 
     const conversation1 = await ConversationModel.create({
       userId: user.id,
@@ -1508,7 +1506,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Provider Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Provider Test Agent" });
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -1529,7 +1527,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "No Provider Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -1551,7 +1548,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Update Model Agent",
-      teams: [],
     });
 
     const model = await ModelModel.create({
@@ -1591,7 +1587,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Find Provider Agent",
-      teams: [],
     });
 
     const created = await ConversationModel.create({
@@ -1619,7 +1614,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Find All Provider Agent",
-      teams: [],
     });
 
     await ConversationModel.create({
@@ -1648,7 +1642,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Search Title Agent", teams: [] });
+    const agent = await makeAgent({ name: "Search Title Agent" });
 
     await ConversationModel.create({
       userId: user.id,
@@ -1677,7 +1671,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Search Content Agent", teams: [] });
+    const agent = await makeAgent({ name: "Search Content Agent" });
 
     const conv1 = await ConversationModel.create({
       userId: user.id,
@@ -1730,7 +1724,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Search Messages Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -1769,7 +1762,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "No Search Messages Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -1807,7 +1799,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Case Insensitive Agent",
-      teams: [],
     });
 
     await ConversationModel.create({
@@ -1849,7 +1840,6 @@ describe("ConversationModel", () => {
     const org2 = await makeOrganization();
     const agent = await makeAgent({
       name: "Isolation Search Agent",
-      teams: [],
     });
 
     const conv1 = await ConversationModel.create({
@@ -1892,7 +1882,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Whitespace Search Agent",
-      teams: [],
     });
 
     await ConversationModel.create({
@@ -1931,7 +1920,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Partial Match Agent", teams: [] });
+    const agent = await makeAgent({ name: "Partial Match Agent" });
 
     await ConversationModel.create({
       userId: user.id,
@@ -1955,7 +1944,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Partial Content Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -1991,7 +1979,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Escape Percent Agent",
-      teams: [],
     });
 
     // Create conversation with % in title
@@ -2027,7 +2014,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Escape Underscore Agent",
-      teams: [],
     });
 
     // Create conversation with _ in title
@@ -2063,7 +2049,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Escape Backslash Agent",
-      teams: [],
     });
 
     // Create conversation with backslash in title
@@ -2098,7 +2083,6 @@ describe("ConversationModel", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       name: "Message Limit Agent",
-      teams: [],
     });
 
     const conversation = await ConversationModel.create({
@@ -2141,7 +2125,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Pin Agent", teams: [] });
+    const agent = await makeAgent({ name: "Pin Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -2174,7 +2158,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Unpin Agent", teams: [] });
+    const agent = await makeAgent({ name: "Unpin Agent" });
 
     const created = await ConversationModel.create({
       userId: user.id,
@@ -2217,7 +2201,7 @@ describe("ConversationModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Search Order Agent", teams: [] });
+    const agent = await makeAgent({ name: "Search Order Agent" });
 
     const conv1 = await ConversationModel.create({
       userId: user.id,
@@ -2254,7 +2238,6 @@ describe("ConversationModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
       });
 
       // Create a conversation with the agent
@@ -2296,11 +2279,9 @@ describe("ConversationModel", () => {
       const org = await makeOrganization();
       const agentToDelete = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
       });
       const agentToKeep = await makeAgent({
         name: "Agent To Keep",
-        teams: [],
       });
 
       // Create conversations with both agents
@@ -2352,7 +2333,6 @@ describe("ConversationModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -2388,7 +2368,6 @@ describe("ConversationModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
       });
 
       const conversation = await ConversationModel.create({
@@ -2423,7 +2402,7 @@ describe("ConversationModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Restore Agent", teams: [] });
+      const agent = await makeAgent({ name: "Restore Agent" });
       const conversation = await ConversationModel.create({
         userId: user.id,
         organizationId: org.id,
@@ -2460,7 +2439,7 @@ describe("ConversationModel", () => {
       const owner = await makeUser();
       const stranger = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Scoped Agent", teams: [] });
+      const agent = await makeAgent({ name: "Scoped Agent" });
       const conversation = await ConversationModel.create({
         userId: owner.id,
         organizationId: org.id,
@@ -2489,7 +2468,7 @@ describe("ConversationModel", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
-      const agent = await makeAgent({ name: "Trash Agent", teams: [] });
+      const agent = await makeAgent({ name: "Trash Agent" });
 
       const active = await ConversationModel.create({
         userId: user.id,

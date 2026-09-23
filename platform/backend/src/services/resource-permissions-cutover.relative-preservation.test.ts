@@ -64,25 +64,25 @@ test("snapshots only current relative recipients at the intersection of role, te
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   const childAgent = await makeAgent({
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   const siblingAgent = await makeAgent({
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   const unshared = await makeAgent({
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "personal",
+    access: "personal",
   });
   for (const [agent, team] of [
     [parentAgent, parent],
@@ -211,8 +211,7 @@ test("snapshots only current relative recipients at the intersection of role, te
     organizationId: org.id,
     authorId: owner.id,
     agentType: "agent",
-    scope: "team",
-    teams: [parent.id],
+    access: { teams: [parent.id] },
   });
   expect(await allows(parentOnly.id, later.id, "update")).toBe(false);
   const revokedKey = { ...base, scope: childAgent.id };

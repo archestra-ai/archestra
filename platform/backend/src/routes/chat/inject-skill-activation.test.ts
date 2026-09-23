@@ -3,14 +3,14 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { expect, test } from "@/test";
+import { accessGrants, expect, type TestAccess, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectSkillActivation } from "./inject-skill-activation";
 
 async function seedSkill(
   organizationId: string,
   name: string,
-  scope: "personal" | "team" | "org" = "org",
+  access: TestAccess = "org",
   authorId: string | null = null,
 ) {
   const skill = await SkillModel.createWithFiles({
@@ -23,9 +23,9 @@ async function seedSkill(
       license: null,
       compatibility: null,
       sourceType: "manual",
-      scope,
     },
     files: [],
+    ...accessGrants(access),
   });
   if (!skill) {
     throw new Error("failed to seed skill");

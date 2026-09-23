@@ -16,7 +16,6 @@ async function seedPersonalSkill(params: {
       content: "# fixture",
       metadata: {},
       sourceType: "manual",
-      scope: "personal",
     },
     files: [],
   });

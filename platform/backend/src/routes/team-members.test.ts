@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentToolModel, TeamModel } from "@/models";
+import AgentTeamModel from "@/models/agent-team";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -1066,9 +1067,10 @@ describe("team routes", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: adminUser.id,
-        scope: "team",
-        teams: [parent.id],
+        access: { teams: [parent.id] },
       });
+      // The cleanup walks the team's agent assignments, not its grants.
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [parent.id]);
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,
         credentialResolutionMode: "static",
@@ -1120,9 +1122,10 @@ describe("team routes", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: adminUser.id,
-        scope: "team",
-        teams: [parent.id],
+        access: { teams: [parent.id] },
       });
+      // The cleanup walks the team's agent assignments, not its grants.
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [parent.id]);
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,
         credentialResolutionMode: "static",

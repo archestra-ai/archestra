@@ -70,7 +70,7 @@ describe("hook routes", () => {
     const other = await makeAgent({
       organizationId,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const deniedCreate = await app.inject({
       method: "POST",

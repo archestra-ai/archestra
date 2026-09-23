@@ -11,7 +11,14 @@ import {
 } from "@/models";
 import { createGithubAppConfig } from "@/services/github-app-config";
 import { handleSkillGithubSync } from "@/task-queue/handlers/skill-github-sync-handler";
-import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  describe,
+  expect,
+  test,
+  useRouteTestApp,
+} from "@/test";
 import { stubSkillManifest } from "@/test/github-skills-stub";
 import { useMswServer } from "@/test/msw";
 import skillRoutes from "./skill.routes";
@@ -175,12 +182,7 @@ describe("Enterprise GitHub App skill import", () => {
     const imported = await ctx.app.inject({
       method: "POST",
       url: "/api/skills/github/import",
-      payload: {
-        ...payload,
-        skillPaths: ["pdf"],
-        scope: "org",
-        sync: { interval: "1d" },
-      },
+      payload: { ...payload, skillPaths: ["pdf"], sync: { interval: "1d" } },
     });
     expect(imported.statusCode, imported.body).toBe(200);
     const [created] = imported.json().created;
@@ -191,7 +193,6 @@ describe("Enterprise GitHub App skill import", () => {
       githubAppConfigId: appConfig.id,
       githubSyncInterval: "1d",
       githubSyncRef: "main",
-      scope: "org",
       latestVersion: 1,
     });
     expect(await SkillFileModel.findBySkillId(created.id)).toEqual(
@@ -236,7 +237,6 @@ describe("Enterprise GitHub App skill import", () => {
       sourceOrigin: origin,
       sourceCommit: secondCommit,
       githubSyncInterval: "1d",
-      scope: "org",
       latestVersion: 2,
       lastSyncError: null,
       content: expect.stringContaining("Updated body"),
@@ -324,9 +324,9 @@ describe("Enterprise GitHub App skill import", () => {
           sourceType: "github",
           sourceRef: `acme/skills@${firstCommit}:pdf`,
           sourceOrigin,
-          scope: "org",
         },
         files: [],
+        ...accessGrants("org"),
       });
     }
     const sources = await ctx.app.inject({

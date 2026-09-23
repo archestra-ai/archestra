@@ -60,7 +60,6 @@ describe("mcp-tool-call routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       agentId = agent.id;
 
@@ -145,7 +144,7 @@ describe("mcp-tool-call routes", () => {
     const ownedApp = await makeApp({
       organizationId,
       authorId: appOwner.id,
-      scope: "personal",
+      access: "personal",
     });
     const appCall = await McpToolCallModel.create({
       ownerType: "app",
@@ -227,7 +226,7 @@ describe("mcp-tool-call routes", () => {
     const privateAgent = await makeAgent({
       organizationId,
       authorId: stranger.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const caller = await makeUser();
@@ -275,7 +274,6 @@ describe("mcp-tool-call routes", () => {
     const otherAgent = await makeAgent({
       organizationId: otherOrganization.id,
       authorId: owner.id,
-      scope: "org",
     });
     const foreign = await seedCall(owner.id, { agentId: otherAgent.id });
     const otherApp = await makeApp({

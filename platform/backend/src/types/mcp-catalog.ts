@@ -23,6 +23,7 @@ import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-cr
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { McpServerHibernationModeSchema } from "./mcp-hibernation";
 import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
+import { RetiredSharingFieldSchema } from "./visibility";
 // SPDX-SnippetEnd
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
@@ -254,6 +255,22 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
 
 export const InsertInternalMcpCatalogSchema =
   InsertInternalMcpCatalogSchemaBase.superRefine(validateInternalMcpCatalog);
+
+/**
+ * The body of the catalog create route and tool. Who can reach the new item is
+ * its initial grants alone; the retired `scope` and `teams` fields are not
+ * accepted.
+ */
+export const CreateInternalMcpCatalogBodySchema =
+  InsertInternalMcpCatalogSchemaBase.omit({
+    scope: true,
+    teams: true,
+  })
+    .extend({
+      scope: RetiredSharingFieldSchema,
+      teams: RetiredSharingFieldSchema,
+    })
+    .superRefine(validateInternalMcpCatalog);
 
 const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,

@@ -6,7 +6,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import {
-  assertAgentTeams,
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
   requireAgentModifyPermission,
@@ -20,12 +19,13 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, AgentScope, ToolExposureMode } from "@/types";
+import type { Agent, ToolExposureMode } from "@/types";
 import {
   AgentActivationSkillSchema,
   AgentScopeSchema,
@@ -102,19 +102,12 @@ export const CreateBaseToolArgsSchema = z
     name: InsertAgentSchemaBase.shape.name.describe(
       "Name for the new resource.",
     ),
-    scope: AgentScopeSchema.optional().describe(
-      "Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided.",
-    ),
     labels: z
       .array(LabelInputSchema)
       .optional()
       .describe(
         "Optional key-value labels for organization and categorization.",
       ),
-    teams: z
-      .array(UuidIdSchema)
-      .optional()
-      .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
     ),
@@ -263,9 +256,7 @@ export async function handleCreateResource<
   TArgs extends {
     name: string;
     initialGrants?: ResourcePermissionGrant[];
-    scope?: AgentScope;
     labels?: Array<{ key: string; value: string }>;
-    teams?: string[];
     description?: string | null;
     icon?: string | null;
     knowledgeBaseIds?: string[];
@@ -296,20 +287,11 @@ export async function handleCreateResource<
   );
 
   try {
-    const teams = args.teams ?? [];
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
 
     if (!args.name || args.name.trim() === "") {
       return errorResult(`${toolLabel} name is required and cannot be empty.`);
     }
-
-    const scope =
-      args.scope ??
-      (teams.length > 0
-        ? "team"
-        : targetAgentType === "agent"
-          ? "personal"
-          : "org");
 
     if (context.userId && context.organizationId) {
       const checker = await getAgentTypePermissionChecker({
@@ -317,17 +299,13 @@ export async function handleCreateResource<
         organizationId: context.organizationId,
       });
       checker.require(targetAgentType, "create");
-      await assertAgentTeams({
-        scope,
-        teamIds: teams,
-        organizationId: context.organizationId,
-      });
     }
 
     const createParams: Parameters<typeof AgentModel.create>[0] = {
       name: args.name,
-      scope,
-      teams,
+      // The retired visibility column is NOT NULL; nothing reads it. Who can
+      // reach the agent is its initial grants alone.
+      scope: "personal",
       labels,
       agentType: targetAgentType,
       environmentId: await resolveNewAgentEnvironmentId({
@@ -404,8 +382,8 @@ export async function handleCreateResource<
           id: crypto.randomUUID(),
           name: args.name,
           authorId: context.userId,
-          scope,
-          teams: teams.map((id) => ({ id })),
+          scope: "personal",
+          teams: [],
           users: [],
         },
       });
@@ -413,10 +391,7 @@ export async function handleCreateResource<
     }
     const created = await AgentModel.create(createParams, context.userId, {
       defaultExcludedSubagentIds,
-      initialPermissionGrants: ResourcePermissions.grantsForCreation({
-        grants: args.initialGrants,
-        visibility: scope,
-      }),
+      initialPermissionGrants: args.initialGrants ?? [],
     });
 
     const toolAssignmentResults =
@@ -498,9 +473,20 @@ export async function handleGetResource<
       // even though admins can see all personal agents in the UI.
       if (
         record &&
-        record.scope === "personal" &&
         context.userId &&
         record.authorId !== context.userId &&
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        (
+          await ResourcePermissionPolicyModel.findAudience({
+            organizationId: record.organizationId,
+            resource:
+              record.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: record.id,
+          })
+        ).audience === "personal" &&
+        // SPDX-SnippetEnd
         !checker?.allowsScoped?.({
           agentType: expectedType,
           agentId: record.id,

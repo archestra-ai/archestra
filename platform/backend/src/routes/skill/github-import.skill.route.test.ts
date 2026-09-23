@@ -179,7 +179,6 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
           content: "# already-here",
           metadata: {},
           sourceType: "manual",
-          scope: "personal",
         },
         files: [],
       });
@@ -221,7 +220,6 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
           content: "# discover-taken",
           metadata: {},
           sourceType: "manual",
-          scope: "personal",
         },
         files: [],
       });
@@ -305,9 +303,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         url: "/api/skills/github/import",
         payload: {
           repoUrl: "route-org-grants/skills",
-          skillPaths: ["pdf"],
-          scope: "org",
-          // Choosing the audience is now an explicit act: the retired `scope`
+          skillPaths: ["pdf"], // Choosing the audience is now an explicit act: the retired `scope`
           // field no longer derives one, because that derivation skipped the
           // delegation check every explicit grant goes through.
           initialGrants: ["admin", "platform_admin", "editor", "member"].map(

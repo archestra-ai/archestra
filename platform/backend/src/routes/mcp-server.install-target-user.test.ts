@@ -91,7 +91,6 @@ describe("MCP Server Install - explicit target user", () => {
     return makeInternalMcpCatalog({
       organizationId,
       authorId,
-      scope: "org",
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });

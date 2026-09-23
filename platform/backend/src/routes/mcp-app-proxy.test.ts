@@ -149,7 +149,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     const owner = await makeUser();
     const created = await makeApp({
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
     });
     const caller = await makeUser();
@@ -194,7 +194,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     const owner = await makeUser();
     const created = await makeApp({
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       enabled: true,
     });
     const caller = await makeUser();
@@ -1039,7 +1039,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     makeMember,
     makeOrganization,
   }) => {
-    const created = await makeApp({ scope: "personal" });
+    const created = await makeApp({ access: "personal" });
     // A user in a different organization holds a valid token, but cannot view
     // this app — visibility is enforced from the token's viewer.
     const otherOrg = await makeOrganization();

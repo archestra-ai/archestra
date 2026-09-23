@@ -41,7 +41,6 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const pin = await app.inject({
@@ -79,7 +78,6 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
     const member = await makeUser({ email: "agent-pin-member@test.com" });
     await makeMember(member.id, organizationId, {});
@@ -117,7 +115,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       organizationId,
       authorId: otherAuthor.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const stranger = await makeUser({ email: "agent-pin-stranger@test.com" });
     await makeMember(stranger.id, organizationId, {});
@@ -137,7 +135,6 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
     await app.inject({ method: "PUT", url: `/api/agents/${agent.id}/pin` });
     await AgentModel.delete(agent.id);
@@ -166,28 +163,24 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
     const bravo = await makeAgent({
       name: `Bravo ${suffix}`,
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
     const charlie = await makeAgent({
       name: `Charlie ${suffix}`,
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
     const zulu = await makeAgent({
       name: `Zulu ${suffix}`,
       organizationId,
       authorId: admin.id,
       agentType: "agent",
-      scope: "org",
     });
 
     await AgentPinModel.pin({ userId: admin.id, agentId: alpha.id });

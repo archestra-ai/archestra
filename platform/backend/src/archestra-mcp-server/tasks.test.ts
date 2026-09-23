@@ -49,7 +49,6 @@ describe("run tools", () => {
         organizationId,
         authorId: actorId,
         agentType: "agent",
-        scope: "org",
       });
       await seedAndAssignArchestraTools(callingAgent.id);
       context = {
@@ -72,7 +71,7 @@ describe("run tools", () => {
       organizationId,
       authorId: owner.id,
       agentType: "agent",
-      scope: "team",
+      access: { teams: [] },
     });
     await AgentTeamModel.syncAgentTeams(target.id, [team.id]);
 
@@ -100,7 +99,6 @@ describe("run tools", () => {
       organizationId,
       authorId: actorId,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -154,7 +152,6 @@ describe("run tools", () => {
       organizationId,
       authorId: actorId,
       agentType: "mcp_gateway",
-      scope: "org",
     });
 
     const result = await executeArchestraTool(
@@ -183,7 +180,6 @@ describe("run tools", () => {
       organizationId,
       authorId: actorId,
       agentType: "agent",
-      scope: "org",
     });
     vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
       text: "Finished",
@@ -678,7 +674,7 @@ describe("run tools", () => {
       organizationId,
       authorId: otherUser.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
 
     const result = await executeArchestraTool(

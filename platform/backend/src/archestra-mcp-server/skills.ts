@@ -540,7 +540,6 @@ const registry = defineArchestraTools([
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
           sourceType: "manual",
-          scope: "personal",
         },
         files: toSkillFiles(args.files ?? []),
         environmentIds: agentEnvironmentId ? [agentEnvironmentId] : [],

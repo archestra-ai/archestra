@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import {
   AgentExcludedSkillModel,
   AgentModel,
@@ -6,6 +8,7 @@ import {
   SkillModel,
 } from "@/models";
 import MemberModel from "@/models/member";
+import SkillTeamModel from "@/models/skill-team";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { describe, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -16,6 +19,14 @@ import {
   seedImportedSkill,
   useSkillRouteTestApp,
 } from "./skill.test-helpers";
+
+/** Publishes a skill created through the route to the whole organization. */
+const PUBLISH_TO_ORGANIZATION = [
+  {
+    subject: { type: "organization" as const, id: "*" as const },
+    actions: ["read" as const, "use" as const],
+  },
+];
 
 describe("GET /api/skills", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
@@ -168,17 +179,24 @@ describe("GET /api/skills", () => {
     const published = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("published-skill"), scope: "org" },
+      payload: {
+        content: manifestNamed("published-skill"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     const excluded = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("excluded-skill"), scope: "org" },
+      payload: {
+        content: manifestNamed("excluded-skill"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("team-skill"), scope: "team" },
+      // An unpublished skill: only its author reaches it.
+      payload: { content: manifestNamed("team-skill") },
     });
     await AgentExcludedSkillModel.replaceExclusions({
       agentId: gateway.id,
@@ -227,14 +245,17 @@ describe("GET /api/skills", () => {
     const everywhere = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("gateway-everywhere"), scope: "org" },
+      payload: {
+        content: manifestNamed("gateway-everywhere"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     const inStaging = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: {
         content: manifestNamed("gateway-staging"),
-        scope: "org",
+        initialGrants: PUBLISH_TO_ORGANIZATION,
         environmentIds: [staging.id],
       },
     });
@@ -243,7 +264,7 @@ describe("GET /api/skills", () => {
       url: "/api/skills",
       payload: {
         content: manifestNamed("gateway-production"),
-        scope: "org",
+        initialGrants: PUBLISH_TO_ORGANIZATION,
         environmentIds: [production.id],
       },
     });
@@ -251,8 +272,8 @@ describe("GET /api/skills", () => {
       method: "POST",
       url: "/api/skills",
       payload: {
+        // An unpublished skill: only its author reaches it.
         content: manifestNamed("gateway-team-skill"),
-        scope: "team",
       },
     });
 
@@ -284,7 +305,7 @@ describe("GET /api/skills", () => {
       name: "Private Skill Agent",
       organizationId: ctx.organizationId,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -373,38 +394,43 @@ describe("GET /api/skills", () => {
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
 
-    await seedImportedSkill({
-      organizationId: ctx.organizationId,
-      name: "org-skill",
-      sourceRef: "shared/org@main:SKILL.md",
-      scope: "org",
-    });
+    await withRetiredScope(
+      await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name: "org-skill",
+        sourceRef: "shared/org@main:SKILL.md",
+        access: "org",
+      }),
+      { scope: "org" },
+    );
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
-    await seedImportedSkill({
-      organizationId: ctx.organizationId,
-      name: "team-a-skill",
-      sourceRef: "team/a@main:SKILL.md",
-      scope: "team",
-      teamIds: [teamA.id],
-    });
-    await seedImportedSkill({
-      organizationId: ctx.organizationId,
-      name: "team-b-skill",
-      sourceRef: "team/b@main:SKILL.md",
-      scope: "team",
-      teamIds: [teamB.id],
-    });
+    await withRetiredScope(
+      await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name: "team-a-skill",
+        sourceRef: "team/a@main:SKILL.md",
+        access: { teams: [teamA.id] },
+      }),
+      { scope: "team", teamIds: [teamA.id] },
+    );
+    await withRetiredScope(
+      await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name: "team-b-skill",
+        sourceRef: "team/b@main:SKILL.md",
+        access: { teams: [teamB.id] },
+      }),
+      { scope: "team", teamIds: [teamB.id] },
+    );
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -438,24 +464,25 @@ describe("GET /api/skills", () => {
     makeUser,
   }) => {
     const otherAuthor = await makeUser();
-    await seedImportedSkill({
-      organizationId: ctx.organizationId,
-      name: "org-skill",
-      sourceRef: "shared/org@main:SKILL.md",
-      scope: "org",
-    });
+    await withRetiredScope(
+      await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name: "org-skill",
+        sourceRef: "shared/org@main:SKILL.md",
+        access: "org",
+      }),
+      { scope: "org" },
+    );
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -503,14 +530,12 @@ describe("GET /api/skills", () => {
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -583,3 +608,23 @@ describe("GET /api/skills", () => {
     expect(response.statusCode).toBe(403);
   });
 });
+
+/**
+ * Write the retired visibility column and team rows a skill carried before
+ * permission policies. The admin list filters (`scope`, `teamIds`,
+ * `excludeOtherPersonalSkills`) still select on them, and create no longer
+ * sets them.
+ */
+async function withRetiredScope(
+  skill: { id: string },
+  legacy: { scope: "org" | "team"; teamIds?: string[] },
+) {
+  await db
+    .update(schema.skillsTable)
+    .set({ scope: legacy.scope })
+    .where(eq(schema.skillsTable.id, skill.id));
+  if (legacy.teamIds) {
+    await SkillTeamModel.syncSkillTeams(skill.id, legacy.teamIds);
+  }
+  return skill;
+}

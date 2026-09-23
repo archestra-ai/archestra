@@ -23,7 +23,6 @@ import type {
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import { knowledgeScope } from "./resource-permission-target";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -243,7 +242,11 @@ class KnowledgeBaseModel {
   static async create(
     data: InsertKnowledgeBase,
     /** Explicit starting audience; omitted derives one from the visibility. */
-    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
+    options?: {
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
   ): Promise<KnowledgeBase> {
     // The access policy is written with the row it governs, so a failure
     // cannot leave a knowledge base nobody can reach.
@@ -267,11 +270,10 @@ class KnowledgeBaseModel {
         resource: "knowledgeBase",
         scope: result.id,
         grants: options?.initialPermissionGrants,
-        // Knowledge carries no author column, so a private base belongs to
-        // no one and is reached by administrators alone.
+        // Knowledge carries no author column, so a base shared with nobody
+        // belongs to no one and is reached by administrators alone.
         authorId: null,
-        visibility: knowledgeScope(result.visibility),
-        teams: (result.teamIds ?? []).map((id: string) => ({ id })),
+        publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd
 

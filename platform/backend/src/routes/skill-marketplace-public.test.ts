@@ -14,7 +14,15 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { MarketplaceMaterializer } from "@/skills/marketplace/materialize";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
@@ -26,7 +34,7 @@ async function seedSkill(params: {
   organizationId: string;
   name: string;
   content?: string;
-  scope?: "org" | "personal";
+  access?: TestAccess;
   authorId?: string;
 }) {
   const skill = await SkillModel.createWithFiles({
@@ -38,9 +46,9 @@ async function seedSkill(params: {
       content: params.content ?? `# ${params.name}\n\nbody`,
       metadata: {},
       sourceType: "manual",
-      scope: params.scope ?? "org",
     },
     files: [],
+    ...accessGrants(params.access ?? "org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
@@ -572,7 +580,7 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       await seedSkill({
         organizationId: org.id,
         name: "Someone Elses",
-        scope: "personal",
+        access: "personal",
         authorId: other.id,
       });
       const { value: token } = await UserTokenModel.create(user.id, org.id);

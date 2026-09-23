@@ -19,12 +19,12 @@ describe("catalog grant filtering", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const other = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const key = {
       organizationId: org.id,
@@ -95,7 +95,7 @@ describe("catalog grant filtering", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const key = {
       organizationId: org.id,

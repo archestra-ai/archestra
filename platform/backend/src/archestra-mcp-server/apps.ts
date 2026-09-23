@@ -539,15 +539,6 @@ const registry = defineArchestraTools([
       if ("error" in auth) return auth.error;
       const { userId, organizationId, sessionKey, interactionSessionId } = auth;
 
-      const scope = args.scope ?? "personal";
-      // Team scope needs explicit team assignment, which these chat tools can't
-      // express — without it a team app would have zero team rows and be
-      // unreachable. Team apps are created via the Apps UI/REST API.
-      if (scope === "team") {
-        return errorResult(
-          "Team-scoped apps must be created via the Apps UI so teams can be assigned. Use personal or org scope here.",
-        );
-      }
       let payload: VersionPayload;
       let warnings: string[];
       try {
@@ -569,7 +560,7 @@ const registry = defineArchestraTools([
               id: crypto.randomUUID(),
               name: args.name,
               authorId: userId,
-              scope,
+              scope: "personal",
               teams: [],
               users: [],
             },
@@ -628,11 +619,7 @@ const registry = defineArchestraTools([
       let created: Awaited<ReturnType<typeof AppModel.create>>;
       try {
         created = await AppModel.create({
-          initialPermissionGrants: ResourcePermissions.grantsForCreation({
-            grants: args.initialGrants,
-            visibility: scope,
-          }),
-          initialVisibility: { scope, teamIds: [] },
+          initialPermissionGrants: args.initialGrants ?? [],
           app: {
             organizationId,
             authorId: userId,
@@ -690,12 +677,10 @@ const registry = defineArchestraTools([
       try {
         await createAppBacking({
           app: created,
-          scope,
           environmentId,
           icon: args.icon ?? null,
           userId,
           organizationId,
-          teamIds: [],
         });
         if (args.labels?.length) {
           await AppLabelModel.syncAppLabels(

@@ -5,7 +5,7 @@ import PluginTeamModel from "./plugin-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("PluginTeamModel.getUserAccessiblePluginIds", () => {
-  test("lists a plugin through a read grant, whatever its retired scope says", async ({
+  test("lists a plugin through a read grant", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -18,8 +18,7 @@ describe("PluginTeamModel.getUserAccessiblePluginIds", () => {
     const plugin = await createPlugin({
       organizationId: org.id,
       userId: author.id,
-      // Organization-wide by the retired field, shared with nobody by grant.
-      scope: "org",
+      // Shared with nobody by grant.
       initialPermissionGrants: [],
     });
     const list = (userId?: string) =>
@@ -59,7 +58,6 @@ describe("PluginTeamModel.getUserAccessiblePluginIds", () => {
 async function createPlugin(params: {
   organizationId: string;
   userId: string;
-  scope: "personal" | "team" | "org";
   initialPermissionGrants: [];
 }) {
   const plugin = await PluginModel.create({
@@ -69,7 +67,6 @@ async function createPlugin(params: {
       displayName: `Plugin ${crypto.randomUUID().slice(0, 8)}`,
       description: "",
       clientType: "claude-code",
-      scope: params.scope,
       files: [
         {
           path: "hooks/hooks.json",

@@ -582,8 +582,7 @@ describe("knowledge-management tool execution", () => {
       );
       const hiddenKb = await makeKnowledgeBase(org.id);
       await makeKnowledgeBaseConnector(hiddenKb.id, org.id, {
-        visibility: "team-scoped",
-        teamIds: [restrictedTeam.id],
+        legacy: { visibility: "team-scoped", teamIds: [restrictedTeam.id] },
       });
 
       const agentWithMixedSources = await makeAgent({
@@ -648,8 +647,7 @@ describe("knowledge-management tool execution", () => {
         org.id,
         {
           name: "Hidden Connector",
-          visibility: "team-scoped",
-          teamIds: [restrictedTeam.id],
+          legacy: { visibility: "team-scoped", teamIds: [restrictedTeam.id] },
         },
       );
 
@@ -745,8 +743,7 @@ describe("knowledge-management tool execution", () => {
 
       const kb = await makeKnowledgeBase(org.id);
       await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "team-scoped",
-        teamIds: [crypto.randomUUID()],
+        legacy: { visibility: "team-scoped", teamIds: [crypto.randomUUID()] },
       });
 
       const agentWithKb = await makeAgent({
@@ -791,8 +788,8 @@ describe("knowledge-management tool execution", () => {
         await makeMember(user.id, org.id, { role: "member" });
         const team = await makeTeam(org.id, (await makeUser()).id);
         const kb = await makeKnowledgeBase(org.id, {
-          visibility,
-          teamIds: [team.id],
+          access:
+            visibility === "team-scoped" ? { teams: [team.id] } : "personal",
         });
         await makeKnowledgeBaseConnector(kb.id, org.id);
         const agent = await makeAgent({
@@ -832,8 +829,7 @@ describe("knowledge-management tool execution", () => {
       const restrictedTeam = await makeTeam(org.id, restrictedTeamOwner.id);
       const hiddenKb = await makeKnowledgeBase(org.id);
       await makeKnowledgeBaseConnector(hiddenKb.id, org.id, {
-        visibility: "team-scoped",
-        teamIds: [restrictedTeam.id],
+        legacy: { visibility: "team-scoped", teamIds: [restrictedTeam.id] },
       });
 
       const agentWithHiddenKb = await makeAgent({
@@ -926,7 +922,7 @@ describe("knowledge-management tool execution", () => {
     }) => {
       const created = await executeArchestraTool(
         t("create_knowledge_base"),
-        { name: "Personal notes", visibility: "private" },
+        { name: "Personal notes" },
         mockContext,
       );
       expect(created.isError).toBe(false);
@@ -1110,14 +1106,15 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
-    test("create_knowledge_connector rejects team-scoped connectors without team_ids", async () => {
+    test("create_knowledge_connector refuses the retired visibility and team_ids arguments", async () => {
+      // Who can reach a new connector is its initial grants alone.
       const result = await executeArchestraTool(
         t("create_knowledge_connector"),
         {
           name: "Invalid Scoped Connector",
           connector_type: "jira",
           visibility: "team-scoped",
-          team_ids: [],
+          team_ids: [crypto.randomUUID()],
           config: {
             jiraBaseUrl: "https://test.atlassian.net",
             isCloud: true,
@@ -1129,7 +1126,7 @@ describe("knowledge-management tool execution", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "At least one team must be selected for team-scoped connectors",
+        "Validation error in archestra__create_knowledge_connector",
       );
     });
 
@@ -1423,10 +1420,7 @@ describe("knowledge-management tool execution", () => {
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         mockContext.organizationId!,
-        {
-          visibility: "team-scoped",
-          teamIds: ["team-a"],
-        },
+        { legacy: { visibility: "team-scoped", teamIds: ["team-a"] } },
       );
 
       const refreshSpy = vi.spyOn(
@@ -1713,7 +1707,7 @@ describe("knowledge-management tool execution", () => {
         kb = await makeKnowledgeBase(org.id);
         autoSyncConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
           connectorType: "github",
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
         });
       },
     );
@@ -1784,7 +1778,7 @@ describe("knowledge-management tool execution", () => {
         {
           name: "Member Auto-sync",
           connector_type: "github",
-          visibility: "auto-sync-permissions",
+          sync_permissions_from_source: true,
           config: {
             githubUrl: "https://api.github.com",
             owner: "test-org",

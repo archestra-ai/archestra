@@ -31,7 +31,15 @@ import {
 } from "@/models";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import type {
   Agent,
   CreatePlugin,
@@ -74,9 +82,11 @@ describe("skill tool execution", () => {
 
   async function seedSkill(
     overrides: {
-      skill?: Partial<InsertSkill>;
+      skill?: Partial<Omit<InsertSkill, "scope">>;
       files?: Omit<InsertSkillFile, "skillId">[];
       environmentIds?: string[];
+      /** Who the skill is shared with; the organization by default. */
+      access?: TestAccess;
     } = {},
   ) {
     return await SkillModel.createWithFiles({
@@ -87,11 +97,11 @@ describe("skill tool execution", () => {
         content: "# PDF Processing\nUse pdftotext.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
         ...overrides.skill,
       },
       files: overrides.files ?? [],
       environmentIds: overrides.environmentIds,
+      ...accessGrants(overrides.access ?? "org"),
     });
   }
 
@@ -240,11 +250,12 @@ describe("skill tool execution", () => {
       },
     });
     await seedSkill({
+      access: "personal",
       skill: {
         name: "shared-name",
         description: "Unselected personal version",
         content: "Use the personal procedure.",
-        scope: "personal",
+
         authorId: userId,
       },
     });
@@ -290,10 +301,11 @@ describe("skill tool execution", () => {
       skill: { name: "shared-name", description: "Organization version" },
     });
     const personal = await seedSkill({
+      access: "personal",
       skill: {
         name: "shared-name",
         description: "My version",
-        scope: "personal",
+
         authorId: userId,
       },
     });
@@ -323,20 +335,22 @@ describe("skill tool execution", () => {
     const firstAuthor = await makeUser();
     const secondAuthor = await makeUser();
     await seedSkill({
+      access: "personal",
       skill: {
         name: "admin-visible-copy",
         description: "First copy",
         content: "# First copy",
-        scope: "personal",
+
         authorId: firstAuthor.id,
       },
     });
     await seedSkill({
+      access: "personal",
       skill: {
         name: "admin-visible-copy",
         description: "Second copy",
         content: "# Second copy",
-        scope: "personal",
+
         authorId: secondAuthor.id,
       },
     });
@@ -558,7 +572,6 @@ describe("skill tool execution", () => {
       description: "Portable skills",
       clientType: "claude-code",
       supportedPlatforms: ["posix"],
-      scope: "org",
       files: [
         {
           path: "skills/release/SKILL.md",
@@ -632,6 +645,7 @@ describe("skill tool execution", () => {
       organizationId,
       userId,
       input,
+      ...accessGrants("org"),
     });
     if (!plugin) throw new Error("plugin seed failed");
     const catalog = await executeArchestraTool(
@@ -715,6 +729,7 @@ describe("skill tool execution", () => {
       },
     });
     const plugin = await PluginModel.create({
+      ...accessGrants("org"),
       organizationId,
       userId,
       input: {
@@ -722,7 +737,6 @@ describe("skill tool execution", () => {
         description: "Portable skills",
         clientType: "claude-code",
         supportedPlatforms: ["posix"],
-        scope: "org",
         files: [
           {
             path: "skills/release/SKILL.md",
@@ -764,6 +778,7 @@ describe("skill tool execution", () => {
   test("uses the XML-safe listed name to load a projected skill", async () => {
     config.plugins.enabled = true;
     const plugin = await PluginModel.create({
+      ...accessGrants("org"),
       organizationId,
       userId,
       input: {
@@ -771,7 +786,6 @@ describe("skill tool execution", () => {
         description: "Portable skills",
         clientType: "claude-code",
         supportedPlatforms: ["posix"],
-        scope: "org",
         files: [
           {
             path: "skills/verify/SKILL.md",
@@ -824,6 +838,7 @@ describe("skill tool execution", () => {
   test("assigns duplicate projected names by stable source identity", async () => {
     config.plugins.enabled = true;
     const plugin = await PluginModel.create({
+      ...accessGrants("org"),
       organizationId,
       userId,
       input: {
@@ -831,7 +846,6 @@ describe("skill tool execution", () => {
         description: "Portable skills",
         clientType: "claude-code",
         supportedPlatforms: ["posix"],
-        scope: "org",
         files: [
           {
             path: "skills/b/SKILL.md",
@@ -867,6 +881,7 @@ describe("skill tool execution", () => {
   test("keeps legacy references ahead of colliding projected names", async () => {
     config.plugins.enabled = true;
     const original = await PluginModel.create({
+      ...accessGrants("org"),
       organizationId,
       userId,
       input: {
@@ -874,7 +889,6 @@ describe("skill tool execution", () => {
         description: "Original skills",
         clientType: "claude-code",
         supportedPlatforms: ["posix"],
-        scope: "org",
         files: [
           {
             path: "skills/release/SKILL.md",
@@ -894,6 +908,7 @@ describe("skill tool execution", () => {
       name: "release-guide",
     });
     const colliding = await PluginModel.create({
+      ...accessGrants("org"),
       organizationId,
       userId,
       input: {
@@ -901,7 +916,6 @@ describe("skill tool execution", () => {
         description: "Colliding skills",
         clientType: "claude-code",
         supportedPlatforms: ["posix"],
-        scope: "org",
         files: [
           {
             path: "skills/collision/SKILL.md",
@@ -1176,9 +1190,10 @@ describe("skill tool execution", () => {
     // a personal skill owned by someone else
     const author = await makeUser();
     await seedSkill({
-      skill: { name: "private-skill", scope: "personal", authorId: author.id },
+      access: "personal",
+      skill: { name: "private-skill", authorId: author.id },
     });
-    await seedSkill({ skill: { name: "shared-skill", scope: "org" } });
+    await seedSkill({ skill: { name: "shared-skill" } });
 
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
@@ -1199,7 +1214,8 @@ describe("skill tool execution", () => {
   }) => {
     const author = await makeUser();
     await seedSkill({
-      skill: { name: "pdf-processing", scope: "personal", authorId: author.id },
+      access: "personal",
+      skill: { name: "pdf-processing", authorId: author.id },
     });
 
     const member = await makeUser();
@@ -1220,7 +1236,8 @@ describe("skill tool execution", () => {
   }) => {
     const author = await makeUser();
     await seedSkill({
-      skill: { name: "pdf-processing", scope: "personal", authorId: author.id },
+      access: "personal",
+      skill: { name: "pdf-processing", authorId: author.id },
       files: [
         { path: "references/FORMS.md", content: "# Forms", kind: "reference" },
       ],
@@ -1307,7 +1324,7 @@ describe("skill tool execution", () => {
 
   test("create_skill allows a personal name that an org skill already uses", async () => {
     // per-scope uniqueness: a personal name may coexist with a shared one.
-    await seedSkill({ skill: { name: "pdf-processing", scope: "org" } });
+    await seedSkill({ skill: { name: "pdf-processing" } });
     const result = await executeArchestraTool(
       TOOL_CREATE_SKILL_FULL_NAME,
       { content: manifest("pdf-processing") },
@@ -1456,7 +1473,7 @@ describe("skill tool execution", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedSkill({ skill: { scope: "org" } });
+    await seedSkill({ skill: {} });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
 
@@ -1509,7 +1526,7 @@ describe("skill tool execution", () => {
     const memberContext = { ...context, userId: member.id };
 
     await seedSkill({
-      skill: { name: "dup", scope: "org", content: "# Org body" },
+      skill: { name: "dup", content: "# Org body" },
     });
     await executeArchestraTool(
       TOOL_CREATE_SKILL_FULL_NAME,
@@ -1539,16 +1556,17 @@ describe("skill tool execution", () => {
 
     // another member owns a personal "dup" the caller cannot see…
     await seedSkill({
+      access: "personal",
       skill: {
         name: "dup",
-        scope: "personal",
+
         authorId: author.id,
         content: "# Other personal",
       },
     });
     // …alongside an org "dup" the caller can see.
     await seedSkill({
-      skill: { name: "dup", scope: "org", content: "# Org body" },
+      skill: { name: "dup", content: "# Org body" },
     });
 
     const result = await executeArchestraTool(
@@ -1574,15 +1592,16 @@ describe("skill tool execution", () => {
     // an admin can access every candidate, so a foreign personal "dup" survives
     // the access filter — it must still not outrank the shared org skill.
     await seedSkill({
+      access: "personal",
       skill: {
         name: "dup",
-        scope: "personal",
+
         authorId: author.id,
         content: "# Other personal",
       },
     });
     await seedSkill({
-      skill: { name: "dup", scope: "org", content: "# Org body" },
+      skill: { name: "dup", content: "# Org body" },
     });
 
     const result = await executeArchestraTool(
@@ -1664,11 +1683,12 @@ describe("skill tool execution", () => {
   describe("org/team-token sessions (no user)", () => {
     test("list_skills returns only org-scoped skills", async ({ makeUser }) => {
       const author = await makeUser();
-      await seedSkill({ skill: { name: "shared-skill", scope: "org" } });
+      await seedSkill({ skill: { name: "shared-skill" } });
       await seedSkill({
+        access: "personal",
         skill: {
           name: "private-skill",
-          scope: "personal",
+
           authorId: author.id,
         },
       });
@@ -1685,7 +1705,7 @@ describe("skill tool execution", () => {
     });
 
     test("load_skill loads an org-scoped skill", async () => {
-      await seedSkill({ skill: { name: "pdf-processing", scope: "org" } });
+      await seedSkill({ skill: { name: "pdf-processing" } });
 
       const result = await executeArchestraTool(
         TOOL_LOAD_SKILL_FULL_NAME,
@@ -1700,9 +1720,10 @@ describe("skill tool execution", () => {
     test("load_skill hides a personal skill", async ({ makeUser }) => {
       const author = await makeUser();
       await seedSkill({
+        access: "personal",
         skill: {
           name: "pdf-processing",
-          scope: "personal",
+
           authorId: author.id,
         },
       });
@@ -1961,9 +1982,10 @@ describe("skill tool execution", () => {
     }) => {
       const author = await makeUser();
       const skill = await seedSkillOrThrow({
+        access: "personal",
         skill: {
           name: "pdf-processing",
-          scope: "personal",
+
           authorId: author.id,
         },
       });

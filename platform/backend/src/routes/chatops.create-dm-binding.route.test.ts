@@ -31,7 +31,6 @@ describe("POST /api/chatops/bindings/dm", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     app = createFastifyInstance();
@@ -71,7 +70,6 @@ describe("POST /api/chatops/bindings/dm", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const existing = await ChatOpsChannelBindingModel.create({
       organizationId,
@@ -107,7 +105,6 @@ describe("POST /api/chatops/bindings/dm", () => {
       organizationId: otherOrganization.id,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const otherBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,

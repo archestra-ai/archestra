@@ -780,7 +780,6 @@ describe("LlmProviderApiKeyModel", () => {
       });
       await makeLlmProviderApiKey(org.id, codexSecret.id, {
         provider: "openai",
-        scope: "personal",
         userId: user.id,
         name: "ChatGPT Subscription",
       });
@@ -788,7 +787,6 @@ describe("LlmProviderApiKeyModel", () => {
       const plainSecret = await makeSecret({ secret: { apiKey: "sk-plain" } });
       await makeLlmProviderApiKey(org.id, plainSecret.id, {
         provider: "openai",
-        scope: "personal",
         userId: user.id,
         name: "Plain OpenAI Key",
       });
@@ -820,7 +818,6 @@ describe("LlmProviderApiKeyModel", () => {
       const secret = await makeSecret({ secret: { apiKey: "sk-old" } });
       await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
-        scope: "personal",
         userId: user.id,
         name: "Key From Before Rotation",
       });
@@ -971,7 +968,7 @@ describe("LlmProviderApiKeyModel", () => {
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
-      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const agent = await makeAgent({ name: "Test Agent" });
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,

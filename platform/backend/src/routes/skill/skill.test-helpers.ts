@@ -1,8 +1,12 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { SkillModel } from "@/models";
 import { builtInSkillSourceRef } from "@/skills/built-in-skills";
-import { beforeEach, useRouteTestApp } from "@/test";
-import type { ResourceVisibilityScope } from "@/types/visibility";
+import {
+  accessGrants,
+  beforeEach,
+  type TestAccess,
+  useRouteTestApp,
+} from "@/test";
 
 export const MANIFEST = [
   "---",
@@ -51,9 +55,10 @@ export async function seedBuiltInSkill(params: {
       metadata: {},
       sourceType: "built_in",
       sourceRef: builtInSkillSourceRef(params.builtInSkillId),
-      scope: "org",
     },
     files: [],
+    // Built-in skills are published to the whole organization.
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("seed failed");
   return skill;
@@ -64,9 +69,9 @@ export async function seedImportedSkill(params: {
   organizationId: string;
   name: string;
   sourceRef: string;
-  scope: ResourceVisibilityScope;
+  /** Who the skill is shared with; defaults to its author alone. */
+  access?: TestAccess;
   authorId?: string | null;
-  teamIds?: string[];
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
@@ -78,10 +83,9 @@ export async function seedImportedSkill(params: {
       metadata: {},
       sourceType: "github",
       sourceRef: params.sourceRef,
-      scope: params.scope,
     },
     files: [],
-    teamIds: params.teamIds,
+    ...accessGrants(params.access),
   });
   if (!skill) throw new Error("seed failed");
   return skill;

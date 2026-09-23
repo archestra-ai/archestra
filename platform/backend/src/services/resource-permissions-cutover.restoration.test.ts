@@ -29,12 +29,10 @@ test("resources deleted before upgrade retain their audience when restored witho
     name: "Restored project",
   });
   const kb = await makeKnowledgeBase(org.id, {
-    visibility: "team-scoped",
-    teamIds: [team.id],
+    legacy: { visibility: "team-scoped", teamIds: [team.id] },
   });
   const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-    visibility: "team-scoped",
-    teamIds: [team.id],
+    legacy: { visibility: "team-scoped", teamIds: [team.id] },
   });
   await ProjectModel.delete(project.id);
   await KnowledgeBaseModel.delete(kb.id);

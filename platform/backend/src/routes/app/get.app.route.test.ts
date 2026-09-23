@@ -37,7 +37,6 @@ describe("GET /api/apps/:appId", () => {
   test("returns an org-scoped app the caller may view", async ({ makeApp }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Viewable",
     });
 
@@ -57,9 +56,10 @@ describe("GET /api/apps/:appId", () => {
     const team = await makeTeam(organizationId, user.id, { name: "Design" });
     const created = await makeApp({
       organizationId,
-      scope: "team",
+      access: { teams: [team.id] },
+      // The response's team list still reads the retired backing-catalog rows.
+      legacy: { scope: "team", teams: [team.id] },
       authorId: user.id,
-      teamIds: [team.id],
     });
 
     const response = await app.inject({
@@ -85,7 +85,6 @@ describe("GET /api/apps/:appId", () => {
     const otherOrg = await makeOrganization();
     const appInOther = await makeApp({
       organizationId: otherOrg.id,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -102,7 +101,7 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
@@ -144,7 +143,7 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
@@ -176,7 +175,7 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
@@ -223,7 +222,6 @@ describe("GET /api/apps/:appId — addressed by slug", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Sales Dashboard",
     });
     expect(created.slug).toBe("sales-dashboard");
@@ -254,7 +252,7 @@ describe("GET /api/apps/:appId — addressed by slug", () => {
     const author = await makeUser();
     const hidden = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       name: "Sales Dashboard",
     });

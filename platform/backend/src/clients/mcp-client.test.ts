@@ -2061,7 +2061,6 @@ describe("McpClient", () => {
         const allAgent = await makeAgent({
           name: "All Tools Agent",
           organizationId: org.id,
-          scope: "org",
           accessAllTools: true,
         });
 

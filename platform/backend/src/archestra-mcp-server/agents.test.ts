@@ -11,9 +11,7 @@ import db, { schema } from "@/database";
 import {
   AgentKnowledgeBaseModel,
   AgentModel,
-  LlmProviderApiKeyModel,
   OrganizationModel,
-  SkillModel,
   ToolModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -65,10 +63,10 @@ describe("agent tool execution", () => {
     );
   });
 
-  test("create_agent attributes the calling user as author for org-scoped agents", async () => {
+  test("create_agent attributes the calling user as author", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
-      { name: "Org Scoped Agent", scope: "org" },
+      { name: "Attributed Agent" },
       mockContext,
     );
     expect(result.isError).toBe(false);
@@ -78,8 +76,22 @@ describe("agent tool execution", () => {
       mockContext.userId,
       true,
     );
-    expect(created?.scope).toBe("org");
     expect(created?.authorId).toBe(mockContext.userId);
+  });
+
+  test("create_agent refuses the retired scope and teams arguments", async () => {
+    // Who can reach a new agent is its initialGrants alone.
+    for (const sharing of [
+      { scope: "org" },
+      { teams: [crypto.randomUUID()] },
+    ]) {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "Retired Sharing Agent", ...sharing },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+    }
   });
 
   test("create_agent persists toolExposureMode", async () => {
@@ -423,7 +435,6 @@ describe("agent tool execution", () => {
       name: `Foreign ${crypto.randomUUID()}`,
       agentType: "agent",
       organizationId: otherOrganization.id,
-      scope: "org",
     });
 
     for (const lookup of [
@@ -442,6 +453,7 @@ describe("agent tool execution", () => {
 
   test("get_agent exposes the skills the caller can activate through it", async ({
     makeAgent,
+    makeSkill,
   }) => {
     const organizationId = mockContext.organizationId;
     if (!organizationId) throw new Error("Expected organization context");
@@ -451,18 +463,13 @@ describe("agent tool execution", () => {
       name: "Skilled Agent",
       agentType: "agent",
       organizationId,
-      scope: "org",
     });
     await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId,
-        name: "triage-incidents",
-        description: "Triage incoming incidents",
-        content: "# Instructions",
-        scope: "org",
-      },
-      files: [],
+    const skill = await makeSkill(organizationId, {
+      name: "triage-incidents",
+      description: "Triage incoming incidents",
+      content: "# Instructions",
+      access: "org",
     });
     if (!skill) throw new Error("Expected skill to be created");
 
@@ -482,7 +489,8 @@ describe("agent tool execution", () => {
         name: "triage-incidents",
         activationName: "triage-incidents",
         description: "Triage incoming incidents",
-        scope: "org",
+        // The retired visibility column, shown as stored until it is dropped.
+        scope: skill.scope,
         providerName: null,
       },
     ]);
@@ -505,7 +513,6 @@ describe("agent tool execution", () => {
       name: "Shared Agent",
       agentType: "agent",
       organizationId,
-      scope: "org",
     });
 
     const result = await executeArchestraTool(
@@ -539,12 +546,10 @@ describe("agent tool execution", () => {
     const foregroundAgent = await makeAgent({
       organizationId: testAgent.organizationId,
       agentType: "agent",
-      scope: "org",
     });
     const runtimeAgent = await makeAgent({
       organizationId: testAgent.organizationId,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.test/agent:current",
         command: null,
@@ -584,22 +589,22 @@ describe("agent tool execution", () => {
     }
   });
 
-  test("list_agents filters by provider key and returns its display name", async () => {
+  test("list_agents filters by provider key and returns its display name", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
     if (!mockContext.organizationId)
       throw new Error("Missing organization fixture");
-    const key = await LlmProviderApiKeyModel.create({
-      organizationId: mockContext.organizationId,
+    const key = await makeLlmProviderApiKey(mockContext.organizationId, null, {
       userId: mockContext.userId,
       name: "Operations provider",
       provider: "openai",
-      scope: "org",
+      access: "org",
     });
-    const selected = await AgentModel.create({
+    const selected = await makeAgent({
       name: "Configured assistant",
       agentType: "agent",
       organizationId: mockContext.organizationId,
-      scope: "org",
-      teams: [],
       llmApiKeyId: key.id,
     });
     const result = await executeArchestraTool(
@@ -619,29 +624,27 @@ describe("agent tool execution", () => {
     ]);
   });
 
-  test("list_agents can select agents using the organization default", async () => {
+  test("list_agents can select agents using the organization default", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
     if (!mockContext.organizationId)
       throw new Error("Missing organization fixture");
-    const inherited = await AgentModel.create({
+    const inherited = await makeAgent({
       name: "Inherited assistant",
       agentType: "agent",
       organizationId: mockContext.organizationId,
-      scope: "org",
-      teams: [],
     });
-    const key = await LlmProviderApiKeyModel.create({
-      organizationId: mockContext.organizationId,
+    const key = await makeLlmProviderApiKey(mockContext.organizationId, null, {
       userId: mockContext.userId,
       name: "Pinned key",
       provider: "openai",
-      scope: "org",
+      access: "org",
     });
-    const pinned = await AgentModel.create({
+    const pinned = await makeAgent({
       name: "Pinned assistant",
       agentType: "agent",
       organizationId: mockContext.organizationId,
-      scope: "org",
-      teams: [],
       llmApiKeyId: key.id,
     });
     const result = await executeArchestraTool(
@@ -737,35 +740,34 @@ describe("agent RBAC visibility", () => {
     makeOrganization,
     makeMember,
     makeAgent,
+    makeLlmProviderApiKey,
   }) => {
     const organization = await makeOrganization();
     const unrelatedOrganization = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, organization.id, { role });
-    const localKey = await LlmProviderApiKeyModel.create({
+    const localKey = await makeLlmProviderApiKey(organization.id, null, {
       name: "Local provider",
       provider: "openai",
-      scope: "org",
-      organizationId: organization.id,
     });
-    const unrelatedKey = await LlmProviderApiKeyModel.create({
-      name: "Unrelated provider",
-      provider: "openai",
-      scope: "org",
-      organizationId: unrelatedOrganization.id,
-    });
+    const unrelatedKey = await makeLlmProviderApiKey(
+      unrelatedOrganization.id,
+      null,
+      {
+        name: "Unrelated provider",
+        provider: "openai",
+      },
+    );
     const localAgent = await makeAgent({
       name: "Local assistant",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       llmApiKeyId: localKey.id,
     });
     await makeAgent({
       name: "Unrelated assistant",
       agentType: "agent",
       organizationId: unrelatedOrganization.id,
-      scope: "org",
       llmApiKeyId: unrelatedKey.id,
     });
     const context: ArchestraContext = {
@@ -822,15 +824,13 @@ describe("agent RBAC visibility", () => {
       name: "Visible Agent",
       agentType: "agent",
       organizationId: org.id,
-      scope: "team",
-      teams: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await makeAgent({
       name: "Hidden Agent",
       agentType: "agent",
       organizationId: org.id,
-      scope: "team",
-      teams: [teamB.id],
+      access: { teams: [teamB.id] },
     });
 
     const memberContext: ArchestraContext = {
@@ -870,8 +870,7 @@ describe("agent RBAC visibility", () => {
       name: "Secret Agent",
       agentType: "agent",
       organizationId: org.id,
-      scope: "team",
-      teams: [teamB.id],
+      access: { teams: [teamB.id] },
     });
 
     const memberContext: ArchestraContext = {
@@ -909,8 +908,10 @@ describe("edit_agent migrated sharing", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
+      // Stored as it was before permission policies, so the check below
+      // proves an edit leaves the retired columns alone.
+      legacy: { scope: "team", teams: [team.id] },
     });
     const context = {
       organizationId: org.id,

@@ -186,8 +186,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
     const payload = {
       name: `gw-${crypto.randomUUID().slice(0, 8)}`,
       agentType: "mcp_gateway",
-      scope: "personal",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],

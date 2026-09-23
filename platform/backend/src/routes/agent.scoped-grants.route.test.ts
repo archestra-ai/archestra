@@ -60,7 +60,7 @@ describe("agent object grants", () => {
       organizationId,
       agentType: "agent",
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     const key = { organizationId, resource: "agent" as const, scope: agent.id };
     const policy = await ResourcePermissionPolicyModel.find(key);
@@ -95,7 +95,7 @@ describe("agent object grants", () => {
       agentType: "agent",
       organizationId,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     const key = { organizationId, resource: "agent" as const, scope: agent.id };
     const subject = { type: "user" as const, id: user.id };
@@ -144,13 +144,11 @@ describe("agent object grants", () => {
       agentType: "agent",
       organizationId,
       authorId: author.id,
-      scope: "org",
     });
     const other = await makeAgent({
       agentType: "agent",
       organizationId,
       authorId: author.id,
-      scope: "org",
     });
     await replacePolicy({
       organizationId: organizationId,
@@ -238,7 +236,6 @@ describe("agent object grants", () => {
         ...{
           name: "Created with grants",
           agentType: "agent",
-          scope: "personal",
         },
         initialGrants: grants,
       },
@@ -297,7 +294,6 @@ describe("agent object grants", () => {
       payload: {
         name: "Private by grant",
         agentType: "agent",
-        scope: "personal",
         initialGrants: [],
       },
     });
@@ -348,11 +344,7 @@ describe("agent object grants", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/agents",
-      payload: {
-        name: "Posted with a retired org scope",
-        agentType: "agent",
-        scope: "org",
-      },
+      payload: { name: "Posted with a retired org scope", agentType: "agent" },
     });
     expect(response.statusCode, response.body).toBe(200);
     const id = response.json().id;
@@ -387,11 +379,7 @@ describe("agent object grants", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/agents",
-      payload: {
-        name: "Converted once",
-        agentType: "agent",
-        scope: "org",
-      },
+      payload: { name: "Converted once", agentType: "agent" },
     });
     expect(response.statusCode, response.body).toBe(200);
     const key = {
@@ -423,8 +411,7 @@ describe("agent object grants", () => {
       organizationId,
       agentType: "agent",
       authorId: author.id,
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     const key = { organizationId, resource: "agent" as const, scope: agent.id };
     const shared = await ResourcePermissionPolicyModel.find(key);

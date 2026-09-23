@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -27,9 +28,15 @@ describe("credential sharing conversion", () => {
     const local = await makeTeam(org.id, owner.id);
     const elsewhere = await makeTeam(foreign.id, outsider.id);
     const key = await makeVirtualApiKey(org.id, {
-      scope: "team",
+      access: "personal",
       authorId: owner.id,
     });
+    // The cutover converts the retired sharing columns, so the seed writes
+    // them directly: create no longer does.
+    await db
+      .update(schema.virtualApiKeysTable)
+      .set({ scope: "team" })
+      .where(eq(schema.virtualApiKeysTable.id, key.id));
     await db.insert(schema.virtualApiKeyTeamsTable).values([
       { virtualApiKeyId: key.id, teamId: local.id },
       { virtualApiKeyId: key.id, teamId: elsewhere.id },
@@ -65,12 +72,14 @@ describe("credential sharing conversion", () => {
     await makeMember(owner.id, org.id);
     const team = await makeTeam(org.id, owner.id);
     const secret = await makeSecret();
-    const shared = await makeLlmProviderApiKey(org.id, secret.id, {
-      scope: "team",
-      teamId: team.id,
-    });
+    const shared = await makeLlmProviderApiKey(org.id, secret.id);
+    // The cutover converts the retired team column, so the seed writes it
+    // directly: create no longer does.
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({ scope: "team", teamId: team.id })
+      .where(eq(schema.llmProviderApiKeysTable.id, shared.id));
     const personal = await makeLlmProviderApiKey(org.id, secret.id, {
-      scope: "personal",
       userId: owner.id,
     });
     await removeObjectPolicies(org.id);
@@ -108,7 +117,6 @@ describe("credential sharing conversion", () => {
     const stranger = await makeUser();
     const secret = await makeSecret();
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
-      scope: "personal",
       userId: stranger.id,
     });
     await removeObjectPolicies(org.id);

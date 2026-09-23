@@ -308,8 +308,8 @@ describe("ToolModel", () => {
       await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents with team assignments
-      const agent1 = await makeAgent({ name: "Agent1", teams: [team1.id] });
-      const agent2 = await makeAgent({ name: "Agent2", teams: [team2.id] });
+      const agent1 = await makeAgent({ name: "Agent1" });
+      const agent2 = await makeAgent({ name: "Agent2" });
 
       const catalog = await makeInternalMcpCatalog();
 
@@ -408,7 +408,7 @@ describe("ToolModel", () => {
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await makeAgent({ teams: [team.id] });
+      const agent = await makeAgent({});
 
       const tool = await makeTool({
         name: "test-tool",
@@ -461,7 +461,7 @@ describe("ToolModel", () => {
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await makeAgent({ teams: [team.id] });
+      const agent = await makeAgent({});
 
       const tool = await makeTool({
         name: "user-tool",
@@ -4340,13 +4340,13 @@ describe("ToolModel", () => {
       // mint a delegation tool called `agent__my_assistant`.
       const kimsAgent = await makeAgent({
         name: "My Assistant",
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: kim.id,
       });
       const samsAgent = await makeAgent({
         name: "My Assistant",
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: sam.id,
       });

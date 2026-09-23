@@ -88,7 +88,6 @@ describe("outbound A2A tenant isolation", () => {
       organizationId: ownerOrganizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const ownedRemote = await createRemoteAgent(
       ownerOrganizationId,
@@ -132,7 +131,6 @@ describe("outbound A2A tenant isolation", () => {
       organizationId: ownerOrganizationId,
       authorId: ctx.user.id,
       agentType: "agent",
-      scope: "org",
     });
     const remote = await createRemoteAgent(
       ownerOrganizationId,

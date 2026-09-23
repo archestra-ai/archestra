@@ -351,8 +351,10 @@ class PluginModel {
     organizationId: string;
     userId: string;
     input: CreatePlugin;
-    /** Explicit starting audience; omitted derives one from the scope. */
+    /** The starting audience beyond the author; omitted means the author only. */
     initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
     /** Optional stable source identity for platform-owned imports. */
     pluginSlug?: string;
     sourceId?: string;
@@ -385,8 +387,9 @@ class PluginModel {
               id,
               organizationId: params.organizationId,
               authorId: params.userId,
-              scope:
-                params.input.scope ?? (params.sourceId ? "org" : "personal"),
+              // Retired mirror of the audience, kept consistent with the
+              // grants written below until the column is dropped.
+              scope: params.publishToOrganization ? "org" : "personal",
               clientType: params.input.clientType,
               supportedPlatforms: params.input.supportedPlatforms ?? ["posix"],
               pluginSlug,
@@ -431,23 +434,11 @@ class PluginModel {
         scope: plugin.id,
         grants: params.initialPermissionGrants,
         authorId: plugin.authorId,
-        visibility: plugin.scope,
-        teams: params.input.teamIds?.map((id) => ({ id })),
-        users: params.input.userIds,
+        publishToOrganization: params.publishToOrganization,
       });
       // SPDX-SnippetEnd
 
       const files = await insertFiles(tx, plugin.id, params.input.files);
-      await PluginTeamModel.syncPluginTeams(
-        plugin.id,
-        plugin.scope === "team" ? (params.input.teamIds ?? []) : [],
-        tx,
-      );
-      await PluginUserModel.syncPluginUsers(
-        plugin.id,
-        plugin.scope === "personal" ? (params.input.userIds ?? []) : [],
-        tx,
-      );
       return { ...plugin, files };
     });
     if (!created) return null;
@@ -494,7 +485,6 @@ class PluginModel {
         organizationId: params.organizationId,
       });
       if (!existing) return null;
-      const scope = params.input.scope ?? existing.scope;
 
       const fileUpdate = params.input.files;
       const contentHash = fileUpdate
@@ -573,7 +563,6 @@ class PluginModel {
           description: params.input.description,
           enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
-          scope,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
           ...githubSourceUpdate,
@@ -606,22 +595,6 @@ class PluginModel {
           .delete(schema.pluginFilesTable)
           .where(eq(schema.pluginFilesTable.pluginId, plugin.id));
         await insertFiles(tx, plugin.id, fileUpdate);
-      }
-      if (
-        params.input.scope !== undefined ||
-        params.input.teamIds !== undefined ||
-        params.input.userIds !== undefined
-      ) {
-        await PluginTeamModel.syncPluginTeams(
-          plugin.id,
-          scope === "team" ? (params.input.teamIds ?? []) : [],
-          tx,
-        );
-        await PluginUserModel.syncPluginUsers(
-          plugin.id,
-          scope === "personal" ? (params.input.userIds ?? []) : [],
-          tx,
-        );
       }
       const files = await findFilesWithTransaction(tx, plugin.id);
       return { ...plugin, files };

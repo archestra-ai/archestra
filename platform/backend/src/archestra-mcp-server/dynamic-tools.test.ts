@@ -811,7 +811,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -848,7 +847,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -882,7 +880,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -908,7 +905,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -940,7 +936,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -971,7 +966,6 @@ describe("dynamic discovery follows catalog visibility", () => {
     await makeTeamMember(team.id, userId);
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",

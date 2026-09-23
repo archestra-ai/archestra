@@ -711,7 +711,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
   }) => {
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     await AgentModel.update(agent.id, { description: "changed" });
@@ -766,7 +766,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const author = await makeRestrictedDeployer(makeUser, makeMember);
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
     });
     await AgentModel.update(agent.id, { environmentId: environment.id });
@@ -793,7 +793,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const author = await makeRestrictedDeployer(makeUser, makeMember);
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       environmentId: environment.id,
     });
@@ -823,7 +823,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const author = await makeRestrictedDeployer(makeUser, makeMember);
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
     });
     await AgentModel.update(agent.id, { environmentId: environment.id });

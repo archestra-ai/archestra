@@ -57,7 +57,6 @@ describe("external MCP Skill routes", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
-      scope: "org",
       icon: "🛰️",
     });
     const server = await makeMcpServer({
@@ -145,7 +144,6 @@ describe("external MCP Skill routes", () => {
     await makeMember(otherUser.id, ctx.organizationId);
     const catalog = await makeInternalMcpCatalog({
       organizationId: null,
-      scope: "org",
     });
     const server = await makeMcpServer({
       catalogId: catalog.id,
@@ -178,7 +176,6 @@ describe("external MCP Skill routes", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
-      scope: "org",
     });
     const server = await makeMcpServer({
       catalogId: catalog.id,

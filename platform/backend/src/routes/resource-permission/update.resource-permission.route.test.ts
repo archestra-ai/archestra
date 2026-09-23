@@ -195,7 +195,6 @@ describe("resource permission routes", () => {
       organizationId,
       agentType: "agent",
       authorId: user.id,
-      scope: "org",
     });
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId,
@@ -294,7 +293,6 @@ describe("resource permission routes", () => {
     const agent = await makeAgent({
       organizationId,
       agentType: "agent",
-      scope: "org",
       authorId: user.id,
     });
     const response = await app.inject({
@@ -329,7 +327,7 @@ describe("resource permission routes", () => {
       organizationId,
       agentType: "agent",
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     const manager = await makeUser();
     const reader = await makeUser();
@@ -409,7 +407,7 @@ describe("resource permission routes", () => {
       agentType: "agent",
       organizationId,
       authorId: user.id,
-      scope: "personal",
+      access: "personal",
     });
     const recipient = await makeUser();
     const role = await makeCustomRole(organizationId, { permission: {} });
@@ -652,7 +650,6 @@ describe("resource permission routes", () => {
     const agent = await makeAgent({
       agentType: "agent",
       organizationId,
-      scope: "org",
     });
     await MemberModel.updateRole(user.id, organizationId, role.role);
     const url = `/api/resource-permissions/agent/${agent.id}`;

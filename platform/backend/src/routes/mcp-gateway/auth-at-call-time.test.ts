@@ -85,7 +85,6 @@ describe("MCP Gateway - Auth at Call Time", () => {
       name: CATALOG_NAME,
       serverType: "remote",
       serverUrl: "https://remote.example.com/mcp",
-      scope: "org",
     });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -106,8 +105,7 @@ describe("MCP Gateway - Auth at Call Time", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [marketingTeam.id],
+      access: { teams: [marketingTeam.id] },
       toolExposureMode: "full",
       accessAllTools: false,
     });
@@ -198,7 +196,6 @@ describe("MCP Gateway - Auth at Call Time", () => {
       name: "per-user-oauth-test",
       serverType: "remote",
       serverUrl: "https://remote.example.com/mcp",
-      scope: "org",
     });
     const toolName = "per-user-oauth-test__list_issues";
     await makeTool({ catalogId: catalog.id, name: toolName });

@@ -23,7 +23,15 @@ import SkillModel from "@/models/skill";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { ApiError, type InsertSkill, type Skill, type User } from "@/types";
 
 vi.mock("@/auth");
@@ -97,21 +105,23 @@ describe("agent skills routes", () => {
   });
 
   async function makeSkill(
-    overrides: Partial<InsertSkill> = {},
+    overrides: Partial<Omit<InsertSkill, "scope">> & {
+      access?: TestAccess;
+    } = {},
     environmentIds: string[] = [],
   ): Promise<Skill> {
+    const { access = "org", ...skillOverrides } = overrides;
     const skill = await SkillModel.createWithFiles({
       skill: {
         organizationId,
         name: `skill-${crypto.randomUUID().slice(0, 8)}`,
         description: "A test skill",
         content: "# Instructions",
-        scope: "org",
-        latestVersion: 1,
-        ...overrides,
-      } as InsertSkill,
+        ...skillOverrides,
+      },
       files: [],
       environmentIds,
+      ...accessGrants(access),
     });
     if (!skill) throw new Error("failed to create test skill");
     return skill;
@@ -148,7 +158,6 @@ describe("agent skills routes", () => {
     const skill = await makeSkill({
       name: "incident-response",
       description: "Respond to incidents",
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -165,7 +174,9 @@ describe("agent skills routes", () => {
           name: "incident-response",
           activationName: "incident-response",
           description: "Respond to incidents",
-          scope: "org",
+          // The retired visibility column, which create no longer sets; the
+          // skill reaches the agent through its organization grants.
+          scope: "personal",
           providerName: null,
         },
       ],
@@ -207,7 +218,7 @@ describe("agent skills routes", () => {
           reference: { source: "native", skillId: visible.id },
           name: "visible-here",
           activationName: "visible-here",
-          scope: "org",
+          scope: "personal",
         },
       ],
     });
@@ -648,7 +659,7 @@ describe("agent skills routes", () => {
     // gateway's token, forever — a team skill they were never given.
     const agent = await makeAgent({ organizationId });
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
 
     const denied = await app.inject({
@@ -677,7 +688,7 @@ describe("agent skills routes", () => {
   }) => {
     const agent = await makeAgent({ organizationId });
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     await makeTeamMember(team.id, user.id);
 
@@ -730,7 +741,7 @@ describe("agent skills routes", () => {
     // skill routes themselves.
     const agent = await makeAgent({ organizationId });
     const team = await makeTeam(organizationId, user.id);
-    const teamSkill = await makeSkill({ scope: "team" });
+    const teamSkill = await makeSkill({ access: "personal" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     await promoteCallerToSkillAdmin();
 
@@ -752,7 +763,7 @@ describe("agent skills routes", () => {
     const agent = await makeAgent({ organizationId });
     const colleague = await makeUser();
     const theirs = await makeSkill({
-      scope: "personal",
+      access: "personal",
       authorId: colleague.id,
     });
 
@@ -771,7 +782,7 @@ describe("agent skills routes", () => {
     // Publication is the author's call: their personal skill can go on any
     // gateway they can edit, not only the auto-provisioned personal one.
     const agent = await makeAgent({ organizationId });
-    const mine = await makeSkill({ scope: "personal", authorId: user.id });
+    const mine = await makeSkill({ access: "personal", authorId: user.id });
 
     const response = await app.inject({
       method: "PUT",
@@ -790,7 +801,7 @@ describe("agent skills routes", () => {
     const agent = await makeAgent({ organizationId });
     const colleague = await makeUser();
     const theirs = await makeSkill({
-      scope: "personal",
+      access: "personal",
       authorId: colleague.id,
     });
     await promoteCallerToSkillAdmin();
@@ -1056,7 +1067,7 @@ describe("agent skills routes", () => {
     // but re-echoing it must not wedge B's otherwise-valid save into silently
     // unpublishing A's skill.
     const agent = await makeAgent({ organizationId });
-    const theirs = await makeSkill({ scope: "personal", authorId: user.id });
+    const theirs = await makeSkill({ access: "personal", authorId: user.id });
     const seeded = await app.inject({
       method: "PUT",
       url: `/api/agents/${agent.id}/skills`,

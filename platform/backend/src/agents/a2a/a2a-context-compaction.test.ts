@@ -28,7 +28,7 @@ async function setUpAgentWithModel(fixtures: {
   makeLlmProviderApiKey: (
     organizationId: string,
     secretId: string,
-    overrides: { name: string; provider: "anthropic"; scope: "org" },
+    overrides: { name: string; provider: "anthropic" },
   ) => Promise<{ id: string }>;
   makeInternalAgent: (overrides: {
     organizationId: string;
@@ -46,7 +46,6 @@ async function setUpAgentWithModel(fixtures: {
   const apiKey = await fixtures.makeLlmProviderApiKey(org.id, secret.id, {
     name: "Test Anthropic",
     provider: "anthropic",
-    scope: "org",
   });
   const model = await ModelModel.create({
     externalId: "anthropic/claude-compaction-test",

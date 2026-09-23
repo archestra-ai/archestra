@@ -22,13 +22,11 @@ describe("GET /api/agent-catalog", () => {
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Beta",
-      scope: "org",
     });
     const delta = await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Delta",
-      scope: "org",
     });
     const alpha = await createRemoteAgent("Alpha");
     const charlie = await createRemoteAgent("Charlie");
@@ -96,7 +94,6 @@ describe("GET /api/agent-catalog", () => {
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Matching regular agent",
-      scope: "org",
     });
     await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -135,19 +132,16 @@ describe("GET /api/agent-catalog", () => {
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Alpha pinned",
-      scope: "org",
     });
     const bravo = await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Bravo unpinned",
-      scope: "org",
     });
     const zulu = await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Zulu pinned",
-      scope: "org",
     });
     const external = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -227,7 +221,6 @@ describe("GET /api/agent-catalog", () => {
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Selectable regular agent",
-      scope: "org",
     });
     await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -271,7 +264,7 @@ describe("GET /api/agent-catalog", () => {
       organizationId: ctx.organizationId,
       agentType: "agent",
       name: "Shared regular agent",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
     // Sharing an agent by name is a grant on its policy now; the legacy

@@ -37,11 +37,15 @@ describe("lists read grants alone", () => {
         description: "Seeded for the unconverted-list check",
         content: "# Instructions",
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
     });
     if (!skill) throw new Error("failed to seed skill");
+    // The retired column says organization-wide; the list must not care.
+    await db
+      .update(schema.skillsTable)
+      .set({ scope: "org" })
+      .where(eq(schema.skillsTable.id, skill.id));
     const list = () =>
       SkillTeamModel.getUserAccessibleSkillIds({
         organizationId: org.id,
@@ -68,7 +72,6 @@ describe("lists read grants alone", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: user.id,
-      scope: "org",
     });
     const list = async () =>
       (
@@ -139,12 +142,11 @@ describe("lists read grants alone", () => {
     const parent = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     const child = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: author.id,
-      scope: "org",
     });
     await db
       .update(schema.internalMcpCatalogTable)
@@ -183,7 +185,7 @@ describe("lists read grants alone", () => {
     const app = await makeApp({
       organizationId: org.id,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     const [backing] = await db
       .select({ catalogId: schema.mcpServersTable.catalogId })

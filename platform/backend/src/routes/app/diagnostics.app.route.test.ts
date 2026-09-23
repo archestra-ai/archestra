@@ -39,7 +39,7 @@ describe("POST /api/apps/:appId/diagnostics", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Diag", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Diag", html: "<h1>v1</h1>" },
     });
     const appId = created.json().id as string;
 
@@ -70,7 +70,7 @@ describe("POST /api/apps/:appId/diagnostics", () => {
     // a personal app owned by the author is invisible to another member
     const personalApp = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();

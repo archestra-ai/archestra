@@ -4,7 +4,6 @@ import db, { schema } from "@/database";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import { knowledgeScope } from "./resource-permission-target";
 
 /**
  * Who a caller is, for repository-listing purposes.
@@ -146,8 +145,6 @@ class KbFileModel {
         scope: file.id,
         grants: params.initialPermissionGrants,
         authorId: file.uploadedBy,
-        visibility: knowledgeScope(file.visibility),
-        teams: params.teamIds.map((id) => ({ id })),
       });
       // SPDX-SnippetEnd
 

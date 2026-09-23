@@ -22,11 +22,11 @@ describe("knowledge sharing conversion", () => {
     const creator = await makeUser();
     await makeMember(creator.id, org.id);
     const published = await makeKnowledgeBase(org.id, {
-      visibility: "org-wide",
+      legacy: { visibility: "org-wide", teamIds: [] },
     });
     const priv = await makeKnowledgeBase(org.id, {
-      visibility: "private",
       createdBy: creator.id,
+      legacy: { visibility: "private", teamIds: [] },
     });
 
     await runScopedResourcePermissionCutover();
@@ -57,7 +57,7 @@ describe("knowledge sharing conversion", () => {
     // Per-document ACLs synced from upstream: no static grant can express
     // them, so the conversion's CASE falls through to the organization branch.
     const connector = await makeKnowledgeBaseConnector(base.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     await runScopedResourcePermissionCutover();

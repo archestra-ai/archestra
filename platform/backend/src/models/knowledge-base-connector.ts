@@ -27,7 +27,6 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import { knowledgeScope } from "./resource-permission-target";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -396,7 +395,11 @@ class KnowledgeBaseConnectorModel {
   static async create(
     data: InsertKnowledgeBaseConnector,
     /** Explicit starting audience; omitted derives one from the visibility. */
-    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
+    options?: {
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
   ): Promise<KnowledgeBaseConnector> {
     // The access policy is written with the row it governs, so a failure
     // cannot leave a connector nobody can reach.
@@ -423,11 +426,9 @@ class KnowledgeBaseConnectorModel {
         resource: "knowledgeConnector",
         scope: result.id,
         grants: options?.initialPermissionGrants,
-        // Knowledge carries no author column. An auto-sync connector resolves
-        // access per document upstream, so it reads as organization-wide here.
+        // Knowledge carries no author column.
         authorId: null,
-        visibility: knowledgeScope(result.visibility),
-        teams: (result.teamIds ?? []).map((id: string) => ({ id })),
+        publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd
 

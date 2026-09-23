@@ -390,7 +390,7 @@ describe("McpServerModel", () => {
         organizationId: org.id,
         name: "My Assistant",
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         accessAllTools: true,
         authorId: alice.id,
       });
@@ -398,7 +398,7 @@ describe("McpServerModel", () => {
         organizationId: org.id,
         name: "My Assistant",
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         accessAllTools: true,
         authorId: bob.id,
       });
@@ -961,7 +961,6 @@ describe("McpServerModel", () => {
         description: "Draw diagrams",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       const install = await makeMcpServer({
         catalogId: catalog.id,
@@ -1001,7 +1000,6 @@ describe("McpServerModel", () => {
         name: "Excalidraw Staging",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1030,7 +1028,6 @@ describe("McpServerModel", () => {
         name: "Multi-scope",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       // Insert the org install first so a naive (DB-order) result would put
       // "org" before "personal".
@@ -1068,7 +1065,6 @@ describe("McpServerModel", () => {
         name: "Archestra PM",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
@@ -1099,7 +1095,6 @@ describe("McpServerModel", () => {
         name: "Uninstalled",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeTool({
         catalogId: catalog.id,
@@ -1125,7 +1120,6 @@ describe("McpServerModel", () => {
         name: "Plain",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1155,7 +1149,6 @@ describe("McpServerModel", () => {
           id: ARCHESTRA_MCP_CATALOG_ID,
           name: "Archestra",
           serverType: "builtin",
-          scope: "org",
         });
       } catch {
         // The built-in catalog may already be seeded in this test database.
@@ -1191,7 +1184,7 @@ describe("McpServerModel", () => {
         name: "Private",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "personal",
+        access: "personal",
         authorId: owner.id,
       });
       // The author's own personal install (the only thing that makes it listable
@@ -1234,7 +1227,6 @@ describe("McpServerModel", () => {
         name: "Multi",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1274,7 +1266,6 @@ describe("McpServerModel", () => {
         name: "Legacy",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1303,7 +1294,6 @@ describe("McpServerModel", () => {
         name: "Searchable Widget",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1338,7 +1328,6 @@ describe("McpServerModel", () => {
         name: "Plain Server",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1366,7 +1355,6 @@ describe("McpServerModel", () => {
         name: "Sneaky",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({

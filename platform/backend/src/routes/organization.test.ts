@@ -226,7 +226,7 @@ describe("organization routes", () => {
         organizationId,
         authorId: user.id,
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         runtime: {
           image: "example.com/coding-agent:latest",
           command: ["archestra-codex"],
@@ -298,7 +298,7 @@ describe("organization routes", () => {
         organizationId,
         authorId: user.id,
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         llmApiKeyId: anthropicKey.id,
         modelId: anthropicModel.id,
         runtime: {

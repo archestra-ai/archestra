@@ -39,7 +39,7 @@ describe("conversation enabled-tools routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -69,7 +69,7 @@ describe("conversation enabled-tools routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: otherUser.id,

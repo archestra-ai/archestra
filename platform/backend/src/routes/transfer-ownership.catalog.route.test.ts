@@ -31,7 +31,7 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
           organizationId,
           authorId: ownerId,
           name,
-          scope: "personal",
+          access: "personal",
         });
       };
       app = createFastifyInstance();

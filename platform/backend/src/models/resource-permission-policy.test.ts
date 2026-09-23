@@ -23,7 +23,7 @@ describe("resource permission policy persistence", () => {
       organizationId: organization.id,
       authorId: author.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const key = {
       organizationId: organization.id,
@@ -74,7 +74,6 @@ describe("resource permission policy persistence", () => {
       organizationId: organization.id,
       authorId: author.id,
       agentType: "agent",
-      scope: "org",
     });
     await runScopedResourcePermissionCutover();
 
@@ -99,7 +98,6 @@ describe("resource permission policy persistence", () => {
       organizationId: organization.id,
       authorId: author.id,
       agentType: "agent",
-      scope: "org",
     });
     await runScopedResourcePermissionCutover();
     const key = {

@@ -236,13 +236,12 @@ describe("POST /api/skills/bulk-delete authorization", () => {
       organizationId,
       name: "bulk-del-org-wide",
       sourceRef: "acme/skills@main:bulk-del-org-wide",
-      scope: "org",
+      access: "org",
     });
     const mine = await seedImportedSkill({
       organizationId,
       name: "bulk-del-mine",
       sourceRef: "acme/skills@main:bulk-del-mine",
-      scope: "personal",
       authorId: user.id,
     });
 
@@ -270,7 +269,6 @@ describe("POST /api/skills/bulk-delete authorization", () => {
       organizationId,
       name: "bulk-del-theirs",
       sourceRef: "acme/skills@main:bulk-del-theirs",
-      scope: "personal",
       authorId: stranger.id,
     });
 

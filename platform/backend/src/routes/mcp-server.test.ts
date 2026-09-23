@@ -2792,7 +2792,7 @@ describe("mcp server inspect route", () => {
     const agent = await makeAgent({
       name: "Protected Resource Demo Agent",
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
       organizationId,
       authorId: user.id,
     });
@@ -3973,7 +3973,7 @@ describe("mcp server inspect route", () => {
       const otherAgent = await makeAgent({
         name: "Explicit Target",
         agentType: "mcp_gateway",
-        scope: "personal",
+        access: "personal",
         organizationId: organizationId,
         authorId: user.id,
       });
@@ -4458,7 +4458,7 @@ describe("mcp server core route coverage", () => {
       const tool = await makeTool({ catalogId: catalog.id });
       const agent = await makeAgent({
         name: "Server Consumer",
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
       await makeAgentTool(agent.id, tool.id);

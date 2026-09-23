@@ -6,7 +6,14 @@ import {
   builtInSkillSourceRef,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
 import { useSkillRouteTestApp } from "./skill.test-helpers";
@@ -107,13 +114,13 @@ describe("POST /api/skills/:id/reset", () => {
     const manual = await SkillModel.createWithFiles({
       skill: {
         organizationId,
-        scope: "org",
         name: "Manual skill",
         description: "desc",
         content: "# manual",
         sourceType: "manual",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const response = await app.inject({
@@ -141,7 +148,6 @@ describe("POST /api/skills/:id/reset — scope visibility", () => {
         content: "# private",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });

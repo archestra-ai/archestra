@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -191,6 +192,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     makeMember,
     makeTeam,
     makeTeamMember,
+    makeInternalMcpCatalog,
   }) => {
     const admin = await makeUser();
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -200,17 +202,26 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     const teamB = await makeTeam(organizationId, admin.id);
     await makeTeamMember(teamA.id, editor.id, { role: MEMBER_ROLE_NAME }); // editor belongs to A only
 
-    currentUser = admin;
-    const created = await post(
-      remotePayload({
+    const item = await makeInternalMcpCatalog({
+      ...remotePayload(),
+      serverType: "remote",
+      organizationId,
+      authorId: admin.id,
+      access: {
+        teams: [
+          { id: teamA.id, level: "edit" },
+          { id: teamB.id, level: "use" },
+        ],
+      },
+      legacy: {
         scope: "team",
         teams: [
           { id: teamA.id, level: "write" },
           { id: teamB.id, level: "use" },
         ],
-      }),
-    );
-    expect(created.statusCode).toBe(200);
+      },
+    });
+    const created = { json: () => item };
 
     currentUser = editor;
     const edited = await put(created.json().id, {
@@ -236,6 +247,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     makeMember,
     makeTeam,
     makeTeamMember,
+    makeInternalMcpCatalog,
   }) => {
     const admin = await makeUser();
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -245,16 +257,26 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     await makeTeamMember(teamA.id, admin.id, { role: ADMIN_ROLE_NAME });
 
     currentUser = admin;
-    const created = await post(
-      remotePayload({
+    const item = await makeInternalMcpCatalog({
+      ...remotePayload(),
+      serverType: "remote",
+      organizationId,
+      authorId: admin.id,
+      access: {
+        teams: [
+          { id: teamA.id, level: "edit" },
+          { id: teamB.id, level: "use" },
+        ],
+      },
+      legacy: {
         scope: "team",
         teams: [
           { id: teamA.id, level: "write" },
           { id: teamB.id, level: "use" },
         ],
-      }),
-    );
-    expect(created.statusCode).toBe(200);
+      },
+    });
+    const created = { json: () => item };
 
     // Adding teamC changes the id set, so the assignments are rewritten. The
     // bare ids carry no level, and must not reset teamB from `use` to `write`.
@@ -281,6 +303,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     makeMember,
     makeTeam,
     makeTeamMember,
+    makeInternalMcpCatalog,
   }) => {
     const admin = await makeUser();
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -289,11 +312,15 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     const team = await makeTeam(organizationId, admin.id);
     await makeTeamMember(team.id, editor.id, { role: ADMIN_ROLE_NAME });
 
-    currentUser = admin;
-    const created = await post(
-      remotePayload({ scope: "team", teams: [{ id: team.id, level: "use" }] }),
-    );
-    expect(created.statusCode).toBe(200);
+    const item = await makeInternalMcpCatalog({
+      ...remotePayload(),
+      serverType: "remote",
+      organizationId,
+      authorId: admin.id,
+      access: { teams: [{ id: team.id, level: "use" }] },
+      legacy: { scope: "team", teams: [{ id: team.id, level: "use" }] },
+    });
+    const created = { json: () => item };
 
     currentUser = editor;
     const res = await put(created.json().id, {
@@ -330,7 +357,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     expect(res.json().scope).toBe("team");
   });
 
-  test("admin bypasses membership and can assign arbitrary teams", async ({
+  test("admin bypasses membership and can grant arbitrary teams at create", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -341,81 +368,27 @@ describe("internal MCP catalog — team-scope RBAC", () => {
 
     currentUser = admin;
     const created = await post(
-      remotePayload({ scope: "team", teams: [team.id] }),
+      remotePayload({
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
+      }),
     );
-    expect(created.statusCode).toBe(200);
-    expect(created.json().scope).toBe("team");
-  });
-
-  test("create with team scope rejects a non-member team", async ({
-    makeUser,
-    makeMember,
-    makeTeam,
-  }) => {
-    const editor = await makeUser();
-    await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
-    const team = await makeTeam(organizationId, editor.id); // not a member
-
-    currentUser = editor;
-    const res = await post(remotePayload({ scope: "team", teams: [team.id] }));
-    expect(res.statusCode).toBe(403);
-  });
-
-  test("cloning to team scope honors the membership gate", async ({
-    makeUser,
-    makeMember,
-    makeTeam,
-    makeTeamMember,
-    makeInternalMcpCatalog,
-  }) => {
-    const admin = await makeUser();
-    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
-    const editor = await makeUser();
-    await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
-    const team = await makeTeam(organizationId, editor.id);
-    await makeTeamMember(team.id, editor.id, { role: ADMIN_ROLE_NAME });
-
-    const source = await makeInternalMcpCatalog({
+    expect(created.statusCode, created.body).toBe(200);
+    const policy = await ResourcePermissionPolicyModel.find({
       organizationId,
-      authorId: admin.id,
-      scope: "org",
+      resource: "mcpRegistry",
+      scope: created.json().id,
     });
-
-    currentUser = editor;
-    const ok = await post(
-      remotePayload({
-        clonedFrom: source.id,
-        scope: "team",
-        teams: [team.id],
-      }),
-    );
-    expect(ok.statusCode).toBe(200);
-
-    const otherTeam = await makeTeam(organizationId, admin.id); // editor not member
-    const denied = await post(
-      remotePayload({
-        clonedFrom: source.id,
-        scope: "team",
-        teams: [otherTeam.id],
-      }),
-    );
-    expect(denied.statusCode).toBe(403);
+    expect(
+      policy?.grants.some(
+        (grant) =>
+          grant.subject.type === "team" && grant.subject.id === team.id,
+      ),
+    ).toBe(true);
   });
 
-  test("team scope requires at least one team", async ({
-    makeUser,
-    makeMember,
-  }) => {
-    const admin = await makeUser();
-    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
-
-    currentUser = admin;
-    const res = await post(remotePayload({ scope: "team", teams: [] }));
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.message).toMatch(/at least one team/i);
-  });
-
-  test("a team assigned without a level defaults to write", async ({
+  test("create refuses the retired scope and teams fields", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -425,36 +398,30 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     const team = await makeTeam(organizationId, admin.id);
 
     currentUser = admin;
-    const created = await post(
-      remotePayload({ scope: "team", teams: [team.id] }),
-    );
-    expect(created.statusCode).toBe(200);
-
-    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(
-      created.json().id,
-    );
-    expect(teams).toEqual([
-      expect.objectContaining({ id: team.id, level: "write" }),
-    ]);
+    const res = await post(remotePayload({ scope: "team", teams: [team.id] }));
+    expect(res.statusCode).toBe(400);
   });
 
   test("a levels-only edit persists the new level", async ({
     makeUser,
     makeMember,
     makeTeam,
+    makeInternalMcpCatalog,
   }) => {
     const admin = await makeUser();
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     const team = await makeTeam(organizationId, admin.id);
 
     currentUser = admin;
-    const created = await post(
-      remotePayload({
-        scope: "team",
-        teams: [{ id: team.id, level: "write" }],
-      }),
-    );
-    expect(created.statusCode).toBe(200);
+    const item = await makeInternalMcpCatalog({
+      ...remotePayload(),
+      serverType: "remote",
+      organizationId,
+      authorId: admin.id,
+      access: { teams: [{ id: team.id, level: "edit" }] },
+      legacy: { scope: "team", teams: [{ id: team.id, level: "write" }] },
+    });
+    const created = { json: () => item };
 
     const downgraded = await put(created.json().id, {
       ...remotePayload({ name: created.json().name }),

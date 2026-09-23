@@ -47,7 +47,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -73,7 +73,7 @@ describe("handleCheckDuePermissionSyncs", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
         enabled: true,
       });
@@ -98,7 +98,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -122,10 +122,11 @@ describe("handleCheckDuePermissionSyncs", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
         enabled: true,
-        schedule: "0 0 1 1 *", // content cadence: not due (once a year)
+        schedule: "0 0 1 1 *",
+        // content cadence: not due (once a year)
       });
       await KnowledgeBaseConnectorModel.update(connector.id, {
         // Content sync just ran; permission sync is stale.
@@ -151,10 +152,11 @@ describe("handleCheckDuePermissionSyncs", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
         enabled: true,
-        schedule: "* * * * *", // content cadence: always due
+        schedule: "* * * * *",
+        // content cadence: always due
       });
       await KnowledgeBaseConnectorModel.update(connector.id, {
         permissionSyncIntervalSeconds: HUGE_INTERVAL_SECONDS,
@@ -175,7 +177,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -199,7 +201,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org-wide", // not auto-sync-permissions
+      // not auto-sync-permissions
       connectorType: "github",
       enabled: true,
     });
@@ -222,7 +224,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -246,7 +248,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -268,7 +270,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
       enabled: true,
     });
@@ -300,7 +302,7 @@ describe("handleCheckDuePermissionSyncs", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
         enabled: true,
       });
@@ -336,7 +338,7 @@ describe("handleCheckDuePermissionSyncs", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         connectorType: "github",
         enabled: true,
       });
@@ -404,7 +406,7 @@ describe("handleCheckDuePermissionSyncs", () => {
         kb.id,
         org.id,
         {
-          visibility: "auto-sync-permissions",
+          syncPermissionsFromSource: true,
           connectorType: "github",
           enabled: true,
         },

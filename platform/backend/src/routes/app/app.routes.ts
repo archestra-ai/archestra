@@ -41,7 +41,6 @@ import {
   assertCallerMayAuthorApp,
   assertCallerMayModifyApp,
   callerIsAppAdmin,
-  resolveOrgTeams,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -99,14 +98,14 @@ const CommaSeparatedIds = z.preprocess(
   z.array(z.string()),
 );
 
-// REST bodies extend the shared create/update schemas with team assignments,
-// which only the REST surface needs for team-scoped apps.
+// The REST create body. Who can reach the new app is its `initialGrants`
+// alone; the schema is strict so the retired `scope`/`teamIds` fields are
+// refused rather than silently dropped.
 const CreateAppBodySchema = CreateAppSchema.extend({
-  teamIds: z.array(UuidIdSchema).optional(),
   // When set, also create a chat conversation with this app already rendered, so
   // the client opens it directly at `/chat/<conversationId>` with no model turn.
   openInChat: z.boolean().optional(),
-});
+}).strict();
 // Who can reach an app is decided by its resource permission policy, which the
 // permissions API writes on its own, so the update body carries no sharing
 // fields: the stored visibility columns are carried through untouched.
@@ -524,14 +523,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const scope = body.scope ?? "personal";
-      const teamIds = await resolveOrgTeams(body.teamIds, organizationId);
-      if (scope === "team" && teamIds.length === 0) {
-        throw new ApiError(
-          400,
-          "A team-scoped app requires at least one teamId.",
-        );
-      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -544,8 +535,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: crypto.randomUUID(),
           name: body.name,
           authorId: user.id,
-          scope,
-          teams: teamIds.map((id) => ({ id })),
+          scope: "personal",
+          teams: [],
           users: [],
         },
       });
@@ -601,11 +592,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
-        initialPermissionGrants: ResourcePermissions.grantsForCreation({
-          grants: body.initialGrants,
-          visibility: scope,
-        }),
-        initialVisibility: { scope, teamIds },
+        initialPermissionGrants: body.initialGrants ?? [],
         app: {
           organizationId,
           authorId: user.id,
@@ -625,12 +612,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         await createAppBacking({
           app: created,
-          scope,
           environmentId,
           icon: body.icon ?? null,
           userId: user.id,
           organizationId,
-          teamIds,
         });
       } catch (error) {
         await AppModel.purge(created.id);

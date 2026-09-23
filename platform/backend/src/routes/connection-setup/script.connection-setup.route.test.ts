@@ -18,7 +18,14 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -826,9 +833,9 @@ async function seedSkill(params: { organizationId: string; name: string }) {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;

@@ -84,8 +84,6 @@ describe("clone agent route", () => {
     const targetSubAgent = await makeInternalAgent({
       organizationId,
       name: "Sub Agent",
-      scope: "org",
-      teams: [],
       labels: [],
     });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
@@ -95,8 +93,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Source Agent",
-      scope: "org",
-      teams: [],
       labels: [{ key: "env", value: "test" }],
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
@@ -173,8 +169,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Source Agent",
-      scope: "org",
-      teams: [],
       labels: [],
     });
     await makeAgentTool(sourceAgent.id, baseTool.id, {
@@ -212,13 +206,11 @@ describe("clone agent route", () => {
     const builtIn = await makeInternalAgent({
       organizationId,
       name: "Built In",
-      scope: "org",
       builtInAgentConfig: {
         // Any valid built-in discriminator works here
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
         autoConfigureOnToolDiscovery: false,
       },
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -238,8 +230,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Source Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -269,8 +259,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Org Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -304,9 +292,8 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Personal Agent",
-      scope: "personal",
-      authorId: otherUser.id, // Owned by different user
-      teams: [],
+      access: "personal",
+      authorId: otherUser.id,
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -335,8 +322,7 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Team Agent",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -371,8 +357,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Org Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -395,7 +379,6 @@ describe("clone agent route", () => {
     const source = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "org",
     });
     const serviceAccount = await ServiceAccountModel.create({
       organizationId,
@@ -445,8 +428,7 @@ describe("clone agent route", () => {
     const source = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     const response = await app.inject({
       method: "POST",
@@ -473,8 +455,7 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Minimal Agent",
-      scope: "personal",
-      teams: [],
+      access: "personal",
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -507,8 +488,6 @@ describe("clone agent route", () => {
         organizationId,
         name: `${agentType} Agent`,
         agentType,
-        scope: "org",
-        teams: [],
         labels: [],
         knowledgeBaseIds: [],
         connectorIds: [],
@@ -555,8 +534,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Headers Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -578,8 +555,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Email Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -605,8 +580,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "LLM Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -631,8 +604,6 @@ describe("clone agent route", () => {
       organizationId,
       name: "MCP Gateway",
       agentType: "mcp_gateway",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -664,8 +635,6 @@ describe("clone agent route", () => {
       organizationId,
       name: "LLM Proxy With KB",
       agentType: "llm_proxy",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
@@ -685,8 +654,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Rollback Source",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -724,8 +691,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Prompts Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -747,8 +712,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Icon Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -770,8 +733,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Described Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -795,8 +756,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Prompt Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -820,8 +779,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Untrusted Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -849,8 +806,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Labeled Agent",
-      scope: "org",
-      teams: [],
       labels,
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -885,8 +840,6 @@ describe("clone agent route", () => {
     const otherOrgAgent = await makeInternalAgent({
       organizationId: otherOrg.id,
       name: "Other Org Agent",
-      scope: "org",
-      teams: [],
       labels: [],
       knowledgeBaseIds: [],
       connectorIds: [],
@@ -905,8 +858,6 @@ describe("clone agent route", () => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Search-Only Agent",
-      scope: "org",
-      teams: [],
       labels: [{ key: "env", value: "prod" }],
       knowledgeBaseIds: [],
       connectorIds: [],

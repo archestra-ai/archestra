@@ -27,14 +27,13 @@ describe("service account object grants over MCP", () => {
     const target = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       authorId: owner.id,
       name: "Shared agent",
     });
     const other = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
       authorId: owner.id,
     });
     await replacePolicy({
@@ -122,14 +121,14 @@ describe("service account object grants over MCP", () => {
     const agent = await makeAgent({ organizationId: org.id });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
     });
     const other = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",

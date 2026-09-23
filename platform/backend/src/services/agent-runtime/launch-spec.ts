@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
   providerDisplayNames,
+  type ResourcePermissionGrant,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
   SESSION_ID_HEADER,
@@ -558,18 +559,33 @@ async function resolveGatewayToken(params: {
   );
 }
 
+/**
+ * Who the run's virtual key reaches, as creation grants. A user actor's key
+ * is the user's own (the author gets full access from creation, and nothing
+ * else reaches it), which is what attributes the session's LLM spend to that
+ * person. A team actor's key reaches the team; an organization actor's key is
+ * published to the organization. The retired `scope` column is written to
+ * match, though nothing reads it.
+ */
 function virtualKeyVisibility(actor: A2AActor): {
   scope: "personal" | "team" | "org";
   authorId: string | null;
-  teamIds?: string[];
+  initialPermissionGrants?: ResourcePermissionGrant[];
+  publishToOrganization?: boolean;
 } {
   if (actor.kind === "user") {
     return { scope: "personal", authorId: actor.id };
   }
   if (actor.kind === "team") {
-    return { scope: "team", authorId: null, teamIds: [actor.id] };
+    return {
+      scope: "team",
+      authorId: null,
+      initialPermissionGrants: [
+        { subject: { type: "team", id: actor.id }, actions: ["read", "use"] },
+      ],
+    };
   }
-  return { scope: "org", authorId: null };
+  return { scope: "org", authorId: null, publishToOrganization: true };
 }
 
 function withNativeClientCredentialAliases(

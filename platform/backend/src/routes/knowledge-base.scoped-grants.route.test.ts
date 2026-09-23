@@ -48,7 +48,6 @@ describe("scoped knowledge grants", () => {
       url: "/api/knowledge-bases",
       payload: {
         name: "Shared research",
-        visibility: "private",
         initialGrants: grants,
       },
     });
@@ -156,17 +155,25 @@ describe("scoped knowledge grants", () => {
     ).toEqual([]);
   });
 
-  test("organization visibility asked for by a request does not publish the base", async ({
+  test("a create request without grants does not publish the base", async ({
     makeMember,
     makeUser,
   }) => {
     const member = await makeUser();
     await makeMember(member.id, organizationId);
 
-    const response = await app.inject({
+    // The retired visibility field is refused rather than read.
+    const refused = await app.inject({
       method: "POST",
       url: "/api/knowledge-bases",
       payload: { name: "Everyone", visibility: "org-wide" },
+    });
+    expect(refused.statusCode).toBe(400);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-bases",
+      payload: { name: "Everyone" },
     });
     expect(response.statusCode, response.body).toBe(200);
 

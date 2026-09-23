@@ -49,7 +49,7 @@ describe("GET /api/projects/:id/conversations (project:read-all)", () => {
     await makeMember(owner.id, organizationId, {});
     viewer = await makeUser({ email: "viewer@test.com" });
     await makeMember(viewer.id, organizationId, {});
-    agentId = (await makeAgent({ name: "Chat Agent", teams: [] })).id;
+    agentId = (await makeAgent({ name: "Chat Agent" })).id;
     actingUser = viewer;
 
     app = createFastifyInstance();

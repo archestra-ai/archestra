@@ -21,7 +21,6 @@ describe("AgentModel.findAccessibleDelegationTargets", () => {
     const target = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
-      scope: "org",
     });
     const key = {
       organizationId: org.id,

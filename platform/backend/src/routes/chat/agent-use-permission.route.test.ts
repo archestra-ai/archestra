@@ -42,7 +42,6 @@ describe("POST /api/chat agent use permission", () => {
         organizationId,
         name: "Org-wide agent",
         agentType: "agent",
-        scope: "org",
       });
       agentId = agent.id;
       conversationId = (

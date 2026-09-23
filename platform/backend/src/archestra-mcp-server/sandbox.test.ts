@@ -33,6 +33,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import {
+  accessGrants,
   afterAll,
   afterEach,
   beforeEach,
@@ -1467,9 +1468,9 @@ describe("sandbox tools (runtime enabled)", () => {
             content: "# doomed",
             metadata: {},
             sourceType: "manual",
-            scope: "org",
           },
           files: [],
+          ...accessGrants("org"),
         });
         if (!skill) throw new Error("skill seed failed");
         const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);

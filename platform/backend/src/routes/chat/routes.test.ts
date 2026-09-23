@@ -954,7 +954,7 @@ describe("persistNewMessages", () => {
       const agent = await makeAgent({
         organizationId: organization.id,
         authorId: user.id,
-        scope: "personal",
+        access: "personal",
       });
       const conversation = await ConversationModel.create({
         userId: user.id,

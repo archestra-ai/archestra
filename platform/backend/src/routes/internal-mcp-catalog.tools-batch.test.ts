@@ -108,7 +108,7 @@ describe("GET /api/internal_mcp_catalog/tools", () => {
     const personal = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     await makeTool({ name: "personal__secret", catalogId: personal.id });
 
@@ -130,7 +130,6 @@ describe("GET /api/internal_mcp_catalog/tools", () => {
     const ownedApp = await makeApp({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
-      scope: "org",
     });
 
     const backingCatalogIds = new Set(

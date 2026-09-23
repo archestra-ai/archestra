@@ -132,7 +132,7 @@ describe("knowledgeSourceAccessControlService", () => {
       org.id,
       {
         connectorType: "github",
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       },
     );
 
@@ -275,10 +275,7 @@ describe("knowledgeSourceAccessControlService", () => {
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
       org.id,
-      {
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      },
+      { legacy: { visibility: "team-scoped", teamIds: [team.id] } },
     );
 
     const access =
@@ -307,13 +304,12 @@ describe("knowledgeSourceAccessControlService", () => {
       name: "Connector Team",
     });
     const knowledgeBase = await makeKnowledgeBase(org.id);
+    // The document ACL is still built from the connector's retired
+    // visibility columns, so the seed writes them.
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
       org.id,
-      {
-        visibility: "team-scoped",
-        teamIds: [connectorTeam.id],
-      },
+      { legacy: { visibility: "team-scoped", teamIds: [connectorTeam.id] } },
     );
 
     const acl =
@@ -377,7 +373,7 @@ describe("knowledgeSourceAccessControlService", () => {
       knowledgeBase.id,
       org.id,
       {
-        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       },
     );
     const document = await KbDocumentModel.create({

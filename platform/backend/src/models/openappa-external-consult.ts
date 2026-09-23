@@ -113,6 +113,7 @@ class OpenappaExternalConsultModel {
     if (filters.root) conditions.push(eq(table.root, filters.root));
     if (filters.sessionId)
       conditions.push(eq(table.sessionId, filters.sessionId));
+    if (filters.callerId) conditions.push(eq(table.callerId, filters.callerId));
 
     // An unreadable cursor is treated as none: the newest page.
     const position = decodeCursor(params.cursor);
@@ -143,6 +144,7 @@ interface ExternalConsultFilters {
   to?: Date;
   root?: string;
   sessionId?: string;
+  callerId?: string;
 }
 
 const EXPORT_PAGE_SIZE = 500;

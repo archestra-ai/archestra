@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import { OpenappaExternalConsultModel } from "@/models";
 import { constructResponseSchema } from "@/types";
 import {
@@ -47,7 +48,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. Requires `log:admin`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -55,12 +56,21 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         ),
       },
     },
-    async ({ query, organizationId }, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const { format, limit, cursor, from, to, ...rest } = query;
+      // log:read scopes the export to the caller's own consults;
+      // log:admin lifts it within the active organization.
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       const filters = {
         ...rest,
         from: from ? new Date(from) : undefined,
         to: to ? new Date(to) : undefined,
+        callerId: canSeeAllLogs ? undefined : `user:${user.id}`,
       };
       switch (format) {
         case "json": {

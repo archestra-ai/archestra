@@ -4827,8 +4827,8 @@ function stripFeedbackMetadata(message: ChatMessage): ChatMessage {
 }
 
 /**
- * Validates that a chat API key exists, belongs to the organization,
- * and the user has access to it based on scope.
+ * Validates that a chat API key exists, belongs to the organization, and the
+ * user may use it (a use grant on the key).
  * Throws ApiError if validation fails.
  */
 async function validateChatApiKeyAccess(
@@ -4841,21 +4841,13 @@ async function validateChatApiKeyAccess(
     throw new ApiError(404, "Chat API key not found");
   }
 
-  // Verify user has access to the API key based on scope
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const canAccessKey =
-    apiKey.scope === "org" ||
-    (apiKey.scope === "personal" && apiKey.userId === userId) ||
-    (apiKey.scope === "team" &&
-      apiKey.teamId &&
-      userTeamIds.includes(apiKey.teamId));
-
-  if (!canAccessKey) {
+  if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, userId, []))) {
     throw new ApiError(403, "You do not have access to this API key");
   }
 }
 
 export const __test = {
+  validateChatApiKeyAccess,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

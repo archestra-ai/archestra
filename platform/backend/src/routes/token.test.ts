@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { hasPermission } from "@/auth";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import TeamTokenModel from "@/models/team-token";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -135,5 +136,44 @@ describe("shared token route authorization", () => {
       url: `/api/tokens/${token.id}/value`,
     });
     expect(allowed.statusCode, allowed.body).toBe(200);
+  });
+
+  test("worksWithProfile follows the agent's grants to the token's team", async ({
+    makeAgent,
+  }) => {
+    // Team-scoped by the retired field and assigned to the team, but the only
+    // thing that counts is a grant on the agent to that team.
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      scope: "team",
+      teams: [teamId],
+    });
+    const { token } = await TeamTokenModel.createTeamToken(
+      teamId,
+      "Team automation",
+    );
+    const worksWith = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/tokens?profileId=${agent.id}`,
+        })
+      )
+        .json()
+        .tokens.find((entry: { id: string }) => entry.id === token.id)
+        ?.worksWithProfile;
+    expect(await worksWith()).toBe(true);
+
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: (policy?.grants ?? []).filter(
+        (grant) => grant.subject.type !== "team",
+      ),
+    });
+    expect(await worksWith()).toBe(false);
   });
 });

@@ -2585,9 +2585,8 @@ class AgentModel {
 
   /**
    * Internal agents eligible as Auto-mode delegation targets for a caller:
-   * agentType "agent", not soft-deleted, that the caller user can access (org,
-   * own personal, or a team the user belongs to), minus the caller agent
-   * itself. This is the delegation analog of
+   * agentType "agent", not soft-deleted, that the caller holds a use grant on,
+   * minus the caller agent itself. This is the delegation analog of
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
@@ -2659,34 +2658,27 @@ class AgentModel {
     }
 
     return db
-      .selectDistinct({
+      .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
         builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
       .where(
         and(
           ...baseConditions,
-          or(
-            eq(schema.agentsTable.scope, "org"),
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
-            ),
-            and(
-              eq(schema.agentsTable.scope, "team"),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.agentTeamsTable.teamId,
-              }),
-            ),
-          ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: schema.agentsTable.organizationId,
+            userId,
+            resource: "agent",
+            scopeColumn: schema.agentsTable.id,
+            action: "use",
+          }),
+          // SPDX-SnippetEnd
         ),
       )
       .orderBy(asc(schema.agentsTable.name));

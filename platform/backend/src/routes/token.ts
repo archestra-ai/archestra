@@ -3,12 +3,7 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import {
-  AgentModel,
-  AgentTeamModel,
-  TeamModel,
-  TeamTokenModel,
-} from "@/models";
+import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -33,8 +28,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    *   stays gated behind access-control management
    *
    * When profileId is provided, tokens are annotated with worksWithProfile
-   * (org-scoped agents accept any team token; team-scoped agents only their
-   * teams'; personal agents none) so the UI can grey out the rest.
+   * (the gateway's own check: a grant on the agent to the token's team, or to
+   * the organization at large) so the UI can grey out the rest.
    *
    * Also returns permission flags so the UI can show disabled options
    * for tokens the user doesn't have access to.
@@ -106,24 +101,26 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // If profileId is provided, annotate each token with whether it can
-      // actually authenticate against that agent, by the pre-grant team-token
-      // rules: org-scoped agents accept any team token, team-scoped agents
-      // only their assigned teams' tokens, personal agents none. Org tokens always pass. Tokens stay listed
-      // either way so the UI can show them greyed out with the reason.
+      // actually authenticate against that agent: the same grant check the
+      // gateway runs when the token is presented. Tokens stay listed either
+      // way so the UI can show them greyed out with the reason.
       let worksWithProfile: ((token: TeamTokenWithTeam) => boolean) | null =
         null;
       if (profileId) {
-        const agent = await AgentModel.findAccessContextById(profileId);
-        const profileTeamIds =
-          agent?.scope === "team"
-            ? await AgentTeamModel.getTeamsForAgent(profileId)
-            : [];
-        worksWithProfile = (token) =>
-          token.isOrganizationToken ||
-          agent?.scope === "org" ||
-          (agent?.scope === "team" &&
-            !!token.teamId &&
-            profileTeamIds.includes(token.teamId));
+        const accepted = new Set<string>();
+        await Promise.all(
+          visibleTokens.map(async (token) => {
+            if (
+              await AgentTeamModel.credentialHasAgentAccess({
+                organizationId: request.organizationId,
+                agentId: profileId,
+                teamId: token.isOrganizationToken ? null : token.teamId,
+              })
+            )
+              accepted.add(token.id);
+          }),
+        );
+        worksWithProfile = (token) => accepted.has(token.id);
       }
 
       return reply.send({

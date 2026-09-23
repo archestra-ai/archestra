@@ -34,10 +34,10 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { ChatLandingLayout } from "@/app/chat/chat-landing-layout";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
-import { AppLogo } from "@/components/app-logo";
 import {
   AppSessionRecorderProvider,
   useOwnAppSessionRecorder,
@@ -3611,8 +3611,8 @@ export function ChatPageContent({
                    and the caller holds submit disabled — so it draws now and
                    fills in. */
 
-                /* The exit fade covers the splash decoration (logo,
-                     suggestions) when a conversation takes over; the composer
+                /* The exit fade covers the splash heading and suggestions
+                     when a conversation takes over; the composer
                      below is excluded — it carries its own shared name and
                      morphs to the bottom-anchored composer instead. */
                 <ViewTransition exit="chat-splash-exit" default="none">
@@ -3632,8 +3632,7 @@ export function ChatPageContent({
                       }
                     }}
                   >
-                    {/* On mobile the splash buttons would overlap the logo,
-                          so the links move into the app shell's header bar. */}
+                    {/* On mobile the splash links live in the app shell's header bar. */}
                     <MobileHeaderChatLinks
                       links={organization?.chatLinks ?? []}
                     />
@@ -3655,17 +3654,19 @@ export function ChatPageContent({
                         )}
                       </div>
                     )}
-                    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                      <div className="scale-150">
-                        <AppLogo />
-                      </div>
-                      {(() => {
+                    <ChatLandingLayout
+                      title="So, what shall we do?"
+                      description="Ask a question or describe a task to get started."
+                      headingLevel={1}
+                      className="px-4 py-4"
+                      suggestions={(() => {
                         if (isInitialRuntimeMode) return null;
                         const prompts = initialAgent?.suggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
                           <SuggestedPromptPills
                             prompts={prompts}
+                            align="start"
                             disabled={
                               isAgentSubscriptionMetadataPending ||
                               (initialPerUserConnect.needsConnect &&
@@ -3685,7 +3686,8 @@ export function ChatPageContent({
                           />
                         );
                       })()}
-                      <div className="w-full max-w-4xl space-y-3">
+                    >
+                      <div>
                         {/* Shared-element pair with the conversation composer —
                             see the bottom-anchored ViewTransition above. */}
                         <ViewTransition
@@ -3705,11 +3707,10 @@ export function ChatPageContent({
                             ) : (
                               <>
                                 {newChatAgentId && !isInitialRuntimeMode && (
-                                  <div className="mb-3">
-                                    <AgentConnectionNotice
-                                      agentId={newChatAgentId}
-                                    />
-                                  </div>
+                                  <AgentConnectionNotice
+                                    agentId={newChatAgentId}
+                                    className="mb-3"
+                                  />
                                 )}
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
@@ -3838,7 +3839,7 @@ export function ChatPageContent({
                           </div>
                         </ViewTransition>
                       </div>
-                    </div>
+                    </ChatLandingLayout>
                     <div className="p-4 text-center">
                       <Version inline />
                     </div>

@@ -18,7 +18,7 @@ With AI tool guardrails, the same agent can operate normally in safe contexts an
 
 ## OpenAPPA Preview
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Describe a policy change in the chat prompt on **OpenAPPA**. The agent reads the current policy, previews the diff, and saves a revision. If GitHub sync is configured in **Settings → OpenAPPA**, it opens a pull request instead. The Policy details tab shows the source and effective TOML as read-only views. When OpenAPPA enforcement is enabled, legacy Guardrails and Security links are hidden. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. On **OpenAPPA**, choose a chat model and ask about the policy or describe a change. The conversation opens on the same page with the platform-managed OpenAPPA Configuration Agent and its policy tools. You can reopen a configuration session from the AI sidebar; it stays in the OpenAPPA workspace. For a change, the agent reads the current policy, previews the diff, and saves a revision. If GitHub sync is configured in **Settings → OpenAPPA**, it opens a pull request instead. The Policy details tab shows the source and effective TOML as read-only views. When OpenAPPA enforcement is enabled, legacy Guardrails and Security links are hidden. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the OpenAPPA policy tools to read, preview, and publish changes. The skill is available only while APPA is enabled.
 
@@ -43,7 +43,7 @@ The default policy has no rules for specific tools. A catch-all annotator adds n
 
 Tool rules name tools exactly, or cover every unnamed tool with `*`. OpenAPPA refuses partial patterns such as `grain__*`. To cover every tool of one server, attach its battery.
 
-The **OpenAPPA is disabled** switch turns on only while the policy opens. If the policy does not open, the switch stays off and names the error. When APPA cannot evaluate a request, the proxy answers with the reason and a trace reference. A refused policy returns HTTP 500 and tells clients not to retry — fix the policy from OpenAPPA chat. An unavailable policy runtime returns HTTP 503, and clients can retry.
+The OpenAPPA control in the sidebar footer turns on only while the policy opens. If the policy does not open, it stays off and names the error. When APPA cannot evaluate a request, the proxy answers with the reason and a trace reference. A refused policy returns HTTP 500 and tells clients not to retry — fix the policy from OpenAPPA configuration. An unavailable policy runtime returns HTTP 503, and clients can retry.
 
 The assistant can read, validate, preview, and publish the policy through the OpenAPPA tool group. Updates enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 

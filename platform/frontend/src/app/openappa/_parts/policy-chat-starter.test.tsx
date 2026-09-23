@@ -1,15 +1,53 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useRouter } from "next/navigation";
 import { beforeEach, expect, test, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useConversation,
+  useCreateConversation,
+  useUpdateConversation,
+} from "@/lib/chat/chat.query";
+import { useChatSession } from "@/lib/chat/global-chat.context";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { PolicyChatStarter } from "./policy-chat-starter";
 
-vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/chat/chat.query");
+vi.mock("@/lib/chat/global-chat.context");
+vi.mock("@/app/chat/prompt-input", () => ({
+  default: ({
+    onSubmit,
+    fixedAgentName,
+  }: {
+    onSubmit: ({ text }: { text: string }) => void;
+    fixedAgentName: string;
+  }) => (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit({
+          text: (
+            event.currentTarget.elements.namedItem(
+              "policy",
+            ) as HTMLTextAreaElement
+          ).value,
+        });
+      }}
+    >
+      <span>{fixedAgentName}</span>
+      <textarea
+        name="policy"
+        aria-label="Describe the OpenAPPA policy change"
+      />
+      <button type="submit">Start policy chat</button>
+    </form>
+  ),
+}));
+vi.mock("@/components/chat/chat-messages", () => ({
+  ChatMessages: () => <div data-testid="policy-messages" />,
+}));
 vi.mock("@/lib/openappa-github-sync.query", () => ({
   useAppaGithubSync: vi.fn(),
 }));
@@ -24,7 +62,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
   useHasAnyApiKey: vi.fn(),
 }));
 
-const push = vi.fn();
+const create = vi.fn();
+const sendMessage = vi.fn();
 const renderStarter = () =>
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -42,9 +81,37 @@ beforeEach(() => {
       removeEventListener: vi.fn(),
     }),
   );
-  vi.mocked(useRouter).mockReturnValue({
-    push,
-  } as unknown as ReturnType<typeof useRouter>);
+  create.mockResolvedValue({
+    id: "conversation-1",
+    agentId: "policy-agent-1",
+    messages: [],
+  });
+  vi.mocked(useCreateConversation).mockReturnValue({
+    mutateAsync: create,
+    isPending: false,
+  } as unknown as ReturnType<typeof useCreateConversation>);
+  vi.mocked(useUpdateConversation).mockReturnValue({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateConversation>);
+  vi.mocked(useConversation).mockImplementation(
+    (id) =>
+      ({
+        data: id ? { id, messages: [] } : undefined,
+      }) as ReturnType<typeof useConversation>,
+  );
+  vi.mocked(useChatSession).mockImplementation(({ conversationId }) =>
+    conversationId
+      ? ({
+          sendMessage,
+          messages: [],
+          status: "ready",
+          optimisticToolCalls: [],
+          setMessages: vi.fn(),
+          addToolApprovalResponse: vi.fn(),
+        } as unknown as ReturnType<typeof useChatSession>)
+      : null,
+  );
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
@@ -69,7 +136,7 @@ beforeEach(() => {
   } as ReturnType<typeof useLlmModels>);
 });
 
-test("starts a chat with the requested policy change and preview instructions", async () => {
+test("starts a policy conversation on this page and sends the user's request", async () => {
   renderStarter();
   fireEvent.change(
     screen.getByRole("textbox", {
@@ -79,16 +146,44 @@ test("starts a chat with the requested policy change and preview instructions", 
   );
   fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
 
-  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
-  const url = new URL(push.mock.calls[0][0], "http://localhost");
-  expect(url.pathname).toBe("/chat/new");
-  expect(url.searchParams.get("user_prompt")).toContain(
-    "Require approval for outbound messages",
+  await vi.waitFor(() =>
+    expect(create).toHaveBeenCalledWith({
+      modelId: "model-1",
+      origin: "openappa",
+    }),
   );
-  expect(url.searchParams.get("user_prompt")).toContain(
-    "preview and explain the diff",
+  await vi.waitFor(() =>
+    expect(screen.getByTestId("policy-messages")).toBeInTheDocument(),
   );
-  expect(url.searchParams.get("modelId")).toBe("model-1");
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      parts: [{ type: "text", text: "Require approval for outbound messages" }],
+    }),
+  );
+});
+
+test("starts with a policy-specific suggested prompt", async () => {
+  renderStarter();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Explain my current policy" }),
+  );
+  await vi.waitFor(() =>
+    expect(create).toHaveBeenCalledWith({
+      modelId: "model-1",
+      origin: "openappa",
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          expect.objectContaining({
+            text: expect.stringContaining("Do not change it"),
+          }),
+        ],
+      }),
+    ),
+  );
 });
 
 test("offers provider setup when no chat credential is available", () => {
@@ -132,5 +227,5 @@ test("asks for a GitHub App before proposing changes to a synced policy", () => 
   expect(screen.getByText("GitHub App needed")).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Start policy chat" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 });

@@ -2046,6 +2046,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
+        if (
+          existingAgent.builtInAgentConfig.name ===
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+        ) {
+          throw new ApiError(
+            403,
+            "The OpenAPPA Configuration Agent is managed by the platform",
+          );
+        }
         // Validate builtInAgentConfig if provided
         if (body.builtInAgentConfig) {
           const parsed = BuiltInAgentConfigSchema.safeParse(

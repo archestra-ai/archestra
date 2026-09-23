@@ -357,6 +357,8 @@ function getBuiltInAgentConfigForSave(params: {
   maxRounds: number;
 }) {
   switch (params.builtInAgentName) {
+    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
+      return { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG };
     case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
       return {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,

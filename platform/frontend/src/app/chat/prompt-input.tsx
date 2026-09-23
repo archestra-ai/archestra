@@ -39,6 +39,7 @@ import {
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -222,6 +223,7 @@ export interface ArchestraPromptInputProps
   runtimeAgentName?: string;
   /** Reuse the chat composer for a focused launch form without chat controls. */
   minimalMode?: boolean;
+  fixedAgentName?: string;
   placeholderOverride?: string;
 }
 
@@ -290,6 +292,7 @@ const PromptInputContent = ({
   runtimeMode = false,
   runtimeAgentName,
   minimalMode = false,
+  fixedAgentName,
   placeholderOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
@@ -1115,10 +1118,21 @@ const PromptInputContent = ({
           className={minimalMode ? "justify-between" : undefined}
         >
           {minimalMode && (
-            <ModelSelector
-              selectedModel={selectedModel}
-              onModelChange={onModelChange}
-            />
+            <div className="flex min-w-0 items-center gap-2">
+              {fixedAgentName && (
+                <span
+                  className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground"
+                  title={`Agent: ${fixedAgentName}`}
+                >
+                  <OpenAppaIcon className="size-4 shrink-0" />
+                  <span className="truncate">{fixedAgentName}</span>
+                </span>
+              )}
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+              />
+            </div>
           )}
           {!minimalMode && (
             <ChatPromptInputTools
@@ -1282,6 +1296,7 @@ const ArchestraPromptInput = ({
   runtimeMode,
   runtimeAgentName,
   minimalMode,
+  fixedAgentName,
   placeholderOverride,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
@@ -1396,6 +1411,7 @@ const ArchestraPromptInput = ({
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
           minimalMode={minimalMode}
+          fixedAgentName={fixedAgentName}
           placeholderOverride={placeholderOverride}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}

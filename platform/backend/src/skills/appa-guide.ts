@@ -4,13 +4,13 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
   builtInSkillId: "appa-guide",
   name: "appa-guide",
   description:
-    "Configure Guardrails v2 (OpenAPPA): explain the current policy, review available tools, and change how tool calls and results are handled using the policy read, validate, and update tools.",
+    "Configure OpenAPPA: explain the effective policy, review available tools, preview a policy diff, and publish a local revision or GitHub pull request.",
   feature: "appa",
   content: `# APPA Guide
 
 Use this skill to explain or change the organization policy. It works
 through platform tools, including when those tools are connected to Claude Code.
-The policy is shared with the OpenAPPA editor in Studio and stored in the database.
+The policy is shown read-only in OpenAPPA Policy details and stored in the database.
 A local organization.appa.toml file, Claude Code settings, or a shell command does
 not change it.
 
@@ -71,23 +71,29 @@ scan or save policy rules; follow these steps when handling the user's request.
    user authorized. If the requested outcome is unclear, ask one focused
    question. An inspection request does not authorize a save. Existing approval
    for a specific change carries forward; do not ask for it again.
-4. Call \`archestra__validate_guardrails_policy\` with
-   \`{ "content": "<complete proposed TOML>" }\`. Validation composes the
+4. Call \`archestra__preview_guardrails_policy_change\` with the complete
+   proposed TOML and the revision returned by the read tool. Preview validates,
+   composes, and returns a diff without saving. Validation composes the
    document with the batteries its \`include\` entries name, so an entry nothing
    answers is an error unless the saved revision already spells it — then it is
    a \`warnings\` line instead, and the battery will govern nothing. Fix reported
-   errors and validate again; report the warnings rather than reading \`valid\`
-   alone as working. Validation checks the policy, not the availability or
+   errors and preview again; report the warnings rather than reading \`valid\`
+   alone as working. Preview checks the policy, not the availability or
    correctness of external annotation services.
-5. If the text already provides the requested behavior, report that no change
-   is needed. Otherwise call \`archestra__update_guardrails_policy\` with
+5. Show the user the diff and explain its effect. If the text already provides
+   the requested behavior, report that no change is needed. Otherwise call
+   \`archestra__update_guardrails_policy\` with
    \`{ "content": "<complete validated TOML>", "expectedRevision": N }\`,
-   where N is the revision returned by the read tool.
+   where N is the revision returned by the read tool. This publishes a GitHub
+   pull request when sync is configured, or a local revision otherwise.
 6. If the save reports a conflict, someone saved a newer copy. Read it again,
-   combine your intended change with those edits, and validate before retrying.
+   combine your intended change with those edits, and preview before retrying.
    Never just increase N and resend the old text. If the edits conflict in
    meaning, ask the user which behavior they want.
-7. Read back the saved policy. If the save's \`effective.error\` is set, the
+7. If the update opened a pull request, report its link and use
+   \`archestra__get_guardrails_policy_change_status\` to check its progress.
+   The proposed policy is not enforced until it is merged and synced. If the
+   update saved locally, read back the saved policy. If its \`effective.error\` is set, the
    text saved but composing it with its batteries failed and the last
    composition that opened is still what is enforced: report that as a problem,
    not a success. Report any battery in \`effective.batteries\` whose status is

@@ -12,6 +12,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { GuardrailsDeploymentToggle } from "./guardrails-deployment-toggle";
 
@@ -22,6 +23,19 @@ const server = setupServer();
 let enabled: boolean;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })),
+  );
   enabled = false;
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
@@ -44,7 +58,11 @@ function show() {
   });
   render(
     <QueryClientProvider client={client}>
-      <GuardrailsDeploymentToggle />
+      <SidebarProvider>
+        <SidebarMenu>
+          <GuardrailsDeploymentToggle />
+        </SidebarMenu>
+      </SidebarProvider>
     </QueryClientProvider>,
   );
 }
@@ -66,30 +84,17 @@ test("enables both engines deployment-wide and disables only APPA", async () => 
     name: "OpenAPPA is disabled",
   });
   expect(toggle).not.toBeChecked();
-  expect(
-    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
-  ).toHaveClass("text-red-500");
-  expect(screen.getByText(/for this deployment/)).toBeVisible();
+  expect(toggle).toHaveClass("text-destructive");
   fireEvent.click(toggle);
-  expect(
-    await screen.findByText(
-      "Policy enforcement is active for this deployment.",
-    ),
-  ).toBeVisible();
+  expect(await screen.findByText("OpenAPPA enabled")).toBeVisible();
   expect(toggle).toHaveAccessibleName("OpenAPPA is enabled");
-  expect(
-    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
-  ).toHaveClass("text-emerald-700");
+  expect(toggle).not.toHaveClass("text-destructive");
   await waitFor(() => expect(toggle).toBeEnabled());
   fireEvent.click(toggle);
-  expect(
-    await screen.findByText("Turn on policy enforcement for this deployment."),
-  ).toBeVisible();
+  expect(await screen.findByText("OpenAPPA disabled")).toBeVisible();
   expect(toggle).not.toBeChecked();
   expect(toggle).toHaveAccessibleName("OpenAPPA is disabled");
-  expect(
-    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
-  ).toHaveClass("text-red-500");
+  expect(toggle).toHaveClass("text-destructive");
 });
 
 test("a rejected update keeps the accepted deployment state", async () => {
@@ -101,9 +106,7 @@ test("a rejected update keeps the accepted deployment state", async () => {
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toBeEnabled());
   expect(toggle).not.toBeChecked();
-  expect(
-    screen.getByText("Turn on policy enforcement for this deployment."),
-  ).toBeVisible();
+  expect(screen.getByText("OpenAPPA disabled")).toBeVisible();
 });
 
 test.each([

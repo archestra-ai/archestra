@@ -286,6 +286,11 @@ const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
   "get_guardrails_policy_change_status",
+  "load_skill",
+  "list_mcp_server_deployments",
+  "get_mcp_server_tools",
+  "search_tools",
+  "ask_user",
 ]);
 
 /**

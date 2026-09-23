@@ -11,6 +11,7 @@ import {
 } from "@/app/_parts/studio-nav";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -49,6 +50,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
@@ -310,8 +312,10 @@ export function ConversationSearchPalette({
     setSelectedValue("");
   }, [searchQuery]);
 
-  const handleSelectConversation = (conversationId: string) => {
-    router.push(`/chat/${conversationId}`);
+  const handleSelectConversation = (
+    conversation: (typeof conversations)[number],
+  ) => {
+    router.push(conversationHref(conversation));
     onOpenChange(false);
   };
 
@@ -348,8 +352,11 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (pathname === `/chat/${conversationId}`) {
-        router.push("/chat");
+      if (
+        pathname === `/chat/${conversationId}` ||
+        pathname === `/openappa/${conversationId}`
+      ) {
+        router.push(pathname.startsWith("/openappa/") ? "/openappa" : "/chat");
       }
     },
     [deleteMutation, conversations, pathname, router],
@@ -506,13 +513,18 @@ export function ConversationSearchPalette({
       ? getPreviewText(conv.messages, debouncedSearch)
       : "";
     const isPending = isPendingDeletion === conv.id;
-    const IconComponent = showPinIcon ? Pin : MessageCircle;
+    const IconComponent =
+      conv.origin === "openappa"
+        ? OpenAppaIcon
+        : showPinIcon
+          ? Pin
+          : MessageCircle;
 
     return (
       <CommandItem
         key={conv.id}
         value={`conv-${conv.id}`}
-        onSelect={() => handleSelectConversation(conv.id)}
+        onSelect={() => handleSelectConversation(conv)}
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
         <div className="flex items-center gap-2 w-full min-w-0">

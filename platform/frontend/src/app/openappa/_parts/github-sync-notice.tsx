@@ -16,10 +16,15 @@ export function GithubSyncNotice() {
     return null;
   return (
     <>
-      <InlineNotice variant="info" className="gap-2">
+      <InlineNotice
+        variant="info"
+        className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center"
+      >
         <Github />
-        <span className="font-medium">Review policy changes in GitHub</span>
-        <InlineNoticeText className="flex-1">
+        <span className="min-w-0 font-medium">
+          Review policy changes in GitHub
+        </span>
+        <InlineNoticeText className="col-start-2 sm:flex-1">
           Connect a repository and GitHub App to let the agent open pull
           requests.
         </InlineNoticeText>
@@ -27,7 +32,7 @@ export function GithubSyncNotice() {
           <Button
             variant="outline"
             size="sm"
-            className="h-6 px-2 text-xs"
+            className="col-start-2 h-6 justify-self-start px-2 text-xs sm:ml-auto"
             onClick={() => setEditing(true)}
           >
             Set up GitHub sync

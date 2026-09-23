@@ -123,6 +123,9 @@ export const AgentScopeFilterSchema = z.enum([
 export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 
 // Built-in agent config — discriminated union by name
+const OpenAppaConfigAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG),
+});
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
@@ -156,6 +159,7 @@ const AdvisorAgentConfigSchema = z.object({
 
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
+  OpenAppaConfigAgentConfigSchema,
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,

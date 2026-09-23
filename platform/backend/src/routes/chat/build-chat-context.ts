@@ -1,5 +1,13 @@
+import {
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import type { Tool } from "ai";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   getChatMcpTools,
   getChatMcpToolUiResourceUris,
@@ -12,8 +20,10 @@ import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import { ConversationEnabledToolModel } from "@/models";
+import { openappaEnabled } from "@/openappa/service";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import type { ToolExposureMode } from "@/types";
+import type { ConversationOrigin } from "@/types/conversation";
 
 /**
  * Assemble everything the chat stream needs about its agent before the first
@@ -22,6 +32,7 @@ import type { ToolExposureMode } from "@/types";
  */
 export async function buildChatContext(params: {
   conversationId: string;
+  conversationOrigin?: ConversationOrigin;
   agentId: string;
   agent: {
     name: string;
@@ -133,9 +144,27 @@ export async function buildChatContext(params: {
     getChatMcpToolUiResourceUris(agentId),
   ]);
 
-  const systemPrompt = await buildAgentSystemPrompt({
-    agent,
-    mcpTools,
+  const isPolicyChat =
+    params.conversationOrigin === "openappa" && openappaEnabled();
+  const availableTools = isPolicyChat
+    ? Object.fromEntries(
+        Object.entries(mcpTools).filter(([name]) =>
+          POLICY_CHAT_TOOL_SHORT_NAMES.has(
+            archestraMcpBranding.getToolShortName(name) ?? "",
+          ),
+        ),
+      )
+    : mcpTools;
+  const baseSystemPrompt = await buildAgentSystemPrompt({
+    agent: isPolicyChat
+      ? {
+          ...agent,
+          name: "OpenAPPA",
+          systemPrompt: null,
+          toolExposureMode: "full" as const,
+        }
+      : agent,
+    mcpTools: availableTools,
     organizationId,
     userId: user.id,
     agentId,
@@ -147,9 +176,12 @@ export async function buildChatContext(params: {
     // The stream above carries ask_user's question to the user and back.
     canAskUser: true,
   });
+  const systemPrompt = isPolicyChat
+    ? `${baseSystemPrompt ?? ""}\n\nThis conversation is dedicated to configuring this deployment's OpenAPPA policy. Your normal agent role does not apply here. Load the built-in appa-guide skill with archestra__load_skill before policy work, then follow its current workflow. Use the built-in OpenAPPA tools to read the current policy and relevant MCP tools, preview proposed changes and explain the diff, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.`
+    : baseSystemPrompt;
 
   return {
-    mcpTools,
+    mcpTools: availableTools,
     toolUiResourceUris,
     systemPrompt,
     toolSelection: {
@@ -159,3 +191,18 @@ export async function buildChatContext(params: {
     repeatTracker,
   };
 }
+
+const POLICY_CHAT_TOOL_SHORT_NAMES = new Set([
+  "get_guardrails_policy",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "get_guardrails_policy_change_status",
+  "list_mcp_server_deployments",
+  "get_mcp_server_tools",
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_ASK_USER_SHORT_NAME,
+]);

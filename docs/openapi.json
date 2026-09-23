@@ -47855,6 +47855,21 @@
                                           "name": {
                                             "type": "string",
                                             "enum": [
+                                              "openappa-configuration-agent"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "enum": [
                                               "policy-configuration-subagent"
                                             ]
                                           },
@@ -49521,6 +49536,21 @@
                                   "name": {
                                     "type": "string",
                                     "enum": [
+                                      "openappa-configuration-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
                                       "policy-configuration-subagent"
                                     ]
                                   },
@@ -50590,6 +50620,20 @@
                           "name": {
                             "type": "string",
                             "enum": [
+                              "openappa-configuration-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
                               "policy-configuration-subagent"
                             ]
                           },
@@ -51329,6 +51373,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -53056,6 +53115,21 @@
                               "name": {
                                 "type": "string",
                                 "enum": [
+                                  "openappa-configuration-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
                                   "policy-configuration-subagent"
                                 ]
                               },
@@ -54402,6 +54476,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -55829,6 +55918,21 @@
                                 "name": {
                                   "type": "string",
                                   "enum": [
+                                    "openappa-configuration-agent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
                                     "policy-configuration-subagent"
                                   ]
                                 },
@@ -56933,6 +57037,21 @@
                             "name": {
                               "type": "string",
                               "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
                                 "policy-configuration-subagent"
                               ]
                             },
@@ -57948,6 +58067,20 @@
                           "name": {
                             "type": "string",
                             "enum": [
+                              "openappa-configuration-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
                               "policy-configuration-subagent"
                             ]
                           },
@@ -58504,6 +58637,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -60906,6 +61054,21 @@
                             "name": {
                               "type": "string",
                               "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
                                 "policy-configuration-subagent"
                               ]
                             },
@@ -61997,6 +62160,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -69924,6 +70102,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -127898,7 +128091,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -128613,11 +128807,14 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "openappa"
+                    ]
                   }
-                },
-                "required": [
-                  "agentId"
-                ]
+                }
               }
             }
           }
@@ -128758,7 +128955,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -129529,7 +129727,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -130311,7 +130510,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -131148,7 +131348,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -133706,7 +133907,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -134776,7 +134978,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -135911,7 +136114,8 @@
                           "enum": [
                             "user",
                             "schedule_trigger",
-                            "app_open"
+                            "app_open",
+                            "openappa"
                           ]
                         },
                         "titleIsPlaceholder": {
@@ -137648,7 +137852,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -138453,7 +138658,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -139250,7 +139456,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -140061,7 +140268,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -369716,7 +369924,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "lastMessageAt": {
@@ -378658,7 +378867,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {

@@ -42,6 +42,8 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
+      // The organization's proxy, which every member reaches.
+      isDefault: true,
     });
     // The user's own (org-scoped) provider key — NOT a key stored on the client.
     const secret = await makeSecret({ secret: { apiKey: "sk-user-openai" } });
@@ -231,6 +233,8 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
+      // The organization's proxy, which every member reaches.
+      isDefault: true,
       scope: "team",
       teams: [team.id],
     });

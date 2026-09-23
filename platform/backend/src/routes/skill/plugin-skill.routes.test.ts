@@ -83,7 +83,10 @@ describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
   let originalEnabled: boolean;
 
-  beforeEach(() => {
+  beforeEach(async ({ makeMember }) => {
+    // Plugin visibility reads grants, and a grant reaches only a member of
+    // the organization.
+    await makeMember(ctx.user.id, ctx.organizationId);
     originalEnabled = config.plugins.enabled;
     config.plugins.enabled = true;
     mockUserHasPermission.mockReset();

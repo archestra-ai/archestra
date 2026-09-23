@@ -1310,10 +1310,11 @@ class SkillModel {
   }
 
   /**
-   * Soft-delete every personal skill a user authored, ahead of deleting the
-   * user. `skills.author_id` is `ON DELETE SET NULL`, so without this the
-   * skills would survive as active orphans — personal rows whose author id,
-   * being a `skill://` URI segment, no longer exists for any URI to carry.
+   * Soft-delete every skill a user authored that its grants give to nobody
+   * else, ahead of deleting the user. `skills.author_id` is `ON DELETE SET
+   * NULL`, so without this those skills would survive as active orphans that
+   * nobody can reach. A skill the author shared by grant (with a person, a
+   * team, a role or the organization) survives: its recipients still use it.
    * Soft rather than hard so no cascade FK can make it fail: a user who asked
    * to be removed must still be removed, and an admin can purge the rows
    * later.
@@ -1322,12 +1323,18 @@ class SkillModel {
     userId: string,
     tx?: Transaction,
   ): Promise<number> {
+    const table = schema.skillsTable;
     return await softDelete(
       tx ?? db,
-      schema.skillsTable,
+      table,
       and(
-        eq(schema.skillsTable.scope, "personal"),
-        eq(schema.skillsTable.authorId, userId),
+        eq(table.authorId, userId),
+        ResourcePermissionPolicyModel.reachesOnlyOwner({
+          organizationId: table.organizationId,
+          resource: "skill",
+          scopeColumn: table.id,
+          ownerColumn: table.authorId,
+        }),
       ),
     );
   }

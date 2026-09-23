@@ -447,7 +447,14 @@ function AgentDetails({
       // was created in.
       maxWidth="wizard"
       minWidth="phone"
-      contentOverflowX={activeFormGroups.length > 0 ? "clip" : "auto"}
+      // A scrolling box would trap the sticky save footer, so it could not
+      // pin to the bottom of the window. Only the wide sections, such as
+      // Runs, need one.
+      contentOverflowX={
+        activeFormGroups.length > 0 || section === "permissions"
+          ? "clip"
+          : "auto"
+      }
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">

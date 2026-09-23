@@ -1,16 +1,13 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { openappaCoverageService } from "@/openappa/coverage";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
-  CoverageAgentsPageSchema,
-  CoverageAgentsQuerySchema,
-  CoverageServerParamsSchema,
-  CoverageServerSchema,
-  CoverageServersPageSchema,
-  CoverageServersQuerySchema,
-  CoverageSummarySchema,
+  CoverageEntitiesPageSchema,
+  CoverageEntitiesQuerySchema,
   CoverageToolsPageSchema,
   CoverageToolsQuerySchema,
 } from "@/types/openappa-coverage";
@@ -25,47 +22,34 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       throw new ApiError(404, "Guardrails v2 is disabled");
   });
   app.get(
-    "/api/openappa/coverage/summary",
+    "/api/openappa/coverage/entities",
     {
       schema: {
-        operationId: RouteId.GetOpenappaCoverageSummary,
+        operationId: RouteId.GetOpenappaCoverageEntities,
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(CoverageSummarySchema),
+        querystring: CoverageEntitiesQuerySchema,
+        response: constructResponseSchema(CoverageEntitiesPageSchema),
       },
     },
-    async (request) => openappaCoverageService.summary(request.organizationId),
-  );
-  app.get(
-    "/api/openappa/coverage/servers",
-    {
-      schema: {
-        operationId: RouteId.GetOpenappaCoverageServers,
-        tags: ["OpenAPPA"],
-        querystring: CoverageServersQuerySchema,
-        response: constructResponseSchema(CoverageServersPageSchema),
-      },
-    },
-    async (request) =>
-      openappaCoverageService.servers({
+    async (request) => {
+      const [{ success: isCatalogAdmin }, visibility] = await Promise.all([
+        hasPermission({ mcpServerInstallation: ["admin"] }, request.headers),
+        coverageVisibility(request.user.id, request.organizationId),
+      ]);
+      const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds(
+        {
+          userId: request.user.id,
+          isAdmin: isCatalogAdmin,
+          organizationId: request.organizationId,
+        },
+      );
+      return openappaCoverageService.entities({
         organizationId: request.organizationId,
+        ...visibility,
+        visibleCatalogIds,
         ...request.query,
-      }),
-  );
-  app.get(
-    "/api/openappa/coverage/servers/:catalogId",
-    {
-      schema: {
-        operationId: RouteId.GetOpenappaCoverageServer,
-        tags: ["OpenAPPA"],
-        params: CoverageServerParamsSchema,
-        response: constructResponseSchema(CoverageServerSchema),
-      },
+      });
     },
-    async (request) =>
-      openappaCoverageService.server({
-        organizationId: request.organizationId,
-        catalogId: request.params.catalogId,
-      }),
   );
   app.get(
     "/api/openappa/coverage/tools",
@@ -80,24 +64,28 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async (request) =>
       openappaCoverageService.tools({
         organizationId: request.organizationId,
-        ...request.query,
-      }),
-  );
-  app.get(
-    "/api/openappa/coverage/agents",
-    {
-      schema: {
-        operationId: RouteId.GetOpenappaCoverageAgents,
-        tags: ["OpenAPPA"],
-        querystring: CoverageAgentsQuerySchema,
-        response: constructResponseSchema(CoverageAgentsPageSchema),
-      },
-    },
-    async (request) =>
-      openappaCoverageService.agents({
-        organizationId: request.organizationId,
+        ...(await coverageVisibility(request.user.id, request.organizationId)),
         ...request.query,
       }),
   );
 };
+
+async function coverageVisibility(userId: string, organizationId: string) {
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+  return {
+    userId,
+    agentTypes: checker
+      .getAgentTypesWithPermission("read")
+      .filter(
+        (type): type is "agent" | "mcp_gateway" =>
+          type === "agent" || type === "mcp_gateway",
+      ),
+    excludeOtherPersonalTypes: (["agent", "mcp_gateway"] as const).filter(
+      (type) => checker.isAdmin(type),
+    ),
+  };
+}
 export default routes;

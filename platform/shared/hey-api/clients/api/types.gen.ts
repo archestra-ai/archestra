@@ -85707,7 +85707,6 @@ export type GetOpenappaBatteriesResponses = {
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
-        createdAt: string | null;
         installs: Array<{
             id: string;
             organizationId: string;
@@ -86601,111 +86600,19 @@ export type DeleteOpenappaBatteryPackageResponses = {
 
 export type DeleteOpenappaBatteryPackageResponse = DeleteOpenappaBatteryPackageResponses[keyof DeleteOpenappaBatteryPackageResponses];
 
-export type GetOpenappaCoverageSummaryData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/openappa/coverage/summary';
-};
-
-export type GetOpenappaCoverageSummaryErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOpenappaCoverageSummaryError = GetOpenappaCoverageSummaryErrors[keyof GetOpenappaCoverageSummaryErrors];
-
-export type GetOpenappaCoverageSummaryResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        servers: number;
-        tools: number;
-        named: number;
-        unlisted: number;
-        agents: number;
-        agentsReachingOpen: number;
-        rootRevision: number;
-        effectiveHash: string | null;
-        lastError: string | null;
-    };
-};
-
-export type GetOpenappaCoverageSummaryResponse = GetOpenappaCoverageSummaryResponses[keyof GetOpenappaCoverageSummaryResponses];
-
-export type GetOpenappaCoverageServersData = {
+export type GetOpenappaCoverageEntitiesData = {
     body?: never;
     path?: never;
     query?: {
         limit?: number;
         offset?: number;
         search?: string;
-        posture?: 'not_enforced' | 'open' | 'guarded' | 'strict';
-        governedBy?: 'battery' | 'root' | 'none';
+        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
     };
-    url: '/api/openappa/coverage/servers';
+    url: '/api/openappa/coverage/entities';
 };
 
-export type GetOpenappaCoverageServersErrors = {
+export type GetOpenappaCoverageEntitiesErrors = {
     /**
      * Default Response
      */
@@ -86768,41 +86675,24 @@ export type GetOpenappaCoverageServersErrors = {
     };
 };
 
-export type GetOpenappaCoverageServersError = GetOpenappaCoverageServersErrors[keyof GetOpenappaCoverageServersErrors];
+export type GetOpenappaCoverageEntitiesError = GetOpenappaCoverageEntitiesErrors[keyof GetOpenappaCoverageEntitiesErrors];
 
-export type GetOpenappaCoverageServersResponses = {
+export type GetOpenappaCoverageEntitiesResponses = {
     /**
      * Default Response
      */
     200: {
         data: Array<{
-            catalogId: string;
+            id: string;
             name: string;
-            prefix: string | null;
+            type: 'agent' | 'mcp_gateway' | 'mcp_server';
+            scope: 'personal' | 'team' | 'org';
+            icon: string | null;
             toolCount: number;
-            named: number;
-            enforcedCount: number;
-            notEnforcedCount: number;
-            unlisted: number;
-            posture: 'not_enforced' | 'declared_not_enforced' | 'partly_enforced' | 'open' | 'guarded' | 'strict';
-            batteries: Array<{
-                name: string;
-                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
-                order: number;
-            }>;
-            rootRules: Array<{
-                line: number;
-                name: string;
-            }>;
-            agents: Array<{
-                id: string;
-                name: string;
-            }>;
-            fits: Array<{
-                battery: string;
-                evidence: 'host' | 'image' | 'name';
-            }>;
-            readsUnlisted: boolean;
+            governedCount: number;
+            fallbackCount: number;
+            builtInCount: number;
+            autoMode: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -86815,118 +86705,7 @@ export type GetOpenappaCoverageServersResponses = {
     };
 };
 
-export type GetOpenappaCoverageServersResponse = GetOpenappaCoverageServersResponses[keyof GetOpenappaCoverageServersResponses];
-
-export type GetOpenappaCoverageServerData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/openappa/coverage/servers/{catalogId}';
-};
-
-export type GetOpenappaCoverageServerErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOpenappaCoverageServerError = GetOpenappaCoverageServerErrors[keyof GetOpenappaCoverageServerErrors];
-
-export type GetOpenappaCoverageServerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        catalogId: string;
-        name: string;
-        prefix: string | null;
-        toolCount: number;
-        named: number;
-        enforcedCount: number;
-        notEnforcedCount: number;
-        unlisted: number;
-        posture: 'not_enforced' | 'declared_not_enforced' | 'partly_enforced' | 'open' | 'guarded' | 'strict';
-        batteries: Array<{
-            name: string;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
-            order: number;
-        }>;
-        rootRules: Array<{
-            line: number;
-            name: string;
-        }>;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
-        fits: Array<{
-            battery: string;
-            evidence: 'host' | 'image' | 'name';
-        }>;
-        readsUnlisted: boolean;
-    };
-};
-
-export type GetOpenappaCoverageServerResponse = GetOpenappaCoverageServerResponses[keyof GetOpenappaCoverageServerResponses];
+export type GetOpenappaCoverageEntitiesResponse = GetOpenappaCoverageEntitiesResponses[keyof GetOpenappaCoverageEntitiesResponses];
 
 export type GetOpenappaCoverageToolsData = {
     body?: never;
@@ -86936,6 +86715,7 @@ export type GetOpenappaCoverageToolsData = {
         offset?: number;
         search?: string;
         catalogId?: string;
+        entityId?: string;
         governedBy?: 'battery' | 'root' | 'catchall';
         kind?: 'read' | 'write' | 'approval';
     };
@@ -87016,10 +86796,12 @@ export type GetOpenappaCoverageToolsResponses = {
             toolId: string;
             catalogId: string;
             catalogName: string;
+            catalogIcon: string | null;
             prefix: string;
             name: string;
             fullName: string;
             kind: 'read' | 'write' | 'approval' | 'neutral' | 'unlisted';
+            policySource: 'built_in' | 'fallback' | 'root' | 'battery';
             rule: {
                 source: 'root' | 'battery';
                 battery: string | null;
@@ -87054,116 +86836,15 @@ export type GetOpenappaCoverageToolsResponses = {
             hasNext: boolean;
             hasPrev: boolean;
         };
+        servers: Array<{
+            id: string;
+            name: string;
+            icon: string | null;
+        }>;
     };
 };
 
 export type GetOpenappaCoverageToolsResponse = GetOpenappaCoverageToolsResponses[keyof GetOpenappaCoverageToolsResponses];
-
-export type GetOpenappaCoverageAgentsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        limit?: number;
-        offset?: number;
-        search?: string;
-        weakest?: 'not_enforced' | 'open' | 'guarded' | 'strict';
-        catalogId?: string;
-    };
-    url: '/api/openappa/coverage/agents';
-};
-
-export type GetOpenappaCoverageAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOpenappaCoverageAgentsError = GetOpenappaCoverageAgentsErrors[keyof GetOpenappaCoverageAgentsErrors];
-
-export type GetOpenappaCoverageAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        data: Array<{
-            id: string;
-            name: string;
-            servers: Array<{
-                catalogId: string;
-                name: string;
-                posture: 'not_enforced' | 'declared_not_enforced' | 'partly_enforced' | 'open' | 'guarded' | 'strict';
-            }>;
-            weakest: 'not_enforced' | 'declared_not_enforced' | 'partly_enforced' | 'open' | 'guarded' | 'strict';
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
-        };
-    };
-};
-
-export type GetOpenappaCoverageAgentsResponse = GetOpenappaCoverageAgentsResponses[keyof GetOpenappaCoverageAgentsResponses];
 
 export type GetOpenappaExternalConsultsData = {
     body?: never;

@@ -56,7 +56,6 @@ const battery = (fields: Partial<Battery>): Battery => ({
   helpers: [],
   credentials: [],
   setup: null,
-  createdAt: null,
   installs: [],
   ...fields,
 });

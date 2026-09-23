@@ -10,23 +10,13 @@
  * answers only what the app's own editors ask of it: a content height of
  * {@link MOCK_EDITOR_LINE_HEIGHT_PX} per line of the value (plus padding),
  * focus, a content-size subscription that fires when the value changes —
- * which is what an editor sized by its content is listening for — a
- * decorations collection that holds what it is given, and the reveal and
- * selection calls a line jump makes, recorded on the exported spies. jsdom paints no glyph
+ * which is what an editor sized by its content is listening for — and a
+ * decorations collection that holds what it is given. jsdom paints no glyph
  * margin, so the decorations are only kept, never drawn; what goes into them
  * is tested where it is computed.
  */
 import type { EditorProps } from "@monaco-editor/react";
 import { useEffect, useRef } from "react";
-import { vi } from "vitest";
-
-/**
- * What a host asks of the editor to land on a line: the mock records the
- * calls so a test can assert the jump without a layout engine. Cleared by
- * `vi.clearAllMocks()` like any other spy.
- */
-export const mockEditorRevealLineInCenter = vi.fn();
-export const mockEditorSetSelection = vi.fn();
 
 const MOCK_EDITOR_LINE_HEIGHT_PX = 20;
 const MOCK_EDITOR_PADDING_PX = 16;
@@ -64,8 +54,6 @@ export function Editor({
         return { dispose: () => contentSizeListeners.current.delete(listener) };
       },
       focus: () => {},
-      revealLineInCenter: mockEditorRevealLineInCenter,
-      setSelection: mockEditorSetSelection,
       getValue: () => valueRef.current,
       createDecorationsCollection: (initial: unknown[] = []) => {
         let held = initial;

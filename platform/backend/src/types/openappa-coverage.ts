@@ -1,42 +1,10 @@
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { z } from "zod";
-import {
-  BatteryInstallStatusSchema,
-  BatteryMatchEvidenceSchema,
-} from "@/types/openappa-batteries";
-
-/**
- * How well the policy covers one server, worst first. The first three share
- * the "not enforced" tone: rules are declared for the server and none, or not
- * all, of them are in force.
- */
-export const CoveragePostureSchema = z.enum([
-  /** The composition was refused: nothing declared for this server is enforced. */
-  "not_enforced",
-  /** Every battery aimed at the server is inactive. */
-  "declared_not_enforced",
-  /** Some battery aimed at the server is inactive. */
-  "partly_enforced",
-  /** No rule names any of its tools: the catch-all judges every call. */
-  "open",
-  /** Named rules, all enforced, and some tool still unlisted or no rule requires anything. */
-  "guarded",
-  /** Every tool named, every rule enforced, and at least one rule requires something. */
-  "strict",
-]);
-export type CoveragePosture = z.infer<typeof CoveragePostureSchema>;
-
-/** The posture facet: `not_enforced` stands for the three not-enforced postures. */
-export const CoveragePostureFilterSchema = z.enum([
-  "not_enforced",
-  "open",
-  "guarded",
-  "strict",
-]);
-export type CoveragePostureFilter = z.infer<typeof CoveragePostureFilterSchema>;
+import { BatteryInstallStatusSchema } from "@/types/openappa-batteries";
 
 /**
  * What kind of rule governs a tool, from its delta and requirements: a rule
@@ -103,12 +71,15 @@ export const CoverageToolSchema = z.object({
   toolId: z.string(),
   catalogId: z.string(),
   catalogName: z.string(),
+  catalogIcon: z.string().nullable(),
   prefix: z.string(),
   /** The tool's own name, after the prefix. */
   name: z.string(),
   /** `<prefix>__<name>`, as a root rule spells it. */
   fullName: z.string(),
   kind: CoverageKindSchema,
+  /** Built-in default fallback, user fallback, root rule, or battery rule. */
+  policySource: z.enum(["built_in", "fallback", "root", "battery"]),
   /** The rule this row is judged by; null when the catch-all judges it. */
   rule: CoverageRuleSchema.nullable(),
   unlisted: z.boolean(),
@@ -117,104 +88,58 @@ export const CoverageToolSchema = z.object({
 });
 export type CoverageTool = z.infer<typeof CoverageToolSchema>;
 
-export const CoverageServerSchema = z.object({
-  catalogId: z.string(),
+/** A visible agent, MCP gateway, or MCP registry server with tool coverage. */
+export const CoverageEntitySchema = z.object({
+  id: z.uuid(),
   name: z.string(),
-  /** The tool prefix its synced tools share; null while none are synced. */
-  prefix: z.string().nullable(),
+  type: z.enum(["agent", "mcp_gateway", "mcp_server"]),
+  scope: ResourceVisibilityScopeSchema,
+  icon: z.string().nullable(),
+  /** Assigned tools plus Auto-mode tools discoverable by this viewer. */
   toolCount: z.number().int(),
-  /** Tools a rule names, enforced or not. */
-  named: z.number().int(),
-  enforcedCount: z.number().int(),
-  notEnforcedCount: z.number().int(),
-  unlisted: z.number().int(),
-  posture: CoveragePostureSchema,
-  /** The batteries aimed at this server, in include order. */
-  batteries: z.array(
-    z.object({
-      name: z.string(),
-      status: BatteryInstallStatusSchema,
-      order: z.number().int(),
-    }),
-  ),
-  /** The root rules that name one of its tools, in text order. */
-  rootRules: z.array(z.object({ line: z.number().int(), name: z.string() })),
-  agents: z.array(CoverageAgentRefSchema),
-  /** Bundled batteries the catalog entry stands for and the policy does not include. */
-  fits: z.array(
-    z.object({ battery: z.string(), evidence: BatteryMatchEvidenceSchema }),
-  ),
-  /** Some unlisted tool looks like a read by its name, so its result never lowers trust. */
-  readsUnlisted: z.boolean(),
+  /** Tools with at least one active root or battery rule, including selector rules. */
+  governedCount: z.number().int(),
+  /** Tools with no unconditional rule, so some calls may use the catch-all. */
+  fallbackCount: z.number().int(),
+  /** Assigned Archestra built-in tools, included in toolCount. */
+  builtInCount: z.number().int(),
+  /** Counts for this entity include the current viewer's dynamic access. */
+  autoMode: z.boolean(),
 });
-export type CoverageServer = z.infer<typeof CoverageServerSchema>;
-
-export const CoverageAgentSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  /** The servers it has explicit tool assignments on, weakest posture first. */
-  servers: z.array(
-    z.object({
-      catalogId: z.string(),
-      name: z.string(),
-      posture: CoveragePostureSchema,
-    }),
-  ),
-  weakest: CoveragePostureSchema,
-});
-export type CoverageAgent = z.infer<typeof CoverageAgentSchema>;
-
-export const CoverageSummarySchema = z.object({
-  servers: z.number().int(),
-  tools: z.number().int(),
-  /** Tools a rule names, enforced or not. */
-  named: z.number().int(),
-  unlisted: z.number().int(),
-  agents: z.number().int(),
-  /** Agents that reach a server whose posture is open or not enforced. */
-  agentsReachingOpen: z.number().int(),
-  rootRevision: z.number().int(),
-  effectiveHash: z.string().nullable(),
-  lastError: z.string().nullable(),
-});
-export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;
+export type CoverageEntity = z.infer<typeof CoverageEntitySchema>;
 
 const SearchSchema = z.string().trim().max(200).optional();
-
-export const CoverageServersQuerySchema = PaginationQuerySchema.extend({
-  /** Matches the server name, its prefix or an agent that reaches it. */
-  search: SearchSchema,
-  posture: CoveragePostureFilterSchema.optional(),
-  governedBy: z.enum(["battery", "root", "none"]).optional(),
-});
-export type CoverageServersQuery = z.infer<typeof CoverageServersQuerySchema>;
-
-export const CoverageServerParamsSchema = z.object({ catalogId: z.uuid() });
 
 export const CoverageToolsQuerySchema = PaginationQuerySchema.extend({
   /** Matches the tool name, its selector, the server name or its prefix. */
   search: SearchSchema,
   catalogId: z.uuid().optional(),
+  /** Tools reachable through this agent or MCP gateway, including Auto mode discovery. */
+  entityId: z.uuid().optional(),
   governedBy: z.enum(["battery", "root", "catchall"]).optional(),
   kind: CoverageKindFilterSchema.optional(),
 });
 export type CoverageToolsQuery = z.infer<typeof CoverageToolsQuerySchema>;
 
-export const CoverageAgentsQuerySchema = PaginationQuerySchema.extend({
-  /** Matches the agent name or a server it reaches. */
+export const CoverageEntitiesQuerySchema = PaginationQuerySchema.extend({
   search: SearchSchema,
-  weakest: CoveragePostureFilterSchema.optional(),
-  /** Only agents that reach this server. */
-  catalogId: z.uuid().optional(),
+  type: CoverageEntitySchema.shape.type.optional(),
 });
-export type CoverageAgentsQuery = z.infer<typeof CoverageAgentsQuerySchema>;
+export type CoverageEntitiesQuery = z.infer<typeof CoverageEntitiesQuerySchema>;
 
-export const CoverageServersPageSchema =
-  createPaginatedResponseSchema(CoverageServerSchema);
-export type CoverageServersPage = z.infer<typeof CoverageServersPageSchema>;
-export const CoverageToolsPageSchema =
-  createPaginatedResponseSchema(CoverageToolSchema);
+export const CoverageToolsPageSchema = createPaginatedResponseSchema(
+  CoverageToolSchema,
+).extend({
+  /** Servers with tools available through the selected agent or gateway. */
+  servers: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      icon: z.string().nullable(),
+    }),
+  ),
+});
 export type CoverageToolsPage = z.infer<typeof CoverageToolsPageSchema>;
-export const CoverageAgentsPageSchema =
-  createPaginatedResponseSchema(CoverageAgentSchema);
-export type CoverageAgentsPage = z.infer<typeof CoverageAgentsPageSchema>;
+export const CoverageEntitiesPageSchema =
+  createPaginatedResponseSchema(CoverageEntitySchema);
+export type CoverageEntitiesPage = z.infer<typeof CoverageEntitiesPageSchema>;

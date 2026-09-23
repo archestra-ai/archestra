@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0-rc.20](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.19...platform-v1.4.0-rc.20) (2026-09-23)
+
+
+### Bug Fixes
+
+* **frontend:** center the projects add-key prompt like /chat ([#8139](https://github.com/archestra-ai/archestra/issues/8139)) ([96965bf](https://github.com/archestra-ai/archestra/commit/96965bf831ec793ae037a4512b69f3f534c2e21e))
+* **openappa:** explain refused policies and keep the switch off while one is saved ([#8127](https://github.com/archestra-ai/archestra/issues/8127)) ([0431a8b](https://github.com/archestra-ai/archestra/commit/0431a8bdc6a0d151f7af53199621667c4be7554a))
+* **openappa:** read the Guardrails v2 switch once per request ([#8130](https://github.com/archestra-ai/archestra/issues/8130)) ([fe37ffc](https://github.com/archestra-ai/archestra/commit/fe37ffcd9f5c8a251c64b07c6b3229bd13e39f37))
+* **proxy:** repair trailing model turns in Gemini OpenAI translation ([#8133](https://github.com/archestra-ai/archestra/issues/8133)) ([a98acc3](https://github.com/archestra-ai/archestra/commit/a98acc30e011f00f0c821f2d8e1033c81ad54b05))
+* surface the real cause when the installer cannot reach a deployment ([#8137](https://github.com/archestra-ai/archestra/issues/8137)) ([199838c](https://github.com/archestra-ai/archestra/commit/199838c78a346b3892c42a2c5682d7dd2bbac86a))
+
+
+### Miscellaneous Chores
+
+* **agent-runtime:** remove the built-in Archestra runtime image ([#8125](https://github.com/archestra-ai/archestra/issues/8125)) ([ccb68a6](https://github.com/archestra-ai/archestra/commit/ccb68a6cebb9805dcc246c5e136d2bacd730f8e2))
+
 ## [1.4.0-rc.19](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.18...platform-v1.4.0-rc.19) (2026-09-22)
 
 

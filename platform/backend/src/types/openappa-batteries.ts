@@ -165,6 +165,8 @@ export const PolicyBatteryViewSchema = z.object({
   status: BatteryInstallStatusSchema,
   /** `catalogs` too for an entry that resolves to nothing. */
   scope: BatteryScopeSchema,
+  /** Whether it composes its own policy; otherwise it folds in as the empty stub. */
+  composed: z.boolean(),
   line: z.number(),
   servers: z.array(BatteryServerViewSchema),
   credentials: z.array(BatteryCredentialViewSchema),

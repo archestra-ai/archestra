@@ -329056,6 +329056,9 @@
                               "organization"
                             ]
                           },
+                          "composed": {
+                            "type": "boolean"
+                          },
                           "line": {
                             "type": "number"
                           },
@@ -329120,6 +329123,7 @@
                           "packageHash",
                           "status",
                           "scope",
+                          "composed",
                           "line",
                           "servers",
                           "credentials",
@@ -330207,6 +330211,9 @@
                         "organization"
                       ]
                     },
+                    "composed": {
+                      "type": "boolean"
+                    },
                     "line": {
                       "type": "number"
                     },
@@ -330271,6 +330278,7 @@
                     "packageHash",
                     "status",
                     "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",
@@ -330605,6 +330613,9 @@
                         "organization"
                       ]
                     },
+                    "composed": {
+                      "type": "boolean"
+                    },
                     "line": {
                       "type": "number"
                     },
@@ -330669,6 +330680,7 @@
                     "packageHash",
                     "status",
                     "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",

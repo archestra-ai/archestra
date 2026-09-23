@@ -477,6 +477,60 @@ describe("a battery made of annotators alone", () => {
   });
 });
 
+describe("routing to an organization-wide battery", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  test("a rule counts only from a battery that composes it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const tagger = await uploadTagger({ organizationId, userId });
+    const router = await uploadRouter({ organizationId, userId });
+    const statuses = async () =>
+      Object.fromEntries(
+        (
+          await openappaBatteriesService.policyDeclarations(organizationId)
+        ).batteries.map((battery) => [battery.name, battery.status]),
+      );
+
+    // No alias binds the router, so it is stubbed and its rule routes nothing.
+    await declare({
+      organizationId,
+      userId,
+      content: root([tagger.entry, router.entry], []),
+    });
+    expect(await statuses()).toEqual({
+      tagger: "unrouted",
+      acme: "server_missing",
+    });
+
+    // Bound to a server, the router composes and its rule routes to tagger.
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    await declare({
+      organizationId,
+      userId,
+      content: root([tagger.entry, router.entry], ["acme_prod"]),
+    });
+    expect(await statuses()).toEqual({ tagger: "active", acme: "active" });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
+    ).toBeNull();
+  });
+});
+
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"
 description = "Acme battery under test"
@@ -609,6 +663,34 @@ command = ["python3", "tag.py"]
 `,
       },
       { path: "tag.py", text: "print('{}')\n" },
+    ],
+  });
+}
+
+/** A battery governing `mcp/acme/list` whose one rule routes to tagger's annotator. */
+async function uploadRouter(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "acme",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: BATTERY_MANIFEST.replace('helpers = ["check.py"]\n', ""),
+      },
+      {
+        path: "appa.toml",
+        text: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "mcp/acme/list"
+annotator = "tagger.call"
+`,
+      },
     ],
   });
 }

@@ -824,9 +824,10 @@ class OpenAppaBatteriesService {
    * A battery composes its own policy only while it is active: a battery held
    * back by a missing credential, an unresolved server or a naming conflict
    * composes as the empty battery, exactly as an unresolved entry does, so the
-   * runtime never consults a helper the host cannot serve. An unrouted battery
-   * composes too: nothing consults its annotators yet, and a rule that routes
-   * to them has to find them declared.
+   * runtime never consults a helper the host cannot serve. An organization-wide
+   * battery composes while unrouted or missing its credential: a rule that routes
+   * to its annotator has to find it declared, and a helper run without its
+   * credential answers nothing, which refuses the calls routed to it.
    */
   private composeInputs(params: {
     planned: PlannedComposition;
@@ -841,8 +842,7 @@ class OpenAppaBatteriesService {
       entries: planned.resolution.entries,
       helpers: (entry) => {
         const planned = byName.get(entry.name);
-        if (planned?.status !== "active" && planned?.status !== "unrouted")
-          return "stub";
+        if (!planned?.composed) return "stub";
         if (!entry.battery || entry.battery.externals.length === 0) return null;
         const owner = helperOwner(installs, entry.name);
         return owner ? { urlBase: helperUrlBase(owner.id), tokenEnv } : "stub";
@@ -922,17 +922,7 @@ class OpenAppaBatteriesService {
         )
         .map((entry) => entry.name),
     );
-    // A tool rule routes to an annotator from the root or from any included
-    // battery, since both compose into the one document the runtime opens.
-    const routed = new Set([
-      ...resolution.routedAnnotators,
-      ...resolution.entries.flatMap(
-        (entry) => entry.battery?.routedAnnotators ?? [],
-      ),
-    ]);
-    const batteries: PlannedBattery[] = [];
-    const rows = new Map<string, BatteryInstallRow>();
-    for (const entry of resolution.entries) {
+    const drafts = resolution.entries.map((entry) => {
       const scope = batteryScope(entry.battery);
       const organizationWide = scope === "organization";
       const namespaces = entry.battery?.namespaces ?? [];
@@ -957,12 +947,7 @@ class OpenAppaBatteriesService {
         credentials,
         bindable,
         governs: organizationWide
-          ? {
-              kind: "organization",
-              routed: (entry.battery?.annotators ?? []).some((annotator) =>
-                routed.has(annotator),
-              ),
-            }
+          ? { kind: "organization" }
           : {
               kind: "catalogs",
               servers,
@@ -971,6 +956,30 @@ class OpenAppaBatteriesService {
               ),
             },
       });
+      return { entry, scope, servers, credentials, catalogIds, status };
+    });
+    // A tool rule routes to an annotator from the root or from a battery that
+    // composes its own rules; a stubbed battery's rules route nothing.
+    const routed = new Set([
+      ...resolution.routedAnnotators,
+      ...drafts
+        .filter(composes)
+        .flatMap(({ entry }) => entry.battery?.routedAnnotators ?? []),
+    ]);
+    const batteries: PlannedBattery[] = [];
+    const rows = new Map<string, BatteryInstallRow>();
+    for (const draft of drafts) {
+      const { entry, scope, servers, credentials, catalogIds } = draft;
+      const organizationWide = scope === "organization";
+      // Nothing consults an organization-wide battery no rule routes to.
+      const status =
+        organizationWide &&
+        draft.status === "active" &&
+        !(entry.battery?.annotators ?? []).some((annotator) =>
+          routed.has(annotator),
+        )
+          ? "unrouted"
+          : draft.status;
       const bindings: BatteryCredentialBindings = Object.fromEntries(
         credentials
           .filter((credential) => credential.key !== null)
@@ -984,6 +993,7 @@ class OpenAppaBatteriesService {
         line: entry.line,
         status,
         scope,
+        composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
@@ -1499,7 +1509,7 @@ type Slot<T> = { running: Promise<T>; queued: Promise<T> | null };
  * The status precedence of the design: an entry that resolves to nothing first,
  * then a variable no key can be bound to, then an ambiguous prefix, then a target
  * no catalog carries. A battery governing the organization has no server to
- * resolve: after its credentials, it only needs a rule routing to its annotators.
+ * resolve: after its credentials, `plan` checks a rule routes to its annotators.
  */
 function batteryStatus(params: {
   resolved: boolean;
@@ -1517,7 +1527,7 @@ function batteryStatus(params: {
     return "missing_credentials";
   switch (governs.kind) {
     case "organization":
-      return governs.routed ? "active" : "unrouted";
+      return "active";
     case "catalogs": {
       const { servers, conflicting } = governs;
       if (conflicting || servers.some((server) => server.catalogs.size > 1))
@@ -1538,12 +1548,35 @@ function batteryStatus(params: {
  * to route a tool to one of its annotators.
  */
 type BatteryGovernance =
-  | { kind: "organization"; routed: boolean }
+  | { kind: "organization" }
   | {
       kind: "catalogs";
       servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
       conflicting: boolean;
     };
+
+/**
+ * Whether a battery composes its own policy rather than the empty stub: an
+ * active one, and an organization-wide one whose package resolves, since its
+ * annotator must stay declared for the rules that route to it.
+ */
+function composes(battery: {
+  status: BatteryInstallStatus;
+  scope: BatteryScope;
+}): boolean {
+  switch (battery.status) {
+    case "active":
+    case "unrouted":
+      return true;
+    case "missing_credentials":
+      return battery.scope === "organization";
+    case "unavailable":
+    case "naming_conflict":
+    case "server_missing":
+    case "refused":
+      return false;
+  }
+}
 
 /** A battery with no tool namespace and at least one annotator governs the organization. */
 function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {

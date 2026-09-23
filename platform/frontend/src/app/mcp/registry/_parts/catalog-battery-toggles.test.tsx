@@ -66,6 +66,7 @@ const declared = (fields: Partial<PolicyBattery>): PolicyBattery => ({
   packageHash: null,
   status: "active",
   scope: "catalogs",
+  composed: true,
   line: 3,
   servers: [],
   credentials: [],

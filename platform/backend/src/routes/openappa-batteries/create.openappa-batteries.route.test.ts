@@ -1158,6 +1158,105 @@ describe("guardrails batteries", () => {
     ]);
   });
 
+  test("an organization-wide battery missing its credential still composes, so a rule routing to it keeps the policy open", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/acme",
+      payload: { files: sharedNamespacePackage("acme", "list") },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    for (const payload of [
+      {
+        batteryName: "acme",
+        catalogId: catalog.id,
+        packageHash: uploaded.json().contentHash,
+      },
+      { batteryName: "jev" },
+    ]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload,
+      });
+      expect(created.statusCode, created.body).toBe(200);
+    }
+    const latest = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: latest.content.replace(
+        'name = "*"\nannotator = "noop"',
+        'name = "*"\nannotator = "jev.tool-call"',
+      ),
+      expectedRevision: latest.revision,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+
+    const jevRow = (await installRows()).find(
+      (install) => install.batteryName === "jev",
+    );
+    if (!jevRow) throw new Error("jev derived no row");
+    // The helper is bound though it has no credential: it answers nothing,
+    // which refuses the calls routed to it rather than the whole policy.
+    const composed = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(composed?.lastError).toBeNull();
+    expect(composed?.content).toContain(helperUrlBase(jevRow.id));
+    expect(await declarations()).toMatchObject({
+      lastError: null,
+      batteries: expect.arrayContaining([
+        expect.objectContaining({ name: "acme", status: "active" }),
+        expect.objectContaining({
+          name: "jev",
+          status: "missing_credentials",
+          composed: true,
+        }),
+      ]),
+    });
+
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: adminId,
+      definition: {
+        key: "jev-key",
+        name: "Jev key",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+      value: "jev_test",
+    });
+    const bound = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${jevRow.id}`,
+      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
+    });
+    expect(bound.statusCode, bound.body).toBe(200);
+    expect(bound.json()).toMatchObject({ status: "active", composed: true });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
+    ).toBeNull();
+  });
+
   test("a member without organization management cannot install", async ({
     makeUser,
     makeMember,

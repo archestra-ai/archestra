@@ -84,6 +84,7 @@ const declaredGithub = (
   packageHash: null,
   status: "missing_credentials",
   scope: "catalogs",
+  composed: false,
   line: 4,
   servers: [{ target: "code", catalogId }],
   credentials: [
@@ -504,6 +505,7 @@ const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
   packageHash: null,
   status: "missing_credentials",
   scope: "organization",
+  composed: true,
   line: 2,
   servers: [],
   credentials: [

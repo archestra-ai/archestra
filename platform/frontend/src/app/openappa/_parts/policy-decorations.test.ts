@@ -26,6 +26,7 @@ function battery(
     packageHash: null,
     status: "active",
     scope: "catalogs",
+    composed: true,
     line: 1,
     servers: [],
     credentials: [],

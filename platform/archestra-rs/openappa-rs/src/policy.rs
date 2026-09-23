@@ -262,6 +262,7 @@ mod tests {
                     .as_str()
                     .to_owned(),
                 arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+                cwd: None,
             },
             spawn: false,
             ruling: None,
@@ -328,6 +329,7 @@ requires = { audience = { within = ["internal"] } }
                         tool: appa_runtime_api::CONTROL_TOOL.into(),
                         arguments: serde_json::value::RawValue::from_string(args.to_string())
                             .unwrap(),
+                        cwd: None,
                     },
                     spawn: false,
                     ruling: None,

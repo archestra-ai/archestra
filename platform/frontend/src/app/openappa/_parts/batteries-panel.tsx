@@ -107,13 +107,13 @@ export function BatteriesPanel() {
       ? (catalog.data.find((entry) => entry.id === catalogId)?.name ??
         "Removed server")
       : "";
+  const summaryOf = (name: string) =>
+    batteries.data.find((battery) => battery.name === name);
   const installsOf = (name: string) =>
-    batteries.data
-      .find((battery) => battery.name === name)
-      ?.installs.map((install) => ({
-        id: install.id,
-        catalogId: install.catalogId,
-      })) ?? [];
+    summaryOf(name)?.installs.map((install) => ({
+      id: install.id,
+      catalogId: install.catalogId,
+    })) ?? [];
   const includedHashes = new Set(
     included
       .map((battery) => battery.packageHash)
@@ -181,6 +181,7 @@ export function BatteriesPanel() {
                 key={battery.entry}
                 battery={battery}
                 installs={installsOf(battery.name)}
+                scope={scopeOf(summaryOf(battery.name))}
                 catalogName={catalogName}
                 enforced={enforced}
                 writable={writable}
@@ -245,8 +246,28 @@ export function BatteriesPanel() {
 
 const UNBOUND = "__unbound__";
 
-/** A battery install as this panel needs it: the row id behind one catalog. */
-type InstallRef = { id: string; catalogId: string };
+/**
+ * A battery install as this panel needs it: the row id behind one catalog, or
+ * behind the organization for a battery made of annotators alone.
+ */
+type InstallRef = { id: string; catalogId: string | null };
+
+/**
+ * What a battery governs: the servers its aliases point at, or the whole
+ * organization for one made of annotators alone, which a policy rule routes a
+ * tool to by name.
+ */
+type BatteryScope = "catalogs" | "organization";
+
+function scopeOf(
+  battery: Pick<BatterySummary, "namespaces" | "annotators"> | undefined,
+): BatteryScope {
+  return battery !== undefined &&
+    battery.namespaces.length === 0 &&
+    battery.annotators.length > 0
+    ? "organization"
+    : "catalogs";
+}
 
 function HeldPullNotice({
   heldPull,
@@ -290,6 +311,7 @@ function HeldPullNotice({
 function IncludedBattery({
   battery,
   installs,
+  scope,
   catalogName,
   enforced,
   writable,
@@ -297,6 +319,7 @@ function IncludedBattery({
 }: {
   battery: PolicyBattery;
   installs: InstallRef[];
+  scope: BatteryScope;
   catalogName: (catalogId: string) => string;
   enforced: boolean;
   writable: boolean;
@@ -331,7 +354,9 @@ function IncludedBattery({
       </div>
       <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
         <Section title="Governs">
-          {battery.servers.length === 0 ? (
+          {scope === "organization" ? (
+            <p className="text-sm">Organization-wide</p>
+          ) : battery.servers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No alias points this battery at a server.
             </p>
@@ -559,6 +584,7 @@ function AttachForm({
   const readiness = useBatteryMatches(catalogId, catalogId !== "");
   const attach = readiness.data?.attach ?? null;
   const chosen = batteries.find((battery) => battery.name === batteryName);
+  const organizationWide = scopeOf(chosen) === "organization";
   const attached = new Set(
     included
       .find((entry) => entry.name === batteryName)
@@ -574,7 +600,16 @@ function AttachForm({
     (entry) => installed === null || installed.has(entry.id),
   );
   const servers = installable.filter((entry) => !attached.has(entry.id));
-  if (installable.length === 0)
+  // A battery governing the organization needs no server, so it stays on offer
+  // before anything is installed.
+  const offered =
+    installable.length === 0
+      ? batteries.filter((battery) => scopeOf(battery) === "organization")
+      : batteries;
+  const ready = organizationWide
+    ? !included.some((entry) => entry.name === batteryName)
+    : attach === "ready";
+  if (offered.length === 0)
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
@@ -601,7 +636,7 @@ function AttachForm({
             <SelectValue placeholder="Pick a battery" />
           </SelectTrigger>
           <SelectContent>
-            {batteries.map((battery) => (
+            {offered.map((battery) => (
               <SelectItem key={battery.name} value={battery.name}>
                 {battery.name}
               </SelectItem>
@@ -609,30 +644,32 @@ function AttachForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="min-w-48 flex-1 space-y-1">
-        <Label htmlFor="attach-server">Server</Label>
-        <Select
-          value={catalogId}
-          disabled={create.isPending || batteryName === ""}
-          onValueChange={setCatalogId}
-        >
-          <SelectTrigger id="attach-server" className="w-full">
-            <SelectValue placeholder="Pick a server" />
-          </SelectTrigger>
-          <SelectContent>
-            {servers.map((entry) => (
-              <SelectItem key={entry.id} value={entry.id}>
-                {entry.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {organizationWide ? null : (
+        <div className="min-w-48 flex-1 space-y-1">
+          <Label htmlFor="attach-server">Server</Label>
+          <Select
+            value={catalogId}
+            disabled={create.isPending || batteryName === ""}
+            onValueChange={setCatalogId}
+          >
+            <SelectTrigger id="attach-server" className="w-full">
+              <SelectValue placeholder="Pick a server" />
+            </SelectTrigger>
+            <SelectContent>
+              {servers.map((entry) => (
+                <SelectItem key={entry.id} value={entry.id}>
+                  {entry.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <Button
-        disabled={batteryName === "" || attach !== "ready" || create.isPending}
+        disabled={batteryName === "" || !ready || create.isPending}
         onClick={() =>
           create.mutate(
-            { batteryName, catalogId },
+            organizationWide ? { batteryName } : { batteryName, catalogId },
             {
               onSuccess: () => {
                 setBatteryName("");

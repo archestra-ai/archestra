@@ -46,10 +46,13 @@ export const BatteryInstallSchema = createSelectSchema(
 });
 export type BatteryInstall = z.infer<typeof BatteryInstallSchema>;
 
-/** One derived install as a recompose computes it; ids are the model's to preserve. */
+/**
+ * One derived install as a recompose computes it; ids are the model's to preserve.
+ * A battery made of annotators alone governs no catalog: its one row has none.
+ */
 export const BatteryInstallRowSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  catalogId: z.string().uuid(),
+  catalogId: z.string().uuid().nullable(),
   status: BatteryInstallStatusSchema,
   packageHash: z.string().nullable(),
   lastError: z.string().nullable(),
@@ -121,6 +124,8 @@ export const BatterySummarySchema = z.object({
   /** The bytes the newest stored package of this name holds; null when bundled. */
   contentHash: z.string().nullable(),
   namespaces: z.array(z.string()),
+  /** The annotators it declares; with no namespace, it governs the organization, not a catalog. */
+  annotators: z.array(z.string()),
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
@@ -188,6 +193,8 @@ export const UploadedBatteryPackageSchema = z.object({
   contentHash: z.string(),
   entry: z.string(),
   namespaces: z.array(z.string()),
+  /** The annotators it declares; with no namespace, it governs the organization, not a catalog. */
+  annotators: z.array(z.string()),
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
@@ -198,7 +205,8 @@ export type UploadedBatteryPackage = z.infer<
 
 export const CreateBatteryInstallSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  catalogId: z.string().uuid(),
+  /** The catalog to govern; absent for a battery made of annotators alone. */
+  catalogId: z.string().uuid().optional(),
   /** The stored package to include; absent spells the bundled battery. */
   packageHash: z
     .string()

@@ -3403,6 +3403,13 @@
       "when": 1790022693565,
       "tag": "0485_fine_silver_surfer",
       "breakpoints": true
+    },
+    {
+      "idx": 486,
+      "version": "7",
+      "when": 1790168804351,
+      "tag": "0486_lonely_talkback",
+      "breakpoints": true
     }
   ]
 }

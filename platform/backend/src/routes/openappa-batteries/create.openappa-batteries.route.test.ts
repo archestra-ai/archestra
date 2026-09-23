@@ -8,6 +8,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { helperUrlBase } from "@/openappa/declarations";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import {
   deleteRuntimeCredentialConnection,
@@ -977,6 +978,149 @@ describe("guardrails batteries", () => {
     } finally {
       await managerApp.close();
     }
+  });
+
+  test("a battery made of annotators alone is installed organization-wide and serves its helper once its credential is bound", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/openappa/batteries",
+    });
+    expect(
+      listed.json().find((battery: { name: string }) => battery.name === "jev"),
+    ).toMatchObject({
+      namespaces: [],
+      annotators: ["jev.tool-call"],
+      credentials: ["APPA_PROVIDER_JEV_API_KEY"],
+    });
+
+    // Each kind of battery refuses the other kind's request.
+    for (const payload of [
+      { batteryName: "jev", catalogId: catalog.id },
+      { batteryName: "github" },
+    ]) {
+      const refused = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload,
+      });
+      expect(refused.statusCode, refused.body).toBe(400);
+    }
+    expect(await declarations()).toMatchObject({ batteries: [] });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "jev" },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json()).toMatchObject({
+      name: "jev",
+      entry: "batteries/jev/appa.toml",
+      status: "missing_credentials",
+      servers: [],
+    });
+    const [row] = await installRows();
+    expect(row).toMatchObject({
+      batteryName: "jev",
+      catalogId: null,
+      status: "missing_credentials",
+    });
+
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: adminId,
+      definition: {
+        key: "jev-key",
+        name: "Jev key",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+      value: "jev_test",
+    });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${row.id}`,
+      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json()).toMatchObject({ status: "active", servers: [] });
+
+    // The composed command external is served by the bridge under the one row.
+    const active = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(active?.lastError).toBeNull();
+    expect(active?.content).toContain(helperUrlBase(row.id));
+    await openappaBatteriesService.recompile(organizationId);
+    expect(await installRows()).toEqual([
+      expect.objectContaining({
+        id: row.id,
+        catalogId: null,
+        status: "active",
+      }),
+    ]);
+
+    // A catalog going away takes none of the organization's rows with it.
+    await db
+      .delete(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    await openappaBatteriesService.recompile(organizationId);
+    expect((await installRows()).map((install) => install.id)).toEqual([
+      row.id,
+    ]);
+
+    const detached = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${row.id}`,
+      payload: { enabled: false },
+    });
+    expect(detached.statusCode, detached.body).toBe(409);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/openappa/battery-installs/${row.id}`,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(await declarations()).toMatchObject({ batteries: [] });
+    expect(await installRows()).toEqual([]);
+
+    const records = (
+      await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId))
+    ).filter(
+      (record) =>
+        record.action.startsWith("openappaBatteryInstall") &&
+        record.httpStatus === 200,
+    );
+    // Every write the organization-wide row answered names it.
+    expect(
+      records.map((record) => [record.action, record.resourceId]).sort(),
+    ).toEqual([
+      ["openappaBatteryInstall.created", row.id],
+      ["openappaBatteryInstall.deleted", row.id],
+      ["openappaBatteryInstall.updated", row.id],
+    ]);
   });
 
   test("a member without organization management cannot install", async ({

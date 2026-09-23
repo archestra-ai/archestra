@@ -16,6 +16,8 @@ export interface BatteryPackage {
   name: string
   description: string
   namespaces: Array<string>
+  /** The `[[policy.annotator]]` names the battery declares. */
+  annotators: Array<string>
   policy: string
   helpers: Array<string>
   credentials: Array<string>
@@ -108,7 +110,7 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
- * which is what Archestra serves.
+ * which is what Archestra serves, or declare annotators alone.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
 

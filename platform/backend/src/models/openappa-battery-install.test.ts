@@ -2,7 +2,9 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import { describe, expect, test } from "@/test";
 import type { BatteryInstallRow } from "@/types/openappa-batteries";
 
-const row = (overrides: Partial<BatteryInstallRow> & { catalogId: string }) =>
+const row = (
+  overrides: Partial<BatteryInstallRow> & { catalogId: string | null },
+) =>
   ({
     batteryName: "github",
     status: "active",
@@ -56,6 +58,42 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
     expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual(
       after,
     );
+  });
+
+  test("an organization-wide row is upserted in place rather than duplicated", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const rows = [
+      row({ catalogId: null, batteryName: "jev" }),
+      row({ catalogId: catalog.id }),
+    ];
+
+    const before = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows,
+    });
+    const after = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: [
+        { ...rows[0], status: "missing_credentials" },
+        rows[1],
+      ] as BatteryInstallRow[],
+    });
+
+    expect(after.map((install) => install.id)).toEqual(
+      before.map((install) => install.id),
+    );
+    expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual([
+      expect.objectContaining({
+        batteryName: "jev",
+        catalogId: null,
+        status: "missing_credentials",
+      }),
+      expect.objectContaining({ batteryName: "github", catalogId: catalog.id }),
+    ]);
   });
 
   test("an empty declaration deletes the organization's rows and leaves another organization alone", async ({

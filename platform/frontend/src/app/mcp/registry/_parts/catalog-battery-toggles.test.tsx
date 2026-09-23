@@ -51,6 +51,7 @@ const battery = (fields: Partial<Battery>): Battery => ({
   source: "bundled",
   contentHash: null,
   namespaces: [],
+  annotators: [],
   helpers: [],
   credentials: [],
   setup: null,

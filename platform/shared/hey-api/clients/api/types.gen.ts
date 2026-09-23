@@ -85297,6 +85297,7 @@ export type GetOpenappaBatteriesResponses = {
         source: 'bundled' | 'upload';
         contentHash: string | null;
         namespaces: Array<string>;
+        annotators: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -85304,7 +85305,7 @@ export type GetOpenappaBatteriesResponses = {
             id: string;
             organizationId: string;
             batteryName: string;
-            catalogId: string;
+            catalogId: string | null;
             enabled: boolean;
             status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
             packageHash: string | null;
@@ -85610,7 +85611,7 @@ export type GetOpenappaBatteryMatchesResponses = {
                 id: string;
                 organizationId: string;
                 batteryName: string;
-                catalogId: string;
+                catalogId: string | null;
                 enabled: boolean;
                 status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
                 packageHash: string | null;
@@ -85630,7 +85631,7 @@ export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesRespons
 export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
-        catalogId: string;
+        catalogId?: string;
         packageHash?: string | null;
     };
     path?: never;
@@ -86093,6 +86094,7 @@ export type UploadOpenappaBatteryPackageResponses = {
         contentHash: string;
         entry: string;
         namespaces: Array<string>;
+        annotators: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;

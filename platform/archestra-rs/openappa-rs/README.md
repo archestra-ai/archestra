@@ -24,7 +24,8 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`8dd1272f4e093856a11ddc11d653180397afdc7d`, the merge of
+`41aa3951bcfc30c3cdf26cfbc5312813d67db8cd`, after the merge of
+archestra-ai/OpenAPPA#394 (the annotator-only `jev` battery) on top of
 archestra-ai/OpenAPPA#386 (a hosted root document declares its batteries and
 their credentials), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects

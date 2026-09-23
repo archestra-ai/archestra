@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -60,6 +60,8 @@ Nothing includes a battery on its own. You add one in three places:
 - the policy editor, where you write the include line yourself.
 
 A server takes a battery once its tools are synced. Until then the checkbox and the server list say so.
+
+An annotator-only battery, such as `jev`, declares no tool rules of its own and governs no server. It adds an annotator your rules route to with `annotator = "<name>"`, for example on the `*` rule. Attach it without picking a server; the panel shows it as organization-wide.
 
 ![The setup wizard offering the matching battery](/docs/automated_screenshots/platform-ai-tool-guardrails_wizard-battery.webp)
 

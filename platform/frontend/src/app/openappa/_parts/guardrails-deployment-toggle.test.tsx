@@ -63,37 +63,46 @@ test("enables both engines deployment-wide and disables only APPA", async () => 
   );
   show();
   const toggle = await screen.findByRole("switch", {
-    name: "Enable Guardrails v2",
+    name: "OpenAPPA is disabled",
   });
   expect(toggle).not.toBeChecked();
-  expect(screen.getByText("All organizations")).toBeVisible();
-  fireEvent.click(toggle);
   expect(
-    await screen.findByText("Both guardrails engines are active."),
-  ).toBeVisible();
-  await waitFor(() => expect(toggle).toBeEnabled());
+    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
+  ).toHaveClass("text-red-500");
+  expect(screen.getByText(/for this deployment/)).toBeVisible();
   fireEvent.click(toggle);
   expect(
     await screen.findByText(
-      "Existing guardrails are active. APPA enforcement is off.",
+      "Policy enforcement is active for this deployment.",
     ),
   ).toBeVisible();
+  expect(toggle).toHaveAccessibleName("OpenAPPA is enabled");
+  expect(
+    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
+  ).toHaveClass("text-emerald-700");
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  expect(
+    await screen.findByText("Turn on policy enforcement for this deployment."),
+  ).toBeVisible();
   expect(toggle).not.toBeChecked();
+  expect(toggle).toHaveAccessibleName("OpenAPPA is disabled");
+  expect(
+    screen.getByRole("alert", { name: "OpenAPPA enforcement" }),
+  ).toHaveClass("text-red-500");
 });
 
 test("a rejected update keeps the accepted deployment state", async () => {
   server.use(http.put(url, () => new HttpResponse(null, { status: 403 })));
   show();
   const toggle = await screen.findByRole("switch", {
-    name: "Enable Guardrails v2",
+    name: "OpenAPPA is disabled",
   });
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toBeEnabled());
   expect(toggle).not.toBeChecked();
   expect(
-    screen.getByText(
-      "Existing guardrails are active. APPA enforcement is off.",
-    ),
+    screen.getByText("Turn on policy enforcement for this deployment."),
   ).toBeVisible();
 });
 
@@ -117,6 +126,6 @@ test.each([
     );
   show();
   expect(
-    await screen.findByRole("switch", { name: "Enable Guardrails v2" }),
+    await screen.findByRole("switch", { name: "OpenAPPA is disabled" }),
   ).toBeDisabled();
 });

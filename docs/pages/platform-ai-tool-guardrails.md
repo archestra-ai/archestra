@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,11 +16,11 @@ This gives you a middle ground between two extremes:
 
 With AI tool guardrails, the same agent can operate normally in safe contexts and become more restricted only when context or tool output requires it.
 
-## Guardrails V2 Preview
+## OpenAPPA Preview
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Open OpenAPPA to edit the organization policy as TOML. The Guardrails page keeps its existing controls. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Describe a policy change in the chat prompt on **OpenAPPA**. The agent reads the current policy, previews the diff, and saves a revision. If GitHub sync is configured in **Settings → OpenAPPA**, it opens a pull request instead. The Policy details tab shows the source and effective TOML as read-only views. When OpenAPPA enforcement is enabled, legacy Guardrails and Security links are hidden. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
 
-The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
+The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the OpenAPPA policy tools to read, preview, and publish changes. The skill is available only while APPA is enabled.
 
 APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
 
@@ -43,9 +43,9 @@ The default policy has no rules for specific tools. A catch-all annotator adds n
 
 Tool rules name tools exactly, or cover every unnamed tool with `*`. OpenAPPA refuses partial patterns such as `grain__*`. To cover every tool of one server, attach its battery.
 
-The **Enable Guardrails v2** switch turns on only while every organization's policy opens. If a policy does not open, the switch stays off and names the error. When APPA cannot evaluate a request, the proxy answers with the reason and a trace reference. A refused policy returns HTTP 500 and tells clients not to retry — fix the policy on the OpenAPPA page. An unavailable policy runtime returns HTTP 503, and clients can retry.
+The **OpenAPPA is disabled** switch turns on only while the policy opens. If the policy does not open, the switch stays off and names the error. When APPA cannot evaluate a request, the proxy answers with the reason and a trace reference. A refused policy returns HTTP 500 and tells clients not to retry — fix the policy from OpenAPPA chat. An unavailable policy runtime returns HTTP 503, and clients can retry.
 
-The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
+The assistant can read, validate, preview, and publish the policy through the OpenAPPA tool group. Updates enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 
 ### Batteries
 
@@ -56,8 +56,8 @@ A battery is a ready-made policy package for one provider, such as GitHub. Your 
 Nothing includes a battery on its own. You add one in three places:
 
 - the **Add the … battery** checkbox in the MCP server setup wizard, which is off until you turn it on;
-- **Attach a battery** in the Batteries panel of the OpenAPPA page: pick the battery, then one of your installed servers;
-- the policy editor, where you write the include line yourself.
+- **Attach** in a battery's Actions column on the OpenAPPA Batteries tab, then pick an installed server;
+- a policy change requested through OpenAPPA chat.
 
 A server takes a battery once its tools are synced. Until then the checkbox and the server list say so.
 

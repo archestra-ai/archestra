@@ -11,6 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -21,9 +22,10 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { BatteriesPanel } from "./batteries-panel";
+import { BatteriesPanel, BatteriesUploadAction } from "./batteries-panel";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("next/navigation");
 vi.mock("sonner");
 // Radix Select uses scrollIntoView and pointer capture, which jsdom lacks.
 Element.prototype.scrollIntoView = vi.fn();
@@ -145,6 +147,14 @@ function grantOnly(...resources: (keyof Permissions)[]) {
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl });
+  vi.mocked(usePathname).mockReturnValue("/openappa/batteries");
+  vi.mocked(useRouter).mockReturnValue({
+    replace: vi.fn(),
+    push: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   grantEverything();
   freshSynced = false;
   batteries = [githubBattery([install()])];
@@ -210,22 +220,35 @@ function show() {
   });
   render(
     <QueryClientProvider client={client}>
+      <BatteriesUploadAction />
       <BatteriesPanel />
     </QueryClientProvider>,
   );
 }
 
-const entry = (name: string) =>
-  screen.findByRole("listitem", { name: `${name} battery` });
+const entry = async (name: string) => {
+  if (!screen.queryByRole("listitem", { name: `${name} battery` })) {
+    const manage = await screen.findByRole("button", {
+      name: `Manage ${name} battery`,
+    });
+    fireEvent.click(manage);
+  }
+  return screen.findByRole("listitem", { name: `${name} battery` });
+};
 
 /** Pick a battery and a server in the attach form and submit it. */
 async function attach(battery: string, serverName: string) {
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
-  await user.click(screen.getByRole("option", { name: battery }));
-  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: `Attach the ${battery} battery to a server`,
+    }),
+  );
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
   await user.click(screen.getByRole("option", { name: serverName }));
-  await user.click(screen.getByRole("button", { name: "Attach" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Attach battery" }),
+  );
 }
 
 test("with no installed server to attach to, the attach form leads to MCP Registry", async () => {
@@ -246,9 +269,12 @@ test("an empty policy offers the installed servers to attach to", async () => {
   declarations = emptyDeclarations();
   show();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
-  await user.click(screen.getByRole("option", { name: "github" }));
-  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Attach the github battery to a server",
+    }),
+  );
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
   expect(
     screen.getAllByRole("option").map((option) => option.textContent),
   ).toEqual(["Code", "Docs", "Fresh"]);
@@ -347,7 +373,7 @@ test("a held pull that moves credentials needs the credential permission", async
   });
   grantOnly("organization", "toolPolicy");
   show();
-  await screen.findByRole("listitem", { name: "github battery" });
+  await entry("github");
   expect(
     screen.queryByRole("button", { name: "Accept repository text" }),
   ).not.toBeInTheDocument();
@@ -380,6 +406,7 @@ test("binding a credential sends the entry's whole binding table", async () => {
   );
   show();
   const user = userEvent.setup();
+  await entry("github");
   await user.click(
     await screen.findByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
@@ -414,6 +441,7 @@ test("a variable another entry reads is never unset, and the row says so", async
   );
   show();
   const user = userEvent.setup();
+  await entry("github");
   await user.click(
     await screen.findByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
@@ -485,12 +513,15 @@ test("a server whose tools are not synced yet cannot take a battery", async () =
   batteries = [githubBattery()];
   show();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
-  await user.click(screen.getByRole("option", { name: "github" }));
-  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Attach the github battery to a server",
+    }),
+  );
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
   await user.click(screen.getByRole("option", { name: "Fresh" }));
   expect(await screen.findByRole("note")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Attach battery" })).toBeDisabled();
   // Syncing the picked server's tools is offered right there and, once it
   // lands, the same server can take the battery.
   let reloaded: string | null = null;
@@ -509,7 +540,9 @@ test("a server whose tools are not synced yet cannot take a battery", async () =
   fireEvent.click(await screen.findByRole("button", { name: "Sync tools" }));
   await waitFor(() => expect(reloaded).toBe(freshServerId));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
+    expect(
+      screen.getByRole("button", { name: "Attach battery" }),
+    ).toBeEnabled(),
   );
   expect(screen.queryByRole("note")).not.toBeInTheDocument();
 });
@@ -542,6 +575,7 @@ test("detaching a server deletes that server's install alone", async () => {
     ),
   );
   show();
+  await entry("github");
   fireEvent.click(
     await screen.findByRole("button", { name: "Detach github from Docs" }),
   );
@@ -562,15 +596,20 @@ test("a failed readiness lookup for the picked server shows an error with a retr
   );
   show();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("combobox", { name: "Battery" }));
-  await user.click(screen.getByRole("option", { name: "github" }));
-  await user.click(screen.getByRole("combobox", { name: "Server" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Attach the github battery to a server",
+    }),
+  );
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
   await user.click(screen.getByRole("option", { name: "Code" }));
   expect(await screen.findByRole("alert")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Attach battery" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
+    expect(
+      screen.getByRole("button", { name: "Attach battery" }),
+    ).toBeEnabled(),
   );
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
@@ -603,6 +642,7 @@ test("removing an entry takes its include out in one write", async () => {
     ),
   );
   show();
+  await entry("github");
   fireEvent.click(
     await screen.findByRole("button", { name: "Remove the github battery" }),
   );
@@ -631,6 +671,7 @@ test("an entry bound to no server this deployment carries is removed the same wa
     ),
   );
   show();
+  await entry("github");
   fireEvent.click(
     await screen.findByRole("button", { name: "Remove the github battery" }),
   );
@@ -855,4 +896,97 @@ test("an alias no entry declares is listed without a control to remove it", asyn
   expect(
     screen.queryByRole("button", { name: /stripe/i }),
   ).not.toBeInTheDocument();
+});
+
+test("search matches battery descriptions and clears the result set", async () => {
+  declarations = emptyDeclarations();
+  batteries = [
+    githubBattery(),
+    {
+      ...githubBattery(),
+      name: "docs",
+      description: "Knowledge rules",
+      namespaces: ["reference"],
+    },
+  ];
+  show();
+  const search = await screen.findByPlaceholderText(/Search batteries by name/);
+  await userEvent.setup().type(search, "knowledge");
+  expect(
+    screen.getByRole("row", { name: /docs Knowledge rules/ }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("row", { name: /github GitHub rules/ }),
+    ).not.toBeInTheDocument(),
+  );
+  await userEvent.setup().clear(search);
+  expect(
+    await screen.findByRole("row", { name: /github GitHub rules/ }),
+  ).toBeVisible();
+});
+
+test("source and status filters narrow the battery table", async () => {
+  declarations = emptyDeclarations({ batteries: [declaredGithub()] });
+  batteries = [
+    githubBattery([install()]),
+    {
+      ...githubBattery(),
+      name: "custom",
+      source: "upload",
+      contentHash: uploadHash,
+    },
+  ];
+  show();
+  const user = userEvent.setup();
+  await screen.findByRole("row", { name: /custom GitHub rules/ });
+  await user.click(screen.getByRole("combobox", { name: "Filter by source" }));
+  await user.click(screen.getByRole("option", { name: "Uploaded" }));
+  expect(
+    screen.getByRole("row", { name: /custom GitHub rules/ }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("row", { name: /github GitHub rules/ }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await user.click(screen.getByRole("option", { name: "Included" }));
+  expect(screen.getByText("No batteries match your filters")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(
+    screen.getByRole("row", { name: /github GitHub rules/ }),
+  ).toBeVisible();
+});
+
+test("pagination shows the next page and search returns to the first", async () => {
+  declarations = emptyDeclarations();
+  batteries = Array.from({ length: 12 }, (_, index) => ({
+    ...githubBattery(),
+    name: `battery-${String(index + 1).padStart(2, "0")}`,
+    description: `Rules ${index + 1}`,
+  }));
+  show();
+  expect(
+    await screen.findByRole("row", { name: /battery-01 Rules 1/ }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("row", { name: /battery-12 Rules 12/ }),
+  ).not.toBeInTheDocument();
+  await userEvent
+    .setup()
+    .click(screen.getAllByRole("button", { name: "Go to next page" })[0]);
+  expect(
+    screen.getByRole("row", { name: /battery-12 Rules 12/ }),
+  ).toBeVisible();
+  await userEvent
+    .setup()
+    .type(
+      screen.getByPlaceholderText(/Search batteries by name/),
+      "battery-01",
+    );
+  expect(
+    await screen.findByRole("row", { name: /battery-01 Rules 1/ }),
+  ).toBeVisible();
+  expect(
+    screen.getAllByRole("button", { name: "Go to previous page" })[0],
+  ).toBeDisabled();
 });

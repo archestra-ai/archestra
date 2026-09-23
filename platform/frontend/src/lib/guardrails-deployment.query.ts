@@ -33,8 +33,8 @@ export function useUpdateGuardrailsDeployment() {
       client.invalidateQueries({ queryKey });
       toast.success(
         data?.active
-          ? "Guardrails v2 enabled for all organizations"
-          : "Guardrails v2 disabled. Existing guardrails remain active.",
+          ? "OpenAPPA enabled"
+          : "OpenAPPA disabled. Existing guardrails remain active.",
       );
     },
   });

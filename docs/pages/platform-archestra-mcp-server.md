@@ -59,7 +59,9 @@ This tool takes no arguments.
 | `yell` | Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `toolPolicy:update` |
-| `update_guardrails_policy` | Save and activate organization.appa.toml for new conversations. | `toolPolicy:update` |
+| `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `toolPolicy:read` |
+| `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `toolPolicy:update` |
+| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | `toolPolicy:read` |
 | `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
 
@@ -93,6 +95,18 @@ Required RBAC permission: `toolPolicy:update`
 | `content` | `string` | Yes |  |
 
 
+#### preview_guardrails_policy_change
+
+Required RBAC permission: `toolPolicy:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes |  |
+| `expectedRevision` | `integer` | Yes |  |
+
+
 #### update_guardrails_policy
 
 Required RBAC permission: `toolPolicy:update`
@@ -103,6 +117,19 @@ Required RBAC permission: `toolPolicy:update`
 |-----------|------|----------|-------------|
 | `content` | `string` | Yes |  |
 | `expectedRevision` | `integer` | Yes |  |
+| `title` | `string` | No |  |
+| `summary` | `string` | No |  |
+
+
+#### get_guardrails_policy_change_status
+
+Required RBAC permission: `toolPolicy:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | `integer` | Yes |  |
 
 
 #### get_remedy_plans

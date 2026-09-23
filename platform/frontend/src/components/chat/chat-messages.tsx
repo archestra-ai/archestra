@@ -142,6 +142,10 @@ import {
   shouldShowStickyBoundaryIndicator,
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
+import {
+  isOpenAppaPolicyChange,
+  OpenAppaPolicyChange,
+} from "./openappa-policy-change";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -1978,6 +1982,12 @@ const MessageTool = memo(
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+    const policyChange =
+      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+        parseFullToolName(mcpAppToolName).toolName,
+      ) &&
+      !errorText &&
+      isOpenAppaPolicyChange(rawOutput);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -2002,7 +2012,7 @@ const MessageTool = memo(
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
-    const shouldDefaultOpen = isApprovalRequested;
+    const shouldDefaultOpen = isApprovalRequested || policyChange;
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
@@ -2226,16 +2236,23 @@ const MessageTool = memo(
           {!authToolBody && errorText && uiResourceUri && toolResultPart && (
             <ToolOutput label="Error" output={output} errorText={errorText} />
           )}
-          {/* Show text output when NOT rendering a UI resource */}
-          {!authToolBody && !uiResourceUri && toolResultPart && (
-            <ToolOutput
-              label={errorText ? "Error" : "Result"}
-              output={output}
-              errorText={errorText}
-            />
+          {!authToolBody && policyChange && (
+            <OpenAppaPolicyChange output={rawOutput} />
           )}
+          {/* Show text output when NOT rendering a UI resource */}
           {!authToolBody &&
             !uiResourceUri &&
+            !policyChange &&
+            toolResultPart && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={output}
+                errorText={errorText}
+              />
+            )}
+          {!authToolBody &&
+            !uiResourceUri &&
+            !policyChange &&
             !toolResultPart &&
             Boolean(part.output) && (
               <ToolOutput

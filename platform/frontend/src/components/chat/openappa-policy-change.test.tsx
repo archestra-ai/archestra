@@ -1,0 +1,31 @@
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OpenAppaPolicyChange } from "./openappa-policy-change";
+
+test("shows a reviewable policy diff and the pull request link", () => {
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          delivery: "pull_request",
+          number: 17,
+          url: "https://github.com/example/policies/pull/17",
+          path: "guardrails/appa.toml",
+          before: '[policy]\nversion = 2\nname = "old"\n',
+          after: '[policy]\nversion = 2\nname = "new"\n',
+        },
+      }}
+    />,
+  );
+
+  expect(screen.getByText("PR #17")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+  expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
+    '-name = "old"',
+  );
+  expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
+    '+name = "new"',
+  );
+});

@@ -18,14 +18,23 @@ export const TOOL_PERMISSIONS: Record<
   ArchestraToolShortName,
   Permission | null
 > = {
-  // Identity — available to all
+  // Identity
   whoami: null,
+  // OpenAPPA
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
   validate_guardrails_policy: { resource: "toolPolicy", action: "update" },
+  preview_guardrails_policy_change: {
+    resource: "toolPolicy",
+    action: "read",
+  },
   update_guardrails_policy: { resource: "toolPolicy", action: "update" },
+  get_guardrails_policy_change_status: {
+    resource: "toolPolicy",
+    action: "read",
+  },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

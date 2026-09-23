@@ -48,6 +48,10 @@ import {
   McpTaskStatusRow,
   useElapsedSince,
 } from "./mcp-task-status";
+import {
+  isOpenAppaPolicyChange,
+  OpenAppaPolicyChange,
+} from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -618,6 +622,15 @@ function ExpandedToolCard({
   } = useMcpTaskFor(part.toolCallId);
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
+  const policyOutput = toolResultPart?.output ?? part.output;
+  const policyChange =
+    ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+      parseFullToolName(
+        resolveRunToolTargetName(part, toolName, { getToolShortName }),
+      ).toolName,
+    ) &&
+    !errorText &&
+    isOpenAppaPolicyChange(policyOutput);
   const input = withoutProxyTransportArguments({
     shortName: toolShortName,
     input:
@@ -709,14 +722,15 @@ function ExpandedToolCard({
             />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {toolResultPart && (
+        {policyChange && <OpenAppaPolicyChange output={policyOutput} />}
+        {toolResultPart && !policyChange && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && Boolean(part.output) && (
+        {!toolResultPart && !policyChange && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={part.output}

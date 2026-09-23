@@ -2307,6 +2307,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/credentials": { credential: ["read"] },
+  "/settings/openappa": { toolPolicy: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

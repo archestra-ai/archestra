@@ -4960,8 +4960,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
     events.length = 0;
     const unprepared = await send(OPENCODE_FORK_SESSION);
-    expect(unprepared.statusCode, unprepared.body).toBe(409);
-    expect(unprepared.body).toContain("context_control = true");
+    expect(unprepared.statusCode, unprepared.body).toBe(200);
+    expect(unprepared.body).toContain("context_control");
+    expect(unprepared.json().output[0].name).toBe(
+      "archestra__get_remedy_plans",
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "cancel_call",

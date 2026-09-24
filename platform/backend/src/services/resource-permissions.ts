@@ -30,6 +30,7 @@ import ResourcePermissionTargetModel from "@/models/resource-permission-target";
 import RoleCompositionModel from "@/models/role-composition";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
@@ -373,6 +374,10 @@ export class ResourcePermissions {
         throw new ApiError(400, "Policy conversations cannot be shared");
     }
     const effective = await ResourcePermissions.getEffective(params);
+    await ResourcePermissions.assertNoStaticPinsBroken({
+      ...params,
+      authorId: effective.target?.authorId ?? null,
+    });
     const policy = await ResourcePermissions.replace({
       ...params,
       authority: effective.grants,
@@ -562,6 +567,35 @@ export class ResourcePermissions {
         "Permissions changed since you opened this editor. Reload before saving.",
       );
     return policy;
+  }
+
+  /**
+   * A static tool pin trusts its connection for good. A policy edit that takes
+   * an agent or app out of the connection's team would leave the pin using a
+   * credential its audience no longer shares, so the edit is refused.
+   */
+  private static async assertNoStaticPinsBroken(
+    params: PermissionContext & {
+      grants: ResourcePermissionGrant[];
+      authorId: string | null;
+    },
+  ) {
+    const { resource, scope, organizationId } = params;
+    if (scope === "*") return;
+    if (resource !== "agent" && resource !== "mcpGateway" && resource !== "app")
+      return;
+    const current = await ResourcePermissionPolicyModel.findAudience(params);
+    const next = ResourcePermissionPolicyModel.audienceOfGrants(params.grants);
+    const target = { organizationId, authorId: params.authorId };
+    await assertNoStaticPinsBrokenByTargetChange({
+      ...(resource === "app" ? { appId: scope } : { agentId: scope }),
+      currentTarget: {
+        ...target,
+        scope: current.audience,
+        teamIds: current.teamIds,
+      },
+      nextTarget: { ...target, scope: next.audience, teamIds: next.teamIds },
+    });
   }
 
   /**

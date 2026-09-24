@@ -33,13 +33,14 @@ test("real middleware admits scoped editors without role update permission and r
     },
   ];
   const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+  // A shared key: an owned key is its owner's alone, whatever its grants.
   const provider = await LlmProviderApiKeyModel.create(
     {
       organizationId: org.id,
       name: "Provider",
       provider: "openai",
-      scope: "personal",
-      userId: owner.id,
+      scope: "org",
+      userId: null,
       secretId: secret.id,
     },
     { initialPermissionGrants: grants },
@@ -73,7 +74,7 @@ test("real middleware admits scoped editors without role update permission and r
       for (const target of [
         {
           url: `/api/llm-provider-api-keys/${provider.id}`,
-          body: { name: "Renamed", scope: "personal" },
+          body: { name: "Renamed" },
         },
         {
           url: `/api/llm-virtual-keys/${virtualKey.id}`,
@@ -109,9 +110,9 @@ test("real middleware admits scoped editors without role update permission and r
         ).statusCode,
       ).toBe(403);
     }
-    expect((await LlmProviderApiKeyModel.findById(provider.id))?.userId).toBe(
-      owner.id,
-    );
+    expect(
+      (await LlmProviderApiKeyModel.findById(provider.id))?.userId,
+    ).toBeNull();
     expect(
       (await VirtualApiKeyModel.findAccessContextById(virtualKey.id))?.authorId,
     ).toBe(owner.id);

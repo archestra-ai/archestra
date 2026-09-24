@@ -533,6 +533,11 @@ export default class ResourcePermissionPolicyModel {
    * the terms of {@link audienceIs}. For callers that decide in code rather
    * than in a query.
    */
+  /** The audience a policy with these grants would have. */
+  static audienceOfGrants(grants: ResourcePermissionGrant[]): ObjectAudience {
+    return audienceOf({ grants });
+  }
+
   static async findAudience(params: {
     organizationId: string;
     resource: ScopedResource;

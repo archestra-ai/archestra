@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import { seedBuiltInSkill, seedImportedSkill } from "./skill.test-helpers";
 

@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import {
   makeAgentCard,

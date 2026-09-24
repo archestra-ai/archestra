@@ -466,11 +466,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.proxy) {
         if (!ctx.proxy.virtualKey) {
           steps.push(
-            "Make sure Codex is signed in with your own OpenAI API key (printenv OPENAI_API_KEY | codex login --with-api-key).",
+            "Use your existing Codex ChatGPT login, or sign in with your own OpenAI API key (codex login --with-api-key).",
           );
         }
         steps.push(
-          `Start Codex through the proxy: codex -c model_provider=${ctx.proxy.proxyName}`,
+          `Open a new terminal and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
         );
       }
       if (ctx.skills?.hasSkills ?? !!ctx.skills) {
@@ -1181,17 +1181,28 @@ ${codexAttributionHeaderLines(ctx.proxy)}
     sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
 CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
 mkdir -p "$(dirname "$CONFIG")"
+umask 077
 if [ -f "$CONFIG" ]; then
-  # drop any previous archestra-managed block for this provider (idempotent)
+  # Drop the previous managed block and any top-level provider selection.
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
-    !skip {print}
-  ' "$CONFIG" > "$CONFIG.archestra-tmp" && mv "$CONFIG.archestra-tmp" "$CONFIG"
+    !skip {
+      if ($0 ~ /^\\[/) in_table=1
+      if (!in_table && $0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
+      print
+    }
+  ' "$CONFIG" > "$CONFIG.archestra-tmp"
+else
+  : > "$CONFIG.archestra-tmp"
 fi
-cat >> "$CONFIG" <<'ARCHESTRA_TOML'
+printf 'model_provider = "%s"\n' ${sh(ctx.proxy.proxyName)} > "$CONFIG.archestra-next"
+cat "$CONFIG.archestra-tmp" >> "$CONFIG.archestra-next"
+cat >> "$CONFIG.archestra-next" <<'ARCHESTRA_TOML'
 ${block}
 ARCHESTRA_TOML
+mv -f "$CONFIG.archestra-next" "$CONFIG"
+rm "$CONFIG.archestra-tmp"
 echo "Updated $CONFIG"${
       ctx.proxy.virtualKey
         ? `
@@ -1200,7 +1211,7 @@ say ${sh("Signing Codex in with your virtual key")}
 ARCHESTRA_VIRTUAL_KEY=${sh(ctx.proxy.virtualKey)}
 printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`
         : `
-echo "Codex keeps using your own OpenAI API key login."`
+echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
     }`);
   }
 

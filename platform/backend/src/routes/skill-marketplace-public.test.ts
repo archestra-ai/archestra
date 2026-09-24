@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   PluginModel,
   SkillMarketplaceRepoModel,
@@ -10,8 +12,6 @@ import {
   SkillShareLinkModel,
   UserTokenModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { MarketplaceMaterializer } from "@/skills/marketplace/materialize";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

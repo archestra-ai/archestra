@@ -1,7 +1,7 @@
 import fastifyFormbody from "@fastify/formbody";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ChatOpsChannelBindingModel } from "@/models";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import chatopsRoutes from "./chatops";
 

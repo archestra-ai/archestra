@@ -130,6 +130,23 @@ describe("client trajectory identity", () => {
         }),
       ).toMatchObject({
         sessionId: CLAUDE_SESSION,
+        provenance: "claude-code-metadata",
+      });
+    });
+
+    test("does not treat non-Claude metadata as a native Claude session", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "anthropic-sdk/0.1" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
         provenance: "claude-metadata",
       });
     });

@@ -1,5 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { GenerateContentResponseSchema } from "./api";
+import {
+  GenerateContentRequestSchema,
+  GenerateContentResponseSchema,
+} from "./api";
+
+describe("GenerateContentRequestSchema", () => {
+  test("preserves provider-hosted tools through request parsing", () => {
+    const tools = [
+      { googleMaps: {} },
+      { enterpriseWebSearch: {} },
+      { fileSearch: { fileSearchStoreNames: ["files/test"] } },
+    ];
+    const parsed = GenerateContentRequestSchema.parse({ contents: [], tools });
+    expect(parsed.tools).toEqual(tools);
+  });
+});
 
 describe("GenerateContentResponseSchema", () => {
   test("accepts a SAFETY candidate that omits content and index", () => {

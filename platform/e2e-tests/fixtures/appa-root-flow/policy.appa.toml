@@ -139,6 +139,30 @@ delta = { audience = ["lab@archestra.local"] }
 name = "builtin:exec_command(cmd:*secret.txt*)"
 delta = { audience = ["lab@archestra.local"] }
 
+[[policy.tool]]
+name = "host/claude-code/Read(file_path:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:read(filePath:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:Read(file_path:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:Read(path:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:shell(command:*secret-other.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "builtin:exec_command(cmd:*secret-other.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
 # --- S3: a read whose output is staged behind a sanitizer -------------------
 
 [[policy.tool]]
@@ -419,6 +443,30 @@ delta = { audience = ["lab@archestra.local"] }
 
 [[policy.tool]]
 name = "host/archestra/Read(path:/tmp/appa-root-flow/lab/secret.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*secret-other.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/shell(command:*secret-other.txt*)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/read(filePath:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/read(path:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/Read(file_path:/tmp/appa-root-flow/lab/secret-other.txt)"
+delta = { audience = ["lab@archestra.local"] }
+
+[[policy.tool]]
+name = "host/archestra/Read(path:/tmp/appa-root-flow/lab/secret-other.txt)"
 delta = { audience = ["lab@archestra.local"] }
 
 [[policy.tool]]

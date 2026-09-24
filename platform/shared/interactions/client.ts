@@ -94,6 +94,7 @@ export const OPENCODE_CLIENT_ID = "opencode";
  */
 const CODEX_FIRST_PARTY_ORIGINATORS = new Set<string>([
   "codex_cli_rs",
+  "codex_exec",
   "codex-tui",
   "codex_vscode",
 ]);

@@ -1,5 +1,6 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import { seedImportedSkill } from "./skill.test-helpers";
 

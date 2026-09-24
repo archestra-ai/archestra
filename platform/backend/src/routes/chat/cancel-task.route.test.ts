@@ -1,8 +1,8 @@
 import { chatTaskPrincipal } from "@/clients/chat-task-bridge";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpGatewayTaskModel } from "@/models";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 

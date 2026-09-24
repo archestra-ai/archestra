@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { createFastifyInstance } from "@/server";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, describe, expect, test } from "@/test";
 import { authPlugin } from "./plugin";
 

@@ -13,3 +13,16 @@
   When adding an endpoint to any entity, copy its shape.
 - Test file: match `/src/routes/virtual-api-key/create.virtual-api-key.route.test.ts`.
   When writing a new endpoint test, copy its shape.
+
+## Test import boundaries
+- Name a test `*.unit.test.ts` only when its runtime imports do not reach the
+  database, models, server entry point, or database fixtures. These tests run
+  without PGlite. Import test APIs from `vitest`, not `@/test`.
+- Keep `*.test.ts` for database-backed and route tests. Use real PGlite and
+  fixtures for database behavior.
+- In route tests, import the Fastify factory from `@/fastify-instance` and the
+  route helper from `@/test/route-test-app`. Do not import `@/server` from a test
+  or re-export route helpers through the general `@/test` barrel.
+- Before adding a database-free test, run `pnpm --dir backend check:test-imports`
+  from `platform/`. Biome enforces direct imports; dependency-cruiser checks
+  transitive runtime imports in `*.unit.test.ts` files.

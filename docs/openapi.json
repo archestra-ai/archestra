@@ -1844,7 +1844,10 @@
                     },
                     "codeExecution": {},
                     "googleSearch": {},
-                    "urlContext": {}
+                    "urlContext": {},
+                    "googleMaps": {},
+                    "enterpriseWebSearch": {},
+                    "fileSearch": {}
                   },
                   "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                 }
@@ -1922,7 +1925,10 @@
                   },
                   "codeExecution": {},
                   "googleSearch": {},
-                  "urlContext": {}
+                  "urlContext": {},
+                  "googleMaps": {},
+                  "enterpriseWebSearch": {},
+                  "fileSearch": {}
                 },
                 "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
               }
@@ -2187,7 +2193,10 @@
                         },
                         "codeExecution": {},
                         "googleSearch": {},
-                        "urlContext": {}
+                        "urlContext": {},
+                        "googleMaps": {},
+                        "enterpriseWebSearch": {},
+                        "fileSearch": {}
                       },
                       "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                     }
@@ -2265,7 +2274,10 @@
                       },
                       "codeExecution": {},
                       "googleSearch": {},
-                      "urlContext": {}
+                      "urlContext": {},
+                      "googleMaps": {},
+                      "enterpriseWebSearch": {},
+                      "fileSearch": {}
                     },
                     "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                   }
@@ -22367,7 +22379,10 @@
                     },
                     "codeExecution": {},
                     "googleSearch": {},
-                    "urlContext": {}
+                    "urlContext": {},
+                    "googleMaps": {},
+                    "enterpriseWebSearch": {},
+                    "fileSearch": {}
                   },
                   "additionalProperties": false,
                   "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22449,7 +22464,10 @@
                   },
                   "codeExecution": {},
                   "googleSearch": {},
-                  "urlContext": {}
+                  "urlContext": {},
+                  "googleMaps": {},
+                  "enterpriseWebSearch": {},
+                  "fileSearch": {}
                 },
                 "additionalProperties": false,
                 "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22724,7 +22742,10 @@
                         },
                         "codeExecution": {},
                         "googleSearch": {},
-                        "urlContext": {}
+                        "urlContext": {},
+                        "googleMaps": {},
+                        "enterpriseWebSearch": {},
+                        "fileSearch": {}
                       },
                       "additionalProperties": false,
                       "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22806,7 +22827,10 @@
                       },
                       "codeExecution": {},
                       "googleSearch": {},
-                      "urlContext": {}
+                      "urlContext": {},
+                      "googleMaps": {},
+                      "enterpriseWebSearch": {},
+                      "fileSearch": {}
                     },
                     "additionalProperties": false,
                     "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -329072,6 +329096,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "required": [
@@ -329383,6 +329426,25 @@
                           "owned_by"
                         ],
                         "additionalProperties": false
+                      }
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name"
+                        ],
+                        "additionalProperties": {}
                       }
                     }
                   },

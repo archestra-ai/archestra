@@ -3,9 +3,12 @@ import { vi } from "vitest";
 import { Authnz } from "@/auth/fastify-plugin/middleware";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConnectionSetupModel from "@/models/connection-setup";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./client-connection.routes";

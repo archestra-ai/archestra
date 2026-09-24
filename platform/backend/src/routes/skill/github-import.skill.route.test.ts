@@ -10,19 +10,13 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { createGithubPat } from "@/services/github-pat";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   STUB_COMMIT_SHA,
   stubGithub,
   stubSkillManifest,
 } from "@/test/github-skills-stub";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 
 describe("POST /api/skills/github/{discover,preview,import}", () => {

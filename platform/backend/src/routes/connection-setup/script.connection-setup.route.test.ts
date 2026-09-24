@@ -7,6 +7,8 @@ import {
 } from "@archestra/shared";
 import JSZip from "jszip";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   ConnectionSetupModel,
   MemberModel,
@@ -16,8 +18,6 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -535,9 +535,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    // Codex keeps its own OpenAI login (no injected key piped into codex)...
+    // Codex keeps its existing ChatGPT or OpenAI API-key login.
     expect(script).toContain(
-      "Codex keeps using your own OpenAI API key login.",
+      "Codex uses your existing ChatGPT or OpenAI API-key login.",
     );
     expect(script).not.toContain(
       `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,

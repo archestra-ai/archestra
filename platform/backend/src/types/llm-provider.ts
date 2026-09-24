@@ -101,9 +101,9 @@ export interface CreateClientOptions {
    */
   onResponseHeaders?: (headers: Headers) => void;
   /**
-   * Ephemeral OpenCode-owned ChatGPT OAuth material for the OpenAI Responses
-   * bridge. It is extracted from one incoming request and must never be
-   * persisted, cached, or used by a non-Responses adapter.
+   * Ephemeral client-owned ChatGPT OAuth material for the OpenAI Responses
+   * bridge. Archestra extracts it from an incoming request. Never persist,
+   * cache, or use this credential outside the Responses adapter.
    */
   openAiCodexPassthrough?: OpenAiCodexPassthrough;
 }
@@ -113,6 +113,7 @@ export interface OpenAiCodexPassthrough {
   accountId: string;
   residency?: string;
   originator?: string;
+  version?: string;
   sessionId?: string;
   userAgent?: string;
 }

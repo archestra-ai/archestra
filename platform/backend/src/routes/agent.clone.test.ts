@@ -74,7 +74,10 @@ describe("clone agent route", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const kb = await makeKnowledgeBase(organizationId, { name: "KB 1" });
+    const kb = await makeKnowledgeBase(organizationId, {
+      name: "KB 1",
+      access: "org",
+    });
     const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
       name: "Connector 1",
     });
@@ -351,7 +354,7 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("rejects a clone override to team scope with no teams", async ({
+  test("refuses the retired scope and teams fields on a clone", async ({
     makeInternalAgent,
   }) => {
     const sourceAgent = await makeInternalAgent({
@@ -387,7 +390,10 @@ describe("clone agent route", () => {
       createdBy: null,
     });
     const grants = [
-      { subject: { type: "team", id: team.id }, actions: ["read", "update"] },
+      {
+        subject: { type: "team", id: team.id },
+        actions: ["read", "use", "update"],
+      },
       {
         subject: { type: "serviceAccount", id: serviceAccount.id },
         actions: ["read", "use"],
@@ -400,7 +406,7 @@ describe("clone agent route", () => {
     });
     expect(response.statusCode, response.body).toBe(200);
     const clone = response.json();
-    expect(clone.scope).toBe("personal");
+    expect(clone.scope).toBe("team");
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId,
       resource: "agent",
@@ -626,7 +632,10 @@ describe("clone agent route", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const kb = await makeKnowledgeBase(organizationId, { name: "KB Reject" });
+    const kb = await makeKnowledgeBase(organizationId, {
+      name: "KB Reject",
+      access: "org",
+    });
     const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
       name: "Connector Reject",
     });
@@ -916,7 +925,9 @@ describe("clone agent route", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const knowledgeBase = await makeKnowledgeBase(organizationId);
+    const knowledgeBase = await makeKnowledgeBase(organizationId, {
+      access: "org",
+    });
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
       organizationId,

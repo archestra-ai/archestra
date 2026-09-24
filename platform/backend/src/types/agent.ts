@@ -516,6 +516,9 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
 
 export const CloneAgentBodySchema = z.object({
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
+  scope: RetiredSharingFieldSchema,
+  teams: RetiredSharingFieldSchema,
+  users: RetiredSharingFieldSchema,
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

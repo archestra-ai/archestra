@@ -150,7 +150,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       if (event.event === "tool_call") {
         if (fail) throw new Error(failure);
         if (!block || event.tool === "allowed_first")
-          return JSON.stringify({ decision: "allow_call" });
+          return JSON.stringify({
+            decision: "allow_call",
+            ...(event.spawn ? { spawn_binding: "prepared-fork" } : {}),
+          });
         denied.add(String(event.operation_id).replace(/^call:/, ""));
         return JSON.stringify({
           decision: "deny_call",
@@ -4680,7 +4683,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           .onConflictDoNothing();
       }
       if (event.event === "tool_call")
-        return JSON.stringify({ decision: "allow_call" });
+        return JSON.stringify({
+          decision: "allow_call",
+          ...(event.spawn ? { spawn_binding: "prepared-fork" } : {}),
+        });
       if (event.event === "tool_result")
         return JSON.stringify({
           decision: "replace_output",
@@ -4816,6 +4822,85 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     authorization: "Bearer test-key",
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
+  });
+
+  test("prepares an OpenCode task fork through the Responses API", async () => {
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_task",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-4.1",
+              output: [
+                {
+                  type: "function_call",
+                  id: "fc_task",
+                  call_id: "call_task",
+                  name: "task",
+                  arguments: JSON.stringify({
+                    description: "Calculate",
+                    prompt: "Determine 17 plus 25",
+                    subagent_type: "general",
+                  }),
+                  status: "completed",
+                },
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+
+    const send = (sessionId: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        remoteAddress: "127.0.0.1",
+        headers: { ...openCodeHeaders(), "x-session-id": sessionId },
+        payload: {
+          model: "gpt-4.1",
+          stream: false,
+          input: [{ role: "user", content: "Delegate the calculation" }],
+          tools: [
+            {
+              type: "function",
+              name: "task",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      });
+    const response = await send(OPENCODE_SESSION);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "task",
+        spawn: true,
+      }),
+    );
+
+    const defaultDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const decision = await defaultDispatch?.(raw);
+      if (JSON.parse(raw).event === "tool_call" && JSON.parse(raw).spawn)
+        return JSON.stringify({ decision: "allow_call" });
+      return decision;
+    });
+    events.length = 0;
+    const unprepared = await send(OPENCODE_FORK_SESSION);
+    expect(unprepared.statusCode, unprepared.body).toBe(409);
+    expect(unprepared.body).toContain("context_control = true");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "cancel_call",
+        tool_call_id: "call_task",
+      }),
+    );
   });
 
   test("injects the APPA pair when a Codex session omits it", async () => {

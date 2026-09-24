@@ -1203,6 +1203,48 @@ describe("LlmProviderApiKeyModel", () => {
       expect(resolved?.id).toBe(shared.id);
     });
 
+    test("a shared key created without grants is still an administrator's default key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeUser();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      // Shared, but granted to nobody: only administrators reach it, through
+      // their authority over every key. It has no owner, like an orphan, but
+      // it was never personal.
+      const adminsOnly = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Administrators' key",
+        provider: "anthropic",
+        scope: "org",
+        secretId: (await makeSecret()).id,
+      });
+      const key = {
+        organizationId: org.id,
+        resource: "llmProviderApiKey" as const,
+        scope: adminsOnly.id,
+      };
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision:
+          (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+        grants: [],
+      });
+
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: admin.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(adminsOnly.id);
+    });
+
     test("a system key reaches every member", async ({
       makeOrganization,
       makeUser,

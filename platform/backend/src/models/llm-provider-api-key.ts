@@ -868,29 +868,45 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
-   * Drop the keys nobody was given: a key without an owner whose own policy
-   * grants no one. That is a personal key whose owner was deleted. An
-   * administrator reaches it through their authority over every key, to
-   * manage it, but it is nobody's to pick as a default credential.
+   * Drop the keys nobody was given: a personal key whose owner was deleted,
+   * which the upgrade left without an owner and with a policy that grants no
+   * one. An administrator reaches it through their authority over every key,
+   * to manage it, but it is nobody's to pick as a default credential. A shared
+   * key created without grants is not an orphan: it is for administrators.
    */
   private static async withoutOrphans<
     T extends { id: string; userId: string | null },
   >(params: { organizationId: string; keys: T[] }): Promise<T[]> {
-    const ownerless = params.keys.filter((key) => key.userId === null);
-    if (ownerless.length === 0) return params.keys;
+    const ownerlessIds = params.keys
+      .filter((key) => key.userId === null)
+      .map((key) => key.id);
+    if (ownerlessIds.length === 0) return params.keys;
+    // The retired scope column still says which keys were personal. Callers
+    // pass a display scope derived from grants, so read the stored one.
+    const formerlyPersonal = await db
+      .select({ id: schema.llmProviderApiKeysTable.id })
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          inArray(schema.llmProviderApiKeysTable.id, ownerlessIds),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+        ),
+      );
+    if (formerlyPersonal.length === 0) return params.keys;
     const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
       organizationId: params.organizationId,
       resource: "llmProviderApiKey",
-      scopes: ownerless.map((key) => key.id),
+      scopes: formerlyPersonal.map((key) => key.id),
     });
     const granted = new Set(
       policies
         .filter((policy) => policy.scope !== "*" && policy.grants.length > 0)
         .map((policy) => policy.scope),
     );
-    return params.keys.filter(
-      (key) => key.userId !== null || granted.has(key.id),
+    const orphans = new Set(
+      formerlyPersonal.map((key) => key.id).filter((id) => !granted.has(id)),
     );
+    return params.keys.filter((key) => !orphans.has(key.id));
   }
 
   private static async ownershipRanks(params: {

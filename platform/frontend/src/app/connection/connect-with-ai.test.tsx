@@ -11,16 +11,35 @@ test.each([
   "cursor",
   "codex",
   "copilot-cli",
+  "opencode",
 ])("copies the deployment prompt for %s", async (id) => {
   const user = userEvent.setup();
   const client = CONNECT_CLIENTS.find((entry) => entry.id === id);
   if (!client) throw new Error("Missing client");
   render(<ConnectWithAi client={client} />);
-  const prompt =
-    id === "claude-code"
-      ? `Read ${window.location.origin}/connect.md?client=claude-code and guide me through connecting Claude Code. I will review and run the setup in my own terminal.`
-      : `Read ${window.location.origin}/connect.md and connect ${client.label}.`;
-  expect(screen.getByText(prompt)).toBeVisible();
+  const prompt = screen.getByText(
+    /Do not fetch setup instructions/,
+  ).textContent;
+  expect(prompt).toContain(
+    `Connect ${client.label} to ${window.location.origin}.`,
+  );
+  expect(prompt).not.toContain("/connect.md");
+  if (id === "claude-code") {
+    expect(prompt).toContain(
+      `${window.location.origin}/connection?clientId=claude-code`,
+    );
+    expect(prompt).toContain("run the installer myself");
+    expect(prompt).toContain("open /mcp in a new session");
+    expect(prompt).not.toContain("/api/client-connections/installer");
+  } else {
+    expect(prompt).toContain(
+      `node "$p" --url ${window.location.origin} --client ${id}`,
+    );
+    expect(prompt).toContain(
+      `node $p --url ${window.location.origin} --client ${id}`,
+    );
+    expect(prompt).toContain("matching code in their browser");
+  }
   await user.click(screen.getByRole("button", { name: "Copy prompt" }));
   expect(await navigator.clipboard.readText()).toBe(prompt);
   expect(screen.getByRole("button", { name: "Copied" })).toBeVisible();

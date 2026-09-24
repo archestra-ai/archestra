@@ -522,7 +522,7 @@ requires_openai_auth = true`,
           },
           {
             title: "Start the OAuth flow",
-            body: "OpenCode doesn't sign in on its own: until you run this, it lists the gateway as needing authentication.",
+            body: "Check with opencode mcp list first. Run this only if authentication is needed; OpenCode does not start OAuth on its own.",
             terminalTitle: "terminal",
             buildCommand: ({ serverName }) =>
               `opencode mcp auth ${shellArg(serverName)}`,

@@ -199,6 +199,9 @@ function SkillsList() {
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const pluginsEnabled = useFeature("plugins") === true;
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const { data: canOpenPluginDetails } = useHasPermissions({
+    plugin: ["read", "admin"],
+  });
   const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind =
@@ -746,6 +749,19 @@ function SkillsList() {
       header: "Source",
       cell: ({ row }) => {
         const source = listedSkillSource(row.original);
+        if (row.original.source === "plugin" && canOpenPluginDetails) {
+          return (
+            <RowClickShield className="min-w-0">
+              <Link
+                href={`/plugins/${row.original.skill.pluginId}`}
+                className="block truncate text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                title={source.label}
+              >
+                {source.label}
+              </Link>
+            </RowClickShield>
+          );
+        }
         return (
           <span
             className="block truncate text-sm text-muted-foreground"
@@ -1051,7 +1067,12 @@ function SkillsList() {
                             <Link href={href} className="truncate">
                               {item.skill.name}
                             </Link>
-                            <ListedSkillSourceBadge item={item} />
+                            <ListedSkillSourceBadge
+                              item={item}
+                              canOpenPluginDetails={
+                                canOpenPluginDetails === true
+                              }
+                            />
                             {standalone ? (
                               <LabelTags labels={standalone.labels} />
                             ) : null}
@@ -1391,7 +1412,13 @@ function ListedSkillName({
   );
 }
 
-function ListedSkillSourceBadge({ item }: { item: ListedSkill }) {
+function ListedSkillSourceBadge({
+  item,
+  canOpenPluginDetails,
+}: {
+  item: ListedSkill;
+  canOpenPluginDetails: boolean;
+}) {
   const source = listedSkillSource(item);
   if (
     item.source === "standalone" &&
@@ -1400,7 +1427,7 @@ function ListedSkillSourceBadge({ item }: { item: ListedSkill }) {
   ) {
     return null;
   }
-  return (
+  const badge = (
     <Badge
       variant="secondary"
       title={source.label}
@@ -1410,6 +1437,18 @@ function ListedSkillSourceBadge({ item }: { item: ListedSkill }) {
         {source.label}
       </span>
     </Badge>
+  );
+  return item.source === "plugin" && canOpenPluginDetails ? (
+    <RowClickShield className="inline-flex min-w-0 shrink">
+      <Link
+        href={`/plugins/${item.skill.pluginId}`}
+        className="min-w-0 rounded-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {badge}
+      </Link>
+    </RowClickShield>
+  ) : (
+    badge
   );
 }
 

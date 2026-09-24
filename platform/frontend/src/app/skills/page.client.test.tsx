@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -384,6 +390,80 @@ describe("SkillsPage rows", () => {
         selector: '[aria-hidden="true"]',
       }),
     ).toBeVisible();
+  });
+
+  it("opens a plugin from its source in table and card views", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [PLUGIN_SKILL],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+
+    const pluginHref = `/plugins/${PLUGIN_SKILL.pluginId}`;
+    const sourceLink = screen.getByRole("link", {
+      name: "STE bundle · Plugin",
+    });
+    expect(sourceLink).toHaveAttribute("href", pluginHref);
+    sourceLink.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.click(sourceLink);
+    expect(push).not.toHaveBeenCalledWith(
+      expect.stringContaining("/skills/plugins/"),
+    );
+
+    cleanup();
+    window.localStorage.setItem("archestra-skills-view", "cards");
+    render(<SkillsPage />);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("columnheader", { name: "Skill" }),
+      ).not.toBeInTheDocument(),
+    );
+    const cardSourceLink = screen.getByRole("link", {
+      name: "STE bundle · Plugin",
+    });
+    expect(cardSourceLink).toHaveAttribute("href", pluginHref);
+    cardSourceLink.addEventListener("click", (event) => event.preventDefault());
+    push.mockClear();
+    await userEvent.click(cardSourceLink);
+    expect(push).not.toHaveBeenCalledWith(
+      expect.stringContaining("/skills/plugins/"),
+    );
+  });
+
+  it("shows plugin sources without a detail link for readers", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions: Record<string, string[]>) =>
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+        ({ data: !permissions.plugin?.includes("admin") }) as any,
+    );
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [PLUGIN_SKILL],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+    expect(screen.getByText("STE bundle · Plugin")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "STE bundle · Plugin" }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    window.localStorage.setItem("archestra-skills-view", "cards");
+    render(<SkillsPage />);
+    expect(screen.getByText("STE bundle · Plugin")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "STE bundle · Plugin" }),
+    ).not.toBeInTheDocument();
   });
 
   it("disables projected skill selection in card view", async () => {

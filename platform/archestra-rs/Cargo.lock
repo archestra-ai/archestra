@@ -105,7 +105,7 @@ dependencies = [
 [[package]]
 name = "appa"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
@@ -124,6 +124,10 @@ dependencies = [
  "hmac",
  "libc",
  "libloading",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
  "rand 0.10.2",
  "regex",
  "reqwest 0.13.1",
@@ -142,6 +146,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
  "url",
  "uuid",
@@ -152,7 +157,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-claude-code"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -163,7 +168,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-kagent"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-runtime-api",
 ]
@@ -171,7 +176,7 @@ dependencies = [
 [[package]]
 name = "appa-builtin"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "serde",
  "serde_json",
@@ -181,7 +186,7 @@ dependencies = [
 [[package]]
 name = "appa-engine"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "serde",
  "serde_json",
@@ -194,7 +199,7 @@ dependencies = [
 [[package]]
 name = "appa-eventlog"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -211,7 +216,7 @@ dependencies = [
 [[package]]
 name = "appa-package"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -224,7 +229,7 @@ dependencies = [
 [[package]]
 name = "appa-policy"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -237,7 +242,7 @@ dependencies = [
 [[package]]
 name = "appa-runtime-api"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=7468837da348135cc018fc24cc82e3d18318e1e6#7468837da348135cc018fc24cc82e3d18318e1e6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5555b90ba963ef968d0778637b77de53d0cb9a0c#5555b90ba963ef968d0778637b77de53d0cb9a0c"
 dependencies = [
  "serde",
  "serde_json",
@@ -356,6 +361,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -374,6 +380,7 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -2139,13 +2146,20 @@ dependencies = [
  "appa-eventlog",
  "appa-package",
  "appa-runtime-api",
+ "axum",
  "chrono",
  "futures-util",
  "napi",
  "napi-build",
  "napi-derive",
  "openssl",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry-proto",
+ "opentelemetry_sdk",
  "proptest",
+ "prost",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2153,6 +2167,9 @@ dependencies = [
  "tokio",
  "toml",
  "toml_edit",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -3896,6 +3913,7 @@ dependencies = [
  "tokio",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]

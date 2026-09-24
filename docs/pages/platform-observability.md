@@ -119,6 +119,16 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
 
 This base URL is used for both traces (`/v1/traces`) and logs (`/v1/logs`). If not specified, it defaults to `http://localhost:4318`.
 
+### OpenAPPA Telemetry
+
+Set `ARCHESTRA_OPENAPPA_OTEL_ENABLED=true` to export embedded APPA traces, logs, and metrics. Export starts when the backend first initializes APPA. It uses the collector and authentication configured below. The collector must accept all three signals, including `/v1/metrics`.
+
+Search for `service.name="appa-runtime"` and `service.namespace="archestra"`. Policy checks, external calls, remedies, failures, and approved report events use APPA's [observability contract](https://www.openappa.com/observability). Each backend process has a distinct `service.instance.id`, which keeps cumulative metrics separate across replicas.
+
+The exporter excludes raw prompts, tool arguments, and tool results, regardless of content-capture settings. Tool names, identifiers, and approved report messages can still contain sensitive information. Full reports continue to use the existing report receiver.
+
+APPA operations have separate traces. Use trajectory and offer identifiers to correlate them. The integration does not attach APPA spans to Node request traces. Export is best-effort and cannot change policy decisions. Graceful shutdown flushes completed records after requests and workers drain.
+
 ### Authentication
 
 Archestra supports authentication for OTEL trace export through environment variables. Authentication is optional and can be configured using either basic authentication or bearer token authentication.

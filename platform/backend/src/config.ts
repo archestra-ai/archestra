@@ -3437,6 +3437,7 @@ const config = {
   },
   observability: {
     otel: {
+      openappaEnabled: process.env.ARCHESTRA_OPENAPPA_OTEL_ENABLED === "true",
       captureContent: parseOtelCaptureContent({
         envValue: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT,
         contentEncryptionConfigured: Boolean(

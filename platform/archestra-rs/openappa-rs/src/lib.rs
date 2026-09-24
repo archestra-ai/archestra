@@ -6,6 +6,7 @@ mod batteries;
 mod consults;
 mod declarations;
 mod policy;
+mod telemetry;
 
 use appa_eventlog::{
     Backend, LogStore,
@@ -45,6 +46,14 @@ use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 pub struct ReportingOptions {
     pub endpoint: String,
     pub hostname: Option<String>,
+}
+
+#[napi(object)]
+pub struct TelemetryOptions {
+    /// Archestra's normalized trace URL, including /v1/traces.
+    pub traces_endpoint: String,
+    pub headers: Option<HashMap<String, String>>,
+    pub instance_id: String,
 }
 
 /// Process-wide runtime slot. The mutex covers initialize, policy reload, and
@@ -361,6 +370,7 @@ pub async fn initialize_openappa(
     postgres_max_connections: u32,
     policy_content: String,
     reporting: Option<ReportingOptions>,
+    telemetry: Option<TelemetryOptions>,
 ) -> napi::Result<()> {
     let max_connections = usize::try_from(postgres_max_connections)
         .ok()
@@ -372,6 +382,16 @@ pub async fn initialize_openappa(
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
+        if let Some(options) = telemetry {
+            // Telemetry failure must not change runtime initialization or decisions.
+            let _ = std::panic::catch_unwind(|| {
+                telemetry::init(telemetry::Config {
+                    traces_endpoint: options.traces_endpoint,
+                    headers: options.headers.unwrap_or_default(),
+                    instance_id: options.instance_id,
+                })
+            });
+        }
         let mut config = policy::compile(&policy_content).map_err(error)?;
         config.reporting.agent_yell = reporting.is_some();
         let store = Arc::new(
@@ -394,6 +414,18 @@ pub async fn initialize_openappa(
     .map_err(error)??;
     *slot = Some(state);
     Ok(())
+}
+
+/// Flush completed telemetry without blocking Node's event loop. Does not load
+/// a runtime or start an exporter when export was not enabled.
+#[napi(js_name = "flushOpenappaTelemetry")]
+pub async fn flush_openappa_telemetry() -> napi::Result<()> {
+    tokio::task::spawn_blocking(|| {
+        std::panic::catch_unwind(telemetry::flush)
+            .map_err(|_| error("OpenAPPA telemetry flush failed"))
+    })
+    .await
+    .map_err(|_| error("OpenAPPA telemetry flush worker failed"))?
 }
 
 /// Validates a root document that declares no battery: [`compose_openappa_policy`]
@@ -1338,6 +1370,9 @@ impl State {
             } else {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
+                    // Keep reader identity under the existing policy sources.
+                    // Archestra's caller ID is not an authenticated reader address.
+                    principal: None,
                 }
             };
             let decision = start_under(policy_content, &self.runtime, start).await?;
@@ -2280,7 +2315,7 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
 /// The identity the runtime judges: the host's spelling derived through the
 /// Archestra adapter, the way the wire derives a served host's calls.
 fn canonical_tool(raw: &str) -> napi::Result<String> {
-    (adapter::adapter().derive)(raw)
+    (adapter::adapter().identify_tool)(raw)
         .map(|derived| derived.canonical.as_str().to_owned())
         .map_err(|refusal| {
             error(match refusal {

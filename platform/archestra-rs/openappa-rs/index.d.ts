@@ -86,6 +86,12 @@ export declare function editOpenappaPolicy(content: string, edits: Array<PolicyE
 /** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
 export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
 
+/**
+ * Flush completed telemetry without blocking Node's event loop. Does not load
+ * a runtime or start an exporter when export was not enabled.
+ */
+export declare function flushOpenappaTelemetry(): Promise<void>
+
 export interface HelperBindingInput {
   /**
    * The endpoint every `command` external of the battery is served under; the
@@ -102,7 +108,7 @@ export interface IncludeDeclaration {
   line: number
 }
 
-export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null, telemetry?: TelemetryOptions | undefined | null): Promise<void>
 
 /**
  * Validates an uploaded battery package with the marketplace's own checks and reads
@@ -181,6 +187,13 @@ export interface ServerAliasDeclaration {
   namespace: string
   servers: Array<string>
   line: number
+}
+
+export interface TelemetryOptions {
+  /** Archestra's normalized trace URL, including /v1/traces. */
+  tracesEndpoint: string
+  headers?: Record<string, string>
+  instanceId: string
 }
 
 /**

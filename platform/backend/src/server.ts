@@ -93,7 +93,10 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
-import { declareOpenappaInstalls } from "@/openappa/service";
+import {
+  declareOpenappaInstalls,
+  flushOpenappaTelemetry,
+} from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
@@ -1314,6 +1317,7 @@ function registerWebServerShutdown(
       if (shouldRunWorker) {
         await taskQueueService.stopWorker();
       }
+      await flushOpenappaTelemetry();
 
       mcpToolsRefreshManager.stop();
 
@@ -1536,6 +1540,7 @@ const startWorker = async () => {
         await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
+        await flushOpenappaTelemetry();
         clearTimeout(forceExitTimeout);
         process.exit(0);
       } catch (error) {

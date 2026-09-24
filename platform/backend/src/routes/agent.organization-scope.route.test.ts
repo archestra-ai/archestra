@@ -7,9 +7,9 @@ import {
 import { getAgentTypePermissionChecker as realGetAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { hasPermission as realHasPermission } from "@/auth/utils";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { LlmProviderApiKeyModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import agentRoutes from "./agent";
 

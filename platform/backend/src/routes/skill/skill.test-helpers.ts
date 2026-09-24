@@ -1,12 +1,8 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { SkillModel } from "@/models";
 import { builtInSkillSourceRef } from "@/skills/built-in-skills";
-import {
-  accessGrants,
-  beforeEach,
-  type TestAccess,
-  useRouteTestApp,
-} from "@/test";
+import { accessGrants, beforeEach, type TestAccess } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 
 export const MANIFEST = [
   "---",

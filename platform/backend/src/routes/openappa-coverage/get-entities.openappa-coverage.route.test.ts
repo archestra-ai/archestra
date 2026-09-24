@@ -2,8 +2,9 @@ import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
 import ToolModel from "@/models/tool";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
+import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-coverage.routes";
 
 describe("GET /api/openappa/coverage/entities", () => {

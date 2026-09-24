@@ -530,31 +530,22 @@ function groupedMembers(
 
 /**
  * Tools the provider runs on the model's behalf, which never reach this proxy
- * as a tool call it can gate — Anthropic's server tools and hosted MCP, the
- * Responses `mcp` tool. A session that declares one is refused rather than
- * governed in part.
+ * as a client tool call it can gate. Responses web search is governed on its
+ * result; other hosted tools run outside OpenAPPA's tool-call boundary.
  */
 export function providerHostedTool(tool: unknown): string | undefined {
   const record = asRecord(tool);
   const type = record?.type;
   if (typeof type !== "string") return undefined;
-  // Every typed declaration outside this allowlist is provider-owned until an
-  // adapter explicitly models how the proxy observes and gates its calls.
-  return CLIENT_RUN_TOOL_TYPES.has(type) ? undefined : type;
+  return HOSTED_TOOL_TYPES.has(type) || HOSTED_TOOL_TYPE_PATTERN.test(type)
+    ? type
+    : undefined;
 }
 
-/**
- * A provider-hosted tool whose result this proxy can still withhold: a
- * read-only lookup on a wire whose response adapter surfaces hosted calls, so
- * what the provider ran is ruled on before any of it reaches the client.
- */
-export function isResultGovernedHostedTool(params: {
-  family: AppaWireFamily | undefined;
-  tool: unknown;
-}): boolean {
-  const hosted = providerHostedTool(params.tool);
-  if (!hosted || !params.family) return false;
-  return RESULT_GOVERNED_HOSTED_TOOL_TYPES[params.family]?.has(hosted) === true;
+export function isClientRunToolType(type: string): boolean {
+  return (
+    CLIENT_RUN_TOOL_TYPES.has(type) || CLIENT_RUN_TOOL_TYPE_PATTERN.test(type)
+  );
 }
 
 /**
@@ -693,7 +684,7 @@ export function declaredToolEntries(body: unknown): DeclaredToolEntry[] {
       }
       const namespace = groupNamespace(tool);
       for (const member of group.members) {
-        entries.push(declaredToolEntry(member, namespace));
+        entries.push(declaredToolEntry(member, namespace, true));
       }
     }
   }
@@ -761,13 +752,23 @@ const CLIENT_RUN_TOOL_TYPES = new Set([
   "custom",
   "namespace",
   "tool_search",
+  "local_shell",
+  "computer_use_preview",
+  "computer_use",
 ]);
-
-const RESULT_GOVERNED_HOSTED_TOOL_TYPES: Partial<
-  Record<AppaWireFamily, ReadonlySet<string>>
-> = {
-  "openai:responses": new Set(["web_search", "web_search_preview"]),
-};
+const CLIENT_RUN_TOOL_TYPE_PATTERN =
+  /^(?:bash|computer|memory|text_editor)_\d{8}$/;
+const HOSTED_TOOL_TYPES = new Set([
+  "mcp",
+  "mcp_toolset",
+  "web_search",
+  "web_search_preview",
+  "file_search",
+  "code_interpreter",
+  "image_generation",
+]);
+const HOSTED_TOOL_TYPE_PATTERN =
+  /^(?:advisor|web_search|web_fetch|code_execution)_\d{8}$/;
 
 /** Adjusts tool call IDs to match expected provider prefixes (fc_, ctc_). */
 function itemIdOfKind(id: string, type: keyof typeof ITEM_ID_PREFIXES): string {
@@ -812,16 +813,20 @@ type DeclaredToolEntry = {
   name?: string;
   /** `name` of the enclosing Codex `namespace` declaration. Never set for Gemini groups. */
   namespace?: string;
+  /** Whether this is a member of a client-callable tool group. */
+  grouped?: boolean;
 };
 
 function declaredToolEntry(
   tool: unknown,
   namespace?: string,
+  grouped = false,
 ): DeclaredToolEntry {
   const holder = declarationHolder(tool);
   const name = declaredToolName(tool);
   return {
     tool,
+    ...(grouped ? { grouped } : {}),
     ...(holder ? { holder } : {}),
     ...(name !== undefined ? { name } : {}),
     ...(namespace !== undefined ? { namespace } : {}),

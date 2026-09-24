@@ -28,14 +28,9 @@ import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
-import Fastify, { type FastifyRequest } from "fastify";
-import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
   jsonSchemaTransform,
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
@@ -88,13 +83,6 @@ import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
-import {
-  getBrowserApiFaviconHref,
-  isApiRequestUrl,
-  isJsonContentType,
-  renderBrowserApiDocument,
-  shouldRenderBrowserApiDocument,
-} from "@/middleware/browser-api-document";
 import { PlaywrightRuntimeModel } from "@/models";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
@@ -133,7 +121,6 @@ import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
   Anthropic,
-  type ApiError,
   Archestra,
   Cerebras,
   Cohere,
@@ -153,6 +140,14 @@ import {
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "./fastify-instance";
+import {
+  registerMetricsPlugin,
+  registerStandaloneMetricsEndpoint,
+} from "./metrics-registration";
 import * as routes from "./routes";
 import { msTeamsWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
@@ -164,20 +159,22 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
-import { handleServerError } from "./server/error-handler";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
 } from "./types/mcp-catalog";
 
+export type { FastifyInstanceWithZod } from "./fastify-instance";
+export { createFastifyInstance } from "./fastify-instance";
+export {
+  addMetricsAuthenticationHook,
+  registerMetricsPlugin,
+  registerStandaloneMetricsEndpoint,
+} from "./metrics-registration";
+
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
-const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
-
-type BrowserApiRequest = FastifyRequest & {
-  [BROWSER_API_FAVICON_HREF]?: string;
-};
 
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
@@ -331,9 +328,6 @@ export function registerOpenApiSchemas() {
 // Register schemas at module load time
 registerOpenApiSchemas();
 
-/** Type for the Fastify instance with Zod type provider */
-export type FastifyInstanceWithZod = ReturnType<typeof createFastifyInstance>;
-
 /**
  * Register the OpenAPI/Swagger plugin on a Fastify instance.
  * @param fastify - The Fastify instance to register the plugin on
@@ -405,164 +399,6 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   // MCP Gateway (tool listing + tool calls via JSON-RPC)
   fastify.register(routes.mcpGatewayRoutes);
 }
-
-/**
- * Sets up logging and zod type provider + request validation & response serialization
- */
-export const createFastifyInstance = () =>
-  Fastify({
-    loggerInstance: logger,
-    disableRequestLogging: true,
-    trustProxy: config.api.trustProxy,
-    bodyLimit: config.api.bodyLimit,
-    // Held above the keep-alive timeout of any proxy or load balancer in front
-    // of us, so the proxy never reuses a socket we are closing at that instant
-    // (which reaches the client as an intermittent dropped request). See
-    // parseKeepAliveTimeoutMs in config.ts.
-    keepAliveTimeout: config.api.keepAliveTimeoutMs,
-    // Some path params are opaque, base64url-encoded handles longer than
-    // Fastify's 100-char default (e.g. skill-sandbox artifact `obj_` refs that
-    // encode a scope + object key). Without this, such a request fails to match
-    // its route and falls through to the auth hook, surfacing as a 403.
-    routerOptions: {
-      maxParamLength: 4096,
-    },
-  })
-    .withTypeProvider<ZodTypeProvider>()
-    .setValidatorCompiler(validatorCompiler)
-    .setSerializerCompiler(serializerCompiler)
-    // Resolve white-label branding before a top-level API navigation reaches
-    // onSend. Keeping onSend synchronous is required for routes (Better Auth)
-    // that write directly to the raw response.
-    .addHook("preHandler", (request, _reply, done) => {
-      if (!shouldRenderBrowserApiDocument(request)) {
-        done();
-        return;
-      }
-
-      void OrganizationModel.getAppearanceSettings().then(
-        ({ favicon }) => {
-          (request as BrowserApiRequest)[BROWSER_API_FAVICON_HREF] =
-            getBrowserApiFaviconHref(favicon);
-          done();
-        },
-        () => done(),
-      );
-    })
-    // REST API responses are per-user and must never be cached by
-    // intermediaries. Reverse proxies/CDNs in front of a deployment default to
-    // caching responses that carry no Cache-Control header, which replays one
-    // user's stale GET body after their own writes (e.g. an /api/apps list
-    // that keeps showing pre-pin state until a hard refresh). Routes that
-    // intentionally cache set their own header, which wins.
-    .addHook("onSend", (request, reply, _payload, done) => {
-      if (isApiRequestUrl(request.url) && !reply.hasHeader("cache-control")) {
-        void reply.header("Cache-Control", "no-store");
-      }
-      done();
-    })
-    // Raw JSON documents have no <head>, so user agents can fall back to an
-    // origin-wide favicon cache. Render only top-level navigations as HTML with
-    // an explicit versioned icon; fetch/XHR/API clients keep the original JSON.
-    .addHook("onSend", (request, reply, payload, done) => {
-      const browserRequest = request as BrowserApiRequest;
-      const faviconHref = browserRequest[BROWSER_API_FAVICON_HREF];
-      delete browserRequest[BROWSER_API_FAVICON_HREF];
-      if (
-        reply.raw.headersSent ||
-        typeof payload !== "string" ||
-        !faviconHref ||
-        !isJsonContentType(reply.getHeader("content-type"))
-      ) {
-        done();
-        return;
-      }
-
-      try {
-        const document = renderBrowserApiDocument(payload, faviconHref);
-        void reply.type("text/html; charset=utf-8");
-        void reply.removeHeader("content-length");
-        done(null, document);
-      } catch {
-        // Branding must never turn a successful API response into an error.
-        done();
-      }
-    })
-    .setErrorHandler<ApiError | Error>(handleServerError);
-
-/**
- * Helper function to register the metrics plugin on a fastify instance.
- *
- * Basically we need to ensure that we are only registering "default" and "route" metrics ONCE
- * If we instantiate a fastify instance and start duplicating the collection of metrics, we will
- * get a fatal error as such:
- *
- * Error: A metric with the name http_request_duration_seconds has already been registered.
- * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
- */
-export const registerMetricsPlugin = async (
-  fastify: ReturnType<typeof createFastifyInstance>,
-  endpointEnabled: boolean,
-): Promise<void> => {
-  const metricsEnabled = !endpointEnabled;
-
-  await fastify.register(metricsPlugin, {
-    endpoint: endpointEnabled ? observability.metrics.endpoint : null,
-    defaultMetrics: { enabled: metricsEnabled },
-    routeMetrics: {
-      enabled: metricsEnabled,
-      methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: [HEALTH_PATH, READY_PATH],
-    },
-  });
-};
-
-export const addMetricsAuthenticationHook = (
-  fastify: FastifyInstanceWithZod,
-): void => {
-  const { secret: metricsSecret } = observability.metrics;
-
-  if (!metricsSecret) {
-    return;
-  }
-
-  const metricsPath = observability.metrics.endpoint;
-
-  fastify.addHook("preHandler", async (request, reply) => {
-    if (
-      request.url !== metricsPath &&
-      !request.url.startsWith(`${metricsPath}?`)
-    ) {
-      return;
-    }
-
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      reply.code(401).send({ error: "Unauthorized: Bearer token required" });
-      return;
-    }
-
-    const token = authHeader.slice(7);
-    if (token !== metricsSecret) {
-      reply.code(401).send({ error: "Unauthorized: Invalid token" });
-      return;
-    }
-  });
-};
-
-export const registerStandaloneMetricsEndpoint = async (params: {
-  fastify: FastifyInstanceWithZod;
-  enableDefaultMetrics: boolean;
-}): Promise<void> => {
-  const { fastify, enableDefaultMetrics } = params;
-  addMetricsAuthenticationHook(fastify);
-
-  await fastify.register(metricsPlugin, {
-    endpoint: observability.metrics.endpoint,
-    defaultMetrics: { enabled: enableDefaultMetrics },
-    routeMetrics: { enabled: false },
-  });
-};
 
 /**
  * Create separate Fastify instance for metrics on a separate port

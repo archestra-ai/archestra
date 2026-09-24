@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import projectRoutes from "./project.routes";
 
 const AUTHOR_ACTIONS = [

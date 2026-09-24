@@ -3,7 +3,8 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ModelModel from "@/models/model";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import modelRoutes from "./llm-provider-models";
 
 describe("scoped model grants", () => {

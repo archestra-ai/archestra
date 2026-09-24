@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -6,7 +11,6 @@ import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { TestAccess } from "@/test/access-grants";
 import type { User } from "@/types";

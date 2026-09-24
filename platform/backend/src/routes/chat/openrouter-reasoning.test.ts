@@ -18,9 +18,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { User } from "@/types";

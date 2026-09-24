@@ -6,9 +6,9 @@ import {
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { rumExporter } from "@/observability/rum/exporter.ee";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 

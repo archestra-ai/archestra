@@ -754,6 +754,13 @@ describe("0488 skill names unique per author", () => {
 });
 
 describe("0488 environment grants", () => {
+  /** Environments made before the upgrade had no grants of their own. */
+  const clearEnvironmentPolicies = () =>
+    db
+      .execute(
+        sql`DELETE FROM "resource_permission_policies" WHERE "resource" = 'environment'`,
+      )
+      .then(() => undefined);
   const organizationWide = {
     subject: { type: "organization", id: "*" },
     actions: ["read", "use"],
@@ -776,6 +783,7 @@ describe("0488 environment grants", () => {
       organizationId: other.id,
       name: "Sandbox",
     });
+    await clearEnvironmentPolicies();
     const restrict = () =>
       db
         .execute(
@@ -816,6 +824,7 @@ describe("0488 environment grants", () => {
       organizationId: org.id,
       name: "Staging",
     });
+    await clearEnvironmentPolicies();
     const teamGrant = {
       subject: { type: "team" as const, id: team.id },
       actions: ["read" as const, "use" as const, "update" as const],

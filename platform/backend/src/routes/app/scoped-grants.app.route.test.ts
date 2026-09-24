@@ -6,7 +6,8 @@ import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import appRoutes from "./app.routes";
 
 describe("scoped app grants", () => {

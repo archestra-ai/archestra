@@ -1,11 +1,14 @@
 import type { Permissions } from "@archestra/shared";
 import { vi } from "vitest";
 import { hasPermission } from "@/auth";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import TeamTokenModel from "@/models/team-token";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import tokenRoutes from "./token";
 

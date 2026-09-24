@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { vi } from "vitest";
 import { enterpriseTier } from "@/enterprise-tier";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";

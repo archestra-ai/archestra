@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   accessGrants,
   afterEach,

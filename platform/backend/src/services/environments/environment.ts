@@ -2,7 +2,6 @@ import {
   type EnvironmentDefaultableResource,
   hasScopedPermission,
 } from "@archestra/shared";
-import { withDbTransaction } from "@/database";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -14,7 +13,6 @@ import {
   OrganizationModel,
   PlaywrightRuntimeModel,
 } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -207,23 +205,8 @@ export async function createEnvironment(params: {
     networkPolicy: data.networkPolicy ?? null,
     validationRegex: data.validationRegex ?? null,
     trustedImageRegistries: data.trustedImageRegistries ?? null,
+    authorId: userId ?? null,
   });
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // A new environment is open to anyone who can create what is deployed into
-  // it, as environments always were. Its Permissions tab narrows that.
-  await withDbTransaction((tx) =>
-    ResourcePermissionPolicyModel.createInitial({
-      tx,
-      organizationId,
-      resource: "environment",
-      scope: created.id,
-      authorId: userId ?? null,
-      publishToOrganization: true,
-    }),
-  );
-  // SPDX-SnippetEnd
 
   if (data.labels?.length) {
     await EnvironmentLabelModel.syncLabels(created.id, data.labels);

@@ -19,6 +19,7 @@ import {
   stubGithub,
   stubSkillManifest,
 } from "@/test/github-skills-stub";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import { useSkillRouteTestApp } from "./skill.test-helpers";
 

@@ -11,16 +11,10 @@ import {
 } from "@/models";
 import { createGithubAppConfig } from "@/services/github-app-config";
 import { handleSkillGithubSync } from "@/task-queue/handlers/skill-github-sync-handler";
-import {
-  accessGrants,
-  afterEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { stubSkillManifest } from "@/test/github-skills-stub";
 import { useMswServer } from "@/test/msw";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 
 const origin = "https://git.enterprise.example";

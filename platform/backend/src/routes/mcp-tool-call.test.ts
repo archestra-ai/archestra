@@ -7,9 +7,10 @@
  * - Every route is constrained to the active organization; agent and MCP
  *   server permissions do not widen or narrow log visibility.
  */
+
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import McpToolCallModel from "@/models/mcp-tool-call";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";

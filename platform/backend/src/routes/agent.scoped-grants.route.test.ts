@@ -2,6 +2,10 @@
 
 import { vi } from "vitest";
 import db from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
@@ -9,7 +13,6 @@ import AuditLogModel from "@/models/audit-log";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";

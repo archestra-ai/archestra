@@ -65,7 +65,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 
 ## Rules that apply on every host
 
-- The root config is the operator's source of truth. Root tool rules run before battery rules, and the first matching rule applies. Keep every root rule unless the operator approves changing or removing it.
+- The root config is the operator's source of truth. Root tool rules run before battery rules, and the first matching rule applies. Preserve the whole root policy, including \`[policy.deployment]\`, unless the operator approves a change. A saved revision replaces the complete document; it does not inherit fields from the starting policy.
 - Use Information Flow Control (IFC) labels first. Express boundaries with trust and audience labels. Do not use effects or human approvals when labels express the requirement. Trusted data flowing within its audience stays autonomous.
 - A battery gives maintained defaults. Never edit a battery. Override a tool contract with a root rule.
 - A battery is declared in this same policy document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
@@ -83,6 +83,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Ask one focused question at a time.
 - Configure only installed OpenAPPA features. If documented configuration cannot express the requested behavior, explain what is missing.
 - For CLI subagents, inspect the spawn tool, the child's tool rules, and the return boundary separately. A rule on the spawn tool or the child's reads does not make its final answer safe for the parent. See \`references/contracts.md\` before proposing return protection.
+- Provider-hosted tools execute inside the model provider without a client-side call to gate. Ask whether connected clients declare them and whether the operator accepts that limitation before an initial or tool-related policy proposal. A \`[[policy.tool]]\` rule cannot refuse their declaration. OpenAI Responses web search is the exception whose result is checked before it reaches the client. If the operator requires refusing every hosted tool with a signed offer to use a local counterpart, state that this is not supported; do not invent an offer or claim a policy rule enforces it.
 - Do not configure the configuring actor: skip the agent that runs this skill and the runtime control tools \`execute_remedy_plan\` and \`get_remedy_plans\`.
 - Call \`execute_remedy_plan\` only when the previous tool result quoted \`offer_id: "<hex>"\`. Copy that hex string exactly. Never invent an offer id. Never ask the operator for an offer id.
 - When the operator sends approval (such as "Approve", "Approved", or "yes"), apply the waiting proposal immediately. If the operator approves when no proposal is waiting, state that nothing needs applying.
@@ -98,7 +99,7 @@ If publishing opens a GitHub PR, give its link and state that the proposed polic
 
 ### Inspect
 
-1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), \`delivery\` (local revision or GitHub PR), and \`effective\` (enforced policy). Note declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
+1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), \`delivery\` (local revision or GitHub PR), and \`effective\` (enforced policy). Note \`[policy.deployment]\`, declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
    - \`active\`: battery's rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: \`[credentials]\` does not bind required helper variables.
@@ -111,9 +112,10 @@ If publishing opens a GitHub PR, give its link and state that the proposed polic
 3. Call \`archestra__list_mcp_server_deployments\` to find all deployed MCP servers.
 4. For each distinct Catalog ID, call \`archestra__get_mcp_server_tools\` with \`{ "mcpServerId": "<Catalog ID>" }\`. Use the Catalog ID, not the deployment ID.
 5. Call \`archestra__search_tools\` to find tools visible to the calling agent. Missing search results do not prove a server has no tools.
-6. Cross-check all sources. In Archestra, MCP tools use \`<catalog>__<tool>\` (canonical \`mcp/<catalog>/<tool>\`), and platform tools use \`archestra__<name>\`. Native client tools may be evaluated as \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Match actual evaluated names, not a guessed translation.
+6. Cross-check all sources. In Archestra, MCP tools use \`<catalog>__<tool>\` (canonical \`mcp/<catalog>/<tool>\`), and platform tools use \`archestra__<name>\`. MCP inventory never lists native client tools: Claude Code uses \`Task\` or \`Agent\`, OpenCode uses lowercase \`host/archestra/task\`, and Codex uses \`spawn_agent\`. Native tools may be evaluated as \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Names are case-sensitive; match the evaluated name instead of copying another client's rule.
    This inspection reads stored tool metadata only. Do not execute tools or read private content to classify them.
-7. Compare installed tools with existing root rules. Existing root rules take priority.
+7. Compare installed and native tools with existing root rules. If native subagents are in scope and \`[policy.deployment] context_control = true\` is absent, propose it and check that the client can receive the return contract before inference. An existing custom policy does not inherit the starting policy's deployment block.
+8. Ask which clients use provider-hosted tools, such as Claude's advisor. If used, ask whether provider-side execution without a proxy-gated call is acceptable. An MCP inventory cannot discover these declarations. If it is not acceptable, list the unsupported refusal and signed-local-counterpart requirement under **Needed for this to work** rather than presenting the policy as complete.
 
 ### Batteries
 
@@ -131,6 +133,7 @@ Batteries supply pre-packaged security rules for popular MCP servers. In Archest
 Create root rules only for installed tools that neither the root config nor an installed battery covers.
 
 - **IFC monoids first**: Always express security boundaries with the \`trust\` lattice and the \`self\` ⊆ \`internal\` ⊆ \`public\` audience chain. Keep autonomous work unblocked for trusted data inside its legitimate audience. Use the reserved \`blocked\` mark only when no safe sanitizer exists.
+- For a native spawn, match the client's exact tool spelling and check the return contract separately. A capitalized \`Task\` rule does not match OpenCode's lowercase \`task\`. Do not classify a provider-hosted declaration as a native client tool or promise that a root rule gates its execution.
 - The built-in audience chain is \`self\` ⊆ \`internal\` ⊆ \`public\`: \`self\` is the person running the session, and \`internal\` is their organization.
 - A tool that reads private user data uses \`delta = { audience = ["self"] }\`.
 - A tool that reads organization data uses \`delta = { audience = ["internal"] }\`.
@@ -189,7 +192,7 @@ Start from the user's requested outcome, not a full tool rescan.
 If the requested outcome is ambiguous, ask one focused question and wait.
 
 1. Call \`archestra__get_guardrails_policy\`. Record current \`content\`, \`revision\`, \`delivery\`, and \`effective\` status.
-2. For syntax or rules not shown in the current config, read \`references/contracts.md\` or \`references/policy-writing.md\` with \`archestra__load_skill\`.
+2. For syntax or rules not shown in the current config, read \`references/contracts.md\` or \`references/policy-writing.md\` with \`archestra__load_skill\`. Preserve \`[policy.deployment]\` while editing. For tool or client changes, ask whether provider-hosted tools are in use and whether their unmediated execution is acceptable; a tool rule cannot refuse them before the provider runs them. If the requested boundary needs signed local substitution, report it as unavailable rather than proposing an ineffective rule.
 3. If a battery helps, add it to the draft \`include\` list. Explain it with the one-sentence rule used in \`init\` mode. Existing root rules keep priority.
 4. Preview the complete proposed policy with \`archestra__preview_guardrails_policy_change\` and the current \`revision\`. Fix errors and preview again. If it produces no change, report that without approval language.
 5. Explain what happens now, the previewed diff and warnings, and the practical effect. State whether approval will save locally or open a GitHub PR. Add one short \`OpenAPPA pieces: <primitives>\` line.
@@ -205,9 +208,9 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
-- The supported editor format is \`[policy]\` plus \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
+- The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
-- APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change deployment settings through this skill.
+- APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
 - A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 `,
   files: [
@@ -221,6 +224,9 @@ The policy document starts with:
 \`\`\`toml
 [policy]
 version = 2
+
+[policy.deployment]
+context_control = true
 \`\`\`
 
 This version identifies the policy format. The API revision is a separate save number that prevents overwriting concurrent edits. Preview the complete draft with that revision before showing the diff and publishing it. With GitHub sync, publishing creates a PR. The policy takes effect after merge and successful sync. Without GitHub sync, publishing saves a local revision.
@@ -386,7 +392,7 @@ The wildcard entry \`name = "*"\` covers unlisted tools.
 In Archestra:
 - MCP tools: \`<catalog>__<tool>\` ↔ \`mcp/<catalog>/<tool>\`
 - Platform tools: \`archestra__<name>\` ↔ \`mcp/archestra/<name>\` or \`host/archestra/<name>\`
-- Native client built-ins: \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Match the name the runtime evaluates, not a guessed translation.
+- Native client built-ins: \`host/claude-code/<name>\` or \`host/archestra/<name>\`. Claude Code's \`Task\` and \`Agent\`, OpenCode's lowercase \`host/archestra/task\`, and Codex's \`spawn_agent\` have different spellings. Match the runtime's exact case.
 - Search without catch-all: declare \`archestra__search_tools\` with \`delta = {}\`.
 - Command tools such as \`bash\`, \`shell\`, \`exec_command\`, and \`run_command\` can use \`command\` or \`cmd\` arguments. The proxy normalizes these variants. Check the evaluated tool name when writing an argument-specific rule.
 
@@ -425,6 +431,12 @@ context_control = true
 This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Never claim the child is protected. Confirm the deployment can issue signed lineage and return receipts without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
 
 This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
+
+### Provider-hosted tools
+
+Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them, but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted calls and results are not governed through a native client tool rule. Deferred \`tool_search\` declarations, including versioned Anthropic types and \`defer_loading\` tools, are still refused because their client-callable tools are not on the wire.
+
+There is no supported policy switch that refuses all provider-hosted declarations with a signed offer to call a client-side counterpart. A hosted declaration arrives before the provider chooses a call or its arguments, so a policy tool rule cannot provide that substitute. If the operator requires this boundary, identify the client and provider tools and report it as unsupported. Do not add a rule that falsely claims to protect provider-side execution.
 
 ### Batteries in Archestra
 

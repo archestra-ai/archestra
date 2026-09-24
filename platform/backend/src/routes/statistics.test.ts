@@ -6,10 +6,10 @@ import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { SkillModel } from "@/models";
 import MemberModel from "@/models/member";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   accessGrants,
   afterEach,

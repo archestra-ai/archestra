@@ -1,7 +1,7 @@
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 

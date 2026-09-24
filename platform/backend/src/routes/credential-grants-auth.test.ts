@@ -2,9 +2,9 @@
 import { vi } from "vitest";
 import { betterAuth, hasPermission, userHasPermission } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
+import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
-import { createFastifyInstance } from "@/server";
 import { expect, test } from "@/test";
 import providerRoutes from "./llm-provider-api-keys";
 import virtualRoutes from "./virtual-api-key/virtual-api-key.routes";

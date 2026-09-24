@@ -3,6 +3,8 @@ import type * as k8s from "@kubernetes/client-node";
 import { and, eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   createHardResetStatusMarker,
@@ -12,8 +14,6 @@ import {
 import K8sDeployment from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 import websocketService from "@/websocket";

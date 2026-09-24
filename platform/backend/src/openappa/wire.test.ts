@@ -6,7 +6,6 @@ import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestr
 import { extractGatewayToolDeclarations } from "@/routes/proxy/utils/gateway-tool-declarations";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { describe, expect, test } from "@/test";
-import { ApiError } from "@/types";
 import { openappaActor } from "./actor";
 import {
   collectAndStripChildReturns,
@@ -2394,21 +2393,109 @@ describe("APPA request preflight", () => {
     ).toThrow("defers its tools to a tool search");
   });
 
-  test("refuses a provider-hosted tool this proxy never sees called", () => {
+  test.each([
+    "advisor_20260301",
+    "web_search_20250305",
+    "web_fetch_20250910",
+  ])("allows provider-hosted %s without treating it as a client tool", (type) => {
+    const hosted = { type, name: "provider_tool" };
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }, hosted],
+      messages: [],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+
+    expect(prepared.tools).toMatchObject({
+      control: { name: CONTROL },
+      notice: { name: NOTICE },
+    });
+    expect(prepared.declaredTools).not.toContainEqual({
+      name: "provider_tool",
+    });
+    expect(body.tools).toContainEqual(hosted);
+  });
+
+  test.each([
+    "local_shell",
+    "computer_use_preview",
+    "computer_use",
+  ])("refuses client-executed %s until its calls can be gated", (type) => {
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ type, name: "client_tool" }], input: [] },
+        interactionType: "openai:responses",
+        identity,
+      }),
+    ).toThrow("client-executed tool type");
+  });
+
+  test("governs Anthropic's versioned client-run memory tool", () => {
+    const prepared = prepareAppaRequest({
+      body: { tools: [{ type: "memory_20250818", name: "memory" }] },
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(prepared.declaredTools).toContainEqual({ name: "memory" });
+  });
+
+  test("refuses unknown typed tools rather than assuming the provider runs them", () => {
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ type: "future_tool_2099", name: "client_tool" }] },
+        interactionType: "anthropic:messages",
+        identity,
+      }),
+    ).toThrow("cannot classify tool type");
+  });
+
+  test.each([
+    { type: "tool_search_tool_bm25_20251119" },
+    { type: "tool_search_tool_regex_20251119" },
+    { type: "function", name: "deferred", defer_loading: true },
+  ])("refuses deferred client tools: %j", (tool) => {
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [tool] },
+        interactionType: "anthropic:messages",
+        identity,
+      }),
+    ).toThrow("defers its tools to a tool search");
+  });
+
+  test("does not accept a provider-hosted tool as the remedy control", () => {
     expect(() =>
       prepareAppaRequest({
         body: {
           tools: [
             { name: NOTICE },
-            { name: CONTROL },
-            { type: "web_search_20250305", name: "web_search" },
+            { type: "advisor_20260301", name: CONTROL },
           ],
           messages: [],
         },
         interactionType: "anthropic:messages",
         identity,
       }),
-    ).toThrow("provider-hosted tool");
+    ).toThrow("conflicts with the OpenAPPA remedy tools");
+  });
+
+  test("rejects a hosted name that collides with a declared client remedy tool", () => {
+    expect(() =>
+      prepareAppaRequest({
+        body: {
+          tools: [
+            { name: NOTICE },
+            { name: CONTROL },
+            { type: "advisor_20260301", name: CONTROL },
+          ],
+        },
+        interactionType: "anthropic:messages",
+        identity,
+      }),
+    ).toThrow("conflicts with a client tool");
   });
 
   test("governs a Responses web search by its result instead of refusing the session", () => {
@@ -2429,23 +2516,98 @@ describe("APPA request preflight", () => {
       control: { name: CONTROL },
       notice: { name: NOTICE },
     });
+    expect(prepared.declaredTools).not.toContainEqual({ name: "web_search" });
   });
 
-  test("still refuses a hosted tool that acts, whose call a withheld result cannot undo", () => {
+  test("keeps hosted-result governance when web search is the only declared tool", () => {
+    const prepared = prepareAppaRequest({
+      body: { tools: [{ type: "web_search" }], input: [] },
+      interactionType: "openai:responses",
+      identity,
+    });
+    expect(prepared.tools?.control).toBeDefined();
+    expect(prepared.declaredTools).toEqual([]);
+  });
+
+  test("allows a provider-hosted MCP tool without claiming to govern its actions", () => {
+    const hosted = { type: "mcp", server_label: "remote" };
+    const body = {
+      tools: [
+        { type: "function", name: NOTICE },
+        { type: "function", name: CONTROL },
+        hosted,
+      ],
+      input: [],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      identity,
+    });
+    expect(body.tools).toContainEqual(hosted);
+    expect(prepared.declaredTools).toEqual([
+      { name: NOTICE },
+      { name: CONTROL },
+    ]);
+  });
+
+  test("allows unnamed Gemini server tools but still requires named client functions", () => {
+    const hosted = { googleSearch: {} };
+    const body = { tools: [hosted] };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "gemini:generateContent",
+      identity,
+    });
+    expect(prepared.tools).toBeUndefined();
+    expect(body.tools).toEqual([hosted]);
+    expect(
+      prepareAppaRequest({
+        body: { tools: [{ googleMaps: {} }, { fileSearch: {} }] },
+        interactionType: "gemini:generateContent",
+        identity,
+      }).tools,
+    ).toBeUndefined();
     expect(() =>
       prepareAppaRequest({
         body: {
-          tools: [
-            { type: "function", name: NOTICE },
-            { type: "function", name: CONTROL },
-            { type: "mcp", server_label: "remote" },
-          ],
-          input: [],
+          tools: [{ functionDeclarations: [{ description: "unnamed" }] }],
         },
-        interactionType: "openai:responses",
+        interactionType: "gemini:generateContent",
         identity,
       }),
-    ).toThrow(ApiError);
+    ).toThrow("without a name");
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ futureClientTool: {} }] },
+        interactionType: "gemini:generateContent",
+        identity,
+      }),
+    ).toThrow("without a name");
+  });
+
+  test("allows hosted Azure tools without clients, but refuses ungoverned web search", () => {
+    expect(
+      prepareAppaRequest({
+        body: { tools: [{ type: "mcp", server_label: "remote" }] },
+        interactionType: "azure:responses",
+        identity,
+      }).tools,
+    ).toBeUndefined();
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ type: "web_search" }] },
+        interactionType: "azure:responses",
+        identity,
+      }),
+    ).toThrow("cannot govern hosted web-search results on Azure Responses");
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ type: "function", name: "local" }] },
+        interactionType: "azure:responses",
+        identity,
+      }),
+    ).toThrow("Azure Responses");
   });
 
   test("refuses Codex code mode, where calls are wrapped in exec", () => {

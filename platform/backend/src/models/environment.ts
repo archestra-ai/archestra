@@ -1,5 +1,5 @@
 import { and, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   Environment,
@@ -8,6 +8,7 @@ import type {
   TrustedImageRegistries,
 } from "@/types";
 import { EnvironmentLabelModel } from "./entity-labels";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 // === Public API ===
 
@@ -141,6 +142,8 @@ class EnvironmentModel {
     networkPolicy?: NetworkPolicy | null;
     validationRegex?: string | null;
     trustedImageRegistries?: TrustedImageRegistries | null;
+    /** The creator, who gets full access. */
+    authorId?: string | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
     const {
       organizationId,
@@ -151,20 +154,37 @@ class EnvironmentModel {
       validationRegex,
       trustedImageRegistries,
     } = params;
-    const [row] = await db
-      .insert(schema.environmentsTable)
-      .values({
+    const sortOrder = await EnvironmentModel.nextSortOrder(organizationId);
+    return withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .insert(schema.environmentsTable)
+        .values({
+          organizationId,
+          name,
+          description: description ?? null,
+          namespace: namespace ?? null,
+          networkPolicy: networkPolicy ?? null,
+          validationRegex: validationRegex ?? null,
+          trustedImageRegistries: trustedImageRegistries ?? null,
+          sortOrder,
+        })
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A new environment is open to anyone who can create what is deployed
+      // into it, as environments always were. Its Permissions tab narrows it.
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
         organizationId,
-        name,
-        description: description ?? null,
-        namespace: namespace ?? null,
-        networkPolicy: networkPolicy ?? null,
-        validationRegex: validationRegex ?? null,
-        trustedImageRegistries: trustedImageRegistries ?? null,
-        sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
-      })
-      .returning();
-    return row;
+        resource: "environment",
+        scope: row.id,
+        authorId: params.authorId ?? null,
+        publishToOrganization: true,
+      });
+      // SPDX-SnippetEnd
+      return row;
+    });
   }
 
   static async update(params: {

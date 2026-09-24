@@ -1,8 +1,8 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, ProjectModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";

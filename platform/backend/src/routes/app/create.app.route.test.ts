@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AppModel,
@@ -12,8 +14,6 @@ import {
 import EnvironmentModel from "@/models/environment";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   afterEach,
   beforeEach,

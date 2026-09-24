@@ -3,10 +3,13 @@ import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
 import db from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

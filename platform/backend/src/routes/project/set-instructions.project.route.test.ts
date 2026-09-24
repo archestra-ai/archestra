@@ -2,9 +2,9 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
 } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import FileModel from "@/models/file";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";

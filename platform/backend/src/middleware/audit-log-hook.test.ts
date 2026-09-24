@@ -157,10 +157,10 @@ vi.mock("./audit-log-registry", async () => {
   };
 });
 
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { registerAuditLogHook } from "./audit-log-hook";

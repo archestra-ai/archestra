@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import config from "@/config";
 import db from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   buildContainerToken,
@@ -28,8 +30,6 @@ import {
 import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   accessGrants,
   afterEach,

@@ -7,6 +7,8 @@ import {
 } from "@archestra/shared";
 import JSZip from "jszip";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   ConnectionSetupModel,
   MemberModel,
@@ -16,8 +18,6 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   accessGrants,
   afterEach,

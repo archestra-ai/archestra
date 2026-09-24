@@ -7,14 +7,8 @@ import {
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
 } from "@/models";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { drainBackgroundWork } from "@/utils/background-work";
 import externalMcpSkillRoutes from "./external-mcp-skill.routes";
 

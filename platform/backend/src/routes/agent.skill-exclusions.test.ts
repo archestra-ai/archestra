@@ -4,12 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { SkillTeamModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SkillModel from "@/models/skill";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   accessGrants,
   afterEach,

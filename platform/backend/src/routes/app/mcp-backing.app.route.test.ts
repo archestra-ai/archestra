@@ -1,5 +1,7 @@
 import { ADMIN_ROLE_NAME, getArchestraAppResourceUri } from "@archestra/shared";
 import mcpClient from "@/clients/mcp-client";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AppModel,
@@ -7,8 +9,6 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   afterEach,
   beforeEach,

@@ -1,21 +1,15 @@
 import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { createGithubPat } from "@/services/github-pat";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";

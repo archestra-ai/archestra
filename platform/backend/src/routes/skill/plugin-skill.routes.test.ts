@@ -10,8 +10,8 @@ import {
   expect,
   type TestAccess,
   test,
-  useRouteTestApp,
 } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";

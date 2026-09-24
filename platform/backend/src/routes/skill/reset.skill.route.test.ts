@@ -1,7 +1,7 @@
 import { syncBuiltInSkills } from "@/database/seed";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   builtInSkillSourceRef,
   getEnabledBuiltInSkills,

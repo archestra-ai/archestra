@@ -3,9 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {

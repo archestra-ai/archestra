@@ -16,14 +16,14 @@ import {
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   McpOauthClientModel,
   OAuthAccessTokenModel,
   TeamTokenModel,
   UserTokenModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 

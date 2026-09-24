@@ -1,13 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { KeyRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
-import { FormDialog } from "@/components/form-dialog";
 import {
+  OAUTH_CLIENT_SECTIONS,
+  type OAuthClientSection,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
@@ -18,12 +20,8 @@ import {
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -53,6 +51,8 @@ export function EditOAuthClientDialog({
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] =
+    useState<OAuthClientSection>("general");
   // The permissions section keeps its edits in its own form. This dialog's
   // Save Changes is the only Save on screen, so it commits them too.
   const permissionsSave = useRef<(() => Promise<void>) | null>(null);
@@ -65,6 +65,7 @@ export function EditOAuthClientDialog({
 
   useEffect(() => {
     if (!oauthClient) return;
+    setActiveSection("general");
     setName(oauthClient.name);
     setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
@@ -83,7 +84,7 @@ export function EditOAuthClientDialog({
       : mappedProviderApiKeys.length > 0);
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={!!oauthClient}
       onOpenChange={onOpenChange}
       title="Edit OAuth Client"
@@ -92,69 +93,14 @@ export function EditOAuthClientDialog({
           ? "Update the redirect URIs for this OAuth client."
           : "Update the provider keys this OAuth client can use."
       }
-    >
-      <DialogForm
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!oauthClient) return;
-          const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-          await permissionsSave.current?.();
-          await onSubmit(oauthClient.id, {
-            name: name.trim(),
-            grantType: oauthClient.grantType,
-            ...(isAuthorizationCode
-              ? { redirectUris }
-              : { providerApiKeys: mappedProviderApiKeys }),
-            labels: finalLabels,
-          });
-        }}
-      >
-        <DialogBody className="space-y-4">
-          {/* Provenance before the editable fields: who to ask before you
-              change somebody else's credential. */}
-          <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
-          <div className="space-y-2">
-            <Label htmlFor="edit-oauth-client-name">Name</Label>
-            <Input
-              id="edit-oauth-client-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="support-assistant-prod"
-            />
-          </div>
-
-          {isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
-          ) : (
-            <ProviderKeyAccessFields
-              providerApiKeyIds={providerApiKeyIds}
-              onProviderApiKeyIdsChange={setProviderApiKeyIds}
-              providerApiKeys={providerApiKeys}
-            />
-          )}
-
-          {/* SPDX-SnippetBegin
-              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          {oauthClient && (
-            <ResourceAccessSection
-              resource="llmOauthClient"
-              id={oauthClient.id}
-              registerSave={registerPermissionsSave}
-            />
-          )}
-          {/* SPDX-SnippetEnd */}
-
-          <AdvancedLabelsSection
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
-        </DialogBody>
-        <DialogStickyFooter>
+      sidebarLabel={name.trim() || "OAuth client"}
+      sidebarDescription="LLM Proxy"
+      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={OAUTH_CLIENT_SECTIONS}
+      onActiveSectionChange={setActiveSection}
+      footer={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -165,8 +111,73 @@ export function EditOAuthClientDialog({
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
             Save Changes
           </Button>
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
+        </>
+      }
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (!oauthClient) return;
+        const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+        await permissionsSave.current?.();
+        await onSubmit(oauthClient.id, {
+          name: name.trim(),
+          grantType: oauthClient.grantType,
+          ...(isAuthorizationCode
+            ? { redirectUris }
+            : { providerApiKeys: mappedProviderApiKeys }),
+          labels: finalLabels,
+        });
+      }}
+    >
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        {/* Provenance before the editable fields: who to ask before you
+              change somebody else's credential. */}
+        <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
+        <div className="space-y-2">
+          <Label htmlFor="edit-oauth-client-name">Name</Label>
+          <Input
+            id="edit-oauth-client-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="support-assistant-prod"
+          />
+        </div>
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+
+      <div hidden={activeSection !== "access"} className="space-y-4">
+        {isAuthorizationCode ? (
+          <RedirectUrisField
+            value={redirectUrisText}
+            onChange={setRedirectUrisText}
+          />
+        ) : (
+          <ProviderKeyAccessFields
+            providerApiKeyIds={providerApiKeyIds}
+            onProviderApiKeyIdsChange={setProviderApiKeyIds}
+            providerApiKeys={providerApiKeys}
+          />
+        )}
+      </div>
+
+      {/* Kept mounted on every tab, so Save Changes commits its edits. */}
+      <div hidden={activeSection !== "permissions"}>
+        {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        {oauthClient && (
+          <ResourceAccessSection
+            resource="llmOauthClient"
+            id={oauthClient.id}
+            registerSave={registerPermissionsSave}
+            standalone
+          />
+        )}
+        {/* SPDX-SnippetEnd */}
+      </div>
+    </TabbedDialogShell>
   );
 }

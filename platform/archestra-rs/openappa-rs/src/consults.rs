@@ -192,6 +192,7 @@ fn backend_name(backend: ConsultBackend) -> &'static str {
         ConsultBackend::Command => "command",
         ConsultBackend::Module => "module",
         ConsultBackend::Llm => "llm",
+        ConsultBackend::Jev => "jev",
         ConsultBackend::ClaudeCode => "claude_code",
         ConsultBackend::Hitl => "hitl",
     }

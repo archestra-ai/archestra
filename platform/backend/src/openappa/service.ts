@@ -1,3 +1,4 @@
+import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -27,7 +28,6 @@ import { openappaFailure } from "@/openappa/failure";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -242,14 +242,14 @@ export function isAppaChatSource(
   return (APPA_CHAT_SOURCES as readonly string[]).includes(source ?? "");
 }
 
-async function binding(content: string) {
+async function binding() {
   if (!openappaEnabled()) {
     throw new Error("OpenAPPA is disabled");
   }
-  // The addon compiles `content` before it serves it, and a composed document
-  // names the helper bridge bearer as a `token_env` the runtime resolves from
-  // this process's environment. Publish it on every crossing, not once at
-  // import time, so opening and reloading never depend on module order.
+  // A composed document names the helper bridge bearer as a `token_env` the
+  // addon resolves from this process's environment when it compiles the
+  // document for a dispatch. Publish it on every crossing, not once at import
+  // time, so no dispatch depends on module order.
   openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
@@ -259,7 +259,6 @@ async function binding(content: string) {
     await module.initializeOpenappa(
       url.toString(),
       config.openappa.postgresMaxConnections,
-      content,
       openappaYellEnabled()
         ? {
             endpoint: "https://appa-yell-wkjbuewj5a-ew.a.run.app",
@@ -279,7 +278,7 @@ async function dispatch(
   session: OpenAppaSession,
   event: Record<string, unknown>,
   /** A policy the caller already read, shared across a batch of dispatches. */
-  policyContent?: string,
+  policy?: DispatchPolicy,
 ) {
   const principal = await sessionPrincipal(session);
   return withRuntime(
@@ -289,7 +288,7 @@ async function dispatch(
         JSON.stringify({ ...session, ...event, ...principal }),
         policy,
       ),
-    policyContent,
+    policy,
   );
 }
 
@@ -320,13 +319,13 @@ async function withRuntime(
   organizationId: string,
   call: (
     module: Awaited<ReturnType<typeof binding>>,
-    policyContent: string,
+    policy: DispatchPolicy,
   ) => Promise<string>,
-  policyContent?: string,
+  batchPolicy?: DispatchPolicy,
 ) {
-  const policy = policyContent ?? (await effectivePolicy(organizationId));
+  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
-    const module = await binding(policy);
+    const module = await binding();
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
@@ -335,21 +334,38 @@ async function withRuntime(
 }
 
 /**
- * The organization's effective policy content, or the refusal every dispatch shares.
+ * The organization's effective policy with the credential values the runtime
+ * reads for it, or the refusal every dispatch shares.
  *
  * The deployment switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
  * when the switch turns off mid-request.
  */
-async function effectivePolicy(organizationId: string): Promise<string> {
+async function effectivePolicy(
+  organizationId: string,
+): Promise<DispatchPolicy> {
   try {
     const rawContent = (
       await openappaBatteriesService.getEffectivePolicy(organizationId)
     ).content;
-    return expandCommandExecutionPolicyRules(rawContent);
+    return await openappaDeclarations.dispatchPolicy({
+      organizationId,
+      content: expandCommandExecutionPolicyRules(rawContent),
+    });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/** One policy read shared by a batch of dispatches, taken by the first of them. */
+type SharedPolicy = () => Promise<DispatchPolicy>;
+
+export function sharedPolicy(organizationId: string): SharedPolicy {
+  let read: Promise<DispatchPolicy> | undefined;
+  return () => {
+    read ??= effectivePolicy(organizationId);
+    return read;
+  };
 }
 
 export function chatOpenAppaSession(
@@ -420,13 +436,9 @@ export function sessionFromHeaders(params: {
 
 async function startSession(
   session: OpenAppaSession,
-  policyContent?: string,
+  policy?: DispatchPolicy,
 ): Promise<void> {
-  const decision = await dispatch(
-    session,
-    { event: "session_start" },
-    policyContent,
-  );
+  const decision = await dispatch(session, { event: "session_start" }, policy);
   if (decision.decision === "context") {
     // The runtime returns start context (the child return contract) before inference.
     // The proxy cannot send this contract to the model.
@@ -480,7 +492,7 @@ async function approveToolResult(params: {
   output: string;
   outcome: ExecutionOutcome;
   controlToolName?: string;
-  policyContent?: string;
+  policy?: DispatchPolicy;
 }): Promise<ProcessedToolResult> {
   const decision = await dispatch(
     params.session,
@@ -493,7 +505,7 @@ async function approveToolResult(params: {
         ? { presentation: nativePresentation(params.controlToolName) }
         : {}),
     },
-    params.policyContent,
+    params.policy,
   );
   const content = extractApprovedOutput(decision, params.output);
   const outputSource =
@@ -539,8 +551,8 @@ export async function processProxyResults(params: {
   ) => "pending" | "failed" | undefined;
 }) {
   // The results dispatch one after another; one policy read serves them all.
-  const policyContent = await effectivePolicy(params.session.organization_id);
-  await startSession(params.session, policyContent);
+  const policy = await effectivePolicy(params.session.organization_id);
+  await startSession(params.session, policy);
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
@@ -566,7 +578,7 @@ export async function processProxyResults(params: {
           : JSON.stringify(result.content),
       outcome,
       controlToolName: params.controlToolName,
-      policyContent,
+      policy,
     });
     updates[result.id] = approved;
   }
@@ -613,6 +625,7 @@ export async function evaluateToolCalls(
     /** Signed lineage retained with a child call for later turns. */
     lineage?: { spawnCallId?: string; childNativeId?: string };
   },
+  policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
   // Validate tool call IDs and arguments before dispatch.
@@ -694,17 +707,18 @@ export async function evaluateToolCalls(
           ? { child_native_id: options.lineage.childNativeId }
           : {}),
       };
-      const decision = await dispatch(session, event);
+      const decision = await dispatch(session, event, await policy());
       if (
         spawn &&
         (decision.decision === "pass_control" ||
           (decision.decision === "allow_call" && !decision.spawn_binding))
       ) {
         if (decision.decision === "allow_call")
-          await dispatch(session, {
-            event: "cancel_call",
-            tool_call_id: call.id,
-          });
+          await dispatch(
+            session,
+            { event: "cancel_call", tool_call_id: call.id },
+            await policy(),
+          );
         return {
           kind: "deny" as const,
           feedback:
@@ -745,8 +759,12 @@ export async function evaluateToolCalls(
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const cancelResults = await Promise.allSettled(
-        admitted.map((id) =>
-          dispatch(session, { event: "cancel_call", tool_call_id: id }),
+        admitted.map(async (id) =>
+          dispatch(
+            session,
+            { event: "cancel_call", tool_call_id: id },
+            await policy(),
+          ),
         ),
       );
       for (const [index, cancelResult] of cancelResults.entries()) {
@@ -793,13 +811,20 @@ export async function evaluateHostedToolCalls(
   }>,
   options: Parameters<typeof evaluateToolCalls>[2],
 ): Promise<AppaHostedCallDecision[]> {
-  const decisions = await evaluateToolCalls(session, [...calls], options);
+  const policy = sharedPolicy(session.organization_id);
+  const decisions = await evaluateToolCalls(
+    session,
+    [...calls],
+    options,
+    policy,
+  );
   if (decisions.some((decision) => decision.kind === "deny")) {
     await cancelCalls(
       session,
       calls.flatMap((call, index) =>
         decisions[index].kind === "allow" ? [call.id] : [],
       ),
+      policy,
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
@@ -815,6 +840,7 @@ export async function evaluateHostedToolCalls(
       output: call.output,
       outcome: "success",
       controlToolName: options.control?.name,
+      policy: await policy(),
     });
     verdicts.push(
       approved.outputSource === "tool" && approved.content === call.output
@@ -829,10 +855,15 @@ export async function evaluateHostedToolCalls(
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
+  policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<void> {
   const results = await Promise.allSettled(
-    ids.map((id) =>
-      dispatch(session, { event: "cancel_call", tool_call_id: id }),
+    ids.map(async (id) =>
+      dispatch(
+        session,
+        { event: "cancel_call", tool_call_id: id },
+        await policy(),
+      ),
     ),
   );
   for (const [index, result] of results.entries()) {
@@ -897,13 +928,20 @@ export async function endChild(params: {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
   }
 
-  const decision = await dispatch(params.session, {
-    event: "child_end",
-    operation_id: params.operationId,
-    ...(params.output.length > 0 ? { output: params.output } : {}),
-    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
-    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
-  });
+  const policy = sharedPolicy(params.session.organization_id);
+  const decision = await dispatch(
+    params.session,
+    {
+      event: "child_end",
+      operation_id: params.operationId,
+      ...(params.output.length > 0 ? { output: params.output } : {}),
+      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+      ...(params.childNativeId
+        ? { child_native_id: params.childNativeId }
+        : {}),
+    },
+    await policy(),
+  );
 
   if (decision.decision === "ack") {
     return { decision: "release", crossed: true };
@@ -924,16 +962,22 @@ export async function endChild(params: {
     );
   }
 
-  const echo = await dispatch(params.session, {
-    event: "child_end",
-    operation_id: `${params.operationId}:echo`,
-    // Keep an explicitly empty canonical value distinct from a void first end.
-    output: decision.value,
-    // The echo is the latest retained ChildEnd, so it must carry the same
-    // correlation metadata for the durable lookup to read back.
-    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
-    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
-  });
+  const echo = await dispatch(
+    params.session,
+    {
+      event: "child_end",
+      operation_id: `${params.operationId}:echo`,
+      // Keep an explicitly empty canonical value distinct from a void first end.
+      output: decision.value,
+      // The echo is the latest retained ChildEnd, so it must carry the same
+      // correlation metadata for the durable lookup to read back.
+      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+      ...(params.childNativeId
+        ? { child_native_id: params.childNativeId }
+        : {}),
+    },
+    await policy(),
+  );
   if (echo.decision !== "ack") {
     throw openappaFailure(
       new Error(
@@ -1122,8 +1166,7 @@ export async function loadChildReturns(params: {
 }): Promise<AppaChildReturnRecord[]> {
   try {
     if (!(await isGuardrailsV2Active())) return [];
-    const policy = await guardrailsPolicyService.get(params.organizationId);
-    const module = await binding(policy.content);
+    const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,
       params.parentSessionId,
@@ -1162,8 +1205,7 @@ export async function loadOfferReview(params: {
 } | null> {
   try {
     if (!(await isGuardrailsV2Active())) return null;
-    const policy = await guardrailsPolicyService.get(params.organizationId);
-    const module = await binding(policy.content);
+    const module = await binding();
     const result = await module.loadOfferReview(
       params.organizationId,
       params.sessionId,

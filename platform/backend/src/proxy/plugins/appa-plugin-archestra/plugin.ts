@@ -46,6 +46,7 @@ import {
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
+  sharedPolicy,
 } from "@/openappa/service";
 import {
   parseTrajectoryStamp,
@@ -673,33 +674,39 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
     const rest = calls.filter((call) => !handbackIds.has(call.id));
+    const policy = sharedPolicy(session.organization_id);
     const decisions = rest.length
-      ? await evaluateToolCalls(session, rest, {
-          ...this.resolution(binding),
-          isUserQuestion: (name, namespace) => {
-            const tools = binding.request.tools;
-            if (tools?.platformToolNames?.has(name)) {
-              return namespace === tools.askUser?.namespace;
-            }
-            if (
-              namespace !== undefined &&
-              binding.adapter?.classifyToolName(name, namespace) !== "local"
-            ) {
-              return false;
-            }
-            return isUserQuestionCall(binding, name);
-          },
-          isSpawn: (name, namespace) =>
-            binding.adapter?.isSpawnTool(name, namespace) === true,
-          lineage: binding.child?.lineage,
-          supportsDelegation: binding.adapter !== undefined && !binding.chat,
-          ...(binding.request.tools
-            ? {
-                control: binding.request.tools.control,
-                notice: binding.request.tools.notice,
+      ? await evaluateToolCalls(
+          session,
+          rest,
+          {
+            ...this.resolution(binding),
+            isUserQuestion: (name, namespace) => {
+              const tools = binding.request.tools;
+              if (tools?.platformToolNames?.has(name)) {
+                return namespace === tools.askUser?.namespace;
               }
-            : {}),
-        })
+              if (
+                namespace !== undefined &&
+                binding.adapter?.classifyToolName(name, namespace) !== "local"
+              ) {
+                return false;
+              }
+              return isUserQuestionCall(binding, name);
+            },
+            isSpawn: (name, namespace) =>
+              binding.adapter?.isSpawnTool(name, namespace) === true,
+            lineage: binding.child?.lineage,
+            supportsDelegation: binding.adapter !== undefined && !binding.chat,
+            ...(binding.request.tools
+              ? {
+                  control: binding.request.tools.control,
+                  notice: binding.request.tools.notice,
+                }
+              : {}),
+          },
+          policy,
+        )
       : [];
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
@@ -755,6 +762,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             rest.flatMap((each) =>
               decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
             ),
+            policy,
           );
           throw new ApiError(
             400,
@@ -776,6 +784,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           rest.flatMap((each) =>
             decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
           ),
+          policy,
         );
         const contentMessage = `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`;
         return {

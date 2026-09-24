@@ -1365,7 +1365,11 @@ describe("rendering runtime text for this client", () => {
         decision: "refuse",
         refusal: { blockedToolId: "denied" },
       });
-      expect(cancelCalls).toHaveBeenCalledWith(expect.anything(), ["admitted"]);
+      expect(cancelCalls).toHaveBeenCalledWith(
+        expect.anything(),
+        ["admitted"],
+        expect.any(Function),
+      );
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();

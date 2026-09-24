@@ -9,7 +9,7 @@
     "build": "napi build --release --platform",
     "build:dev": "napi build --profile release-fast --platform",
     "type-check": "cargo check -p openappa_rs",
-    "test": "node --test smoke.test.cjs policy.test.cjs",
+    "test": "node --test smoke.test.cjs policy.test.cjs tenants.test.cjs",
     "check:ci": "pnpm build && pnpm smoke:load",
     "check:musl": "pnpm build && pnpm smoke:load",
     "smoke:load": "node load.test.cjs",

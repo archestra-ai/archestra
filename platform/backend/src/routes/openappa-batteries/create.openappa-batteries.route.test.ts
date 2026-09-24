@@ -15,7 +15,8 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import ToolModel from "@/models/tool";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { bundledEntry, helperUrlBase } from "@/openappa/declarations";
+import { bundledEntry, openappaDeclarations } from "@/openappa/declarations";
+import { openappaFailure } from "@/openappa/failure";
 import {
   deleteRuntimeCredentialConnection,
   deleteRuntimeCredentialDefinition,
@@ -109,6 +110,17 @@ describe("guardrails batteries", () => {
         (battery: { entry: string }) => battery.entry !== SHIPPED_ENTRY,
       ),
     };
+  };
+
+  /** The credential values a dispatch in this organization carries now. */
+  const dispatchCredentials = async () => {
+    const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return (
+      await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: effective?.content ?? "",
+      })
+    ).credentials;
   };
 
   /** The derived rows a recompose left, in the order the model returns them. */
@@ -1091,10 +1103,12 @@ describe("guardrails batteries", () => {
       status: "unrouted",
       servers: [],
     });
-    // Its helper is composed all the same, served under the one row.
+    // Its profile is composed all the same, and a dispatch carries the bound key.
     const unrouted = await OpenAppaEffectivePolicyModel.find(organizationId);
     expect(unrouted?.lastError).toBeNull();
-    expect(unrouted?.content).toContain(helperUrlBase(row.id));
+    expect(await dispatchCredentials()).toEqual({
+      APPA_PROVIDER_JEV_API_KEY: "jev_test",
+    });
 
     const latest = await guardrailsPolicyService.get(organizationId);
     await guardrailsPolicyService.update({
@@ -1109,7 +1123,6 @@ describe("guardrails batteries", () => {
     await openappaBatteriesService.recompile(organizationId);
     const active = await OpenAppaEffectivePolicyModel.find(organizationId);
     expect(active?.lastError).toBeNull();
-    expect(active?.content).toContain(helperUrlBase(row.id));
     expect(await installRows()).toEqual([
       expect.objectContaining({
         id: row.id,
@@ -1230,11 +1243,12 @@ describe("guardrails batteries", () => {
       (install) => install.batteryName === "jev",
     );
     if (!jevRow) throw new Error("jev derived no row");
-    // The helper is bound though it has no credential: it answers nothing,
-    // which refuses the calls routed to it rather than the whole policy.
+    // The profile composes though it has no credential: a dispatch carries no
+    // key, so jev answers nothing, which refuses the calls routed to it rather
+    // than the whole policy.
     const composed = await OpenAppaEffectivePolicyModel.find(organizationId);
     expect(composed?.lastError).toBeNull();
-    expect(composed?.content).toContain(helperUrlBase(jevRow.id));
+    expect(await dispatchCredentials()).toEqual({});
     expect(await declarations()).toMatchObject({
       lastError: null,
       batteries: expect.arrayContaining([
@@ -1277,6 +1291,45 @@ describe("guardrails batteries", () => {
     expect(
       (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
     ).toBeNull();
+    expect(await dispatchCredentials()).toEqual({
+      APPA_PROVIDER_JEV_API_KEY: "jev_test",
+    });
+
+    // Every dispatch reads the value anew: a rotation reaches the next one, and
+    // a removed value leaves the key out.
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+      value: "jev_rotated",
+    });
+    expect(await dispatchCredentials()).toEqual({
+      APPA_PROVIDER_JEV_API_KEY: "jev_rotated",
+    });
+    await RuntimeCredentialConnectionModel.delete({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+    });
+    expect(await dispatchCredentials()).toEqual({});
+
+    // A binding whose credential can no longer be read for the organization
+    // fails the dispatch instead of leaving the key to the backend environment.
+    await RuntimeCredentialDefinitionModel.delete({
+      organizationId,
+      key: "jev-key",
+    });
+    const failure = openappaFailure(
+      await dispatchCredentials().then(
+        () => expect.unreachable("the dispatch policy resolved"),
+        (error: unknown) => error,
+      ),
+    );
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
   });
 
   test("a member without organization management cannot install", async ({

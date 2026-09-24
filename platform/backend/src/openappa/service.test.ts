@@ -50,6 +50,7 @@ const native = vi.hoisted(() => ({
     serverAliases: [],
     credentials: [],
     routedAnnotators: [],
+    runtimeCredentials: [],
     errors: [],
   })),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
@@ -1710,10 +1711,10 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
     content,
-  );
+    credentials: {},
+  });
   const updated = `${content}# updated`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
@@ -1727,10 +1728,10 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
-    updated,
-  );
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
+    content: updated,
+    credentials: {},
+  });
 });
 
 describe("remedy by offer", () => {

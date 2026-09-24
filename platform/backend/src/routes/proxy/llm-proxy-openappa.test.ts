@@ -2394,6 +2394,279 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.body).not.toContain("get_remedy_plans");
   });
 
+  test.each([
+    true,
+    false,
+  ])("answers every call of an all-denied batch with its own notice (stream=%s)", async (stream) => {
+    block = true;
+    // A second denied call ahead of the stub's own: both must be ruled on,
+    // and each ruling must reach the client under the call's own id.
+    const extra = {
+      type: "tool_use" as const,
+      id: "toolu_test_time",
+      caller: { type: "direct" as const },
+      name: "get_time",
+      input: { timezone: "UTC" },
+    };
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient(options);
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        const response = await create(params);
+        providerResponses.push(response);
+        if (!(Symbol.asyncIterator in response))
+          return { ...response, content: [extra, ...response.content] };
+        const prefixed = (async function* () {
+          for await (const event of response) {
+            if (!event) continue;
+            if (event.type === "message_start") {
+              yield event;
+              yield {
+                type: "content_block_start" as const,
+                index: 0,
+                content_block: { ...extra, input: {} },
+              };
+              yield {
+                type: "content_block_delta" as const,
+                index: 0,
+                delta: {
+                  type: "input_json_delta" as const,
+                  partial_json: JSON.stringify(extra.input),
+                },
+              };
+              yield { type: "content_block_stop" as const, index: 0 };
+            } else {
+              yield "index" in event
+                ? { ...event, index: event.index + 1 }
+                : event;
+            }
+          }
+          return undefined;
+        })();
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              async next() {
+                const next = await prefixed.next();
+                return next.done
+                  ? { done: true, value: undefined }
+                  : { done: false, value: next.value };
+              },
+            };
+          },
+        };
+      };
+      return client as never;
+    });
+    const body = payload(stream);
+    body.tools.push({ ...body.tools[0], name: "get_time" });
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Two denials still cost exactly one provider call.
+    expect(providerRequests).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["get_time", "get_weather"]);
+    // Nothing was admitted, so nothing is cancelled.
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expect(response.body).not.toContain('"name":"get_weather"');
+    expect(response.body).not.toContain('"name":"get_time"');
+    const frames = stream
+      ? response.body
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => JSON.parse(line.slice("data: ".length)))
+      : [];
+    const notices = stream
+      ? frames
+          .filter(
+            (event) =>
+              event.type === "content_block_start" &&
+              event.content_block?.type === "tool_use",
+          )
+          .map((event) => {
+            const partial = frames
+              .filter(
+                (delta) =>
+                  delta.delta?.type === "input_json_delta" &&
+                  delta.index === event.index,
+              )
+              .map((delta) => delta.delta.partial_json)
+              .join("");
+            return {
+              id: event.content_block.id as string,
+              name: event.content_block.name as string,
+              input: (partial.length > 0
+                ? JSON.parse(partial)
+                : event.content_block.input) as Record<string, unknown>,
+            };
+          })
+      : ((JSON.parse(response.body).content ?? []) as Record<string, unknown>[])
+          .filter((block) => block.type === "tool_use")
+          .map((block) => ({
+            id: block.id as string,
+            name: block.name as string,
+            input: block.input as Record<string, unknown>,
+          }));
+    // Same positions, same provider call ids; only the projection changed.
+    expect(notices.map((notice) => notice.id)).toEqual([
+      "toolu_test_time",
+      "toolu_test_weather",
+    ]);
+    for (const [index, notice] of notices.entries()) {
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+      expect(notice.input.tool).toBe(index === 0 ? "get_time" : "get_weather");
+      expect(notice.input.ruling).toBe(
+        "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+      );
+      expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    }
+    // The denied arguments travel inside the notice, verbatim per call.
+    expect(notices[0].input.arguments).toBe(JSON.stringify(extra.input));
+    expect(notices[1].input.arguments).toBe(
+      stream
+        ? JSON.stringify({ location: "San Francisco", unit: "fahrenheit" })
+        : JSON.stringify({ location: "SF" }),
+    );
+  });
+
+  test("conveys an unanswered notice's ruling on the next turn, inventing no result for the admitted sibling", async () => {
+    // The interrupted-batch sequence: the model's batch was [admitted A,
+    // denied B]; the client ran A, never answered B's notice, and opened a
+    // new user turn. The provider must still see B's ruling as B's result —
+    // Anthropic refuses a tool_use with no result — and exactly one result
+    // for A: the client's own, approved.
+    block = true;
+    const admitted = {
+      type: "tool_use" as const,
+      id: "allowed-first",
+      caller: { type: "direct" as const },
+      name: "allowed_first",
+      input: { timezone: "UTC" },
+    };
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient(options);
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        const response = await create(params);
+        providerResponses.push(response);
+        if (!(Symbol.asyncIterator in response))
+          return { ...response, content: [admitted, ...response.content] };
+        return response;
+      };
+      return client as never;
+    });
+    const body = payload(false);
+    body.tools.push({ ...body.tools[0], name: "allowed_first" });
+    const first = await post(body);
+    expect(first.statusCode, first.body).toBe(200);
+    const received = (
+      (JSON.parse(first.body).content ?? []) as Record<string, unknown>[]
+    ).filter((block) => block.type === "tool_use");
+    const releasedA = received.find((block) => block.name === "allowed_first");
+    const notice = noticeFrom(first.body, false);
+    expect(releasedA).toBeDefined();
+    expect(notice.name).toBe("archestra__get_remedy_plans");
+
+    // The follow-up turn answers only the admitted call.
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient({
+        includeToolUse: false,
+        streamStopReason: "end_turn",
+      });
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+    providerRequests.length = 0;
+    const second = await post(
+      payload(false, [
+        { role: "user", content: "Check the weather and the time" },
+        {
+          role: "assistant",
+          content: [
+            releasedA,
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "allowed-first",
+              content: "RAW TIME OUTPUT",
+            },
+            { type: "text", text: "Never mind the weather." },
+          ],
+        },
+      ]),
+    );
+
+    expect(second.statusCode, second.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+      tools: { name: string }[];
+    };
+    // History shows the calls the model made: A as admitted, B restored to
+    // its own name and arguments — never the proxy's notice envelope.
+    expect(sent.messages[1].content).toContainEqual({
+      type: "tool_use",
+      id: "allowed-first",
+      name: "allowed_first",
+      input: { timezone: "UTC" },
+    });
+    expect(sent.messages[1].content).toContainEqual({
+      type: "tool_use",
+      id: notice.id,
+      name: "get_weather",
+      input: { location: "SF" },
+    });
+    expect(JSON.stringify(sent.messages[1])).not.toContain(
+      "archestra__get_remedy_plans",
+    );
+    const results = sent.messages[2].content.filter(
+      (block) => block.type === "tool_result",
+    );
+    // B's ruling is conveyed exactly once, as B's own error result.
+    expect(results.filter((block) => block.tool_use_id === notice.id)).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: notice.id,
+        content:
+          "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+        is_error: true,
+      },
+    ]);
+    // A is answered exactly once, by the client's own result as approved —
+    // no second A result is invented to fill the interrupted turn.
+    expect(
+      results.filter((block) => block.tool_use_id === "allowed-first"),
+    ).toHaveLength(1);
+    expect(
+      results.find((block) => block.tool_use_id === "allowed-first")?.content,
+    ).toBe("APPROVED REPLACEMENT");
+    expect(JSON.stringify(sent.messages[2])).not.toContain("RAW TIME OUTPUT");
+    expect(sent.tools.map((declared) => declared.name)).not.toContain(
+      "archestra__get_remedy_plans",
+    );
+  });
+
   for (const stream of [true, false]) {
     test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
       makeTool,
@@ -4460,6 +4733,180 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
     });
 
+    test.each([
+      true,
+      false,
+    ])("an unmarkable nested spawn interrupts the whole batch and cancels its admitted siblings (stream=%s)", async (stream) => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
+      const spawn = {
+        description: "Investigate",
+        prompt: spawnPrompt,
+        subagent_type: "general-purpose",
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: { name: "Agent", input: spawn },
+        streamingToolUse: { name: "Agent", input: spawn },
+      };
+      const send = (agentId: string | undefined, messages: unknown[]) => {
+        const body = payload(stream, messages);
+        body.tools.push(
+          {
+            name: "Agent",
+            description: "Launch a subagent",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "get_time",
+            description: "Current time",
+            input_schema: { type: "object", properties: {} },
+          },
+        );
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": session,
+            ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
+          },
+          payload: body,
+        });
+      };
+
+      // The root turn mints the marker the child session binds with.
+      const root = await send(undefined, [
+        { role: "user", content: "Fix the build" },
+      ]);
+      expect(root.statusCode, root.body).toBe(200);
+      const marked = noticeFrom(root.body, stream);
+
+      // The child's batch: an ordinary allowed call beside a spawn whose blank
+      // prompt cannot carry a marker. The runtime admitted both; the wire
+      // batch as a whole cannot run, so the admitted sibling is cancelled.
+      const sibling = {
+        type: "tool_use" as const,
+        id: "toolu_test_time",
+        caller: { type: "direct" as const },
+        name: "get_time",
+        input: { timezone: "UTC" },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { ...spawn, prompt: "  \n" },
+        },
+        streamingToolUse: {
+          name: "Agent",
+          input: { ...spawn, prompt: "  \n" },
+        },
+      };
+      vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+        const client = createAnthropicTestClient(options);
+        const create = client.messages.create;
+        client.messages.create = async (params) => {
+          providerRequests.push(structuredClone(params));
+          const response = await create(params);
+          providerResponses.push(response);
+          if (!(Symbol.asyncIterator in response))
+            return { ...response, content: [sibling, ...response.content] };
+          const prefixed = (async function* () {
+            for await (const event of response) {
+              if (!event) continue;
+              if (event.type === "message_start") {
+                yield event;
+                yield {
+                  type: "content_block_start" as const,
+                  index: 0,
+                  content_block: { ...sibling, input: {} },
+                };
+                yield {
+                  type: "content_block_delta" as const,
+                  index: 0,
+                  delta: {
+                    type: "input_json_delta" as const,
+                    partial_json: JSON.stringify(sibling.input),
+                  },
+                };
+                yield { type: "content_block_stop" as const, index: 0 };
+              } else {
+                yield "index" in event
+                  ? { ...event, index: event.index + 1 }
+                  : event;
+              }
+            }
+            return undefined;
+          })();
+          return {
+            [Symbol.asyncIterator]() {
+              return {
+                async next() {
+                  const next = await prefixed.next();
+                  return next.done
+                    ? { done: true, value: undefined }
+                    : { done: false, value: next.value };
+                },
+              };
+            },
+          };
+        };
+        return client as never;
+      });
+      events.length = 0;
+      providerRequests.length = 0;
+
+      const nested = await send("a1", [
+        { role: "user", content: String(marked.input.prompt) },
+      ]);
+
+      if (stream) {
+        // The response stream has already opened when the batch is
+        // interrupted, so the refusal arrives as an in-band error event —
+        // before any tool_use block, and with no native diagnostics.
+        expect(nested.statusCode, nested.body).toBe(200);
+        expect(nested.body).not.toContain('"type":"tool_use"');
+        const errorFrame = nested.body
+          .split("\n")
+          .find(
+            (line) =>
+              line.startsWith("data: ") && line.includes('"type":"error"'),
+          );
+        expect(errorFrame).toBeDefined();
+        expect(errorFrame).toContain(
+          "cannot safely start a nested child because its delegation marker could not be attached",
+        );
+      } else {
+        expect(nested.statusCode, nested.body).toBe(400);
+        expect(nested.body).toContain(
+          "cannot safely start a nested child because its delegation marker could not be attached",
+        );
+      }
+      // Both calls were evaluated before the batch was interrupted...
+      expect(
+        events
+          .filter((event) => event.event === "tool_call")
+          .map((event) => event.tool),
+      ).toEqual(["get_time", "Agent"]);
+      // ...and both admitted calls are cancelled with the runtime: nothing
+      // from this evaluated batch may run.
+      expect(
+        events
+          .filter((event) => event.event === "cancel_call")
+          .map((event) => event.tool_call_id)
+          .sort(),
+      ).toEqual(["toolu_test_time", "toolu_test_weather"]);
+      // The refusal happens on the way back: the provider answered once, and
+      // the client receives neither call.
+      expect(providerRequests).toHaveLength(1);
+      expect(nested.body).not.toContain('"name":"get_time"');
+    });
+
     test("preserves a streaming child refusal after the start proof is in history", async () => {
       config.openappa.offerSigningSecret = "stream-refusal-proof-test";
       const unregisterRefusalPolicy = registerLlmProxyPlugin({
@@ -5935,6 +6382,513 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       session_id: `user:${userId}|${OPENCODE_SESSION}:${OPENCODE_FORK_SESSION}`,
       parent_id: `user:${userId}|${OPENCODE_SESSION}`,
     });
+  });
+});
+
+/**
+ * Parallel-call rulings on the OpenAI wire families: a batch's calls are
+ * evaluated one by one, and each ruling reaches the client under the call's
+ * own id — allowed calls untouched, denied calls as notices.
+ */
+describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
+  const CHAT_SESSION = "ses_01J8ZQ3V0R1Y8M0P4K0W3M7P9B";
+  const RESPONSES_SESSION = "d12f967d-6fe1-4f92-a62f-0f6a2092fd2e";
+  const RESPONSES_THREAD = "01a0859b-3029-78f3-a730-0edef60872cc";
+
+  let app: FastifyInstance;
+  let agent: Agent;
+  let userId: string;
+  let events: Array<Record<string, unknown>>;
+  let providerBodies: unknown[];
+  let denyTools: Set<string>;
+  let unregisterAppaPlugin: () => void;
+
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+    config.llmProxy.plugins = parseLlmProxyPlugins(
+      undefined,
+      config.openappa.enabled,
+    );
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+      "postgresql://test:test@localhost/test?schema=public",
+    );
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) =>
+      reply.status(error instanceof ApiError ? error.statusCode : 500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type:
+            error instanceof ApiError
+              ? error.type
+              : "api_internal_server_error",
+        },
+      }),
+    );
+    await app.register(openAiProxyRoutes);
+    agent = await makeAgent({ name: "Native proxy batch matrix" });
+    userId = (await makeUser()).id;
+    await makeMember(userId, agent.organizationId);
+    events = [];
+    providerBodies = [];
+    denyTools = new Set();
+    native.initializeOpenappa.mockResolvedValue(undefined);
+    // Mirrors the real binding: the runtime answers each call's evaluation
+    // with that call's own ruling.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "session_start") {
+        const runtimeSessionId = String(event.session_id);
+        await db
+          .insert(database.schema.openappaSessionsTable)
+          .values({
+            actor: openappaActor(runtimeSessionId),
+            root: openappaActor(runtimeSessionId),
+            organizationId: String(event.organization_id),
+            callerId:
+              typeof event.caller_id === "string" ? event.caller_id : null,
+            sessionId: runtimeSessionId,
+            forkedFrom:
+              typeof event.fork_of === "string" ? event.fork_of : null,
+            startDecision: { decision: "ack" },
+          })
+          .onConflictDoNothing();
+      }
+      if (event.event === "tool_call")
+        return JSON.stringify(
+          denyTools.has(String(event.tool))
+            ? {
+                decision: "deny_call",
+                feedback: `[appa] NATIVE REFUSAL of ${String(event.tool)}`,
+              }
+            : { decision: "allow_call" },
+        );
+      if (event.event === "tool_result")
+        return JSON.stringify({
+          decision: "replace_output",
+          approved_output: "APPROVED REPLACEMENT",
+          output_source: "tool",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => chatBatchClient() as never,
+    );
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () => responsesBatchClient() as never,
+    );
+    for (const modelId of ["gpt-4.1", "gpt-5.5"]) {
+      await ModelModel.upsert({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    }
+  });
+
+  afterEach(async () => {
+    unregisterAppaPlugin();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    await app.close();
+  });
+
+  /** The batch every provider turn answers with: one reader, one deleter. */
+  const batchCalls = [
+    { id: "call_read", name: "read_file", arguments: '{"path":"a.txt"}' },
+    { id: "call_delete", name: "delete_file", arguments: '{"path":"b.txt"}' },
+  ];
+
+  const chatBatchClient = () => ({
+    chat: {
+      completions: {
+        create: async (params: { stream?: boolean }) => {
+          providerBodies.push(structuredClone(params));
+          if (!params.stream)
+            return {
+              id: "chatcmpl_batch",
+              object: "chat.completion",
+              created: 1,
+              model: "gpt-4.1",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    refusal: null,
+                    tool_calls: batchCalls.map((call) => ({
+                      id: call.id,
+                      type: "function",
+                      function: {
+                        name: call.name,
+                        arguments: call.arguments,
+                      },
+                    })),
+                  },
+                  finish_reason: "tool_calls",
+                  logprobs: null,
+                },
+              ],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+              },
+            };
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const [index, call] of batchCalls.entries()) {
+                yield {
+                  id: "chatcmpl_batch",
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: "gpt-4.1",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        ...(index === 0 ? { role: "assistant" } : {}),
+                        tool_calls: [
+                          {
+                            index,
+                            id: call.id,
+                            type: "function",
+                            function: { name: call.name, arguments: "" },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                yield {
+                  id: "chatcmpl_batch",
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: "gpt-4.1",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          { index, function: { arguments: call.arguments } },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+              }
+              yield {
+                id: "chatcmpl_batch",
+                object: "chat.completion.chunk",
+                created: 1,
+                model: "gpt-4.1",
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+                usage: {
+                  prompt_tokens: 10,
+                  completion_tokens: 5,
+                  total_tokens: 15,
+                },
+              };
+            },
+          };
+        },
+      },
+    },
+  });
+
+  const responsesBatchClient = () => ({
+    responses: {
+      create: async (params: { stream?: boolean }) => {
+        providerBodies.push(structuredClone(params));
+        const completed = {
+          id: "resp_batch",
+          object: "response",
+          created_at: 1,
+          status: "completed",
+          model: "gpt-5.5",
+          output: batchCalls.map((call) => ({
+            type: "function_call",
+            id: `fc_${call.id}`,
+            call_id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+            status: "completed",
+          })),
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        };
+        if (!params.stream) return completed;
+        return {
+          async *[Symbol.asyncIterator]() {
+            for (const [index, call] of batchCalls.entries()) {
+              const item = {
+                type: "function_call",
+                id: `fc_${call.id}`,
+                call_id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+                status: "completed",
+              };
+              yield {
+                type: "response.output_item.added",
+                output_index: index,
+                sequence_number: index * 3 + 1,
+                item: { ...item, arguments: "", status: "in_progress" },
+              };
+              yield {
+                type: "response.function_call_arguments.delta",
+                item_id: item.id,
+                output_index: index,
+                sequence_number: index * 3 + 2,
+                delta: call.arguments,
+              };
+              yield {
+                type: "response.output_item.done",
+                output_index: index,
+                sequence_number: index * 3 + 3,
+                item,
+              };
+            }
+            yield {
+              type: "response.completed",
+              sequence_number: batchCalls.length * 3 + 1,
+              response: completed,
+            };
+          },
+        };
+      },
+    },
+  });
+
+  const appaPair = () =>
+    ["archestra__execute_remedy_plan", "archestra__get_remedy_plans"].map(
+      (name) => ({
+        type: "function",
+        function: { name, parameters: { type: "object", properties: {} } },
+      }),
+    );
+
+  const chatPayload = (stream: boolean) => ({
+    model: "gpt-4.1",
+    stream,
+    messages: [{ role: "user", content: "Read a.txt, then delete b.txt" }],
+    tools: [
+      ...batchCalls.map((call) => ({
+        type: "function",
+        function: {
+          name: call.name,
+          parameters: { type: "object", properties: {} },
+        },
+      })),
+      ...appaPair(),
+    ],
+  });
+
+  const chatHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "opencode/1.18.29",
+    "x-session-id": CHAT_SESSION,
+  });
+
+  const responsesPayload = (stream: boolean) => ({
+    model: "gpt-5.5",
+    stream,
+    input: [{ role: "user", content: "Read a.txt, then delete b.txt" }],
+    client_metadata: {
+      session_id: RESPONSES_SESSION,
+      thread_id: RESPONSES_THREAD,
+    },
+    tools: [
+      ...batchCalls.map((call) => ({
+        type: "function",
+        name: call.name,
+        parameters: { type: "object", properties: {} },
+      })),
+      ...appaPair().map((tool) => ({ type: "function", ...tool.function })),
+    ],
+  });
+
+  const responsesHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
+    originator: "codex_cli_rs",
+  });
+
+  /** The calls the client received, in wire order: id, name, raw arguments. */
+  const chatCallsFrom = (body: string, stream: boolean) => {
+    if (!stream)
+      return (
+        (JSON.parse(body).choices[0].message.tool_calls ?? []) as {
+          id: string;
+          function: { name: string; arguments: string };
+        }[]
+      ).map((call) => ({
+        id: call.id,
+        name: call.function.name,
+        arguments: call.function.arguments,
+      }));
+    const frames = body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)));
+    const byIndex = new Map<
+      number,
+      { id: string; name: string; arguments: string }
+    >();
+    for (const frame of frames)
+      for (const call of frame.choices?.[0]?.delta?.tool_calls ?? []) {
+        const entry = byIndex.get(call.index) ?? {
+          id: "",
+          name: "",
+          arguments: "",
+        };
+        if (call.id) entry.id = call.id;
+        if (call.function?.name) entry.name = call.function.name;
+        entry.arguments += call.function?.arguments ?? "";
+        byIndex.set(call.index, entry);
+      }
+    return [...byIndex.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, entry]) => entry);
+  };
+
+  const responsesCallsFrom = (body: string, stream: boolean) => {
+    const output = (
+      stream
+        ? body
+            .split("\n")
+            .filter(
+              (line) => line.startsWith("data: ") && line !== "data: [DONE]",
+            )
+            .map((line) => JSON.parse(line.slice("data: ".length)))
+            .findLast((event) => event.type === "response.completed").response
+            .output
+        : JSON.parse(body).output
+    ) as Record<string, unknown>[];
+    return output
+      .filter((item) => item.type === "function_call")
+      .map((item) => ({
+        id: item.call_id as string,
+        name: item.name as string,
+        arguments: item.arguments as string,
+      }));
+  };
+
+  type MatrixMode = "all-allow" | "mixed" | "multi-deny";
+  const deniedIn = (mode: MatrixMode) =>
+    mode === "all-allow"
+      ? []
+      : mode === "mixed"
+        ? ["delete_file"]
+        : ["read_file", "delete_file"];
+
+  /** What the client must hold after a batch ruled on under `mode`. */
+  const expectMatrix = (
+    calls: { id: string; name: string; arguments: string }[],
+    mode: MatrixMode,
+  ) => {
+    expect(calls).toHaveLength(2);
+    for (const [index, expected] of batchCalls.entries()) {
+      const received = calls[index];
+      // The call keeps its own id, whatever the ruling.
+      expect(received.id).toBe(expected.id);
+      if (deniedIn(mode).includes(expected.name)) {
+        // A denied call is projected through the notice tool, ruling and
+        // original arguments in the clear.
+        expect(received.name).toBe("archestra__get_remedy_plans");
+        const notice = JSON.parse(received.arguments) as Record<
+          string,
+          unknown
+        >;
+        expect(notice.tool).toBe(expected.name);
+        expect(notice.ruling).toBe(`[appa] NATIVE REFUSAL of ${expected.name}`);
+        expect(notice.arguments).toBe(expected.arguments);
+        expect(notice.notice).toEqual({ v: 1, call_id: expected.id });
+      } else {
+        // An admitted call reaches the client untouched, arguments and all.
+        expect(received.name).toBe(expected.name);
+        expect(received.arguments).toBe(expected.arguments);
+      }
+    }
+  };
+
+  test.each([
+    { stream: true, mode: "all-allow" },
+    { stream: false, mode: "all-allow" },
+    { stream: true, mode: "mixed" },
+    { stream: false, mode: "mixed" },
+    { stream: true, mode: "multi-deny" },
+    { stream: false, mode: "multi-deny" },
+  ] as const)("answers a Chat Completions batch call by call (stream=$stream, mode=$mode)", async ({
+    stream,
+    mode,
+  }) => {
+    denyTools = new Set(deniedIn(mode));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: chatHeaders(),
+      payload: chatPayload(stream) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // However the batch is ruled on, it costs one provider call.
+    expect(providerBodies).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["read_file", "delete_file"]);
+    // Nothing admitted is withdrawn: the runtime sees no cancellation.
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expectMatrix(chatCallsFrom(response.body, stream), mode);
+  });
+
+  test.each([
+    { stream: true, mode: "all-allow" },
+    { stream: false, mode: "all-allow" },
+    { stream: true, mode: "mixed" },
+    { stream: false, mode: "mixed" },
+    { stream: true, mode: "multi-deny" },
+    { stream: false, mode: "multi-deny" },
+  ] as const)("answers a Responses batch call by call (stream=$stream, mode=$mode)", async ({
+    stream,
+    mode,
+  }) => {
+    denyTools = new Set(deniedIn(mode));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: responsesHeaders(),
+      payload: responsesPayload(stream) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerBodies).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["read_file", "delete_file"]);
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expectMatrix(responsesCallsFrom(response.body, stream), mode);
   });
 });
 

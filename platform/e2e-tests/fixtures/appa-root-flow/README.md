@@ -75,6 +75,7 @@ scenario files the policy names by absolute path:
 | Path | Purpose |
 | --- | --- |
 | `$APPA_LAB_HOME/lab/secret.txt` | S1/S2 — holds a `LAB-SECRET-…` marker the `redactor` sanitizer rewrites |
+| `$APPA_LAB_HOME/lab/secret-other.txt` | S6 — a second, independently gated read for two denials in one response |
 | `$APPA_LAB_HOME/lab/report.txt` | S3 — prose long enough that the `summarize` sanitizer's replacement is visible |
 | `$APPA_LAB_HOME/{claude,codex,opencode}/` | per-client config and state |
 | `$APPA_LAB_HOME/transcripts/<client>/` | transcripts and stderr, one pair per session id |
@@ -240,7 +241,7 @@ Logs** (`http://localhost:3000/mcp/logs`).
 
 ---
 
-## The five scenarios
+## Root-flow scenarios
 
 Substitute your lab path for `<LAB>` (`$APPA_LAB_HOME/lab`).
 
@@ -352,6 +353,56 @@ If instead the call simply succeeds, the tool you picked *is* named in the
 policy (or canonicalizes onto one that is); pick another and re-run with a fresh
 session id.
 
+### S6 — parallel tool calls
+
+Use a fresh session id for **every row and client**. Ask for the two independent
+calls in the model's **first assistant turn**. A final answer that happens to
+mention both tools does not prove parallel admission: inspect the client
+transcript (OpenCode: `opencode export <session-id>`) and confirm the first
+assistant message contains two tool parts. Codex emits two `command_execution`
+items without another model message between them; Claude Code emits two
+`tool_use` blocks in one assistant message.
+
+| Case | Claude Code prompt (use `Read`/`Glob`) | Codex prompt (use `exec_command`) | OpenCode prompt (use `read`/`glob`) | Expected first response |
+| --- | --- | --- | --- | --- |
+| Both allowed | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `ls <LAB>` as two separate calls together. | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Two unchanged calls, two ordinary results; no notice. |
+| Mixed | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `wc -c <LAB>/secret.txt` together. | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | One unchanged call and one `get_remedy_plans` notice with the denied call's own id. Accept the offer, then retry the blocked call. |
+| Both denied | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Run separate `wc -c` commands for `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Two distinct notices under the two original call ids, with distinct offer ids. Accept both offers and retry both reads. |
+
+For each row, check the first model turn, the tool results, and the next
+provider request. The admitted sibling must not wait for a remedy; the denied
+sibling must not execute before its remedy. The provider sees the original calls
+and one result per call after notice restoration. A model that issues the two
+calls in separate turns did not qualify that row: retry with a fresh session id.
+
+The policy covers both restricted files under `host/claude-code/*`,
+`host/archestra/*`, and the `builtin:*` forms. When adding a new file or client
+spelling, update all relevant forms. A missing host rule makes the call appear
+allowed and invalidates the two-denial case.
+
+### S7 — interrupt a parallel batch
+
+Start the mixed case, but leave the notice unanswered and send a new user
+instruction before the next provider request. The allowed sibling may finish;
+the denied sibling must never execute. Verify that restoration gives the model
+the recorded ruling even though the client did not call `get_remedy_plans`, and
+that a later retry must still pass OpenAPPA. The one-shot runners normally
+execute notices automatically, so interruption requires an interactive client
+session or a scripted provider/client turn. The route-level tests pin the
+deterministic partial-batch failure path.
+
+### S8 — repeat a remedy attempt
+
+After the mixed case yields an acceptance offer, ask the client to submit the
+same `execute_remedy_plan` call twice, using the same offer id and input.
+With distinct client call ids, one attempt succeeds and the other gets a
+terminal no-live-offer response; the effect must happen only once. A transport
+retry of the *same* stamped call replays its recorded result, while a repeat
+with changed input is rejected. Inspect the MCP gateway results rather than
+trusting the final answer; if the chosen plan calls the authority, also check
+the fixture's `/calls` count. The runtime smoke test pins concurrent duplicate
+attempts; model cooperation is required for a live CLI run.
+
 ---
 
 ## Archestra Chat
@@ -432,7 +483,7 @@ qualification in the way noted.
 | Codex | `[features] code_mode_host = false` | Codex's code mode, on by default in recent builds, wraps every call in an `exec` program: the wire declares only `exec` and `wait`, so nothing can be gated and no notice tool exists. With it off, a model whose catalog entry allows direct tools declares them and the notice loop works. A model whose entry is `code_mode_only` (`gpt-5.6-luna`, for one) does not: Codex reports `Code Mode is unavailable because code-mode host is disabled`, still declares only `exec`, and the proxy refuses the session with `direct tool mode only`. Give such a model a catalog override, next row. |
 | Codex | `tools.apply_patch_tool_type = "function"` (and `features.apply_patch_freeform=false`) | Codex's default free-form custom `apply_patch` carries one text argument. The proxy governs custom tools, but the function form keeps this qualification on the JSON path the other clients use. Flip this only when you are deliberately testing the free-form custom tool path. |
 | Codex | a model Codex has a **catalog entry** for (`gpt-5.1-codex`; override with `ARCHESTRA_CODEX_MODEL`) | Two separate failures hide here. A model whose entry has `supports_search_tool = true` (`gpt-5.5`) defers its MCP tools to a provider-side tool search: the wire declares a `tool_search` tool and none of the APPA tools, and the proxy refuses the session with `defers its tools to a tool search`. A model Codex has no catalog entry for is worse, because it fails quietly: Codex logs `Model metadata for <model> not found. Defaulting to fallback metadata`, the session opens normally because the declaration does reach the proxy, and then Codex's own router rejects the notice call with `ERROR codex_core::tools::router: error=unsupported call: archestra__get_remedy_plans`. The run still reaches an answer — restoration supplies the ruling on the next request, which is the interrupted-notice path — so it looks like a pass unless you read the stderr. Confirm the gateway is advertising both tools (`tools/list` on `/v1/mcp/<gateway>` returns `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`) before blaming the proxy. |
-| Codex | `ARCHESTRA_CODEX_MODEL_CATALOG=<file>` for a `code_mode_only` or tool-search model | The runner writes the file's path to `model_catalog_json`, and Codex reads the model metadata from it instead of from its fetched catalog. Copy `~/.codex/models_cache.json`, and in the entry of the model you run set `tool_mode` to `"direct"` and `supports_search_tool` to `false`. The model then declares every tool inline, the APPA pair included, and the five scenarios run as on the other clients. Both `gpt-5.6-luna` and `gpt-5.5` were qualified this way. Codex drives some of these models over the lite Responses wire, which declares the tools as an `additional_tools` **input item** rather than a top-level `tools` list; the proxy reads that container too. |
+| Codex | `ARCHESTRA_CODEX_MODEL_CATALOG=<file>` for a `code_mode_only` or tool-search model | The runner writes the file's path to `model_catalog_json`, and Codex reads the model metadata from it instead of from its fetched catalog. Copy `~/.codex/models_cache.json`, and in the entry of the model you run set `tool_mode` to `"direct"` and `supports_search_tool` to `false`. The model then declares every tool inline, the APPA pair included, and the scenarios run as on the other clients. Both `gpt-5.6-luna` and `gpt-5.5` were qualified this way. Codex drives some of these models over the lite Responses wire, which declares the tools as an `additional_tools` **input item** rather than a top-level `tools` list; the proxy reads that container too. |
 | Codex | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"`, `--dangerously-bypass-approvals-and-sandbox` | Headless: nothing is there to answer an approval prompt, and the sandbox would block the lab paths. |
 | OpenCode | `"external_directory": "allow"` | The prompts name the scenario files by absolute path and the lab is not a project root, so OpenCode treats them as external and refuses to touch them — the call then never reaches the proxy to be gated. The runners `cd` into the lab first, but the live runs still needed this, so it stays. |
 | OpenCode | `<label>_archestra__get_remedy_plans` / `…__execute_remedy_plan` set to `"allow"` | Headless mode cannot answer a permission prompt, so the notice and the remedy would stall. |
@@ -466,9 +517,9 @@ Requests to `/anthropic/v1/messages` without the `/v1` prefix return `401 Unauth
 
 ## What this does not cover
 
-- **CI, except the Chat acceptance-plan path.** That one scenario is automated
-  (`platform/e2e-tests/tests/openappa/root-remedy-flow.spec.ts`, the
-  `openappa` project). The rest is not, and cannot cheaply be: it needs live
+- **Live external-client CI.** Chat's acceptance-plan and parallel-call flows
+  are automated in `platform/e2e-tests/tests/openappa/` (the `openappa`
+  project). The three external CLI runs are not: they need live
   provider credentials and three third-party CLIs whose flags change between
   releases. The proxy-side unit and route tests
   (`platform/backend/src/openappa/`, `platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts`,
@@ -479,9 +530,10 @@ Requests to `/anthropic/v1/messages` without the `/v1` prefix return `401 Unauth
   deployment's own HTTP authority is not exercised beyond the envelope shape.
 - **Providers beyond Anthropic Messages and OpenAI Responses/Chat Completions.**
   The other proxy adapters are out of scope here.
-- **Concurrency.** One session at a time, one scenario at a time. Nothing here
-  probes interleaved roots or races between two clients on one session id.
+- **Cross-root concurrency.** S6 checks parallel calls within one model turn,
+  not interleaved roots or races between two clients on one session id.
 - **Policy authoring, RBAC and revision conflicts.** Covered by the guardrails
   policy route tests, not by this runbook.
-- **Long-horizon sessions.** Each scenario is a single one-shot prompt with a
-  300s timeout. Restoration across many turns is exercised only incidentally.
+- **Long-horizon sessions.** S1-S6 use a one-shot runner with a 300s timeout;
+  S7 needs an interactive interruption, and S8 may require another turn to
+  induce a duplicate. Restoration across many unrelated turns is not covered.

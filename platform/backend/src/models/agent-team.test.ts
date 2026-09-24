@@ -170,9 +170,11 @@ describe("AgentTeamModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
       const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
 
       const orgAgent = await makeAgent({
         organizationId: org.id,
@@ -201,15 +203,12 @@ describe("AgentTeamModel", () => {
 
       const visibleAgent = await makeAgent({
         organizationId: org.id,
-        access: { teams: [] },
+        access: { teams: [memberTeam.id] },
       });
-      await AgentTeamModel.assignTeamsToAgent(visibleAgent.id, [memberTeam.id]);
-
       const hiddenAgent = await makeAgent({
         organizationId: org.id,
-        access: { teams: [] },
+        access: { teams: [otherTeam.id] },
       });
-      await AgentTeamModel.assignTeamsToAgent(hiddenAgent.id, [otherTeam.id]);
 
       const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
         user.id,
@@ -224,10 +223,13 @@ describe("AgentTeamModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
       const org = await makeOrganization({ legacyPermissions: true });
       const author = await makeUser();
       const otherUser = await makeUser();
+      await makeMember(author.id, org.id, { role: "member" });
+      await makeMember(otherUser.id, org.id, { role: "member" });
 
       const ownAgent = await makeAgent({
         organizationId: org.id,

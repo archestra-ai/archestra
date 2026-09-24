@@ -83,7 +83,7 @@ describe("scoped skill grants", () => {
     );
   });
 
-  test("an object-only editor can discover and edit the skill, but cannot execute, share, or delete it", async ({
+  test("an object-only editor can discover, edit, and execute the skill, but cannot share or delete it", async ({
     makeCustomRole,
     makeUser,
     makeAgent,
@@ -129,7 +129,8 @@ describe("scoped skill grants", () => {
       grants: [
         {
           subject: { type: "user", id: ctx.user.id },
-          actions: ["read", "update"],
+          // The Edit preset: every grant that can change a skill can run it.
+          actions: ["read", "use", "update"],
         },
       ],
     });
@@ -218,7 +219,17 @@ describe("scoped skill grants", () => {
           context,
         )
       ).isError,
+    ).not.toBe(true);
+    expect(
+      (
+        await executeArchestraTool(
+          TOOL_LOAD_SKILL_FULL_NAME,
+          { name: "other-skill" },
+          context,
+        )
+      ).isError,
     ).toBe(true);
+    // Stepping down to Use keeps execution and takes editing away.
     await replacePolicy({
       ...policy,
       revision: 1,

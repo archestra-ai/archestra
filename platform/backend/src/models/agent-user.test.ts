@@ -2,6 +2,43 @@ import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import AgentUserModel from "./agent-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+
+/**
+ * Share `scope` with one user by name, or take that share back. Named sharing
+ * is a user grant on the object's policy; the retired share rows no longer
+ * decide access.
+ */
+async function setNamedShare(params: {
+  organizationId: string;
+  scope: string;
+  userId: string;
+  shared: boolean;
+}) {
+  const key = {
+    organizationId: params.organizationId,
+    resource: "agent" as const,
+    scope: params.scope,
+  };
+  const current = await ResourcePermissionPolicyModel.find(key);
+  const others = (current?.grants ?? []).filter(
+    (grant) =>
+      !(grant.subject.type === "user" && grant.subject.id === params.userId),
+  );
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: current?.revision ?? 0,
+    grants: params.shared
+      ? [
+          ...others,
+          {
+            subject: { type: "user", id: params.userId },
+            actions: ["read", "use"],
+          },
+        ]
+      : others,
+  });
+}
 
 describe("AgentUserModel", () => {
   describe("access", () => {
@@ -9,12 +46,16 @@ describe("AgentUserModel", () => {
       makeUser,
       makeAgent,
       makeOrganization,
+      makeMember,
     }) => {
       const org = await makeOrganization({ legacyPermissions: true });
       const author = await makeUser();
       const colleague = await makeUser();
+      await makeMember(author.id, org.id, { role: "member" });
+      await makeMember(colleague.id, org.id, { role: "member" });
       const agent = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         access: "personal",
         authorId: author.id,
       });
@@ -28,7 +69,12 @@ describe("AgentUserModel", () => {
         }),
       ).toBe(false);
 
-      await AgentUserModel.syncAgentUsers(agent.id, [colleague.id]);
+      await setNamedShare({
+        organizationId: org.id,
+        scope: agent.id,
+        userId: colleague.id,
+        shared: true,
+      });
 
       expect(
         await AgentTeamModel.userHasAgentAccess({
@@ -57,12 +103,23 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const agent = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         access: "personal",
         authorId: author.id,
       });
 
-      await AgentUserModel.syncAgentUsers(agent.id, [colleague.id]);
-      await AgentUserModel.syncAgentUsers(agent.id, []);
+      await setNamedShare({
+        organizationId: org.id,
+        scope: agent.id,
+        userId: colleague.id,
+        shared: true,
+      });
+      await setNamedShare({
+        organizationId: org.id,
+        scope: agent.id,
+        userId: colleague.id,
+        shared: false,
+      });
 
       expect(
         await AgentTeamModel.userHasAgentAccess({
@@ -83,16 +140,23 @@ describe("AgentUserModel", () => {
       const colleague = await makeUser();
       const shared = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         access: "personal",
         authorId: author.id,
       });
       const other = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         access: "personal",
         authorId: author.id,
       });
 
-      await AgentUserModel.syncAgentUsers(shared.id, [colleague.id]);
+      await setNamedShare({
+        organizationId: org.id,
+        scope: shared.id,
+        userId: colleague.id,
+        shared: true,
+      });
 
       expect(
         await AgentTeamModel.userHasAgentAccess({
@@ -107,12 +171,16 @@ describe("AgentUserModel", () => {
       makeUser,
       makeAgent,
       makeOrganization,
+      makeMember,
     }) => {
       const org = await makeOrganization({ legacyPermissions: true });
       const author = await makeUser();
       const colleague = await makeUser();
+      await makeMember(author.id, org.id, { role: "member" });
+      await makeMember(colleague.id, org.id, { role: "member" });
       const agent = await makeAgent({
         organizationId: org.id,
+        agentType: "agent",
         access: "personal",
         authorId: author.id,
       });
@@ -121,7 +189,12 @@ describe("AgentUserModel", () => {
         await AgentModel.findAccessibleIdsForUser(colleague.id),
       ).not.toContain(agent.id);
 
-      await AgentUserModel.syncAgentUsers(agent.id, [colleague.id]);
+      await setNamedShare({
+        organizationId: org.id,
+        scope: agent.id,
+        userId: colleague.id,
+        shared: true,
+      });
 
       expect(await AgentModel.findAccessibleIdsForUser(colleague.id)).toContain(
         agent.id,

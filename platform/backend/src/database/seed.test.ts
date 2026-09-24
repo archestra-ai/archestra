@@ -647,15 +647,19 @@ describe("syncBuiltInSkills", () => {
     expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
-  test("does not seed a phantom copy when the name is already taken", async ({
+  test("seeds the built-in beside a member's skill of the same name", async ({
     makeOrganization,
+    makeUser,
   }) => {
     const org = await makeOrganization();
+    const author = await makeUser();
 
-    // a pre-existing shared skill squats on the built-in's display name.
-    await SkillModel.createWithFiles({
+    // Names are unique per author, and a built-in has none, so a member's
+    // skill with the built-in's display name no longer blocks the seed.
+    const own = await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
+        authorId: author.id,
         name: BASE_SKILL.name,
         description: "user's own skill",
         content: "# not the built-in",
@@ -667,16 +671,19 @@ describe("syncBuiltInSkills", () => {
 
     await syncBuiltInSkills();
 
-    // the squatted built-in is skipped (no phantom copy); the other built-ins
-    // still seed.
     expect(await countBuiltInSkills(org.id)).toBe(
-      getEnabledBuiltInSkills().length - 1,
+      getEnabledBuiltInSkills().length,
     );
     const built = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
     });
-    expect(built).toBeNull();
+    expect(built?.content).toBe(BASE_SKILL.content);
+    expect(built?.id).not.toBe(own?.id);
+    // The member's skill is left as it was.
+    const untouched = await SkillModel.findById(own?.id ?? "");
+    expect(untouched?.content).toBe("# not the built-in");
+    expect(untouched?.authorId).toBe(author.id);
   });
 
   test("auto-upgrades a pristine copy when the shipped revision changes", async ({

@@ -1033,7 +1033,23 @@ function ${client.binary} {
       if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ instructions = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
           : ""
     }
-    & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
+    ${
+      handoffEnabled && client.clientId === "codex"
+        ? `if ((Test-Path ($archGuard + '.handoff.cjs')) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+      $archPreviousLaunchArgs = $env:ARCHESTRA_CODEX_LAUNCH_ARGS
+      try {
+        $env:ARCHESTRA_CODEX_LAUNCH_ARGS = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject ([string[]]$archLaunchArgs) -Compress)))
+        & node ($archGuard + '.handoff.cjs') --launch $archReal.Source
+        if ($LASTEXITCODE -eq 125) { & $archReal.Source @args }
+      } finally {
+        if ($null -eq $archPreviousLaunchArgs) { Remove-Item Env:ARCHESTRA_CODEX_LAUNCH_ARGS -ErrorAction SilentlyContinue }
+        else { $env:ARCHESTRA_CODEX_LAUNCH_ARGS = $archPreviousLaunchArgs }
+      }
+    } else {
+      & $archReal.Source @args
+    }`
+        : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
+    }
     ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }

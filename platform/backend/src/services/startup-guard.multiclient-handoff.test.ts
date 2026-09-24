@@ -11,7 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared";
 import { expect, test } from "vitest";
+import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { renderSetupScript } from "./connection-setup-script";
 import {
   buildStartupGuardInstallSection,
@@ -23,6 +25,45 @@ import {
 } from "./startup-guard.clients";
 
 const exec = promisify(execFile);
+
+test("Windows npm Codex shim preserves multiword handoff config at launch", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex shim "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const result = path.join(home, "args.json");
+  const args = [
+    "-c",
+    `developer_instructions=${JSON.stringify(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)}`,
+    "-c",
+    "model_provider=llm_proxy",
+    "exec",
+    "hello",
+  ];
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify(process.argv.slice(2))); process.exit(23);",
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await expect(
+      exec(process.execPath, [helper, "--launch", shim], {
+        env: {
+          ...process.env,
+          CODEX_TEST_RESULT: result,
+          ARCHESTRA_CODEX_LAUNCH_ARGS: Buffer.from(
+            JSON.stringify(args),
+          ).toString("base64"),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 23 });
+    expect(JSON.parse(await readFile(result, "utf8"))).toEqual(args);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
 
 for (const shell of ["bash", "zsh"]) {
   for (const client of [CODEX_GUARD_CLIENT, COPILOT_GUARD_CLIENT]) {

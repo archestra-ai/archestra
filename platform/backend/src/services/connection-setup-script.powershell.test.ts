@@ -11,7 +11,10 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { STARTUP_GUARD_INSTALL } from "@archestra/shared";
+import {
+  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  STARTUP_GUARD_INSTALL,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   renderSetupScript,
@@ -192,9 +195,17 @@ describe.skipIf(!powershellAvailable)(
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify(args) + "\\n");
-if (args[0] !== "mcp") process.exit(23);
-if (args[1] === "remove") process.exit(1);
-process.exit(args[1] === "add" && process.env.ARCHESTRA_TEST_FAIL_ADD === "1" ? 42 : 0);
+if (args[0] === "app-server") {
+  require("node:readline").createInterface({input:process.stdin}).on("line", line => {
+    const request = JSON.parse(line);
+    if (request.method === "initialize") console.log(JSON.stringify({id:request.id,result:{}}));
+    if (request.method === "config/read") console.log(JSON.stringify({id:request.id,result:{config:{developer_instructions:"Keep existing guidance."}}}));
+  });
+} else {
+  if (args[0] !== "mcp") process.exit(23);
+  if (args[1] === "remove") process.exit(1);
+  process.exit(args[1] === "add" && process.env.ARCHESTRA_TEST_FAIL_ADD === "1" ? 42 : 0);
+}
 `,
         );
         await chmod(executable, 0o755);
@@ -210,6 +221,10 @@ process.exit(args[1] === "add" && process.env.ARCHESTRA_TEST_FAIL_ADD === "1" ? 
             },
             proxy: null,
             skills: null,
+            runtimeHandoffInstructions:
+              clientId === "codex"
+                ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                : null,
           }),
         );
         await writeFile(
@@ -284,8 +299,14 @@ exit 0
           .trim()
           .split("\n")
           .map((line) => JSON.parse(line));
-        expect(calls.filter((args) => args[0] === "invoke")).toEqual(
+        expect(calls.filter((args) => args.includes("invoke"))).toEqual(
           Array.from({ length: 4 }, () => [
+            ...(clientId === "codex"
+              ? [
+                  "-c",
+                  `developer_instructions=${JSON.stringify(`Keep existing guidance.\n\n${DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS}`)}`,
+                ]
+              : []),
             "invoke",
             "two words",
             "",

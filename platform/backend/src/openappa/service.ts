@@ -15,7 +15,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
-import UserModel from "@/models/user";
+import MemberModel from "@/models/member";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   expandCommandExecutionPolicyRules,
@@ -286,7 +286,7 @@ async function dispatch(
     session.organization_id,
     (module, policy) =>
       module.dispatchHook(
-        JSON.stringify({ ...session, ...principal, ...event }),
+        JSON.stringify({ ...session, ...event, ...principal }),
         policy,
       ),
     policyContent,
@@ -296,7 +296,8 @@ async function dispatch(
 /**
  * The email of the user a session acts for, which the runtime reads as the
  * session's own audience. Sent on every event, since any of them may open the
- * session; an app or virtual-key caller acts for no user.
+ * session; an app or virtual-key caller, or a user outside the organization,
+ * acts for no user.
  */
 async function sessionPrincipal(
   session: OpenAppaSession,
@@ -305,8 +306,11 @@ async function sessionPrincipal(
     ? session.caller_id.slice(USER_CALLER_PREFIX.length)
     : undefined;
   if (!userId) return {};
-  const email = await UserModel.getEmailById(userId);
-  return email ? { principal: email } : {};
+  const member = await MemberModel.findByIdOrEmail(
+    userId,
+    session.organization_id,
+  );
+  return member ? { principal: member.email } : {};
 }
 
 const USER_CALLER_PREFIX = "user:";

@@ -111,14 +111,16 @@ async function members(
   let emails: string[];
   switch (parsed.kind) {
     case "members":
-      emails = (await MemberModel.findAllByOrganization(organizationId)).map(
-        (member) => member.email,
-      );
+      emails = await MemberModel.findEmailsByOrganization({
+        organizationId,
+        limit: MAX_MEMBERS + 1,
+      });
       break;
     case "team": {
       const team = await TeamModel.findSubtreeMemberEmails({
         organizationId,
         idOrName: parsed.idOrName,
+        limit: MAX_MEMBERS + 1,
       });
       switch (team.kind) {
         case "found":

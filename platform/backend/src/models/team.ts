@@ -1031,6 +1031,7 @@ class TeamModel {
   static async findSubtreeMemberEmails(params: {
     organizationId: string;
     idOrName: string;
+    limit: number;
   }): Promise<
     | { kind: "found"; emails: string[] }
     | { kind: "missing" }
@@ -1049,19 +1050,10 @@ class TeamModel {
     const root = byId ?? (byName.length === 1 ? byName[0] : undefined);
     if (!root) return { kind: byName.length > 1 ? "ambiguous" : "missing" };
 
-    const subtree = new Set([root.id]);
-    for (let grew = true; grew; ) {
-      grew = false;
-      for (const team of hierarchy)
-        if (
-          team.parentId !== null &&
-          subtree.has(team.parentId) &&
-          !subtree.has(team.id)
-        ) {
-          subtree.add(team.id);
-          grew = true;
-        }
-    }
+    const subtree = [
+      root.id,
+      ...TeamModel.findDescendants(hierarchy, root.id).map((team) => team.id),
+    ];
     const rows = await db
       .selectDistinct({ email: schema.usersTable.email })
       .from(schema.teamMembersTable)
@@ -1069,7 +1061,8 @@ class TeamModel {
         schema.usersTable,
         eq(schema.teamMembersTable.userId, schema.usersTable.id),
       )
-      .where(inArray(schema.teamMembersTable.teamId, [...subtree]));
+      .where(inArray(schema.teamMembersTable.teamId, subtree))
+      .limit(params.limit);
     return { kind: "found", emails: rows.map((row) => row.email) };
   }
 

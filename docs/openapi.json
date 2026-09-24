@@ -244154,6 +244154,12 @@
                       ]
                     }
                   },
+                  "scope": {
+                    "not": {}
+                  },
+                  "teams": {
+                    "not": {}
+                  },
                   "oauthClientSecretVaultPath": {
                     "type": "string"
                   },

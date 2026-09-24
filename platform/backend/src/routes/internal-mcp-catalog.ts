@@ -91,6 +91,7 @@ import {
   McpServerDismissibleAlertKindSchema,
   MuteMcpServerAlertBodySchema,
   PartialUpdateInternalMcpCatalogSchema,
+  RetiredSharingUpdateFieldSchema,
   SelectInternalMcpCatalogSchema,
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
@@ -829,6 +830,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: PartialUpdateInternalMcpCatalogSchema.extend({
+          // Who can reach the item changes through its permissions, so the
+          // retired sharing fields are refused rather than dropped.
+          scope: RetiredSharingUpdateFieldSchema,
+          teams: RetiredSharingUpdateFieldSchema,
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret

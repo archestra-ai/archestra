@@ -74,7 +74,7 @@ describe("catalog object grants", () => {
       url: `/api/internal_mcp_catalog/${catalogId}`,
       payload: { scope: "org" },
     });
-    expect(denied.statusCode, denied.body).toBe(403);
+    expect(denied.statusCode, denied.body).toBe(400);
     expect((await InternalMcpCatalogModel.findById(catalogId))?.scope).toBe(
       "personal",
     );

@@ -62273,6 +62273,8 @@ export type UpdateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
+        scope?: unknown;
+        teams?: unknown;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;

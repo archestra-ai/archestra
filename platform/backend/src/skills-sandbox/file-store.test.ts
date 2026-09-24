@@ -391,6 +391,8 @@ describe("fileStore.get access", () => {
     });
 
     const member = await makeUser({ email: "proj-member@test.com" });
+
+    await makeMember(member.id, org.id);
     const seen = await fileStore.get({
       ref: file.id,
       organizationId: org.id,
@@ -412,9 +414,11 @@ describe("fileStore.get access", () => {
   test("project file: a user with no project access is denied; the owner is allowed", async ({
     makeUser,
     makeOrganization,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const project = await ProjectModel.create({
       organizationId: org.id,
       userId: owner.id,
@@ -788,9 +792,11 @@ describe("fileStore disk overlay (filesystem provider)", () => {
   test("a project rename does not move its files (folder is the immutable slug)", async ({
     makeUser,
     makeOrganization,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const project = await ProjectModel.create({
       organizationId: org.id,
       userId: owner.id,
@@ -944,6 +950,8 @@ describe("fileStore disk overlay (filesystem provider)", () => {
     await drop(project.slug, "shared.txt", "data");
 
     const member = await makeUser({ email: "overlay-member@test.com" });
+
+    await makeMember(member.id, org.id);
     const items = await fileStore.search({
       organizationId: org.id,
       userId: member.id,
@@ -1061,9 +1069,11 @@ describe("fileStore disk overlay (filesystem provider)", () => {
   test("the instructions file cannot be deleted via an obj_ ref to its bytes", async ({
     makeUser,
     makeOrganization,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const project = await ProjectModel.create({
       organizationId: org.id,
       userId: user.id,
@@ -1258,9 +1268,11 @@ describe("fileStore project instructions", () => {
   test("the instructions file cannot be deleted", async ({
     makeUser,
     makeOrganization,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const project = await makeProject(org, user);
     await fileStore.writeProjectInstructions({
       organizationId: org.id,

@@ -17,9 +17,10 @@ describe("POST /api/projects/:id/files", () => {
   let owner: User;
   let actingUser: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     actingUser = owner;
 
     app = createFastifyInstance();
@@ -277,12 +278,12 @@ describe("POST /api/projects/:id/files", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  test("a project admin with only oversight cannot upload (404, nothing written)", async ({
+  test("an admin's organization-wide project grant lets them upload to another member's project", async ({
     makeUser,
     makeMember,
   }) => {
-    // A foreign project NOT shared with the admin: oversight is read-only, so an
-    // upload (a write) must be refused even though the admin can view it.
+    // The retired project:admin action became Full access at `*`, which
+    // includes update. Oversight is no longer read-only.
     const otherOwner = await makeUser({ email: "oversight-owner@test.com" });
     await makeMember(otherOwner.id, organizationId, {});
     const project = await projectService.create({
@@ -302,13 +303,6 @@ describe("POST /api/projects/:id/files", () => {
       dataBase64: b64("data"),
     });
 
-    expect(res.statusCode).toBe(404);
-    expect(
-      await FileModel.findByProjectAndName({
-        organizationId,
-        projectId: project.id,
-        filename: "oversight.txt",
-      }),
-    ).toBeNull();
+    expect(res.statusCode, res.body).toBe(200);
   });
 });

@@ -68,9 +68,10 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -394,9 +395,10 @@ describe("GET /api/skill-sandbox/conversations/:conversationId/artifacts", () =>
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    await makeMember(user.id, organizationId);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
@@ -475,9 +477,10 @@ describe("project file cross-user access", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -530,9 +533,11 @@ describe("project file cross-user access", () => {
 
   test("project members can download files produced by others", async ({
     makeUser,
+    makeMember,
   }) => {
     // `user` owns the project; `member` produced a file into it.
     const member = await makeUser({ email: "cross-member@test.com" });
+    await makeMember(member.id, organizationId);
     const { file } = await seedProjectFile({
       ownerId: user.id,
       authorId: member.id,
@@ -659,9 +664,10 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -707,6 +713,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
 
   test("a project member can delete a member-produced file; non-members cannot", async ({
     makeUser,
+    makeMember,
   }) => {
     const { projectService } = await import("@/services/project");
     const project = await projectService.create({
@@ -716,6 +723,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       description: null,
     });
     const member = await makeUser({ email: "delete-member@test.com" });
+    await makeMember(member.id, organizationId);
     const memberSandbox = await SkillSandboxModel.create({
       organizationId,
       userId: member.id,
@@ -802,9 +810,10 @@ describe("conversation-artifacts route", () => {
     return app;
   }
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    await makeMember(user.id, organizationId);
   });
 
   test("lists the artifacts produced in a conversation's sandbox", async ({
@@ -1101,7 +1110,7 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
     expect(await bytesOf(file.id)).toBe("secret");
   });
 
-  test("oversight project:admin can READ a foreign project file but PUT is 404 (read-only)", async ({
+  test("an admin's organization-wide project grant can read and edit a foreign project file", async ({
     makeUser,
     makeMember,
   }) => {
@@ -1125,17 +1134,17 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
     const admin = await makeUser({ email: "edit-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     actingUser = admin;
-    // Oversight read works (parity with the GET route's admin fallback) ...
+    // The retired project:admin action became Full access at `*`, which
+    // includes update, so oversight is no longer read-only.
     expect(await bytesOf(file.id)).toBe("owner only");
-    // ... but editing is never an oversight capability.
     const res = await app.inject({
       method: "PUT",
       url: `/api/skill-sandbox/artifacts/${file.id}/content`,
       payload: { content: "admin tampered" },
     });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode, res.body).toBe(200);
     actingUser = owner;
-    expect(await bytesOf(file.id)).toBe("owner only");
+    expect(await bytesOf(file.id)).toBe("admin tampered");
   });
 
   test("a binary (non-text) file is rejected with 415", async () => {

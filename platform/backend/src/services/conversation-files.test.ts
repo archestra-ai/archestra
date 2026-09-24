@@ -193,6 +193,7 @@ test("project chat: projectFiles is every project file (any author, any chat), f
   // Org-wide sharing requires the member role's project:share-org.
   await makeMember(owner.id, org.id);
   const member = await makeUser({ email: "files-member@test.com" });
+  await makeMember(member.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
 
   const project = await projectService.create({
@@ -307,9 +308,11 @@ test("project chat: the project's instructions file never lists as an ordinary r
   makeUser,
   makeOrganization,
   makeAgent,
+  makeMember,
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser({});
+  await makeMember(owner.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
 
   const project = await projectService.create({

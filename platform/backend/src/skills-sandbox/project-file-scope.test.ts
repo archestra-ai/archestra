@@ -12,9 +12,11 @@ test("resolveProjectFileScope returns the project's id and name", async ({
   makeUser,
   makeOrganization,
   makeAgent,
+  makeMember,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
+  await makeMember(user.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
   const project = await ProjectModel.create({
     organizationId: org.id,

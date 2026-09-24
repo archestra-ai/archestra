@@ -104,3 +104,122 @@ jobs:
           test -f platform/agent_images/bin/archestra-tui-run
           test -f .github/actions/setup-env/action.yml
           du -sh platform
+
+  native-build:
+    name: Build native bindings once
+    if: github.event.label.name == 'benchmark-backend-native-artifact'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
+
+      - name: Build backend workspace dependencies
+        run: pnpm exec turbo build --filter="@backend^..."
+
+      - name: Upload native bindings
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-native-bindings
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            platform/archestra-rs/app-runtime-rs/*.node
+            platform/archestra-rs/image-rs/*.node
+            platform/archestra-rs/openappa-rs/*.node
+            platform/archestra-rs/sandbox-rs/*.node
+
+  native-consumer:
+    name: Restore shared native bindings
+    needs: native-build
+    if: github.event.label.name == 'benchmark-backend-native-artifact'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Download native bindings
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: backend-native-bindings
+          path: platform/archestra-rs
+
+      - name: Smoke native bindings
+        run: |
+          pnpm --filter @archestra/app-runtime-rs smoke
+          pnpm --filter @archestra/image-rs smoke
+          pnpm --filter @archestra/openappa-rs smoke:load
+          pnpm --filter @archestra/sandbox-rs smoke
+
+  native-control:
+    name: Rebuild native bindings on consumer
+    if: github.event.label.name == 'benchmark-backend-native-artifact'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
+
+      - name: Build backend workspace dependencies
+        run: pnpm exec turbo build --filter="@backend^..."
+
+      - name: Smoke native bindings
+        run: |
+          pnpm --filter @archestra/app-runtime-rs smoke
+          pnpm --filter @archestra/image-rs smoke
+          pnpm --filter @archestra/openappa-rs smoke:load
+          pnpm --filter @archestra/sandbox-rs smoke

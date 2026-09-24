@@ -14,7 +14,52 @@ const publishPart = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const startRunPart = (overrides: Record<string, unknown> = {}) => ({
+  type: "tool-archestra__start_run",
+  state: "output-available",
+  output: { session_id: "run-1" },
+  ...overrides,
+});
+
 describe("collectArchestraToolInvalidations", () => {
+  it("refreshes run sessions after a successful start_run in chat", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [startRunPart()],
+        getToolShortName,
+      }),
+    ).toEqual([["agent-runs"]]);
+  });
+
+  it("refreshes run sessions when start_run is dispatched through run_tool", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          startRunPart({
+            type: "tool-archestra__run_tool",
+            input: { tool_name: "archestra__start_run", tool_args: {} },
+          }),
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([["agent-runs"]]);
+  });
+
+  it("does not refresh run sessions for a refused start_run", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          startRunPart({
+            output: {
+              archestraError: { type: "generic", message: "not allowed" },
+            },
+          }),
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([]);
+  });
+
   it("invalidates the app caches for a successful publish_app result", () => {
     expect(
       collectArchestraToolInvalidations({

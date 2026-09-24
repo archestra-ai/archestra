@@ -3,7 +3,6 @@ import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import type {
-  AgentRunInput,
   AgentRunRecord,
   AgentRunStartupProgress,
   AgentRuntimeSteerMode,
@@ -17,6 +16,7 @@ import type {
   AgentRunCompletion,
   AgentRunLaunchSpec,
   AgentRuntimeBackendDriver,
+  RuntimeInputFile,
 } from "./types";
 
 /**
@@ -48,6 +48,7 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
   async continueRun(params: {
     session: AgentRunRecord;
     spec: AgentRunLaunchSpec;
+    inputs?: RuntimeInputFile[];
   }): Promise<void> {
     await agentRuntimeManager.continueRun(params);
   }
@@ -109,6 +110,22 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     return agentRuntimeManager.readWorkspaceTransferRange(params);
   }
 
+  readThreadFile(params: {
+    session: AgentRunRecord;
+    path: string;
+    maxBytes: number;
+  }): Promise<Buffer> {
+    return agentRuntimeManager.readThreadFile(params);
+  }
+
+  assertThreadFilesAvailable(session: AgentRunRecord): Promise<void> {
+    return agentRuntimeManager.assertThreadFilesAvailable(session);
+  }
+
+  cleanupThreadFiles(session: AgentRunRecord): Promise<void> {
+    return agentRuntimeManager.cleanupThreadFiles(session);
+  }
+
   async suspendWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {
@@ -133,7 +150,7 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
 
   async stageInputs(params: {
     session: AgentRunRecord;
-    inputs: AgentRunInput[];
+    inputs: RuntimeInputFile[];
   }): Promise<void> {
     await agentRuntimeManager.stageInputs(params);
   }

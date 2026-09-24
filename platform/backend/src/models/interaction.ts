@@ -63,8 +63,10 @@ import {
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
+import { redactFilePayloads } from "@/utils/redact-file-payloads";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
+import AgentRunModel from "./agent-run";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
@@ -471,13 +473,37 @@ class InteractionModel {
         ? await AgentModel.findEnvironmentId(data.profileId)
         : (data.environmentId ?? null));
 
+    // Runtime source/run headers are caller-controlled; use the authenticated
+    // standard or passthrough key's stored run association for ephemeral files.
+    const ephemeralFiles =
+      data.source === "chatops:slack" ||
+      (data.virtualKeyId
+        ? await AgentRunModel.usesEphemeralFiles({
+            virtualApiKeyId: data.virtualKeyId,
+          })
+        : false) ||
+      (data.passthroughVirtualKeyId
+        ? await AgentRunModel.usesEphemeralFiles({
+            virtualApiKeyId: data.passthroughVirtualKeyId,
+          })
+        : false);
+    // Redact the audit copy without changing live provider traffic.
+    const auditData = ephemeralFiles
+      ? {
+          ...data,
+          request: redactFilePayloads(data.request),
+          processedRequest: redactFilePayloads(data.processedRequest),
+          response: redactFilePayloads(data.response),
+        }
+      : data;
+
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...auditData,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(auditData.request),
+      processedRequest: stripUnstorableChars(auditData.processedRequest),
+      response: stripUnstorableChars(auditData.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the

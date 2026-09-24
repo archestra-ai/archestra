@@ -16,6 +16,12 @@ import type {
 } from "@/types/agent-workspace-file";
 import type { RenewableCredential } from "@/types/renewable-credential";
 
+/** Bytes supplied directly at launch or loaded from the durable input workflow. */
+export type RuntimeInputFile = Pick<
+  AgentRunInput,
+  "originalName" | "runtimePath" | "mimeType" | "fileSize" | "fileData"
+>;
+
 /**
  * Runtime-neutral description of one isolated Agent run.
  *
@@ -51,7 +57,7 @@ export type AgentRunLaunchSpec = {
   nodeSelector: Record<string, string>;
   imagePullSecrets: string[];
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
-  /** Number of durable input files the backend must stage before entrypoint. */
+  /** Input staging barrier; a positive count holds the entrypoint until ready. */
   inputFileCount: number;
 };
 
@@ -92,6 +98,7 @@ export interface AgentRuntimeBackendDriver {
   continueRun(params: {
     session: AgentRunRecord;
     spec: AgentRunLaunchSpec;
+    inputs?: RuntimeInputFile[];
   }): Promise<void>;
   /** Recover a durable, unstarted continuation after its launcher disappeared. */
   recoverRun(session: AgentRunRecord): Promise<void>;
@@ -138,6 +145,14 @@ export interface AgentRuntimeBackendDriver {
     length: number;
     timeoutMs: number;
   }): Promise<{ stdout: Readable; completed: Promise<void> }>;
+  /** Capture bounded bytes from this task's volatile files, without a tool payload. */
+  readThreadFile(params: {
+    session: AgentRunRecord;
+    path: string;
+    maxBytes: number;
+  }): Promise<Buffer>;
+  assertThreadFilesAvailable(session: AgentRunRecord): Promise<void>;
+  cleanupThreadFiles(session: AgentRunRecord): Promise<void>;
   /** Remove compute while preserving the workspace's durable volumes. */
   suspendWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
@@ -150,10 +165,10 @@ export interface AgentRuntimeBackendDriver {
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void>;
 
-  /** Materialize durable task inputs before the Agent command is released. */
+  /** Materialize task inputs before the Agent command is released. */
   stageInputs(params: {
     session: AgentRunRecord;
-    inputs: AgentRunInput[];
+    inputs: RuntimeInputFile[];
   }): Promise<void>;
 
   /**

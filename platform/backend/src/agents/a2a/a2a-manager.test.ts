@@ -152,6 +152,148 @@ function buildGetTaskRequest(params: {
 }
 
 describe("A2AManager.sendMessage", () => {
+  test.for([
+    { source: "chatops:slack" as const, stateless: true, fullTask: false },
+    { source: "chatops:slack" as const, stateless: false, fullTask: false },
+    { source: "chatops:slack" as const, stateless: false, fullTask: true },
+    { source: "api" as const, stateless: true, fullTask: false },
+  ])("$source approval history (stateless=$stateless, fullTask=$fullTask) keeps Slack files out of persisted parts and content", async ({
+    source,
+    stateless,
+    fullTask,
+  }, { makeAgent }) => {
+    const agent = await makeAgent({
+      name: "attachment approval agent",
+      teams: [],
+    });
+    const manager = new A2AManager({
+      stateless,
+      taskMode: fullTask ? "full" : "approval-only",
+    });
+    const bytes = Buffer.from("private-attachment-payload");
+    const encoded = bytes.toString("base64");
+    const parts = [
+      { text: "Review the attached report" },
+      {
+        raw: bytes,
+        mediaType: "application/pdf",
+        filename: "report.pdf",
+        metadata: { originalFile: { data: bytes, filename: "original.pdf" } },
+      },
+      {
+        text: "Retain the filename",
+        filename: "metadata-only.pdf",
+        metadata: {
+          originalFile: { data: bytes, filename: "metadata-only.pdf" },
+        },
+      },
+      { url: `data:application/pdf;base64,${encoded}`, filename: "inline.pdf" },
+    ];
+    const responseUiMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [
+        {
+          type: "file",
+          url: `data:application/pdf;base64,${encoded}`,
+          mediaType: "application/pdf",
+          filename: "generated.pdf",
+        },
+        {
+          type: "tool-preview",
+          state: "output-available",
+          toolCallId: "preview-call",
+          input: {},
+          output: {
+            content: [{ type: "image", data: encoded, mimeType: "image/png" }],
+          },
+        },
+        {
+          type: "tool-approve",
+          state: "approval-requested",
+          approval: { id: "approval-file-test" },
+          toolCallId: "approval-call",
+          input: { action: "review" },
+        },
+      ],
+    };
+    const responseBefore = structuredClone(responseUiMessage);
+    executeA2AMessage.mockResolvedValue({ responseUiMessage, text: "" });
+    const result = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          parts,
+        },
+      },
+      systemParams: { source },
+      taskRun: fullTask ? { createTask: true, detached: false } : undefined,
+    });
+    expect(result.task?.status.state).toBe(A2AProtocolTaskState.InputRequired);
+    if (!result.task?.contextId)
+      throw new Error("Expected approval task context");
+    const rows = await A2AMessageModel.findByContextId(result.task.contextId);
+    const persisted = JSON.stringify(rows);
+    if (source === "chatops:slack") {
+      expect(persisted).not.toContain(encoded);
+      expect(persisted).not.toContain('"raw"');
+      expect(persisted).not.toContain("originalFile");
+      expect(persisted).toContain("report.pdf");
+      expect(persisted).toContain(
+        "Fetch the source attachment again from Slack",
+      );
+      expect(persisted).toContain("Review the attached report");
+    } else {
+      expect(persisted).toContain(encoded);
+      expect(persisted).toContain('"raw"');
+      expect(persisted).toContain("originalFile");
+    }
+    expect(
+      executeA2AMessage.mock.lastCall?.[0].attachments[0].contentBase64,
+    ).toBe(encoded);
+    expect(parts[1].raw).toBe(bytes);
+    expect(parts[1].metadata?.originalFile.data).toBe(bytes);
+    expect(responseUiMessage).toEqual(responseBefore);
+
+    if (source === "chatops:slack") {
+      executeA2AMessage.mockResolvedValue({
+        text: "Reviewed",
+        responseUiMessage: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "text", text: "Reviewed" }],
+        },
+      });
+      await manager.sendMessage({
+        actor,
+        agentId: agent.id,
+        request: buildApprovalDecisionSendMessageRequest({
+          taskId: result.task.id,
+          approvalDecisions: [
+            { approvalId: "approval-file-test", approved: true },
+          ],
+        }),
+        systemParams: { source },
+      });
+      const resumedHistory = JSON.stringify(
+        executeA2AMessage.mock.lastCall?.[0].messages,
+      );
+      expect(resumedHistory).not.toContain(encoded);
+      expect(resumedHistory).toContain(
+        "Fetch the source attachment again from Slack",
+      );
+      expect(resumedHistory).toContain("report.pdf");
+      expect(
+        JSON.stringify(
+          await A2AMessageModel.findByContextId(result.task.contextId),
+        ),
+      ).not.toContain(encoded);
+    }
+  });
+
   test("empty message parts", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "agent1", teams: [] });
     const manager = new A2AManager();
@@ -337,6 +479,80 @@ describe("A2AManager.sendMessage", () => {
     // Not "\nhi" — the blank part is gone before the join, so it contributes no
     // separator to the text the model receives.
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("hi");
+  });
+
+  test("trusted originals survive while external metadata cannot supply originals", async ({
+    makeAgent,
+  }) => {
+    const files = [
+      {
+        filename: "photo.png",
+        mimeType: "image/png",
+        data: Buffer.from("private image bytes"),
+      },
+      {
+        filename: "report.csv",
+        mimeType: "text/csv",
+        data: Buffer.from("name,value\nalpha,42\n"),
+      },
+      {
+        filename: "report.pdf",
+        mimeType: "application/pdf",
+        data: Buffer.from("%PDF-1.7\nprivate report\n%%EOF"),
+      },
+      {
+        filename: "archive.bin",
+        mimeType: "application/octet-stream",
+        data: Buffer.from([0, 255, 128, 1]),
+      },
+    ];
+    const agent = await makeAgent({ name: "attachment agent", teams: [] });
+    const manager = new A2AManager({ stateless: true });
+    executeA2AMessage.mockResolvedValue({
+      text: "ok",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "ok" }],
+      },
+    });
+    const attachments = files.map(({ mimeType, ...originalFile }) => ({
+      contentType: mimeType,
+      contentBase64: Buffer.from("preview").toString("base64"),
+      name: originalFile.filename,
+      originalFile,
+    }));
+    const request = {
+      message: {
+        messageId: crypto.randomUUID(),
+        role: A2AProtocolRole.User,
+        parts: attachments.map((attachment) => ({
+          raw: Buffer.from("preview"),
+          mediaType: attachment.contentType,
+          filename: attachment.name,
+          metadata: { originalFile: attachment.originalFile },
+        })),
+      },
+    };
+    await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request,
+      systemParams: {
+        attachments,
+        chatOpsMessageId: "trigger-ts",
+      },
+    });
+    expect(executeA2AMessage.mock.lastCall?.[0].attachments).toEqual(
+      attachments,
+    );
+    expect(executeA2AMessage.mock.lastCall?.[0].chatOpsMessageId).toBe(
+      "trigger-ts",
+    );
+    await manager.sendMessage({ actor, agentId: agent.id, request });
+    expect(executeA2AMessage.mock.lastCall?.[0].attachments).toEqual(
+      attachments.map(({ originalFile: _originalFile, ...preview }) => preview),
+    );
   });
 
   test("a message carrying only a file part executes", async ({

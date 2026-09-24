@@ -6,8 +6,10 @@ import {
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
 } from "@/models";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   afterAll,
   afterEach,
@@ -15,7 +17,9 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "@/test";
+import { asSandboxId } from "@/types";
 import { stageAttachmentsIntoSandbox } from "./stage-attachments";
 
 // Exercises the real staging path against the test DB: per-execution sandbox
@@ -134,6 +138,69 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
       isolationKey,
     });
     expect(uploads).toHaveLength(1);
+  });
+
+  test("Slack staging reaches the default runtime without persisting uploads or commands", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+    isolationKeys.push(isolationKey);
+    const scope = { organizationId: org.id, userId: user.id, isolationKey };
+    const contentBase64 = Buffer.from("private attachment").toString("base64");
+    const results = await stageAttachmentsIntoSandbox({
+      ...scope,
+      attachments: [
+        {
+          contentType: "application/octet-stream",
+          contentBase64,
+          name: "data.bin",
+        },
+      ],
+      conversationId: null,
+      agentId: "agent-x",
+    });
+    expect(results).toEqual([{ path: "/home/sandbox/attachments/data.bin" }]);
+    const sandbox = await executionSandboxRegistry.getOrCreateDefault({
+      ...scope,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    const nativeRun = vi
+      .spyOn(sandboxRuntimeService, "runCommand")
+      .mockResolvedValue({
+        stdout: "private attachment",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 1,
+        timedOut: false,
+        truncated: false,
+      });
+    await skillSandboxRuntimeService.runCommand({
+      sandboxId: asSandboxId(sandbox.id),
+      caller: { organizationId: org.id, userId: user.id },
+      command: "cat attachments/data.bin",
+    });
+    expect(nativeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spoolRoot: undefined,
+        replayEntries: [
+          {
+            kind: "file",
+            file: {
+              path: "/home/sandbox/attachments/data.bin",
+              encoding: "base64",
+              content: contentBase64,
+            },
+          },
+        ],
+      }),
+    );
+    expect(await SkillSandboxModel.findById(sandbox.id)).toBeNull();
+    expect(
+      await SkillSandboxReplayEventModel.listBySandbox(sandbox.id),
+    ).toEqual([]);
   });
 
   test("stages into the conversation default sandbox when a conversationId is set", async ({

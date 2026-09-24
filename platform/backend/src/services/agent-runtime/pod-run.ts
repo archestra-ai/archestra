@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
-import type { A2AExecuteResult } from "@/agents/a2a-executor";
+import type { A2AAttachment, A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -27,6 +27,7 @@ import type {
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { buildEphemeralAgentRunInputs } from "./input-files";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
 import { generateAgentRunTitle } from "./title";
@@ -58,6 +59,7 @@ async function startAgentRunSession(params: {
   llmApiKeyId: string | null;
   titleUserId?: string;
   resumeFromTaskId?: string;
+  attachments?: A2AAttachment[];
 }): Promise<AgentRunRecord> {
   const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
 
@@ -78,7 +80,15 @@ async function startAgentRunSession(params: {
     environmentNetworkPolicy: environment?.networkPolicy,
     defaultNetworkPolicy: organization?.defaultNetworkPolicy,
   });
-  const inputFiles = await AgentRunInputModel.findByTaskId(params.taskId);
+  const ephemeralFiles =
+    params.completionTarget?.type === "chatops" &&
+    params.completionTarget.ephemeralFiles === true;
+  const inputFiles = ephemeralFiles
+    ? buildEphemeralAgentRunInputs({
+        taskId: params.taskId,
+        attachments: params.attachments ?? [],
+      })
+    : await AgentRunInputModel.findByTaskId(params.taskId);
   const runId = randomUUID();
 
   const priorRun = params.resumeFromTaskId
@@ -115,6 +125,7 @@ async function startAgentRunSession(params: {
     task: params.task,
     runMode: params.runMode,
     inputFiles,
+    ephemeralFiles,
   });
 
   if (workspace) {
@@ -196,7 +207,11 @@ async function startAgentRunSession(params: {
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
       if (previous?.virtualApiKeyId)
         await cleanupAgentRun(previous, { requireTranscript: true });
-      await backend.continueRun({ session, spec });
+      await backend.continueRun({
+        session,
+        spec,
+        ...(ephemeralFiles ? { inputs: inputFiles } : {}),
+      });
     } else {
       createdWorkspace = await AgentWorkspaceModel.create({
         // The initial public run URL is the permanent session URL.
@@ -308,6 +323,7 @@ export async function runTaskInAgentRuntime(params: {
   llmApiKeyId: string | null;
   titleUserId?: string;
   resumeFromTaskId?: string;
+  attachments?: A2AAttachment[];
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
@@ -380,6 +396,12 @@ export async function cleanupAgentRun(
       task?.state === "TASK_STATE_COMPLETED" &&
       ["active", "idle"].includes(workspace?.state ?? ""),
   });
+  if (
+    session.completionTarget?.type === "chatops" &&
+    session.completionTarget.ephemeralFiles
+  ) {
+    await backend.cleanupThreadFiles(session);
+  }
   await AgentWorkspaceModel.release({
     workloadName: session.workloadName,
     taskId: session.taskId,
@@ -408,11 +430,17 @@ async function followAgentRun(params: {
 
   try {
     if (params.launchedAt === undefined) {
+      const ephemeralFiles =
+        session.completionTarget?.type === "chatops" &&
+        session.completionTarget.ephemeralFiles === true;
+      if (ephemeralFiles) await backend.assertThreadFilesAvailable(session);
       await backend.recoverRun(session);
-      await backend.stageInputs({
-        session,
-        inputs: await AgentRunInputModel.findByTaskId(session.taskId),
-      });
+      if (!ephemeralFiles) {
+        await backend.stageInputs({
+          session,
+          inputs: await AgentRunInputModel.findByTaskId(session.taskId),
+        });
+      }
     }
     await backend.waitUntilRunning({
       session,
@@ -496,6 +524,12 @@ async function followAgentRun(params: {
       await backend.releaseRun(session, {
         retainInteractiveSession: outcome === "succeeded",
       });
+      if (
+        session.completionTarget?.type === "chatops" &&
+        session.completionTarget.ephemeralFiles
+      ) {
+        await backend.cleanupThreadFiles(session);
+      }
     })().catch((error) => {
       cleanupSucceeded = false;
       logger.warn(

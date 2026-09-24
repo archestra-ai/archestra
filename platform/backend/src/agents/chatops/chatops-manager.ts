@@ -32,10 +32,12 @@ import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
+  ChatOpsFileDestination,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
+  PreparedChatOpsFileUpload,
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -196,18 +198,34 @@ export class ChatOpsManager {
     );
   }
 
-  /**
-   * Discover all channels in a workspace and upsert them as bindings.
-   * Uses a distributed TTL cache to avoid rediscovering too frequently.
-   * Providers implement channel listing; this method handles caching, upsert, and stale cleanup.
-   */
-  /**
-   * Post one message into a bound channel's thread, outside any incoming
-   * message flow. This is how background work started FROM a chatops
-   * conversation (a runner task) reports back when it finishes — the promise
-   * "I'll follow up once it completes" only means something if something can
-   * actually follow up.
-   */
+  prepareThreadFileUpload(
+    destination: ChatOpsFileDestination,
+  ): PreparedChatOpsFileUpload {
+    const provider = this.getConfiguredFileProvider(destination.provider);
+    if (!provider.uploadFileToThread || !provider.prepareThreadFileUpload) {
+      throw new Error(
+        `The ${destination.provider} provider does not support private file delivery`,
+      );
+    }
+    const { networkUrls } = provider.prepareThreadFileUpload(destination);
+    if (networkUrls.length === 0) {
+      throw new Error(
+        "The file provider has no authorized upload destinations",
+      );
+    }
+    return {
+      destination: {
+        organizationId: destination.organizationId,
+        provider: destination.provider,
+        channelId: destination.channelId,
+        workspaceId: destination.workspaceId,
+        isDm: destination.isDm,
+        threadId: destination.threadId,
+      },
+      networkUrls: [...new Set(networkUrls)].sort(),
+    };
+  }
+
   /**
    * Upload a file into a bound channel thread (a task's demo recording, for
    * example) so it renders natively. Throws with a caller-visible reason when
@@ -220,34 +238,51 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
-  }): Promise<void> {
+    expectedUpload?: PreparedChatOpsFileUpload;
+    /** Recheck the caller's lifetime after asynchronous destination validation. */
+    assertDeliveryActive?: () => void | Promise<void>;
+  }): Promise<undefined | { fileId: string }> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
     }
-    const provider: ChatOpsProvider | null =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
-    if (!provider?.isConfigured()) {
-      throw new Error(`The ${binding.provider} provider is not configured`);
-    }
+    await params.assertDeliveryActive?.();
+    const provider = this.getConfiguredFileProvider(binding.provider);
     if (!provider.uploadFileToThread) {
       throw new Error(
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
-    await provider.uploadFileToThread({
+    if (params.expectedUpload) {
+      const current = this.prepareThreadFileUpload({
+        ...binding,
+        threadId: params.threadId,
+      });
+      const expected = params.expectedUpload;
+      if (
+        current.destination.organizationId !==
+          expected.destination.organizationId ||
+        current.destination.provider !== expected.destination.provider ||
+        current.destination.channelId !== expected.destination.channelId ||
+        current.destination.workspaceId !== expected.destination.workspaceId ||
+        current.destination.isDm !== expected.destination.isDm ||
+        current.destination.threadId !== expected.destination.threadId ||
+        JSON.stringify(current.networkUrls) !==
+          JSON.stringify(expected.networkUrls)
+      ) {
+        throw new Error(
+          "The authorized file destination changed before upload",
+        );
+      }
+    }
+    const receipt = await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,
       filename: params.filename,
       data: params.data,
       comment: params.comment,
     });
+    return receipt || undefined;
   }
 
   async notifyBindingThread(params: {
@@ -1075,6 +1110,16 @@ export class ChatOpsManager {
   // Private Methods
   // ===========================================================================
 
+  private getConfiguredFileProvider(
+    providerId: ChatOpsProviderType,
+  ): ChatOpsProvider {
+    const provider = this.getChatOpsProvider(providerId);
+    if (!provider?.isConfigured()) {
+      throw new Error(`The ${providerId} provider is not configured`);
+    }
+    return provider;
+  }
+
   /**
    * Send a welcome DM to a newly auto-provisioned user.
    * Non-fatal — failures are logged but do not block message processing.
@@ -1417,6 +1462,17 @@ export class ChatOpsManager {
             (sum, a) => sum + Math.ceil((a.contentBase64.length * 3) / 4),
             0,
           ) ?? 0;
+        const currentOriginalSize =
+          message.attachments?.reduce(
+            (sum, attachment) =>
+              sum + (attachment.originalFile?.data.length ?? 0),
+            0,
+          ) ?? 0;
+        let remainingOriginalBudget = Math.max(
+          0,
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
+            currentOriginalSize,
+        );
         const remainingBudget =
           CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
           currentAttachmentSize;
@@ -1459,7 +1515,16 @@ export class ChatOpsManager {
                 return;
               }
               totalSize += size;
-              historyAttachments.push(outcome.attachment);
+              const originalSize =
+                outcome.attachment.originalFile?.data.length ?? 0;
+              if (originalSize > remainingOriginalBudget) {
+                const { originalFile: _original, ...preview } =
+                  outcome.attachment;
+                historyAttachments.push(preview);
+              } else {
+                remainingOriginalBudget -= originalSize;
+                historyAttachments.push(outcome.attachment);
+              }
             });
             if (historyAttachments.length > 0) {
               logger.info(
@@ -2412,6 +2477,8 @@ export class ChatOpsManager {
     const source: InteractionSource =
       CHATOPS_PROVIDER_SOURCES[provider.providerId];
     const systemParams: A2ASystemParams = {
+      attachments: message.attachments,
+      chatOpsMessageId: message.messageId,
       sessionId,
       source,
       routeCategory: RouteCategory.CHATOPS,
@@ -2600,6 +2667,15 @@ export class ChatOpsManager {
             originalMessage.threadId,
           ),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          chatOpsMessageId: originalMessage.messageId,
+          completionTarget: {
+            type: "chatops",
+            bindingId: binding.id,
+            threadId:
+              originalMessage.threadId ??
+              originalMessage.channelId ??
+              originalMessage.messageId,
+          },
           // Resuming after an approval is still a ChatOps run; without this it
           // would fall back to the A2A route category like the initial send did.
           routeCategory: RouteCategory.CHATOPS,

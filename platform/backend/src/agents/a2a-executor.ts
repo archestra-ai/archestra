@@ -24,6 +24,8 @@ import {
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
+import { CHATOPS_ATTACHMENT_LIMITS } from "@/agents/chatops/constants";
+import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import { DelegationLoopError } from "@/agents/errors";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import {
@@ -82,6 +84,8 @@ export interface A2AAttachment {
   contentBase64: string;
   /** Optional filename for context */
   name?: string;
+  /** Private original bytes, supplied only by trusted internal ingestion. */
+  originalFile?: { data: Buffer; filename?: string };
 }
 
 /**
@@ -146,6 +150,8 @@ export interface A2AExecuteParams {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Provider message that triggered this execution; never supplied by a tool. */
+  chatOpsMessageId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
   /**
@@ -230,6 +236,7 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
+    chatOpsMessageId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
     subagentToolStream,
@@ -243,7 +250,7 @@ export async function executeA2AMessage(
   // `params.conversationId` may ever be persisted as a conversation id.
   const isDirectExecutionOutsideConversation =
     !params.conversationId && !params.isolationKey;
-  const isolationKey =
+  let isolationKey =
     params.conversationId ?? params.isolationKey ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
@@ -321,6 +328,22 @@ export async function executeA2AMessage(
   }
 
   try {
+    if (source === "chatops:slack") {
+      if (params.conversationId) {
+        throw new Error(
+          "Slack executions cannot use a persistent conversation sandbox",
+        );
+      }
+      if (isDirectExecutionOutsideConversation) {
+        isolationKey = executionSandboxRegistry.openEphemeralExecution((key) =>
+          threadFileStore.release(key),
+        );
+      } else if (!executionSandboxRegistry.isEphemeralExecution(isolationKey)) {
+        throw new Error(
+          "Slack executions require an active temporary execution scope",
+        );
+      }
+    }
     // One tracker per run, shared between the breaker (records each call) and the
     // stop condition below (terminates the run once repeats hit the ceiling).
     const repeatTracker = new ToolCallRepeatTracker();
@@ -334,6 +357,7 @@ export async function executeA2AMessage(
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsMessageId,
       sessionId,
       delegationChain,
       conversationId: params.conversationId,
@@ -417,8 +441,55 @@ export async function executeA2AMessage(
     // model's capabilities and normalized for the provider. `params.messages`
     // carries only prior context; this turn is appended to it below. Passing
     // `stageAttachments` is what tells `buildUserContent` a sandbox is available.
+    let originalFileNote = "";
+    if (
+      source === "chatops:slack" &&
+      chatOpsBindingId &&
+      chatOpsThreadId &&
+      userId !== "system"
+    ) {
+      const originals = [];
+      const unavailable = [];
+      let originalFileBytes = 0;
+      for (const attachment of attachments ?? []) {
+        const original = attachment.originalFile;
+        if (
+          !original ||
+          originalFileBytes + original.data.length >
+            CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+        ) {
+          unavailable.push(attachment.name ?? "unnamed file");
+          continue;
+        }
+        try {
+          originals.push(
+            threadFileStore.retain({
+              scope: {
+                organizationId,
+                userId,
+                isolationKey,
+                chatOpsBindingId,
+                chatOpsThreadId,
+              },
+              data: original.data,
+              filename: original.filename ?? attachment.name ?? "file",
+            }),
+          );
+          originalFileBytes += original.data.length;
+        } catch {
+          unavailable.push(attachment.name ?? "unnamed file");
+        }
+      }
+      if (originals.length > 0) {
+        originalFileNote += `\n\n[Original files available privately in this Slack thread for this execution: ${JSON.stringify(originals)}. Use post_thread_file with file_id and sha256 from this metadata to forward an original, or upload_file with source {"type":"thread_file","fileId":"..."} to process it in a sandbox. Use these references to transfer the original bytes without reproducing them in tool arguments.]`;
+      }
+      if (unavailable.length > 0) {
+        originalFileNote += `\n\n[Original file bytes are unavailable for ${JSON.stringify(unavailable)}; any inline image is a preview.]`;
+      }
+    }
+    const messageWithOriginals = message + originalFileNote;
     const { content: userContent, note } = await buildUserContent(
-      message,
+      messageWithOriginals,
       attachments,
       {
         provider,
@@ -438,7 +509,7 @@ export async function executeA2AMessage(
           : undefined,
       },
     );
-    const currentTurnText = message + note;
+    const currentTurnText = messageWithOriginals + note;
 
     // Execute via the shared agent-run primitive: it owns the streamText call
     // and transparently recovers empty/abortive/context-length turns before any
@@ -841,6 +912,10 @@ export async function executeA2AMessage(
         : undefined,
     };
   } finally {
+    if (isDirectExecutionOutsideConversation) {
+      executionSandboxRegistry.release(isolationKey);
+      threadFileStore.release(isolationKey);
+    }
     // Clean up browser tab BEFORE decrementing the tracker.
     // This ensures screenshots remain paused while the subagent's tab is
     // being closed, preventing the preview from capturing the wrong tab.
@@ -854,12 +929,6 @@ export async function executeA2AMessage(
 
     if (!isDirectExecutionOutsideConversation) {
       subagentRunTracker.decrement(isolationKey);
-    }
-
-    // The root headless execution owns its generated isolation scope; drop the
-    // per-run sandbox state once the run (and its delegations) finished.
-    if (isDirectExecutionOutsideConversation) {
-      executionSandboxRegistry.release(isolationKey);
     }
   }
 }

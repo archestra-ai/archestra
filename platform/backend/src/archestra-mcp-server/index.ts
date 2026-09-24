@@ -40,6 +40,10 @@ import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import {
+  toolEntries as chatOpsToolEntries,
+  tools as chatOpsTools,
+} from "./chatops";
+import {
   toolEntries as credentialToolEntries,
   tools as credentialTools,
 } from "./credentials";
@@ -172,6 +176,7 @@ function getToolEntries(): Partial<
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
+      ...chatOpsToolEntries,
       ...projectToolEntries,
       ...searchToolEntries,
       ...runToolEntries,
@@ -210,6 +215,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,
+      ...chatOpsTools,
       ...projectTools,
       ...searchToolTools,
       ...runToolTools,

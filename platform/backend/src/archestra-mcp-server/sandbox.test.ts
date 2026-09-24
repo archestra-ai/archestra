@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+import { createHash, randomUUID } from "node:crypto";
 import {
   ADMIN_ROLE_NAME,
   PROJECT_INSTRUCTIONS_FILENAME,
@@ -11,6 +12,7 @@ import {
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
@@ -184,6 +186,126 @@ describe("sandbox tools (runtime enabled)", () => {
   }
 
   describe("run_command", () => {
+    test("volatile default, fresh, and explicit targets stay within the execution", async () => {
+      const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+      const otherKey = executionSandboxRegistry.openEphemeralExecution();
+      const ctx = { ...context, isolationKey };
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      const nativeRun = vi
+        .spyOn(sandboxRuntimeService, "runCommand")
+        .mockResolvedValue({
+          stdout: "ok",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+        });
+      try {
+        const run = (
+          target?: { fresh: boolean } | { id: string },
+          runContext = ctx,
+        ) =>
+          executeArchestraTool(
+            TOOL_RUN_COMMAND_FULL_NAME,
+            { command: "echo ok", target },
+            runContext,
+          );
+        const first = await run();
+        expect(first.isError).toBe(false);
+        const firstId = structuredOf<{ sandboxId: string }>(first).sandboxId;
+        const fresh = await run({ fresh: true });
+        expect(fresh.isError).toBe(false);
+        const freshId = structuredOf<{ sandboxId: string }>(fresh).sandboxId;
+        expect(freshId).not.toBe(firstId);
+        expect(structuredOf<{ sandboxId: string }>(await run()).sandboxId).toBe(
+          firstId,
+        );
+        expect((await run({ id: freshId })).isError).toBe(false);
+        expect(await SkillSandboxModel.findById(firstId)).toBeNull();
+        expect(await SkillSandboxModel.findById(freshId)).toBeNull();
+        expect(
+          await SkillSandboxReplayEventModel.listBySandbox(firstId),
+        ).toEqual([]);
+        const durable = await SkillSandboxModel.create({
+          organizationId,
+          userId,
+          conversationId: null,
+          defaultCwd: "/home/sandbox",
+        });
+        const countBeforeDenials = nativeRun.mock.calls.length;
+        expect(
+          (await run({ id: freshId }, { ...ctx, isolationKey: otherKey }))
+            .isError,
+        ).toBe(true);
+        expect((await run({ id: durable.id })).isError).toBe(true);
+        executionSandboxRegistry.release(isolationKey);
+        expect((await run()).isError).toBe(true);
+        expect(nativeRun).toHaveBeenCalledTimes(countBeforeDenials);
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+        executionSandboxRegistry.release(otherKey);
+      }
+    });
+
+    test("volatile executions cannot save, edit, or copy persistent files", async () => {
+      const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+      const file = await fileStore.put({
+        organizationId,
+        userId,
+        projectId: null,
+        conversationId: null,
+        filename: "existing.txt",
+        mimeType: "text/plain",
+        sizeBytes: 8,
+        data: Buffer.from("original"),
+      });
+      try {
+        const calls = [
+          {
+            tool: TOOL_SAVE_FILE_FULL_NAME,
+            args: {
+              filename: "existing.txt",
+              content: "replaced",
+              overwrite: true,
+            },
+          },
+          {
+            tool: TOOL_EDIT_FILE_FULL_NAME,
+            args: {
+              filename: "existing.txt",
+              old_string: "original",
+              new_string: "replaced",
+            },
+          },
+          {
+            tool: "archestra__copy_file",
+            args: {
+              from: { type: "chat_file", filename: "existing.txt" },
+              to: { scope: "app" },
+            },
+          },
+        ];
+        for (const { tool, args } of calls) {
+          const result = await executeArchestraTool(tool, args, {
+            ...context,
+            isolationKey,
+          });
+          expect(result.isError).toBe(true);
+          expect(textOf(result)).toContain(
+            "Persistent file changes are unavailable",
+          );
+        }
+        expect(
+          (
+            await fileStore.get({ organizationId, userId, ref: file.id })
+          )?.data.toString(),
+        ).toBe("original");
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+      }
+    });
+
     test("lazily creates the conversation default sandbox and delegates to it", async () => {
       const ctx = await makeConversationCtx();
       const runSpy = vi
@@ -991,12 +1113,172 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 
   describe("download_file", () => {
+    test("persistent ChatOps exports do not create Slack file references", async () => {
+      const ctx = {
+        ...context,
+        isolationKey: randomUUID(),
+        chatOpsBindingId: randomUUID(),
+        chatOpsThreadId: "1780000000.000001",
+        chatOpsMessageId: "1780000000.000002",
+      };
+      const data = Buffer.from("private report");
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
+        dataBase64: data.toString("base64"),
+        sizeBytes: data.length,
+      });
+
+      try {
+        const result = await executeArchestraTool(
+          TOOL_DOWNLOAD_FILE_FULL_NAME,
+          { path: "report.txt" },
+          ctx,
+        );
+        expect(result.isError, textOf(result)).toBe(false);
+        const fileId = result.structuredContent?.fileId;
+        if (typeof fileId !== "string") throw new Error("Missing saved file");
+        expect(
+          (await fileStore.get({ ref: fileId, organizationId, userId }))?.data,
+        ).toEqual(data);
+        expect(result.structuredContent).not.toHaveProperty("threadFile");
+        expect(textOf(result)).not.toContain("Slack");
+        expect(textOf(result)).not.toContain("post_thread_file");
+      } finally {
+        executionSandboxRegistry.release(ctx.isolationKey);
+        threadFileStore.release(ctx.isolationKey);
+      }
+    });
+
+    test.for([
+      {
+        filename: "report.pdf",
+        data: Buffer.from("%PDF-1.7\nprivate report\n%%EOF"),
+        expectedMime: "application/pdf",
+      },
+      {
+        filename: "archive.bin",
+        data: Buffer.from([0x00, 0xff, 0x12, 0x90, 0x02]),
+        expectedMime: "application/octet-stream",
+      },
+    ])("stages and exports $filename with byte-derived Slack metadata", async ({
+      filename,
+      data,
+      expectedMime,
+    }) => {
+      config.daggerRuntime.enabled = true;
+      const ctx = {
+        ...context,
+        isolationKey: executionSandboxRegistry.openEphemeralExecution(),
+        chatOpsBindingId: randomUUID(),
+        chatOpsThreadId: "1780000000.000001",
+        chatOpsMessageId: "1780000000.000002",
+      };
+      const threadScope = {
+        organizationId,
+        userId,
+        isolationKey: ctx.isolationKey,
+        chatOpsBindingId: ctx.chatOpsBindingId,
+        chatOpsThreadId: ctx.chatOpsThreadId,
+      };
+      try {
+        const original = threadFileStore.retain({
+          scope: threadScope,
+          data,
+          filename,
+        });
+        const uploaded = await executeArchestraTool(
+          TOOL_UPLOAD_FILE_FULL_NAME,
+          {
+            path: filename,
+            source: { type: "thread_file", fileId: original.fileId },
+          },
+          ctx,
+        );
+        expect(uploaded.isError, textOf(uploaded)).toBe(false);
+        expect(uploaded.structuredContent?.mimeType).toBe(expectedMime);
+        expect(
+          await SkillSandboxFileModel.findUploadDataById(
+            uploaded.structuredContent?.uploadId as string,
+          ),
+        ).toBeNull();
+        const sandboxId = uploaded.structuredContent?.sandboxId as string;
+        expect(await SkillSandboxModel.findById(sandboxId)).toBeNull();
+        expect(
+          await SkillSandboxReplayEventModel.listBySandbox(sandboxId),
+        ).toEqual([]);
+
+        vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
+          dataBase64: data.toString("base64"),
+          sizeBytes: data.length,
+        });
+        const exported = await executeArchestraTool(
+          TOOL_DOWNLOAD_FILE_FULL_NAME,
+          { path: filename, mimeType: "image/png" },
+          ctx,
+        );
+        expect(exported.isError, textOf(exported)).toBe(false);
+        const metadata = exported.structuredContent?.threadFile as ReturnType<
+          typeof threadFileStore.retain
+        >;
+        expect(metadata).toMatchObject({
+          filename,
+          mimeType: expectedMime,
+          sizeBytes: data.length,
+          sha256: createHash("sha256").update(data).digest("hex"),
+        });
+        expect(textOf(exported)).toContain(metadata.fileId);
+        expect(textOf(exported)).toContain(metadata.sha256);
+        expect(textOf(exported)).toContain("post_thread_file");
+        expect(textOf(exported)).not.toContain(data.toString("base64"));
+        expect(exported.structuredContent).not.toHaveProperty("data");
+        expect(
+          threadFileStore.resolve({
+            scope: threadScope,
+            fileId: metadata.fileId,
+          })?.data,
+        ).toEqual(data);
+        expect(exported.structuredContent).not.toHaveProperty("fileId");
+        expect(textOf(exported)).toContain("this execution only");
+        expect(
+          await FileModel.findOrphanByName({
+            organizationId,
+            userId,
+            filename,
+          }),
+        ).toBeNull();
+        executionSandboxRegistry.release(ctx.isolationKey);
+        expect(
+          threadFileStore.resolve({
+            scope: threadScope,
+            fileId: metadata.fileId,
+          }),
+        ).toBeNull();
+        expect(() =>
+          threadFileStore.retain({ scope: threadScope, data, filename }),
+        ).toThrow();
+        const expired = await executeArchestraTool(
+          TOOL_UPLOAD_FILE_FULL_NAME,
+          {
+            path: filename,
+            source: { type: "text", text: "late bytes" },
+          },
+          ctx,
+        );
+        expect(expired.isError).toBe(true);
+      } finally {
+        executionSandboxRegistry.release(ctx.isolationKey);
+        threadFileStore.release(ctx.isolationKey);
+      }
+    });
+
     test("delegates to the runtime service and returns fileId without a download link", async () => {
       const ctx = await makeConversationCtx();
       const exportSpy = vi
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "artifact-1",
+          data: Buffer.alloc(42, 7),
+          filename: "file.txt",
           sandboxId: "sb" as any,
           path: "/home/sandbox/out/file.txt",
           mimeType: "text/plain",
@@ -1021,12 +1303,15 @@ describe("sandbox tools (runtime enabled)", () => {
         fileId: string;
         sizeBytes: number;
         downloadUrl?: string;
+        threadFile?: unknown;
       }>(result);
       expect(structured.fileId).toBe("artifact-1");
       expect(structured.sizeBytes).toBe(42);
       // No download link is surfaced anymore — the file is reached via the Files
       // panel, and neither the structured output nor the text mentions a URL.
       expect(structured.downloadUrl).toBeUndefined();
+      expect(structured.threadFile).toBeUndefined();
+      expect(structured).not.toHaveProperty("data");
       expect(JSON.stringify(result.content)).not.toContain(
         "/api/skill-sandbox/artifacts",
       );
@@ -1043,6 +1328,8 @@ describe("sandbox tools (runtime enabled)", () => {
       const ctx = await makeConversationCtx();
       vi.spyOn(skillSandboxRuntimeService, "exportArtifact").mockResolvedValue({
         artifactId: "tiny-png",
+        data: Buffer.alloc(256, 7),
+        filename: "preview.png",
         sandboxId: "sb" as any,
         path: "/home/sandbox/preview.png",
         mimeType: "image/png",
@@ -1136,6 +1423,8 @@ describe("sandbox tools (runtime enabled)", () => {
       });
       const first = await skillSandboxRuntimeService.exportArtifact(params);
       expect(first.overwritten).toBe(false);
+      if (!first.artifactId)
+        throw new Error("Durable export returned no file id");
 
       readSpy.mockResolvedValue({
         dataBase64: Buffer.from("version-two").toString("base64"),
@@ -1148,6 +1437,13 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(second.overwritten).toBe(true);
       expect(second.artifactId).toBe(first.artifactId);
       expect(second.sizeBytes).toBe(Buffer.from("version-two").byteLength);
+      expect(first.data).toEqual(Buffer.from("v1"));
+      expect(second.data).toEqual(Buffer.from("version-two"));
+      expect(first.filename).toBe("result.txt");
+      expect(
+        (await fileStore.get({ ref: first.artifactId, organizationId, userId }))
+          ?.data,
+      ).toEqual(second.data);
     });
 
     // Conversation scope resolves the existing file via resolveMyFileRef (not the
@@ -1262,7 +1558,7 @@ describe("sandbox tools (runtime enabled)", () => {
       const text = textOf(result);
       expect(text).toContain("Validation error in");
       expect(text).toContain(
-        'source.type: set "type" to one of: "chat_attachment", "base64", "text"',
+        'source.type: set "type" to one of: "thread_file", "chat_attachment", "base64", "text", "my_file"',
       );
       expect(uploadSpy).not.toHaveBeenCalled();
     });
@@ -1732,6 +2028,8 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-0",
+          data: Buffer.from("out"),
+          filename: "out.txt",
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",
@@ -1769,6 +2067,8 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-1",
+          data: Buffer.from("out"),
+          filename: "out.txt",
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",

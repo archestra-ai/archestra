@@ -29,14 +29,11 @@ import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { modelSyncService } from "@/services/model-sync";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
-import type {
-  AgentRunInput,
-  EffectiveNetworkPolicy,
-  ResolvedAgentRuntime,
-} from "@/types";
+import type { EffectiveNetworkPolicy, ResolvedAgentRuntime } from "@/types";
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
+import type { RuntimeInputFile } from "./backends/types";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
 import {
@@ -75,7 +72,8 @@ export async function buildAgentRunLaunchSpec(params: {
   task?: string | null;
   /** Whether the Agent owns a live TUI or exits after its first result. */
   runMode: "interactive" | "one_shot";
-  inputFiles?: AgentRunInput[];
+  inputFiles?: RuntimeInputFile[];
+  ephemeralFiles?: boolean;
   imagePullSecrets?: string[];
 }): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
@@ -242,6 +240,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
     ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
+    ...(params.ephemeralFiles
+      ? { ARCHESTRA_AGENT_RUNTIME_THREAD_FILES: "1" }
+      : {}),
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
     // capability detection. Their single-provider virtual key keeps this
@@ -295,6 +296,7 @@ export async function buildAgentRunLaunchSpec(params: {
   const task = taskWithAgentRunInputs({
     task: params.task,
     inputs: params.inputFiles ?? [],
+    ephemeralTaskId: params.ephemeralFiles ? params.taskId : undefined,
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
@@ -376,7 +378,10 @@ export async function buildAgentRunLaunchSpec(params: {
       nodeSelector: config.agentRuntime.nodeSelector,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
-      inputFileCount: params.inputFiles?.length ?? 0,
+      inputFileCount: Math.max(
+        params.ephemeralFiles ? 1 : 0,
+        params.inputFiles?.length ?? 0,
+      ),
     },
   };
 }
@@ -422,6 +427,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
+  "ARCHESTRA_AGENT_RUNTIME_THREAD_FILES",
   "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
   "ARCHESTRA_LLM_PROXY_PROTOCOL",
   "ARCHESTRA_LLM_PROXY_URL",

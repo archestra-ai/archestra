@@ -21,6 +21,10 @@ import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
+import {
+  type EphemeralSandboxState,
+  ephemeralSandboxStore,
+} from "./ephemeral-sandbox-store";
 import { storageFilename } from "./file-storage";
 import { fileStore } from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
@@ -31,9 +35,9 @@ import {
   skillRootPath,
 } from "./runtime-image";
 import {
-  type ArtifactRef,
   type CommandResult,
   type ExportArtifactParams,
+  type ExportedArtifact,
   type MountRef,
   type MountSkillParams,
   type RunCommandParams,
@@ -68,9 +72,9 @@ interface SandboxQueueState {
 }
 
 /**
- * Orchestrates DB-backed skill sandboxes: loads snapshots + replay log,
- * delegates execution to the unified `sandboxRuntimeService`, appends the
- * result to the command log.
+ * Orchestrates persistent and execution-scoped skill sandbox recipes through
+ * the same runtime. Temporary recipes retain inputs and replay commands only
+ * in memory; their command output and exported bytes are never saved here.
  *
  * Per-sandbox serialization is enforced here (not in the runtime service) so
  * concurrent calls cannot observe stale replay state or record commands out of
@@ -109,10 +113,11 @@ class SkillSandboxRuntimeService {
     validateCommand(params.command, params.cwd ?? null);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
-    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+    return this.runWithSandbox(params.sandboxId, async (sandbox, ephemeral) => {
       const { stagingNotices, replayEntries } = await this.prepareExecution(
         sandbox,
         params.caller,
+        ephemeral,
       );
       const cwd = params.cwd ?? sandbox.defaultCwd;
 
@@ -129,14 +134,14 @@ class SkillSandboxRuntimeService {
           environment: params.environment,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
+          spoolRoot: ephemeral ? undefined : SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
       } catch (error) {
         // engine-level failure (unreachable / internal panic) — the command
         // may have already run inside Dagger but we lost the result. Record a
-        // synthetic row so subsequent replays re-execute it instead of
+        // synthetic replay step so subsequent calls re-execute it instead of
         // silently dropping it from the log, then surface the error.
         // wall-clock of the failed engine call (the inner durationMs is lost on
         // throw); the success path below observes the engine-reported duration.
@@ -145,13 +150,21 @@ class SkillSandboxRuntimeService {
           durationSeconds: (Date.now() - startedAt) / 1000,
         });
         if (shouldRecordOnFailure(error)) {
-          await this.appendSyntheticRow({
-            sandboxId: params.sandboxId,
-            organizationId: sandbox.organizationId,
-            command: params.command,
-            cwd: params.cwd ?? null,
-            timeoutSeconds,
-          });
+          if (ephemeral) {
+            ephemeral.appendCommand({
+              command: params.command,
+              cwd,
+              timeoutSeconds,
+            });
+          } else {
+            await this.appendSyntheticRow({
+              sandboxId: params.sandboxId,
+              organizationId: sandbox.organizationId,
+              command: params.command,
+              cwd: params.cwd ?? null,
+              timeoutSeconds,
+            });
+          }
         }
         throw this.toSkillError(error);
       }
@@ -160,6 +173,23 @@ class SkillSandboxRuntimeService {
         status: metrics.sandbox.classifyCommandStatus(executed),
         durationSeconds: executed.durationMs / 1000,
       });
+
+      if (ephemeral) {
+        const commandId = ephemeral.appendCommand({
+          command: params.command,
+          cwd,
+          timeoutSeconds,
+        });
+        return {
+          commandId,
+          sandboxId: params.sandboxId,
+          command: params.command,
+          cwd: params.cwd ?? null,
+          ...executed,
+          binaryStripped: false,
+          stagingNotices,
+        };
+      }
 
       let row: Awaited<
         ReturnType<typeof SkillSandboxReplayEventModel.appendCommand>
@@ -213,13 +243,16 @@ class SkillSandboxRuntimeService {
     });
   }
 
-  async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
+  async exportArtifact(
+    params: ExportArtifactParams,
+  ): Promise<ExportedArtifact> {
     this.ensureEnabled();
 
-    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+    return this.runWithSandbox(params.sandboxId, async (sandbox, ephemeral) => {
       const { stagingNotices, replayEntries } = await this.prepareExecution(
         sandbox,
         params.caller,
+        ephemeral,
       );
       const resolvedPath = resolveArtifactPath({
         path: params.path,
@@ -240,7 +273,7 @@ class SkillSandboxRuntimeService {
           // here invalidates Dagger's per-replay layer cache.
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
+          spoolRoot: ephemeral ? undefined : SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -257,6 +290,20 @@ class SkillSandboxRuntimeService {
         originalName: null,
         path: resolvedPath,
       });
+
+      if (ephemeral) {
+        ephemeral.assertActive();
+        return {
+          data,
+          filename,
+          sandboxId: params.sandboxId,
+          path: resolvedPath,
+          mimeType,
+          sizeBytes: data.byteLength,
+          stagingNotices,
+          overwritten: false,
+        };
+      }
 
       // Overwrite: replace an existing same-named persistent file in this scope
       // in place, keeping its id — the export-side counterpart of save_file's
@@ -294,6 +341,8 @@ class SkillSandboxRuntimeService {
           if (updated) {
             return {
               artifactId: updated.id,
+              data,
+              filename,
               sandboxId: params.sandboxId,
               path: resolvedPath,
               mimeType: updated.mimeType,
@@ -348,6 +397,8 @@ class SkillSandboxRuntimeService {
 
       return {
         artifactId: row.id,
+        data,
+        filename,
         sandboxId: params.sandboxId,
         path: resolvedPath,
         mimeType: row.mimeType,
@@ -359,8 +410,9 @@ class SkillSandboxRuntimeService {
   }
 
   /**
-   * Persist an uploaded file as an ordered replay event. No Dagger work happens
-   * here — the bytes become part of the recipe and are materialized on the next
+   * Append an upload to the ordered recipe, in memory for temporary executions
+   * and in persistent storage otherwise. No Dagger work happens here — the bytes
+   * become part of the recipe and are materialized on the next
    * run/export. Serialized through `runExclusive` so the upload's sequence lands
    * after any in-flight command's append and before the next run reads context;
    * otherwise replay order could diverge from execution order.
@@ -368,7 +420,7 @@ class SkillSandboxRuntimeService {
   async uploadFile(params: UploadFileParams): Promise<UploadRef> {
     this.ensureEnabled();
 
-    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+    return this.runWithSandbox(params.sandboxId, async (sandbox, ephemeral) => {
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
@@ -391,6 +443,15 @@ class SkillSandboxRuntimeService {
         buffer: params.data,
         claimed: params.mimeType,
       });
+
+      if (ephemeral) {
+        return ephemeral.appendUpload({
+          path: resolvedPath,
+          mimeType,
+          data: params.data,
+          dedupeId: params.dedupeId,
+        });
+      }
 
       let row: Awaited<
         ReturnType<typeof SkillSandboxReplayEventModel.appendUpload>
@@ -456,12 +517,13 @@ class SkillSandboxRuntimeService {
    * Mount an immutable skill version into a sandbox: append a `skill_mount`
    * replay event pinning the version and — for every `requirements.txt` the
    * version ships (root or nested, e.g. `tools/requirements.txt`) — an install
-   * command right after it, all in one transaction so the deps can never be
-   * lost. No Dagger work happens here; the mount becomes part of the recipe and
+   * command right after it. Persistent recipes use one transaction; temporary
+   * recipes admit the complete batch atomically in memory. No Dagger work happens
+   * here; the mount becomes part of the recipe and
    * materializes on the next run/export.
    *
-   * Idempotent and race-safe: `appendSkillMount` inserts under a
-   * `(sandbox_id, skill_id)` unique constraint, so a concurrent or repeated
+   * Idempotent and race-safe: the queue serializes temporary mounts, while the
+   * persistent path uses a `(sandbox_id, skill_id)` unique constraint. A repeated
    * activation of the same skill is a no-op that returns null. The version's
    * files are read here to detect requirements and to reject any path that the
    * Rust replay validator would later refuse.
@@ -469,7 +531,7 @@ class SkillSandboxRuntimeService {
   async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
     this.ensureEnabled();
 
-    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+    return this.runWithSandbox(params.sandboxId, async (sandbox, ephemeral) => {
       const files = await SkillVersionModel.findFiles(
         params.skill.skillVersionId,
       );
@@ -481,6 +543,45 @@ class SkillSandboxRuntimeService {
         params.skill.skillName,
         files.map((file) => file.path),
       );
+
+      if (ephemeral) {
+        const version = await SkillVersionModel.findById(
+          params.skill.skillVersionId,
+        );
+        if (!version)
+          throw new SkillSandboxError("The skill version no longer exists.");
+        const mount = ephemeral.appendMount({
+          skill: params.skill,
+          entry: {
+            kind: "skill_mount",
+            skillMount: {
+              skillName: params.skill.skillName,
+              files: [
+                {
+                  skillName: params.skill.skillName,
+                  path: SKILL_MANIFEST_FILENAME,
+                  encoding: "utf8",
+                  content: version.content,
+                },
+                ...files.map((file) => ({
+                  skillName: params.skill.skillName,
+                  path: file.path,
+                  encoding: file.encoding,
+                  content: file.content,
+                })),
+              ],
+            },
+          },
+          installCommands,
+        });
+        return mount
+          ? {
+              mountId: mount.id,
+              sandboxId: params.sandboxId,
+              skillName: mount.skillName,
+            }
+          : null;
+      }
 
       let mount: Awaited<
         ReturnType<typeof SkillSandboxReplayEventModel.appendSkillMount>
@@ -514,6 +615,12 @@ class SkillSandboxRuntimeService {
         skillName: params.skill.skillName,
       };
     });
+  }
+
+  async findMountBySkill(params: { sandboxId: string; skillId: string }) {
+    const ephemeral = ephemeralSandboxStore.findById(params.sandboxId);
+    if (ephemeral) return ephemeral.findMountBySkill(params.skillId);
+    return SkillSandboxModel.findMountBySkill(params);
   }
 
   // === private ===
@@ -605,11 +712,21 @@ class SkillSandboxRuntimeService {
 
   private runWithSandbox<T>(
     sandboxId: SandboxId,
-    fn: (sandbox: SkillSandbox) => Promise<T>,
+    fn: (
+      sandbox: SkillSandbox,
+      ephemeral?: EphemeralSandboxState,
+    ) => Promise<T>,
   ): Promise<T> {
-    return this.runExclusive(sandboxId, async () =>
-      fn(await this.loadSandbox(sandboxId)),
-    );
+    // Capture the lease before queueing. Closing while this operation waits
+    // must reject it, never reload a durable sandbox or recreate a recipe.
+    const ephemeral = ephemeralSandboxStore.findById(sandboxId);
+    return this.runExclusive(sandboxId, async () => {
+      if (ephemeral) {
+        ephemeral.assertActive();
+        return fn(ephemeral.sandbox, ephemeral);
+      }
+      return fn(await this.loadSandbox(sandboxId));
+    });
   }
 
   /**
@@ -623,8 +740,15 @@ class SkillSandboxRuntimeService {
   private async prepareExecution(
     sandbox: SkillSandbox,
     caller: SandboxCaller,
+    ephemeral?: EphemeralSandboxState,
   ): Promise<{ stagingNotices: string[]; replayEntries: ReplayEntry[] }> {
-    await this.assertMountsReadable(asSandboxId(sandbox.id), caller);
+    await this.assertMountsReadable(
+      asSandboxId(sandbox.id),
+      caller,
+      ephemeral?.skillIds,
+    );
+    if (ephemeral)
+      return { stagingNotices: [], replayEntries: ephemeral.replayEntries };
     const stagingNotices = await stageConversationAttachments(sandbox);
     const { replayEntries } = await this.buildContext(sandbox);
     return { stagingNotices, replayEntries };
@@ -639,9 +763,11 @@ class SkillSandboxRuntimeService {
   private async assertMountsReadable(
     sandboxId: SandboxId,
     caller: SandboxCaller,
+    skillIds?: string[],
   ): Promise<void> {
     const result = await assertMountedSkillsReadable({
       sandboxId,
+      skillIds,
       userId: caller.userId,
       organizationId: caller.organizationId,
       agentId: caller.agentId,

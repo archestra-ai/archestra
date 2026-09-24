@@ -1,9 +1,16 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
+import { AGENT_RUNTIME_THREAD_FILES_DIR } from "@/services/agent-runtime/runtime-contract";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -238,6 +245,115 @@ describe("buildAgentRuntimeSandbox", () => {
     expect(container?.command?.join("\n")).toContain(
       "/var/run/archestra/inputs-ready",
     );
+  });
+
+  it("does not release a stale request with another turn's temporary files", () => {
+    const directory = mkdtempSync(
+      path.join(tmpdir(), "runtime-input-barrier-"),
+    );
+    try {
+      const retained = path.join(directory, "retained");
+      mkdirSync(retained);
+      writeFileSync(path.join(retained, "inputs-ready"), "");
+      const otherFiles = path.join(directory, "volatile", "another-task");
+      mkdirSync(otherFiles, { recursive: true });
+      writeFileSync(path.join(otherFiles, ".ready"), "");
+      const command = buildAgentRuntimeSandbox({
+        ...SPEC,
+        env: { ...SPEC.env, ARCHESTRA_AGENT_RUNTIME_THREAD_FILES: "1" },
+        command: ["/bin/sh", "-c", "echo AGENT_STARTED"],
+      }).spec.podTemplate.spec?.containers[0].env?.find(
+        ({ name }) => name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
+      )?.value;
+      if (!command) throw new Error("Missing entrypoint");
+      const result = spawnSync(
+        "/bin/sh",
+        [
+          "-c",
+          `sleep() { :; };\n${command
+            .replaceAll("/var/run/archestra", retained)
+            .replaceAll(
+              AGENT_RUNTIME_THREAD_FILES_DIR,
+              path.join(directory, "volatile"),
+            )}`,
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: "/usr/bin:/bin",
+            ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT: "1",
+            ARCHESTRA_AGENT_RUNTIME_THREAD_FILES: "1",
+            ARCHESTRA_AGENT_RUNTIME_TASK_ID: SPEC.taskId,
+          },
+          timeout: 5000,
+        },
+      );
+      expect(result.status, result.stderr).toBe(74);
+      expect(result.stdout).not.toContain("AGENT_STARTED");
+      expect(result.stderr).toContain("timed out while staging run inputs");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("starts a replacement supervisor and continuation without the initial turn's temporary files", () => {
+    const directory = mkdtempSync(
+      path.join(tmpdir(), "runtime-continuation-barrier-"),
+    );
+    try {
+      const retained = path.join(directory, "retained");
+      const continuedTask = "11111111-2222-3333-4444-555555555555";
+      const files = path.join(directory, "volatile", continuedTask);
+      mkdirSync(path.join(retained, "turns"), { recursive: true });
+      mkdirSync(files, { recursive: true });
+      writeFileSync(path.join(retained, "inputs-ready"), "");
+      writeFileSync(path.join(retained, "turns", `${SPEC.taskId}.exit`), "0");
+      writeFileSync(path.join(files, ".ready"), "");
+      const command =
+        buildAgentRuntimeSandbox(SPEC).spec.podTemplate.spec?.containers[0]
+          .command?.[2];
+      if (!command) throw new Error("Missing bootstrap command");
+      const localize = (script: string) =>
+        script
+          .replaceAll("/var/run/archestra", retained)
+          .replaceAll(
+            AGENT_RUNTIME_THREAD_FILES_DIR,
+            path.join(directory, "volatile"),
+          );
+      const boot = spawnSync(
+        "/bin/sh",
+        ["-c", `tmux() { exit 0; }; sleep() { :; };\n${localize(command)}`],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: "/usr/bin:/bin",
+            ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT: "1",
+            ARCHESTRA_AGENT_RUNTIME_THREAD_FILES: "1",
+            ARCHESTRA_AGENT_RUNTIME_TASK_ID: SPEC.taskId,
+          },
+          timeout: 5000,
+        },
+      );
+      expect(boot.status, boot.stderr).toBe(0);
+      const turn = buildAgentRuntimeTurnScript({
+        ...SPEC,
+        runtimeScope: SPEC.namespace,
+        taskId: continuedTask,
+        env: {
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: continuedTask,
+          ARCHESTRA_AGENT_RUNTIME_THREAD_FILES: "1",
+        },
+        command: ["/bin/sh", "-c", "echo CONTINUED"],
+      });
+      const run = spawnSync("/bin/sh", ["-c", localize(turn)], {
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stdout).toBe("CONTINUED\n");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("omits envFrom entirely when there are no secrets to mount", () => {

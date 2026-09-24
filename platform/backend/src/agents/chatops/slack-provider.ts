@@ -27,6 +27,7 @@ import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
+  ChatOpsFileDestination,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -545,25 +546,45 @@ class SlackProvider implements ChatOpsProvider {
     return firstTs;
   }
 
+  prepareThreadFileUpload(destination: ChatOpsFileDestination): {
+    networkUrls: readonly string[];
+  } {
+    if (destination.isDm || !/^\d+\.\d+$/.test(destination.threadId)) {
+      throw new Error("The current Slack channel thread is unavailable");
+    }
+    if (!destination.workspaceId || this.teamId !== destination.workspaceId) {
+      throw new Error(
+        "The Slack connection no longer matches the authorized workspace",
+      );
+    }
+    return { networkUrls: ["https://slack.com", "https://files.slack.com"] };
+  }
+
   async uploadFileToThread(options: {
     channelId: string;
     threadId: string;
     filename: string;
     data: Buffer;
     comment?: string;
-  }): Promise<void> {
+  }): Promise<{ fileId: string }> {
     if (!this.client) {
       throw new Error("SlackProvider not initialized");
     }
     // files.uploadV2 shares the file into the thread; Slack renders video and
     // image uploads natively, which a plain link cannot.
-    await this.client.files.uploadV2({
+    const result = await this.client.files.uploadV2({
       channel_id: options.channelId,
       thread_ts: options.threadId,
       filename: options.filename,
       file: options.data,
       ...(options.comment ? { initial_comment: options.comment } : {}),
     });
+    // uploadV2 wraps completeUploadExternal responses in its own `files` array.
+    const completion = result as { files?: { files?: { id?: string }[] }[] };
+    const fileId = completion.files?.[0]?.files?.[0]?.id;
+    if (!fileId)
+      throw new Error("Slack did not return an uploaded file receipt");
+    return { fileId };
   }
 
   async addApprovalRequestForm(
@@ -1863,6 +1884,7 @@ class SlackProvider implements ChatOpsProvider {
       outcomes.push({ status: "skipped", skipped });
     };
     let totalSize = 0;
+    let originalFileSize = 0;
     let deliveredCount = 0;
     // Once the combined budget is spent, every remaining file is recorded as
     // over-budget rather than silently skipped (the old code `break`-ed here).
@@ -2060,6 +2082,14 @@ class SlackProvider implements ChatOpsProvider {
             continue;
           }
 
+          // Preserve the private original independently of the model preview.
+          // This separate budget counts original bytes, including resized images.
+          const originalFile =
+            originalFileSize + buffer.length <=
+            CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+              ? { data: buffer, filename: file.name }
+              : undefined;
+
           // Shrink an image that is too large for the model's inline limit
           // (covers both >10 MB images downloaded for conversion and images in
           // the 3.75–10 MB band). If it can't be brought under the limit, report
@@ -2115,6 +2145,7 @@ class SlackProvider implements ChatOpsProvider {
           }
 
           totalSize += buffer.length;
+          originalFileSize += originalFile?.data.length ?? 0;
           deliveredCount++;
           outcomes.push({
             status: "delivered",
@@ -2122,6 +2153,7 @@ class SlackProvider implements ChatOpsProvider {
               contentType,
               contentBase64: buffer.toString("base64"),
               name: file.name,
+              ...(originalFile ? { originalFile } : {}),
             },
           });
 

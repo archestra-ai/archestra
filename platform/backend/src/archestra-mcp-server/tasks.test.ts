@@ -702,7 +702,7 @@ describe("run tools", () => {
     });
     const upload = vi
       .spyOn(chatOpsManager, "uploadFileToBindingThread")
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     const result = await executeArchestraTool(
       TOOL_POST_RUN_FILE_FULL_NAME,
@@ -733,7 +733,7 @@ describe("run tools", () => {
     });
     const upload = vi
       .spyOn(chatOpsManager, "uploadFileToBindingThread")
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     const result = await executeArchestraTool(
       TOOL_POST_RUN_FILE_FULL_NAME,
@@ -765,7 +765,7 @@ describe("run tools", () => {
     });
     const upload = vi
       .spyOn(chatOpsManager, "uploadFileToBindingThread")
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     const result = await executeArchestraTool(
       TOOL_POST_RUN_FILE_FULL_NAME,

@@ -40,6 +40,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
+import { redactFileToolArguments } from "@/utils/redact-file-payloads";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
 import { mcpToolCallBelongsToOrganization } from "./log-organization";
@@ -709,7 +710,7 @@ function toVisibleMcpToolCall(
 }
 
 /**
- * Strips credential values out of the logged arguments. Reassigns `toolCall`
+ * Strips credentials and legacy file bytes from logged arguments. Reassigns `toolCall`
  * rather than editing it, so the caller's plaintext copy — which the gateway
  * still needs for its JSON-RPC response — is left intact.
  */
@@ -717,7 +718,10 @@ function redactToolCallArguments(values: InsertMcpToolCall): InsertMcpToolCall {
   const toolCall = values.toolCall;
   if (!toolCall?.arguments) return values;
 
-  const redacted = redactCatalogToolArguments(toolCall.arguments);
+  const redacted = redactFileToolArguments(
+    toolCall.name,
+    redactCatalogToolArguments(toolCall.arguments),
+  );
   // Same reference back means nothing matched; skip the rewrite entirely.
   if (redacted === toolCall.arguments) return values;
 

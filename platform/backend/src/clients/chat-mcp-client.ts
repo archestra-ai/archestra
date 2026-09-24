@@ -808,6 +808,7 @@ export async function getChatMcpTools({
   organizationId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsMessageId,
   enabledToolIds,
   conversationId,
   isolationKey,
@@ -836,6 +837,8 @@ export async function getChatMcpTools({
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Incoming ChatOps message ID from the trusted provider path. */
+  chatOpsMessageId?: string;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -1041,6 +1044,7 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsMessageId,
       sessionId,
       delegationChain,
       scheduleTriggerRunId,

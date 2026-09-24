@@ -35,6 +35,56 @@ describe("executionSandboxRegistry", () => {
     executionSandboxRegistry.release(isolationKey);
   });
 
+  test("volatile defaults and fresh sandboxes stay scoped and cannot reopen after release", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+    const otherKey = executionSandboxRegistry.openEphemeralExecution();
+    const params = {
+      organizationId: org.id,
+      userId: user.id,
+      isolationKey,
+      defaultCwd: "/home/sandbox",
+    };
+    try {
+      const [first, same] = await Promise.all([
+        executionSandboxRegistry.getOrCreateDefault(params),
+        executionSandboxRegistry.getOrCreateDefault(params),
+      ]);
+      const fresh = await executionSandboxRegistry.createFresh(params);
+      expect(first.id).toBe(same.id);
+      expect(fresh.id).not.toBe(first.id);
+      expect(await SkillSandboxModel.findById(first.id)).toBeNull();
+      expect(await SkillSandboxModel.findById(fresh.id)).toBeNull();
+      expect(
+        executionSandboxRegistry.isOwned({ ...params, sandboxId: fresh.id }),
+      ).toBe(true);
+      expect(
+        executionSandboxRegistry.isOwned({
+          ...params,
+          isolationKey: otherKey,
+          sandboxId: first.id,
+        }),
+      ).toBe(false);
+      executionSandboxRegistry.release(isolationKey);
+      expect(
+        executionSandboxRegistry.isOwned({ ...params, sandboxId: first.id }),
+      ).toBe(false);
+      await expect(
+        executionSandboxRegistry.getOrCreateDefault(params),
+      ).rejects.toThrow();
+      await expect(
+        executionSandboxRegistry.createFresh(params),
+      ).rejects.toThrow();
+    } finally {
+      executionSandboxRegistry.release(isolationKey);
+      executionSandboxRegistry.release(otherKey);
+    }
+  });
+
   test("a failed creation is retried instead of caching the rejection", async ({
     makeOrganization,
     makeUser,

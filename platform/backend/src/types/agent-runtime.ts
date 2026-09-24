@@ -72,6 +72,7 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
     type: z.literal("chatops"),
     bindingId: z.string().uuid(),
     threadId: z.string().min(1),
+    ephemeralFiles: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("email"),

@@ -24,6 +24,7 @@ vi.mock("./channel-activation", async (importOriginal) => {
 import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
@@ -1878,6 +1879,96 @@ describe("ChatOpsManager security validation", () => {
     }
   });
 
+  test("Slack approval resumes retain the original file-delivery destination and triggering message", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "approver@example.com" });
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    const originalMessage = createMockMessage({
+      messageId: "1790010000.000001",
+      threadId: "1790000000.000001",
+      senderEmail: user.email,
+    });
+    const executor = mockA2AExecutor().mockResolvedValueOnce({
+      text: "",
+      messageId: crypto.randomUUID(),
+      finishReason: "tool-calls",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-review",
+            state: "approval-requested",
+            toolCallId: "review-call",
+            input: {},
+            approval: { id: "approval-review" },
+          },
+        ],
+      },
+    });
+    // Persist the actual approval task so the resume traverses the A2A manager
+    // and its task history, stopping only at the agent execution boundary.
+    const initial = await new A2AManager({ stateless: true }).sendMessage({
+      actor: { id: user.id, kind: "user", organizationId: org.id },
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Review and generate a report" }],
+        },
+      },
+      systemParams: {
+        source: "chatops:slack",
+        chatOpsMessageId: originalMessage.messageId,
+        completionTarget: {
+          type: "chatops",
+          bindingId: binding.id,
+          threadId: originalMessage.threadId as string,
+        },
+      },
+    });
+    if (!initial.task) throw new Error("Expected a persisted approval task");
+    const provider: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      providerId: "slack",
+      displayName: "Slack",
+    };
+    await new ChatOpsManager().handleInteractiveApprovalDecision(provider, {
+      taskId: initial.task.id,
+      approvalId: "approval-review",
+      approved: true,
+      toolName: "review",
+      messageTs: "1790010010.000001",
+      channelId: originalMessage.channelId,
+      workspaceId: originalMessage.workspaceId,
+      userId: originalMessage.senderId,
+      userName: "Approver",
+      responseUrl: "",
+      originalMessage,
+    });
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(executor.mock.lastCall?.[0]).toMatchObject({
+      source: "chatops:slack",
+      userId: user.id,
+      organizationId: org.id,
+      chatOpsBindingId: binding.id,
+      chatOpsThreadId: originalMessage.threadId,
+      chatOpsMessageId: originalMessage.messageId,
+    });
+  });
+
   test("Teams approver mixed-case email is accepted", async ({
     makeUser,
     makeOrganization,
@@ -3114,7 +3205,11 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(callArg.message).toContain("IMG_0354.png");
   });
 
-  test("includes image attachments from thread history in follow-up messages", async ({
+  test.for([
+    undefined,
+    "image/png",
+    "application/pdf",
+  ])("includes history previews and bounds original bytes with current file type=%s", async (currentContentType, {
     makeUser,
     makeOrganization,
     makeTeam,
@@ -3125,6 +3220,10 @@ describe("ChatOpsManager attachment passthrough", () => {
       contentType: "image/png",
       contentBase64: Buffer.alloc(10_000).toString("base64"),
       name: "photo.png",
+      originalFile: {
+        data: Buffer.alloc(16 * 1024 * 1024, 1),
+        filename: "photo.png",
+      },
     };
 
     const executorSpy = vi
@@ -3198,11 +3297,27 @@ describe("ChatOpsManager attachment passthrough", () => {
       manager as unknown as { msTeamsProvider: ChatOpsProvider }
     ).msTeamsProvider = mockProvider;
 
-    // Follow-up message with no new attachments, but in the same thread
+    const currentFileAttachment = {
+      ...historyImageAttachment,
+      contentType: currentContentType ?? "image/png",
+      name:
+        currentContentType === "application/pdf"
+          ? "current.pdf"
+          : "current.png",
+      originalFile: {
+        data: Buffer.alloc(10 * 1024 * 1024, 2),
+        filename:
+          currentContentType === "application/pdf"
+            ? "current.pdf"
+            : "current.png",
+      },
+    };
+    // Current files keep their original-byte budget before historical files.
     const message = createMockMessage({
       threadId: "thread-123",
       isThreadReply: true,
       text: "What breed is the cat?",
+      attachments: currentContentType ? [currentFileAttachment] : undefined,
     });
 
     const result = await manager.processMessage({
@@ -3211,17 +3326,25 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
-    // The image from thread history should be forwarded to the executor via the
-    // `attachments` param.
-    expect(executorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachments: expect.arrayContaining([
-          expect.objectContaining({
-            contentType: historyImageAttachment.contentType,
-          }),
-        ]),
-      }),
+    const received = executorSpy.mock.lastCall?.[0];
+    expect(received?.chatOpsMessageId).toBe(message.messageId);
+    expect(received?.attachments?.[0].contentBase64).toBe(
+      historyImageAttachment.contentBase64,
     );
+    if (currentContentType) {
+      expect(received?.attachments?.[0].originalFile).toBeUndefined();
+      expect(
+        received?.attachments?.[1].originalFile?.data.equals(
+          currentFileAttachment.originalFile.data,
+        ),
+      ).toBe(true);
+    } else {
+      expect(
+        received?.attachments?.[0].originalFile?.data.equals(
+          historyImageAttachment.originalFile.data,
+        ),
+      ).toBe(true);
+    }
   });
 
   test("includes non-image attachments (PDF) from thread history within budget", async ({
@@ -3231,10 +3354,15 @@ describe("ChatOpsManager attachment passthrough", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
+    const originalBytes = Buffer.from("%PDF-1.7\nprivate report\n%%EOF");
     const downloadedPdf = {
       contentType: "application/pdf",
-      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      contentBase64: originalBytes.toString("base64"),
       name: "history.pdf",
+      originalFile: {
+        data: originalBytes,
+        filename: "history.pdf",
+      },
     };
 
     const executorSpy = vi
@@ -3328,6 +3456,10 @@ describe("ChatOpsManager attachment passthrough", () => {
         expect.objectContaining({
           contentType: "application/pdf",
           name: "history.pdf",
+          originalFile: {
+            data: originalBytes,
+            filename: "history.pdf",
+          },
         }),
       ]),
     );

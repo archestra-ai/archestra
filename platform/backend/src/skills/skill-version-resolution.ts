@@ -46,7 +46,7 @@ export async function resolveEffectiveSkillVersion(params: {
 }): Promise<SkillVersion | null> {
   const sandbox = await findDefaultSandboxForScope(params);
   if (sandbox) {
-    const mount = await SkillSandboxModel.findMountBySkill({
+    const mount = await skillSandboxRuntimeService.findMountBySkill({
       sandboxId: sandbox.id,
       skillId: params.skill.id,
     });
@@ -120,7 +120,7 @@ export async function resolveActivationVersion(params: {
  * fail the `(sandbox, skill_name)` unique constraint when a different skill of
  * the same name is already mounted there; that failure is swallowed and the
  * result is `mounted: false`, since `/skills/<name>` belongs to the other skill.
- * `mounted: true` is returned only when a mount row for *this* skill exists, so
+ * `mounted: true` is returned only when a mount for *this* skill exists, so
  * the rendered/pinned version can never claim another skill's bytes.
  */
 async function mountAndResolve(params: {
@@ -175,8 +175,8 @@ async function mountAndResolve(params: {
     );
   }
 
-  // only a mount row for THIS skill makes it runnable under /skills/<name>.
-  const mount = await SkillSandboxModel.findMountBySkill({
+  // only a mount for THIS skill makes it runnable under /skills/<name>.
+  const mount = await skillSandboxRuntimeService.findMountBySkill({
     sandboxId: sandbox.id,
     skillId: params.skill.id,
   });

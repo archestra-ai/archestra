@@ -30,6 +30,8 @@ export interface ArchestraContext {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Incoming ChatOps message ID, supplied only by the trusted provider path. */
+  chatOpsMessageId?: string;
   userId?: string;
   /** The ID of the current internal agent (for agent delegation tool lookup) */
   agentId?: string;

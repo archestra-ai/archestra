@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import {
   SkillModel,
@@ -5,9 +6,11 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import { afterAll, beforeEach, describe, expect, test } from "@/test";
-import type { Skill } from "@/types";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import { afterAll, beforeEach, describe, expect, test, vi } from "@/test";
+import { asSandboxId, type Skill } from "@/types";
 import {
   resolveActivationVersion,
   resolveEffectiveSkillVersion,
@@ -185,14 +188,16 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
     expect(mount?.skillVersionId).toBe(result?.version.id);
   });
 
-  test("mounts into the per-execution sandbox for headless runs", async ({
+  test("pins volatile mounts for the execution and still rejects revoked skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     const skill = await seedSkillV2(org.id);
-    const isolationKey = crypto.randomUUID();
+    const isolationKey = executionSandboxRegistry.openEphemeralExecution();
 
     const result = await resolveActivationVersion({
       skill,
@@ -229,6 +234,36 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
       conversationId: undefined,
     });
     expect(elsewhere?.version).toBe(3);
+
+    const sandbox = await executionSandboxRegistry.findDefault({
+      organizationId: org.id,
+      userId: user.id,
+      isolationKey,
+    });
+    if (!sandbox) throw new Error("missing volatile sandbox");
+    expect(await SkillSandboxModel.findById(sandbox.id)).toBeNull();
+    expect(
+      await SkillSandboxReplayEventModel.listBySandbox(sandbox.id),
+    ).toEqual([]);
+    await SkillModel.delete(skill.id);
+    const nativeRun = vi
+      .spyOn(sandboxRuntimeService, "runCommand")
+      .mockResolvedValue({
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 1,
+        timedOut: false,
+        truncated: false,
+      });
+    await expect(
+      skillSandboxRuntimeService.runCommand({
+        sandboxId: asSandboxId(sandbox.id),
+        caller: { organizationId: org.id, userId: user.id },
+        command: "echo secret",
+      }),
+    ).rejects.toThrow("no longer exists");
+    expect(nativeRun).not.toHaveBeenCalled();
 
     executionSandboxRegistry.release(isolationKey);
   });

@@ -1,8 +1,43 @@
+import { CHATOPS_ATTACHMENT_LIMITS } from "@/agents/chatops/constants";
 import { A2AContextModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { persistAgentRunInputs, taskWithAgentRunInputs } from "./input-files";
+import {
+  buildEphemeralAgentRunInputs,
+  persistAgentRunInputs,
+  taskWithAgentRunInputs,
+} from "./input-files";
 
 describe("Agent run input files", () => {
+  test("rejects excessive ephemeral originals before copying them into runtime inputs", () => {
+    const oversized = Buffer.alloc(
+      CHATOPS_ATTACHMENT_LIMITS.MAX_THREAD_FILE_SIZE + 1,
+    );
+    const attachment = (data: Buffer) => ({
+      name: "preview.txt",
+      contentType: "text/plain",
+      contentBase64: "",
+      originalFile: { filename: "input.bin", data },
+    });
+    for (const attachments of [
+      Array.from(
+        { length: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE + 1 },
+        () => attachment(oversized.subarray(0, 1)),
+      ),
+      [attachment(oversized)],
+      [
+        attachment(oversized.subarray(0, 20 * 1024 * 1024)),
+        attachment(oversized.subarray(0, 5 * 1024 * 1024 + 1)),
+      ],
+    ]) {
+      expect(() =>
+        buildEphemeralAgentRunInputs({
+          taskId: crypto.randomUUID(),
+          attachments,
+        }),
+      ).toThrow(/Too many files|attachment limit/);
+    }
+  });
+
   test("stores binary inputs at collision-safe runtime paths", async ({
     makeAgent,
     makeMember,

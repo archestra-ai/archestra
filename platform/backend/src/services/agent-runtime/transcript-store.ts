@@ -1,7 +1,11 @@
 import { promisify } from "node:util";
 import { gunzip, gzip } from "node:zlib";
 import { AgentRunReadableTranscriptSchema } from "@archestra/shared";
-import { AgentRunTranscriptModel } from "@/models";
+import { AgentRunModel, AgentRunTranscriptModel } from "@/models";
+import {
+  redactFilePayloads,
+  redactFileToolArguments,
+} from "@/utils/redact-file-payloads";
 
 export const agentRunTranscriptStore = {
   async persist(params: {
@@ -31,6 +35,25 @@ export const agentRunTranscriptStore = {
     if (!readable) {
       await AgentRunTranscriptModel.deleteReadable(params.runId);
       return;
+    }
+    if (await AgentRunModel.usesEphemeralFiles({ runId: params.runId })) {
+      // Normalized transcripts encode structured tool content as JSON strings.
+      // Ordinary message text and terminal output retain their existing policy.
+      readable.entries = readable.entries.map((entry) => {
+        if (entry.type === "tool_result") {
+          return { ...entry, text: redactSerializedFilePayloads(entry.text) };
+        }
+        if (entry.type === "tool_call" && entry.input !== undefined) {
+          return {
+            ...entry,
+            input: redactFileToolArguments(
+              entry.name,
+              redactSerializedFilePayloads(entry.input),
+            ),
+          };
+        }
+        return entry;
+      });
     }
     const readableData = Buffer.from(JSON.stringify(readable), "utf8");
     const readableChunks = await compressChunks({
@@ -123,5 +146,13 @@ function parseReadableTranscript(value?: string | null) {
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
+  }
+}
+
+function redactSerializedFilePayloads(value: string): string {
+  try {
+    return JSON.stringify(redactFilePayloads(JSON.parse(value)));
+  } catch {
+    return value;
   }
 }

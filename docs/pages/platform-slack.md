@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -133,14 +133,23 @@ Admins can view autoprovisioned users on the **Settings → Users** page — fro
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
+Attach files when you message the bot. The agent reads supported files directly. A [code sandbox](/docs/platform-code-sandbox) lets it work with other formats. The agent receives a notice when an attachment cannot be read.
 
-**Limits:**
-- Max 20 attachments per message
-- Max 10 MB per individual file
-- Max 25 MB total across all attachments in a single message
+### Files In Threads
 
-Files exceeding these limits are silently skipped.
+Agents can return attachments and generated files in the same Slack channel thread. Files upload directly to Slack without a public file host.
+
+Regular agents use **Post Thread File** from the [agent's tools](/docs/platform-agents#tool-access-modes). Creating or editing files requires a code sandbox. Returning an unchanged attachment works without one.
+
+Tasks delegated to [Agent Runtime](/docs/platform-agent-runtime) use **Post Run File** instead. They process files in their own temporary directory.
+
+The agent can reuse temporary files only during the current run. Later requests must fetch the original attachment again or regenerate the output.
+
+File delivery supports channel threads, including private channels the bot can access. See the [tool reference](/docs/platform-archestra-mcp-server#post_thread_file) for limits, access requirements, and retention.
+
+### Use Case
+
+Attach a product photo and ask the agent to crop it for a draft. The agent returns the edited image in the same thread.
 
 ## Troubleshooting
 

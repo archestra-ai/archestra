@@ -40,6 +40,7 @@ import {
   type OutboundUrlRejection,
   validateOutboundUrl,
 } from "@/utils/outbound-url";
+import { redactFilePayloads } from "@/utils/redact-file-payloads";
 import type { InteractionSource } from "../../../../shared";
 import {
   type A2AAttachment,
@@ -159,6 +160,10 @@ interface A2AManagerConfig {
  * ChatOps run was traced as `a2a` because nothing reads that key.
  */
 export interface A2ASystemParams {
+  /** Trusted ingestion payload; original bytes never travel in protocol metadata. */
+  attachments?: A2AAttachment[];
+  /** The provider message that triggered the run, for delivery deduplication. */
+  chatOpsMessageId?: string;
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
   sessionId?: string;
@@ -499,17 +504,17 @@ export class A2AManager {
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the
       // turn's text + attachments rather than baking it into `requestMessages`
-      // (which stays prior-context only). Attachments are reconstructed from the
-      // protocol file parts, preserving filenames.
-      const currentTurnAttachments: A2AAttachment[] = (
-        request.message.parts || []
-      )
-        .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
-        .map((p) => ({
-          contentType: p.mediaType as string,
-          contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
-          name: p.filename,
-        }));
+      // (which stays prior-context only). Trusted ingestion may carry private
+      // originals outside the protocol; external requests use only file parts.
+      const currentTurnAttachments: A2AAttachment[] =
+        systemParams?.attachments ??
+        (request.message.parts || [])
+          .filter((p) => p.raw !== undefined && p.mediaType !== undefined)
+          .map((p) => ({
+            contentType: p.mediaType as string,
+            contentBase64: Buffer.from(p.raw as Uint8Array).toString("base64"),
+            name: p.filename,
+          }));
       const currentTurnText = messageParts
         .filter((part): part is TextPart => part.type === "text")
         .map((part) => part.text)
@@ -554,13 +559,24 @@ export class A2AManager {
             "[A2AManager] No context when inserting user message in the db",
           );
         }
-        const uiMessageParts: TextUIPart[] = [];
-        messageParts.forEach((part) => {
-          if (part.type === "text") {
-            uiMessageParts.push({ type: "text" as const, text: part.text });
-          }
-          // Files are currently not supported in history.
-        });
+        // Approval history outlives Slack's execution. Keep a refetch notice,
+        // not the protocol's raw bytes or trusted original-file metadata.
+        const persistedMessage =
+          systemParams?.source === "chatops:slack"
+            ? omitSlackProtocolFileBodies(request.message)
+            : request.message;
+        const uiMessageParts: TextUIPart[] =
+          systemParams?.source === "chatops:slack"
+            ? (persistedMessage.parts ?? []).flatMap((part) =>
+                part.text !== undefined
+                  ? [{ type: "text" as const, text: part.text }]
+                  : [],
+              )
+            : messageParts.flatMap((part) =>
+                part.type === "text"
+                  ? [{ type: "text" as const, text: part.text }]
+                  : [],
+              );
         const userUiMessage: UIMessage = {
           id: request.message.messageId,
           parts: uiMessageParts,
@@ -569,7 +585,7 @@ export class A2AManager {
         if (task) {
           const { task: updatedTask } = await A2ATaskManager.addMessageToTask({
             task,
-            message: request.message,
+            message: persistedMessage,
             uiMessage: userUiMessage,
           });
           task = updatedTask;
@@ -577,7 +593,7 @@ export class A2AManager {
         }
         const { dbMessage } = await A2AContextManager.addMessageToContext({
           context,
-          message: request.message,
+          message: persistedMessage,
           uiMessage: userUiMessage,
         });
         return dbMessage;
@@ -642,6 +658,10 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                attachments:
+                  systemParams?.source === "chatops:slack"
+                    ? currentTurnAttachments
+                    : undefined,
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
@@ -674,6 +694,7 @@ export class A2AManager {
                 systemParams?.completionTarget?.type === "chatops"
                   ? systemParams.completionTarget.threadId
                   : undefined,
+              chatOpsMessageId: systemParams?.chatOpsMessageId,
               onTextDelta: runOpts.onTextDelta,
               abortSignal: runOpts.abortSignal,
             });
@@ -724,6 +745,7 @@ export class A2AManager {
             contextId: runContextId,
             executeRun,
             survivesRestart: Boolean(runtime),
+            omitSlackFiles: systemParams?.source === "chatops:slack",
           });
 
         if (params.taskRun?.detached) {
@@ -812,6 +834,7 @@ export class A2AManager {
           task,
           responseUiMessage: result.responseUiMessage,
           stateless: false,
+          omitSlackFiles: systemParams?.source === "chatops:slack",
         });
         task = updatedTask ?? task;
 
@@ -827,6 +850,7 @@ export class A2AManager {
         task,
         responseUiMessage: result.responseUiMessage,
         stateless: Boolean(this.config.stateless),
+        omitSlackFiles: systemParams?.source === "chatops:slack",
       });
       task = persistedTask ?? task;
       context = persistedContext ?? context;
@@ -886,6 +910,7 @@ export class A2AManager {
     }) => Promise<A2AExecuteResult>;
     /** This task's work runs in a container, so it outlives this process. */
     survivesRestart?: boolean;
+    omitSlackFiles?: boolean;
   }): Promise<A2AProtocolSendMessageResponse> {
     const { contextId } = params;
     let task = params.task;
@@ -968,13 +993,16 @@ export class A2AManager {
       const approvalRequests = extractApprovalRequestsFromUiMessage(
         result.responseUiMessage,
       );
-      const parts = extractProtocolPartsFromUIMessage(result.responseUiMessage);
+      const persistedResponse = params.omitSlackFiles
+        ? omitSlackUiFileBodies(result.responseUiMessage)
+        : result.responseUiMessage;
+      const parts = extractProtocolPartsFromUIMessage(persistedResponse);
       const agentMessage = {
         id: result.responseUiMessage.id,
         contextId,
         role: A2AProtocolRole.Agent,
         parts,
-        content: result.responseUiMessage,
+        content: persistedResponse,
       };
 
       if (approvalRequests.length > 0) {
@@ -1217,12 +1245,17 @@ export class A2AManager {
     task: A2ATaskWithData | undefined;
     responseUiMessage: UIMessage;
     stateless: boolean;
+    omitSlackFiles?: boolean;
   }): Promise<{
     resultMessage: A2AProtocolMessage;
     task?: A2ATaskWithData;
     context?: A2AContext;
   }> {
-    const { context, task, responseUiMessage, stateless } = args;
+    const { context, task, stateless } = args;
+    const responseUiMessage =
+      args.omitSlackFiles && !stateless
+        ? omitSlackUiFileBodies(args.responseUiMessage)
+        : args.responseUiMessage;
     const parts = extractProtocolPartsFromUIMessage(responseUiMessage);
 
     if (stateless) {
@@ -1841,6 +1874,52 @@ function buildStatusReasonMessage(params: {
     taskId: params.taskId,
     role: A2AProtocolRole.Agent,
     parts: [{ text: params.reason }],
+  };
+}
+
+function slackFileRefetchNotice(filename: string | undefined): string {
+  return `[Temporary file ${JSON.stringify(filename ?? "attachment")} was omitted from saved history. Fetch the source attachment again from Slack, or regenerate the output, before using it in a later execution.]`;
+}
+
+function isInlineFileUrl(url: string | undefined): boolean {
+  return url?.slice(0, 5).toLowerCase() === "data:";
+}
+
+function omitSlackProtocolFileBodies(
+  message: A2AProtocolMessage,
+): A2AProtocolMessage {
+  return {
+    ...message,
+    parts: message.parts?.map((part) => {
+      if (
+        part.raw !== undefined ||
+        isInlineFileUrl(part.url) ||
+        part.metadata?.originalFile !== undefined
+      ) {
+        return {
+          text: [part.text, slackFileRefetchNotice(part.filename)]
+            .filter(Boolean)
+            .join("\n"),
+        };
+      }
+      return part;
+    }),
+  };
+}
+
+function omitSlackUiFileBodies(message: UIMessage): UIMessage {
+  return {
+    ...message,
+    parts: message.parts.map((part) => {
+      if (part.type === "file" && isInlineFileUrl(part.url)) {
+        return { type: "text", text: slackFileRefetchNotice(part.filename) };
+      }
+      // File-producing tool results can sit beside an approval request. Keep
+      // the approval's arguments intact, but omit structured result bodies.
+      return "state" in part && part.state === "output-available"
+        ? { ...part, output: redactFilePayloads(part.output) }
+        : part;
+    }),
   };
 }
 

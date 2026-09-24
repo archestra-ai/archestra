@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import path from "node:path";
 import {
   DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -16,6 +18,8 @@ import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { CHATOPS_ATTACHMENT_LIMITS } from "@/agents/chatops/constants";
+import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config, { getAppAssetBaseOrigin } from "@/config";
@@ -44,12 +48,16 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import { AgentWorkspaceRelativePathSchema } from "@/types/agent-workspace-file";
+import { sendCapturedThreadFile } from "./chatops";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -119,20 +127,43 @@ export async function startDelegatedTask(params: {
       }
     }
 
+    const temporarySlackScope =
+      context.isolationKey &&
+      context.chatOpsBindingId &&
+      context.chatOpsThreadId &&
+      executionSandboxRegistry.isEphemeralExecution(context.isolationKey)
+        ? {
+            organizationId: actor.organizationId,
+            userId: actor.id,
+            isolationKey: context.isolationKey,
+            chatOpsBindingId: context.chatOpsBindingId,
+            chatOpsThreadId: context.chatOpsThreadId,
+          }
+        : undefined;
+    const threadAttachments: A2AAttachment[] = temporarySlackScope
+      ? threadFileStore.resolveAll(temporarySlackScope).map((file) => ({
+          name: file.filename,
+          contentType: file.mimeType,
+          contentBase64: "",
+          originalFile: { data: file.data, filename: file.filename },
+        }))
+      : [];
     const completionTarget =
       context.chatOpsBindingId && context.chatOpsThreadId
         ? {
             type: "chatops" as const,
             bindingId: context.chatOpsBindingId,
             threadId: context.chatOpsThreadId,
+            ...(temporarySlackScope ? { ephemeralFiles: true } : {}),
           }
         : undefined;
     const taskRow = await startDetachedAgentTask({
       actor,
       agentId: agent.id,
       message,
-      attachments: params.attachments,
+      attachments: temporarySlackScope ? threadAttachments : params.attachments,
       systemParams: {
+        ...(temporarySlackScope ? { source: "chatops:slack" as const } : {}),
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
         routeCategory: completionTarget
@@ -1012,24 +1043,54 @@ const registry = defineArchestraTools([
     shortName: TOOL_POST_RUN_FILE_SHORT_NAME,
     title: "Post Run File",
     description:
-      "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
-      "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread.",
-    schema: z.object({
+      "Upload a file to the messaging thread a run reports to. For temporary Slack runtime files, " +
+      "use task_id, a path relative to the run's temporary files directory, and the file's SHA-256. " +
+      "The backend privately captures and sends the bytes; do not encode files in tool arguments. " +
+      "Files must be nonempty and at most 20 MiB. The run must be active and belong to this agent and user. " +
+      "Approval-required policies block this headless upload. Legacy runs also accept filename and content_base64.",
+    publicSchema: z.strictObject({
       task_id: z.string().uuid(),
+      path: AgentWorkspaceRelativePathSchema.optional().describe(
+        "Temporary runtime-relative path; requires sha256 and excludes filename/content_base64.",
+      ),
+      sha256: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .optional(),
       filename: z
         .string()
-        .trim()
         .min(1)
         .max(120)
-        .regex(
-          /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
-          "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+        .optional()
+        .describe(
+          "Legacy uploads only; requires content_base64 and excludes path/sha256.",
         ),
-      content_base64: z.string().min(1),
+      content_base64: z.string().min(1).optional(),
       comment: z.string().trim().max(2_000).optional(),
     }),
-    handler: async ({ args, context }) => {
+    schema: z.union([
+      z.strictObject({
+        task_id: z.string().uuid(),
+        path: AgentWorkspaceRelativePathSchema,
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        comment: z.string().trim().max(2_000).optional(),
+      }),
+      z.strictObject({
+        task_id: z.string().uuid(),
+        filename: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .regex(
+            /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
+            "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+          ),
+        content_base64: z.string().min(1),
+        comment: z.string().trim().max(2_000).optional(),
+      }),
+    ]),
+    handler: async ({ args, context, toolName }) => {
       try {
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
@@ -1055,6 +1116,91 @@ const registry = defineArchestraTools([
         if (!target || target.type !== "chatops") {
           return errorResult(
             "This run does not report to a messaging-channel thread.",
+          );
+        }
+
+        if ("path" in args) {
+          if (!target.ephemeralFiles || context.appId) {
+            return errorResult(
+              "Path uploads require an active temporary Slack file run.",
+            );
+          }
+          const backend = resolveAgentRuntimeBackendDriver(session.backend);
+          const assertDeliveryActive = async () => {
+            context.abortSignal?.throwIfAborted();
+            const [current, currentTask, workspace] = await Promise.all([
+              AgentRunModel.findByTaskId(task.row.id),
+              A2ATaskModel.findById(task.row.id),
+              AgentWorkspaceModel.findByWorkloadName(session.workloadName),
+            ]);
+            if (
+              !current ||
+              current.id !== session.id ||
+              current.endedAt ||
+              current.organizationId !== actor.organizationId ||
+              current.actorKind !== actor.kind ||
+              current.actorId !== actor.id ||
+              current.agentId !== context.agent.id ||
+              currentTask?.agentId !== context.agent.id ||
+              currentTask?.state !== "TASK_STATE_WORKING" ||
+              current.completionTarget?.type !== "chatops" ||
+              !current.completionTarget.ephemeralFiles ||
+              current.completionTarget.bindingId !== target.bindingId ||
+              current.completionTarget.threadId !== target.threadId ||
+              !workspace ||
+              workspace.organizationId !== actor.organizationId ||
+              workspace.actorKind !== actor.kind ||
+              workspace.actorId !== actor.id ||
+              workspace.agentId !== context.agent.id ||
+              workspace.activeTaskId !== task.row.id ||
+              workspace.state !== "active" ||
+              workspace.expiresAt.getTime() <= Date.now()
+            ) {
+              throw new Error(
+                "The temporary file run is no longer active for this user and agent.",
+              );
+            }
+            await backend.assertThreadFilesAvailable(current);
+            context.abortSignal?.throwIfAborted();
+          };
+          await assertDeliveryActive();
+          const data = await backend.readThreadFile({
+            session,
+            path: args.path,
+            maxBytes: CHATOPS_ATTACHMENT_LIMITS.MAX_THREAD_FILE_SIZE,
+          });
+          const sha256 = createHash("sha256").update(data).digest("hex");
+          if (sha256 !== args.sha256) {
+            return errorResult(
+              "The file changed or its hash is incorrect. Compute its current SHA-256 before sending.",
+            );
+          }
+          return await sendCapturedThreadFile({
+            context,
+            organizationId: actor.organizationId,
+            userId: actor.id,
+            chatOpsBindingId: target.bindingId,
+            chatOpsThreadId: target.threadId,
+            chatOpsMessageId: task.row.id,
+            file: {
+              data,
+              filename: path.posix.basename(args.path),
+              mimeType: resolveArtifactMime({
+                buffer: data,
+                claimed: undefined,
+              }),
+              sizeBytes: data.length,
+              sha256,
+            },
+            fileId: `${task.row.id}:${args.path}`,
+            args,
+            toolName,
+            assertDeliveryActive,
+          });
+        }
+        if (target.ephemeralFiles) {
+          return errorResult(
+            "Use a temporary file path and SHA-256 for this Slack run; inline file bodies are not supported.",
           );
         }
 

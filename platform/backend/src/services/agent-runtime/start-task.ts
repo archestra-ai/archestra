@@ -28,6 +28,9 @@ export async function startDetachedAgentTask(params: {
   /** Persist the caller's durable task association before execution starts. */
   onTaskCreated?: (taskId: string) => Promise<void>;
 }): Promise<A2ATask> {
+  const ephemeralFiles =
+    params.systemParams?.completionTarget?.type === "chatops" &&
+    params.systemParams.completionTarget.ephemeralFiles === true;
   const response = await (await taskManager.get()).sendMessage({
     actor: params.actor,
     agentId: params.agentId,
@@ -37,15 +40,27 @@ export async function startDetachedAgentTask(params: {
         role: A2AProtocolRole.User,
         parts: [
           { text: params.message },
-          ...buildAttachmentsMessageParts(params.attachments ?? []),
+          ...(ephemeralFiles
+            ? []
+            : buildAttachmentsMessageParts(params.attachments ?? [])),
         ],
       },
     },
-    systemParams: params.systemParams,
+    systemParams: ephemeralFiles
+      ? {
+          ...params.systemParams,
+          source: "chatops:slack",
+          attachments: params.attachments ?? params.systemParams?.attachments,
+        }
+      : params.systemParams,
     taskRun: { createTask: true, detached: true },
     onDetachedTaskRun: async ({ taskId }) => {
       await params.onTaskCreated?.(taskId);
-      if (params.attachments && params.attachments.length > 0) {
+      if (
+        !ephemeralFiles &&
+        params.attachments &&
+        params.attachments.length > 0
+      ) {
         await persistAgentRunInputs({
           taskId,
           organizationId: params.actor.organizationId,

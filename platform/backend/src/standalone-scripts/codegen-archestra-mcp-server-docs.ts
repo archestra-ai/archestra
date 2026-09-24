@@ -41,6 +41,36 @@ const groupOrder = new Map<ArchestraToolGroupId, number>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  post_run_file: `For temporary Slack runs, supply \`task_id\`, \`path\`, and \`sha256\`. Paths are relative to the run's temporary files directory. The caller must own the active run and use its agent. The destination is its bound Slack channel thread.
+
+The same [delivery controls and limits](#post_thread_file) apply. Duplicate suppression uses the run and file hash. Inline \`content_base64\` uploads are rejected for these runs.
+
+Files live under \`/tmp/archestra-thread-files/<task-id>/\` on the runtime's temporary disk. The runtime attempts cleanup when the task ends; deleting its compute removes the temporary volume. Missing files must be fetched again. File bytes are not saved as database attachments. Metadata and ordinary text logs remain.
+
+The runtime's regular workspace remains persistent. Files deliberately copied there follow its retention policy. Legacy runs continue to accept \`filename\` and \`content_base64\`.`,
+  post_thread_file: `Requires a file reference from the current Slack channel run. Direct messages and other destination channels are unsupported. Generated files use the \`threadFile\` reference from \`download_file\`.
+
+##### Setup And Limits
+
+- The bot needs \`files:write\` permission.
+- The agent's environment must allow \`slack.com\` and \`files.slack.com\`.
+- Outgoing files must be nonempty and at most 20 MiB.
+- Incoming messages support 20 attachments, totaling at most 25 MiB. Each image can reach 20 MiB; other files can reach 10 MiB.
+- Slack workspace file restrictions apply.
+
+##### Delivery Controls
+
+[Tool policies](/docs/platform-ai-tool-guardrails) check the file and destination before upload. Policies requiring approval block delivery. Trusted-data policies can also block subsequent uploads.
+
+Policy fields include \`channel_id\`, \`thread_ts\`, \`sha256\`, \`filename\`, \`mime_type\`, and \`size_bytes\`. Recognized images and PDFs use their detected MIME type. Other formats use \`application/octet-stream\`.
+
+Duplicate uploads for the same message and file are suppressed for seven days. Check the thread before retrying an unconfirmed upload.
+
+##### Retention
+
+File references expire when the run ends, within one hour, or sooner under memory pressure. Slack runs do not save working files to Archestra's persistent file storage. Uploads already underway may finish after cleanup.
+
+Slack retains delivered files under its workspace policy. Runtime caches and text logs can outlive the run.`,
   // Membership mutations gate on `team:read`, then require the caller to be an
   // organization-level team manager (holds `team:create`) OR an admin
   // (team-member role) of the target team.
@@ -292,9 +322,11 @@ ${formatToolLink("query_knowledge_sources")} is an exception: its output is trea
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
+Most Archestra tools bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails).
 
 ${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
+
+${formatToolLink("post_thread_file")} checks tool policies before uploading a file to Slack. Policies requiring approval block delivery.
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
 

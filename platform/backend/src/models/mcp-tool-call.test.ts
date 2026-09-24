@@ -20,6 +20,70 @@ describe("McpToolCallModel", () => {
   });
 
   describe("create", () => {
+    test("omits legacy upload bytes from successful and rejected audit rows without changing the call", async () => {
+      const body = Buffer.from("private uploaded file").toString("base64");
+      const uploadArguments = {
+        task_id: crypto.randomUUID(),
+        filename: "report.pdf",
+        content_base64: body,
+      };
+      const startArguments = {
+        agent_id: agentId,
+        message: "Inspect the attachment",
+        attachments: [{ filename: "report.pdf", contentBase64: body }],
+      };
+      for (const { name, args, isError } of [
+        {
+          name: "archestra__post_run_file",
+          args: uploadArguments,
+          isError: false,
+        },
+        {
+          name: "archestra__post_run_file",
+          args: uploadArguments,
+          isError: true,
+        },
+        {
+          name: "archestra__run_tool",
+          args: {
+            tool_name: "archestra__post_run_file",
+            tool_args: uploadArguments,
+          },
+          isError: true,
+        },
+        { name: "archestra__start_run", args: startArguments, isError: false },
+        {
+          name: "archestra__run_tool",
+          args: {
+            tool_name: "archestra__start_run",
+            tool_args: startArguments,
+          },
+          isError: true,
+        },
+      ]) {
+        const toolCall = {
+          id: "file-upload",
+          name,
+          arguments: args,
+        };
+        const created = await McpToolCallModel.create({
+          agentId,
+          mcpServerName: "Archestra",
+          method: "tools/call",
+          toolCall,
+          toolResult: { isError, content: "Upload handled" },
+        });
+        const stored = await McpToolCallModel.findById(created.id);
+        expect(JSON.stringify(stored?.toolCall)).not.toContain(body);
+        expect(JSON.stringify(stored?.toolCall)).toContain("report.pdf");
+        expect(JSON.stringify(stored?.toolCall)).toContain(
+          "Ephemeral file payload omitted",
+        );
+        expect(stored?.toolResult).toMatchObject({ isError });
+        expect(JSON.stringify(toolCall)).toContain(body);
+      }
+    });
+
     test("can create an MCP tool call", async () => {
       const mcpToolCall = await McpToolCallModel.create({
         agentId,

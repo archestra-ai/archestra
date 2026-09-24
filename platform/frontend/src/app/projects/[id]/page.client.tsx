@@ -738,7 +738,7 @@ function ProjectFilesSidebar({
       <FileDropZone
         onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
         uploading={uploadProjectFiles.isPending}
-        className="flex-1 min-h-0 flex flex-col gap-0"
+        className="flex-1 min-h-0 flex flex-col gap-0 overflow-hidden"
       >
         {/* Instructions keep their natural (clamped) height, schedules are
             capped, and the file list takes the rest with its own scroller — so

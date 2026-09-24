@@ -204,12 +204,20 @@ const createAgent = async (
   request: APIRequestContext,
   name: string,
   agentType?: "agent" | "mcp_gateway",
+  initialGrants?: ReadonlyArray<{
+    subject: { type: string; id: string };
+    actions: ReadonlyArray<string>;
+  }>,
 ) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/agents",
-    data: { name, ...(agentType ? { agentType } : {}) },
+    data: {
+      name,
+      ...(agentType ? { agentType } : {}),
+      ...(initialGrants ? { initialGrants } : {}),
+    },
   });
 
 /**

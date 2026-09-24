@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { UI_BASE_URL } from "../consts";
+import { ORGANIZATION_USE_GRANT, UI_BASE_URL } from "../consts";
 import { test } from "./api-fixtures";
 
 /**
@@ -29,6 +29,8 @@ test.describe("A2A over the public origin", () => {
       data: {
         name: `A2A Public Origin ${Date.now()}`,
         agentType: "agent",
+        // The organization token reaches only agents the organization may use.
+        initialGrants: [ORGANIZATION_USE_GRANT],
       },
     });
     const agent = await agentResponse.json();

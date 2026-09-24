@@ -5,6 +5,7 @@ import {
   MCP_SERVER_JWKS_BACKEND_URL,
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  ORGANIZATION_USE_GRANT,
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../consts";
@@ -436,6 +437,8 @@ async function createProfile(params: {
       name: params.name,
       agentType: params.agentType,
       identityProviderId: params.identityProviderId,
+      // Every member calls this profile with a token of their own.
+      initialGrants: [ORGANIZATION_USE_GRANT],
     },
   });
 

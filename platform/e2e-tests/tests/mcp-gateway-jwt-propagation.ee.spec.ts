@@ -23,6 +23,7 @@ import {
   MCP_SERVER_JWKS_DOCKER_IMAGE,
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  ORGANIZATION_USE_GRANT,
   SSO_DOMAIN,
 } from "../consts";
 import {
@@ -262,9 +263,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
 
     try {
       // Create MCP Gateway WITHOUT IdP (so archestra token is used, not JWT)
+      // The organization token reaches only gateways the organization may use.
       const agentResponse = await createAgent(
         request,
         `JWT Reject E2E ${Date.now()}`,
+        undefined,
+        [ORGANIZATION_USE_GRANT],
       );
       const agent = await agentResponse.json();
       profileId = agent.id;

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
+import { ORGANIZATION_USE_GRANT } from "../consts";
 import { waitForServerInstallation } from "../utils";
 import {
   callMcpTool,
@@ -136,6 +137,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
       await waitForServerInstallation(request, serverId);
 
       // Create a team-scoped profile so it can use the team-scoped MCP server.
+      // The organization grant lets the organization token call it.
       const profileResponse = await makeApiRequest({
         request,
         method: "post",
@@ -147,6 +149,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
               subject: { type: "team", id: defaultTeam.id },
               actions: ["read", "use"],
             },
+            ORGANIZATION_USE_GRANT,
           ],
         },
       });

@@ -8,7 +8,12 @@
  * 4. Authenticate to MCP Gateway using the JWT
  * 5. Verify tool calls succeed and the Archestra user is linked in audit logs
  */
-import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX, SSO_DOMAIN } from "../consts";
+import {
+  API_BASE_URL,
+  MCP_GATEWAY_URL_SUFFIX,
+  ORGANIZATION_USE_GRANT,
+  SSO_DOMAIN,
+} from "../consts";
 import { getKeycloakJwt } from "../utils";
 import {
   assignArchestraToolsToProfile,
@@ -61,6 +66,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
           name: `JWKS E2E Test ${Date.now()}`,
           agentType: "mcp_gateway",
           identityProviderId,
+          initialGrants: [ORGANIZATION_USE_GRANT],
         },
       });
       const agent = (await agentResponse.json()) as { id: string };
@@ -156,6 +162,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
           name: `JWKS Reject Test ${Date.now()}`,
           agentType: "mcp_gateway",
           identityProviderId,
+          initialGrants: [ORGANIZATION_USE_GRANT],
         },
       });
       const agent = (await agentResponse.json()) as { id: string };
@@ -198,9 +205,12 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     deleteAgent,
   }) => {
     // Create a profile WITHOUT an IdP linked
+    // The organization token reaches only gateways the organization may use.
     const agentResponse = await createAgent(
       request,
       `No IdP Test ${Date.now()}`,
+      undefined,
+      [ORGANIZATION_USE_GRANT],
     );
     const agent = await agentResponse.json();
     const profileId = agent.id;

@@ -909,8 +909,10 @@ class LlmProviderApiKeyModel {
         key.id,
         params.userId !== undefined && key.userId === params.userId
           ? 0
-          : audiences.get(key.id)?.audience === "team" ||
-              (audiences.get(key.id)?.teamIds ?? []).some((teamId) =>
+          : // A team key ranks as the caller's own team key only when the
+            // caller is in one of its teams. An admin reaches every team key
+            // through `*`, and must not prefer it over the organization key.
+            (audiences.get(key.id)?.teamIds ?? []).some((teamId) =>
                 params.userTeamIds.includes(teamId),
               )
             ? 1

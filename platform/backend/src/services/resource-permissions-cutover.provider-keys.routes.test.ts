@@ -41,6 +41,8 @@ type Fixtures = Pick<
  * - Editing, deleting and re-sharing it took the route action
  *   (`llmProviderApiKey:update` or `delete`, which the Editor role held and
  *   the Member role did not) and membership in its team, or `team:create`.
+ *   After the upgrade the team holds read and use only, an approved
+ *   narrowing.
  * - Default key resolution preferred the caller's own key, then a key of one
  *   of the caller's teams, then an organization key.
  *
@@ -78,7 +80,10 @@ describe("provider keys after the upgrade", () => {
       admin: [true, true, 200, 200, 200],
       author: [false, false, 403, 403, 403],
       teammate: [true, true, 403, 403, 403],
-      teamEditor: [true, true, 200, 200, 200],
+      // Approved narrowing: the team keeps read and use on its key, so an
+      // Editor in the team no longer edits, deletes or re-shares it. Only its
+      // author and admins manage it.
+      teamEditor: [true, true, 403, 403, 403],
       outsiderEditor: [false, false, 403, 403, 403],
       loner: [false, false, 403, 403, 403],
     };

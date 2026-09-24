@@ -4,8 +4,8 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import db, { schema } from "@/database";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";

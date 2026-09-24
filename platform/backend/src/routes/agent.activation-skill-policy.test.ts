@@ -3,6 +3,8 @@ import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentActivationSkillRuleModel,
@@ -12,8 +14,6 @@ import {
   ToolModel,
 } from "@/models";
 import SkillModel from "@/models/skill";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InsertSkill, Skill, User } from "@/types";

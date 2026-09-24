@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import {
   MANIFEST,

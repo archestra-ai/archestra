@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import AuditLogModel from "@/models/audit-log";
 import GithubPatModel from "@/models/github-pat";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
 import { afterEach, describe, expect, test } from "@/test";
 import {
   buildGithubPatTestApp,

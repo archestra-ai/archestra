@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import type { A2AExecuteParams } from "@/agents/a2a-executor";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const { mockExecuteA2AMessage, mockValidateMCPGatewayToken } = vi.hoisted(

@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const { getSessionMock, hasPermissionMock, verifyApiKeyMock } = vi.hoisted(

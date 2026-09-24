@@ -1,5 +1,5 @@
 import config from "@/config";
-import { createFastifyInstance } from "@/server";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, describe, expect, test } from "@/test";
 import healthRoutes, { mapSandboxStatus } from "./health";
 

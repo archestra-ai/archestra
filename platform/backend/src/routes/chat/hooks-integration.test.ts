@@ -1,9 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";

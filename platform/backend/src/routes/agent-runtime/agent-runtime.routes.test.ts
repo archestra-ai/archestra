@@ -4,6 +4,8 @@ import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
@@ -17,8 +19,6 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";

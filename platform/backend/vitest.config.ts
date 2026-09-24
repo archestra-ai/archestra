@@ -34,7 +34,7 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
 }
 
 /**
- * Partition test files by whether they use Vitest module mocking.
+ * Partition test files by explicit database usage and Vitest module mocking.
  *
  * `vi.mock`/`vi.doMock` registrations live in the worker's shared module/mock
  * registry, which Vitest does NOT reset between files when `isolate: false`
@@ -47,11 +47,18 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
  * that adds `vi.mock` is automatically placed in the isolated project — no
  * manual list to maintain.
  */
-function partitionTestFiles(): { mocked: string[]; clean: string[] } {
+function partitionTestFiles(): {
+  mocked: string[];
+  clean: string[];
+  unitMocked: string[];
+  unit: string[];
+} {
   const root = path.resolve(__dirname, "./src");
   const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
   const mocked: string[] = [];
   const clean: string[] = [];
+  const unitMocked: string[] = [];
+  const unit: string[] = [];
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -60,10 +67,12 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
     if (!entry.isFile() || !entry.name.endsWith(".test.ts")) continue;
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
-    if (usesModuleMocks.test(readFileSync(absolute, "utf-8"))) {
-      mocked.push(relative);
+    const databaseFree = entry.name.endsWith(".unit.test.ts");
+    const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
+    if (databaseFree) {
+      (moduleMocks ? unitMocked : unit).push(relative);
     } else {
-      clean.push(relative);
+      (moduleMocks ? mocked : clean).push(relative);
     }
   }
 
@@ -74,7 +83,7 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
     );
   }
 
-  return { mocked, clean };
+  return { mocked, clean, unitMocked, unit };
 }
 
 const testFiles = partitionTestFiles();
@@ -95,12 +104,6 @@ export default defineConfig({
     ...vitestLogPolicy,
     globals: true,
     environment: "node",
-    // Build the migrated schema once and snapshot it (see global-setup.ts); each test
-    // file's beforeAll then loads the snapshot instead of replaying all migrations.
-    // Root-level only: it must run ONCE per run, not once per project below.
-    globalSetup: ["./src/test/global-setup.ts"],
-    setupFiles: ["./src/test/setup.ts"],
-
     /**
      * Performance Optimizations
      *
@@ -171,17 +174,35 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Explicit *.unit.test.ts files are audited to avoid database imports.
+          // No PGlite setup or migrated snapshot is needed for this project.
+          name: "unit",
+          include: testFiles.unit,
+          isolate: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "unit-mocked",
+          include: testFiles.unitMocked,
+          isolate: true,
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: "clean",
           include: testFiles.clean,
           isolate: false,
+          // This project and `mocked` share one snapshot through global-setup.ts.
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
           // shared mutable state (the config object) between tests. The
           // isolated project skips that — its per-file registries can't leak,
           // and exotic config mocks (getter-only properties) would break it.
           env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
-          // Inherit everything else from root, but globalSetup must not be
-          // re-run per project — the snapshot is built once at the root.
-          globalSetup: [],
         },
       },
       {
@@ -190,7 +211,8 @@ export default defineConfig({
           name: "mocked",
           include: testFiles.mocked,
           isolate: true,
-          globalSetup: [],
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
         },
       },
     ],

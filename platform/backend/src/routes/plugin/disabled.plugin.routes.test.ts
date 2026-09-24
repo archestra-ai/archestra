@@ -1,5 +1,6 @@
 import { vi } from "vitest";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import pluginRoutes from "./plugin.routes";
 
 vi.mock("@/config", async () =>

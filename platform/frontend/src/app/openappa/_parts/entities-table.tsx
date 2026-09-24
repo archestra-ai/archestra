@@ -229,7 +229,7 @@ export function EntitiesTable() {
   );
 }
 
-function entityTypeLabel(type: CoverageEntity["type"]): string {
+export function entityTypeLabel(type: CoverageEntity["type"]): string {
   switch (type) {
     case "agent":
       return "Agent";

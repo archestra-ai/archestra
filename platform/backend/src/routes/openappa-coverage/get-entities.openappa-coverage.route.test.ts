@@ -333,4 +333,46 @@ describe("GET /api/openappa/coverage/entities", () => {
       "docs__microsoft_docs_search",
     ]);
   });
+
+  test("narrows to the targets that reach one tool", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { catalogIds, toolIds } = await seedCoverage({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      fixtures: { makeInternalMcpCatalog, makeTool, makeAgent, makeAgentTool },
+    });
+    const caller = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "Deleter",
+      agentType: "agent",
+    });
+    const gateway = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "Deleting gateway",
+      agentType: "mcp_gateway",
+    });
+    const bystander = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "Reader",
+      agentType: "agent",
+    });
+    await makeAgentTool(caller.id, toolIds.acme__delete_item);
+    await makeAgentTool(gateway.id, toolIds.acme__delete_item);
+    await makeAgentTool(bystander.id, toolIds.acme__list_items);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/openappa/coverage/entities?toolId=${toolIds.acme__delete_item}`,
+    });
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().data.map((entity: { id: string }) => entity.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([caller.id, gateway.id, catalogIds.acme]),
+    );
+    expect(ids).toHaveLength(3);
+  });
 });

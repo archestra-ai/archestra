@@ -84,6 +84,29 @@ describe("organization routes", () => {
     });
   });
 
+  test("refuses an appName whose built-in tool prefix an MCP server already gives its tools", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const wasWhiteLabeled = config.enterpriseFeatures.fullWhiteLabeling;
+    config.enterpriseFeatures.fullWhiteLabeling = true;
+    try {
+      await makeInternalMcpCatalog({ organizationId, name: "acme copilot" });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { appName: "Acme Copilot" },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(
+        (await OrganizationModel.getById(organizationId))?.appName,
+      ).not.toBe("Acme Copilot");
+    } finally {
+      config.enterpriseFeatures.fullWhiteLabeling = wasWhiteLabeled;
+    }
+  });
+
   test("re-brands the built-in skill rows when appName changes", async () => {
     vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue();
     const { syncBuiltInSkillsForOrganization } = await import(

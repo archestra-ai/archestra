@@ -2,6 +2,7 @@
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   getAgentRuntimeModelCompatibility,
+  getArchestraMcpServerName,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
@@ -11,6 +12,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
@@ -109,6 +111,34 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!currentOrganization) {
         throw new ApiError(404, "Organization not found");
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        config.enterpriseFeatures.fullWhiteLabeling &&
+        body.appName !== undefined
+      ) {
+        // The built-in tools take their prefix from appName; one an MCP server
+        // already gives its tools would route calls to either of them.
+        const serverName = getArchestraMcpServerName({
+          appName: body.appName,
+          fullWhiteLabeling: true,
+        });
+        if (
+          serverName !== archestraMcpBranding.serverName &&
+          (await InternalMcpCatalogModel.findRootByNameInOrg({
+            name: serverName,
+            organizationId,
+          }))
+        )
+          throw new ApiError(
+            409,
+            `An MCP server already gives its tools the "${serverName}" prefix this app name would give the built-in tools.`,
+            "catalog_name_conflict",
+          );
+      }
+      // SPDX-SnippetEnd
 
       const organization = await OrganizationModel.patch(organizationId, body);
 

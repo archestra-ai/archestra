@@ -276,7 +276,7 @@ mod tests {
             call_id: Some(format!("call:{call_id}")),
             actor: actor.clone(),
             call: ProposedCall {
-                tool: (crate::adapter::adapter().derive)(tool)
+                tool: (crate::adapter::adapter().identify_tool)(tool)
                     .expect("test tool names are well formed")
                     .canonical
                     .as_str()
@@ -302,7 +302,8 @@ mod tests {
             hooks::handle(
                 runtime,
                 HookEvent::SessionStart {
-                    root: actor.root.clone()
+                    root: actor.root.clone(),
+                    principal: None,
                 }
             )
             .await,

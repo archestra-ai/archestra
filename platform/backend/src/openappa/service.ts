@@ -15,6 +15,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
+import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   expandCommandExecutionPolicyRules,
@@ -280,13 +281,35 @@ async function dispatch(
   /** A policy the caller already read, shared across a batch of dispatches. */
   policyContent?: string,
 ) {
+  const principal = await sessionPrincipal(session);
   return withRuntime(
     session.organization_id,
     (module, policy) =>
-      module.dispatchHook(JSON.stringify({ ...session, ...event }), policy),
+      module.dispatchHook(
+        JSON.stringify({ ...session, ...principal, ...event }),
+        policy,
+      ),
     policyContent,
   );
 }
+
+/**
+ * The email of the user a session acts for, which the runtime reads as the
+ * session's own audience. Sent on every event, since any of them may open the
+ * session; an app or virtual-key caller acts for no user.
+ */
+async function sessionPrincipal(
+  session: OpenAppaSession,
+): Promise<{ principal?: string }> {
+  const userId = session.caller_id?.startsWith(USER_CALLER_PREFIX)
+    ? session.caller_id.slice(USER_CALLER_PREFIX.length)
+    : undefined;
+  if (!userId) return {};
+  const email = await UserModel.getEmailById(userId);
+  return email ? { principal: email } : {};
+}
+
+const USER_CALLER_PREFIX = "user:";
 
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
@@ -332,7 +355,7 @@ export function chatOpenAppaSession(
 ): OpenAppaSession {
   return {
     organization_id: organizationId,
-    caller_id: `user:${userId}`,
+    caller_id: `${USER_CALLER_PREFIX}${userId}`,
     session_id: sessionId,
   };
 }

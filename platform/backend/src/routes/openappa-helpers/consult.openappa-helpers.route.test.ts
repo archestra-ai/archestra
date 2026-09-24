@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import ToolModel from "@/models/tool";
+import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
@@ -342,6 +344,91 @@ describe("battery helper bridge", () => {
     // battery files, the command, the envelope on stdin.
     const { secretEnv: _secret, ...rest } = params ?? {};
     expect(JSON.stringify(rest)).not.toContain(CREDENTIAL_VALUE);
+  });
+
+  test("the archestra audience is answered from the organization's own membership, never a sandbox", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const install = await attach({
+      organizationId,
+      batteryName: "archestra",
+      catalogId: ARCHESTRA_MCP_CATALOG_ID,
+      credentialBindings: {},
+    });
+    const run = vi.spyOn(sandboxRuntimeService, "runCommand");
+    const member = async (email: string) => {
+      const user = await makeUser({ email });
+      await makeMember(user.id, organizationId);
+      return user;
+    };
+    const alice = await member("alice@example.com");
+    const bob = await member("bob@example.com");
+    const admin = await UserModel.getEmailById(userId);
+    const parent = await makeTeam(organizationId, userId, { name: "eng" });
+    const child = await makeTeam(organizationId, userId, {
+      name: "platform",
+      parentId: parent.id,
+    });
+    await makeTeamMember(parent.id, alice.id);
+    await makeTeamMember(child.id, bob.id);
+    await makeTeam(organizationId, userId, { name: "twin" });
+    await makeTeam(organizationId, userId, { name: "twin" });
+    const outsider = await makeUser({ email: "carol@example.com" });
+
+    const ask = async (artifact: Record<string, string>) => {
+      const response = await consult({
+        installId: install.id,
+        externalName: "archestra",
+        authorization: bridgeBearer(),
+        payload: {
+          version: 1,
+          kind: "audience",
+          name: "archestra",
+          declaration: { templates: ["members", "team/<team>", "user/<user>"] },
+          artifact,
+        },
+      });
+      return response.statusCode === 200
+        ? response.json().answer
+        : response.statusCode;
+    };
+    const members = async (selector: string) => {
+      const answer = await ask({ selector });
+      return typeof answer === "number" ? answer : answer.members.sort();
+    };
+
+    expect(await members("members")).toEqual(
+      [admin, "alice@example.com", "bob@example.com"].sort(),
+    );
+    // A child team's members reach what is shared with its ancestors.
+    expect(await members("team/eng")).toEqual([
+      "alice@example.com",
+      "bob@example.com",
+    ]);
+    expect(await members(`team/${child.id}`)).toEqual(["bob@example.com"]);
+    expect(await members(`user/${bob.id}`)).toEqual(["bob@example.com"]);
+    expect(await members("user/alice@example.com")).toEqual([
+      "alice@example.com",
+    ]);
+    expect(await ask({ member: `archestra:${alice.id}` })).toEqual({
+      principal: "alice@example.com",
+    });
+    expect(await ask({ member: `archestra:${outsider.id}` })).toEqual({
+      principal: null,
+    });
+    // What the source cannot name exactly answers nothing, never an empty set.
+    for (const unanswerable of [
+      "team/twin",
+      "team/nobody",
+      `user/${outsider.id}`,
+      "teams/eng",
+    ])
+      expect(await members(unanswerable), unanswerable).toBe(502);
+    expect(run).not.toHaveBeenCalled();
   });
 
   test("consults beyond half the sandbox pool are refused as busy", async ({

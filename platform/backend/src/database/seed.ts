@@ -392,6 +392,13 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     );
   }
   logger.info("Seeded Archestra catalog and tools");
+  // The API refuses such a name now; a catalog that predates that still
+  // shadows the built-in tools and keeps the archestra OpenAPPA battery inactive.
+  for (const conflict of await InternalMcpCatalogModel.findTakingBuiltInToolPrefix())
+    logger.error(
+      { catalogId: conflict.id, organizationId: conflict.organizationId },
+      "An MCP server gives its tools the built-in tools' prefix; rename it",
+    );
 }
 
 /** @public — startup reconciliation, exported for behavior tests. */

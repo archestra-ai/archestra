@@ -1022,6 +1022,57 @@ class TeamModel {
     }));
   }
 
+  /**
+   * The emails of every user who can reach what is shared with the team named
+   * by id or name in the organization: its direct members and the members of
+   * its descendant teams, since membership in a child team inherits access from
+   * every ancestor. `ambiguous` when several teams carry the name.
+   */
+  static async findSubtreeMemberEmails(params: {
+    organizationId: string;
+    idOrName: string;
+  }): Promise<
+    | { kind: "found"; emails: string[] }
+    | { kind: "missing" }
+    | { kind: "ambiguous" }
+  > {
+    const hierarchy = await db
+      .select({
+        id: schema.teamsTable.id,
+        name: schema.teamsTable.name,
+        parentId: schema.teamsTable.parentId,
+      })
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.organizationId, params.organizationId));
+    const byId = hierarchy.find((team) => team.id === params.idOrName);
+    const byName = hierarchy.filter((team) => team.name === params.idOrName);
+    const root = byId ?? (byName.length === 1 ? byName[0] : undefined);
+    if (!root) return { kind: byName.length > 1 ? "ambiguous" : "missing" };
+
+    const subtree = new Set([root.id]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const team of hierarchy)
+        if (
+          team.parentId !== null &&
+          subtree.has(team.parentId) &&
+          !subtree.has(team.id)
+        ) {
+          subtree.add(team.id);
+          grew = true;
+        }
+    }
+    const rows = await db
+      .selectDistinct({ email: schema.usersTable.email })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
+      .where(inArray(schema.teamMembersTable.teamId, [...subtree]));
+    return { kind: "found", emails: rows.map((row) => row.email) };
+  }
+
   // ==========================================
   // External Group Sync Methods
   // ==========================================

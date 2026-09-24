@@ -10,6 +10,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import {
   assertMcpCatalogTeams,
@@ -664,6 +665,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Clone source catalog item not found");
         }
       }
+
+      if (InternalMcpCatalogModel.takesBuiltInToolPrefix(restBody.name))
+        throw new ApiError(
+          409,
+          `An MCP server named "${restBody.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`,
+          "catalog_name_conflict",
+        );
 
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
         InternalMcpCatalogModel.create(restBody, {

@@ -21,9 +21,16 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
+vi.mock("@/app/settings/layout", () => ({
+  useSetSettingsAction: vi.fn(() => () => undefined),
+}));
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import OauthClientsPage from "./page";
 
@@ -78,6 +85,12 @@ describe("OauthClientsPage", () => {
       data: true,
       isPending: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        { resource: "llmOauthClient", scope: "*", action: "read" },
+        { resource: "mcpOauthClient", scope: "*", action: "read" },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);
@@ -160,5 +173,36 @@ describe("OauthClientsPage", () => {
       await screen.findByRole("dialog", { name: /Deploy bot permissions/ }),
     ).toBeVisible();
     expect(requested).toContain("mcpOauthClient/client-row-1");
+  });
+
+  it("offers the permissions of both client kinds from the header menu", async () => {
+    let headerAction: React.ReactNode = null;
+    const { useSetSettingsAction } = await import("@/app/settings/layout");
+    vi.mocked(useSetSettingsAction).mockReturnValue((node) => {
+      headerAction = node;
+    });
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OauthClientsPage />
+      </QueryClientProvider>,
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        {headerAction}
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "LLM client permissions" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "MCP client permissions" }),
+    ).toBeVisible();
   });
 });

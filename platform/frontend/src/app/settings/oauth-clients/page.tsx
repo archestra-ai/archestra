@@ -29,6 +29,7 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -195,13 +196,22 @@ function OauthClientsTable() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton
-        permissions={{ llmOauthClient: ["create"] }}
-        onClick={() => setCreateOpen(true)}
-      >
-        <Plus className="h-4 w-4" />
-        <span>Create OAuth Client</span>
-      </PermissionButton>,
+      <div className="flex items-center gap-2">
+        <PermissionButton
+          permissions={{ llmOauthClient: ["create"] }}
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          <span>Create OAuth Client</span>
+        </PermissionButton>
+        <ResourceListActions
+          resource="llmOauthClient"
+          label="LLM client permissions"
+          alsoResources={[
+            { resource: "mcpOauthClient", label: "MCP client permissions" },
+          ]}
+        />
+      </div>,
     );
     return () => setActionButton(null);
   }, [setActionButton]);

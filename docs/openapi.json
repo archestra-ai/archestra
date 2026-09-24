@@ -11845,6 +11845,7 @@
                       "type": "string"
                     },
                     "tool_calls": {
+                      "nullable": true,
                       "type": "array",
                       "items": {
                         "anyOf": [
@@ -32819,6 +32820,7 @@
                       "type": "string"
                     },
                     "tool_calls": {
+                      "nullable": true,
                       "type": "array",
                       "items": {
                         "anyOf": [

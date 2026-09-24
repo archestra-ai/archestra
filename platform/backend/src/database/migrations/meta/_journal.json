@@ -3417,6 +3417,13 @@
       "when": 1790181834243,
       "tag": "0487_slim_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 488,
+      "version": "7",
+      "when": 1790283509646,
+      "tag": "0488_third_veda",
+      "breakpoints": true
     }
   ]
 }

@@ -66,7 +66,7 @@ const scope = () => ({
 export const openappaSessionsTable = pgTable(
   "openappa_sessions",
   {
-    actor: text().primaryKey(),
+    actor: text().notNull(),
     root: text().notNull(),
     ...scope(),
     parentId: text("parent_id"),
@@ -81,6 +81,8 @@ export const openappaSessionsTable = pgTable(
     startDecision: jsonb("start_decision").notNull(),
   },
   (table) => [
+    // Client session ids may repeat across organizations; the actor alone does not.
+    primaryKey({ columns: [table.organizationId, table.actor] }),
     index("openappa_sessions_root_idx").on(table.root),
     index("openappa_sessions_forked_from_idx").on(
       table.organizationId,

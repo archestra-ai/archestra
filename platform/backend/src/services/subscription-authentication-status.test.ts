@@ -30,9 +30,11 @@ for (const provider of [
     test(`${provider} inference status: ${scenario}`, async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
       const organization = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, organization.id);
       const token = randomUUID();
       const credential = { refreshToken: token, userId: "fixture-account" };
       const encode = (value: string) =>

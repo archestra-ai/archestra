@@ -96,7 +96,7 @@ class LlmProviderApiKeyModel {
    */
   static async create(
     data: InsertLlmProviderApiKey,
-    /** Explicit starting audience; omitted derives one from the scope. */
+    /** Who else can reach the key. Omitted, only its owner or creator. */
     options?: {
       initialPermissionGrants?: ResourcePermissionGrant[];
       /** Publish to the whole organization; for system callers only. */

@@ -565,10 +565,13 @@ describe("LlmProviderApiKeyModel", () => {
     test("user sees their own personal keys", async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user1 = await makeUser({ email: "user1@test.com" });
+      await makeMember(user1.id, org.id);
       const user2 = await makeUser({ email: "user2@test.com" });
+      await makeMember(user2.id, org.id);
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -600,18 +603,32 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeTeam,
+      makeMember,
+      makeTeamMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+      await makeTeamMember(team.id, user.id);
 
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Team Key",
-        provider: "anthropic",
-        scope: "team",
-        teamId: team.id,
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Team Key",
+          provider: "anthropic",
+          scope: "team",
+          teamId: team.id,
+        },
+        {
+          initialPermissionGrants: [
+            {
+              subject: { type: "team", id: team.id },
+              actions: ["read", "use"],
+            },
+          ],
+        },
+      );
 
       const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
@@ -624,16 +641,24 @@ describe("LlmProviderApiKeyModel", () => {
       expect(visible[0].name).toBe("Team Key");
     });
 
-    test("user sees org-wide keys", async ({ makeOrganization, makeUser }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+    test("user sees org-wide keys", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "anthropic",
+          scope: "org",
+        },
+        { publishToOrganization: true },
+      );
 
       const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
@@ -649,10 +674,13 @@ describe("LlmProviderApiKeyModel", () => {
     test("admin sees all keys except other users personal keys", async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const admin = await makeUser({ email: "admin@test.com" });
+      await makeMember(admin.id, org.id, { role: "admin" });
       const user = await makeUser({ email: "user@test.com" });
+      await makeMember(user.id, org.id);
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -668,12 +696,15 @@ describe("LlmProviderApiKeyModel", () => {
         scope: "personal",
         userId: user.id,
       });
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "openai",
-        scope: "org",
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "openai",
+          scope: "org",
+        },
+        { publishToOrganization: true },
+      );
 
       const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
@@ -692,9 +723,11 @@ describe("LlmProviderApiKeyModel", () => {
     test("supports filtering visible keys by search and provider", async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -729,9 +762,11 @@ describe("LlmProviderApiKeyModel", () => {
     test("treats LIKE wildcard characters in search as literals", async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
       await LlmProviderApiKeyModel.create({
         organizationId: org.id,
@@ -767,9 +802,11 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
       makeLlmProviderApiKey,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
       const codexSecret = await makeSecret({
         secret: {
@@ -812,9 +849,11 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeSecret,
       makeLlmProviderApiKey,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
       const secret = await makeSecret({ secret: { apiKey: "sk-old" } });
       await makeLlmProviderApiKey(org.id, secret.id, {
@@ -932,9 +971,11 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
@@ -946,13 +987,16 @@ describe("LlmProviderApiKeyModel", () => {
         userId: user.id,
         secretId: secret1.id,
       });
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret2.id,
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret2.id,
+        },
+        { publishToOrganization: true },
+      );
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -970,28 +1014,45 @@ describe("LlmProviderApiKeyModel", () => {
       makeUser,
       makeTeam,
       makeSecret,
+      makeMember,
+      makeTeamMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+      await makeTeamMember(team.id, user.id);
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
-      const teamKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Team Key",
-        provider: "anthropic",
-        scope: "team",
-        teamId: team.id,
-        secretId: secret1.id,
-      });
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret2.id,
-      });
+      const teamKey = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Team Key",
+          provider: "anthropic",
+          scope: "team",
+          teamId: team.id,
+          secretId: secret1.id,
+        },
+        {
+          initialPermissionGrants: [
+            {
+              subject: { type: "team", id: team.id },
+              actions: ["read", "use"],
+            },
+          ],
+        },
+      );
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret2.id,
+        },
+        { publishToOrganization: true },
+      );
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -1008,18 +1069,23 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret = await makeSecret();
 
-      const orgWideKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret.id,
-      });
+      const orgWideKey = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret.id,
+        },
+        { publishToOrganization: true },
+      );
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -1038,9 +1104,11 @@ describe("LlmProviderApiKeyModel", () => {
       makeSecret,
       makeAgent,
       makeConversation,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
       const agent = await makeAgent({ name: "Test Agent" });
@@ -1053,13 +1121,16 @@ describe("LlmProviderApiKeyModel", () => {
         userId: user.id,
         secretId: secret1.id,
       });
-      const conversationKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Org Wide Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret2.id,
-      });
+      const conversationKey = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Org Wide Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret2.id,
+        },
+        { publishToOrganization: true },
+      );
 
       // Create a conversation with the org-wide key as its chatApiKeyId
       const conversation = await makeConversation(agent.id, {
@@ -1082,9 +1153,11 @@ describe("LlmProviderApiKeyModel", () => {
     test("returns null when no keys available", async ({
       makeOrganization,
       makeUser,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -1101,31 +1174,39 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
       // Create an older key (not primary)
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Older Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret1.id,
-        isPrimary: false,
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Older Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret1.id,
+          isPrimary: false,
+        },
+        { publishToOrganization: true },
+      );
 
       // Create a newer key marked as primary
-      const primaryKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Primary Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret2.id,
-        isPrimary: true,
-      });
+      const primaryKey = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Primary Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret2.id,
+          isPrimary: true,
+        },
+        { publishToOrganization: true },
+      );
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -1142,28 +1223,36 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
       // Create two keys, neither is primary — oldest should win
-      const olderKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Older Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret1.id,
-      });
+      const olderKey = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Older Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret1.id,
+        },
+        { publishToOrganization: true },
+      );
 
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Newer Key",
-        provider: "anthropic",
-        scope: "org",
-        secretId: secret2.id,
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Newer Key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: secret2.id,
+        },
+        { publishToOrganization: true },
+      );
 
       const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
@@ -1183,9 +1272,11 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const secret = await makeSecret();
 
       const personalKey = await LlmProviderApiKeyModel.create({
@@ -1212,10 +1303,13 @@ describe("LlmProviderApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeMember,
     }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
       const owner = await makeUser();
+      await makeMember(owner.id, org.id);
       const otherUser = await makeUser();
+      await makeMember(otherUser.id, org.id);
       const ownerSecret = await makeSecret();
       const orgSecret = await makeSecret();
 
@@ -1230,13 +1324,16 @@ describe("LlmProviderApiKeyModel", () => {
       });
       // An org-scoped Copilot key (shouldn't exist under enforcement, but the
       // guard must ignore it even if one is present)
-      await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
-        name: "Shared Copilot",
-        provider: "github-copilot",
-        scope: "org",
-        secretId: orgSecret.id,
-      });
+      await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Shared Copilot",
+          provider: "github-copilot",
+          scope: "org",
+          secretId: orgSecret.id,
+        },
+        { publishToOrganization: true },
+      );
 
       // otherUser invokes the agent (agentLlmApiKeyId = owner's key) but has no
       // personal Copilot key → must resolve to null, not the owner's/org key.

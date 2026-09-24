@@ -15,6 +15,7 @@ import {
   vi,
 } from "vitest";
 import { authQueryKeys } from "@/lib/auth/auth.query";
+import { invalidatePolicyViews } from "@/lib/openappa-policy-views";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 vi.mock("@/components/editor");
@@ -246,6 +247,123 @@ test("read-only users can inspect the policy without editing controls", async ()
   expect(
     screen.queryByRole("button", { name: "Validate" }),
   ).not.toBeInTheDocument();
+});
+
+test("the Policy page selects an included battery source and searches its status", async () => {
+  const githubEntry = "batteries/github/appa.toml";
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          { ...battery("github", "active", 3), entry: githubEntry },
+          battery("pending", "missing_credentials", 4),
+        ],
+      }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("entry")).toBe(githubEntry);
+      return HttpResponse.json({
+        entry: githubEntry,
+        name: "github",
+        content: '[[policy.tool]]\nname = "mcp/github/get_commit"\n',
+      });
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GuardrailsPolicyEditor readOnly sourceEntry={githubEntry} />
+    </QueryClientProvider>,
+  );
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "GitHub battery policy TOML",
+    }),
+  ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
+  expect(
+    screen.queryByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
+  ).not.toBeInTheDocument();
+
+  await userEvent.click(
+    screen.getByRole("combobox", { name: "Policy source file" }),
+  );
+  await userEvent.type(
+    await screen.findByPlaceholderText("Search included batteries"),
+    "active",
+  );
+  expect(screen.getByRole("option", { name: /GitHubActive/ })).toBeVisible();
+  expect(
+    screen.queryByRole("option", { name: /pendingNeeds a credential/ }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("option", { name: "Organization policy" }),
+  );
+  expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy");
+});
+
+test("battery source remains available when root policy and GitHub sync fail", async () => {
+  const entry = "batteries/github/appa.toml";
+  server.use(
+    http.get(url, () => new HttpResponse(null, { status: 500 })),
+    http.get(
+      `${origin}/api/openappa/github-sync`,
+      () => new HttpResponse(null, { status: 500 }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, () =>
+      HttpResponse.json({
+        entry,
+        name: "github",
+        content: '[[policy.tool]]\nname = "mcp/github/get_commit"\n',
+      }),
+    ),
+  );
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByRole("textbox", { name: "GitHub battery policy TOML" }),
+  ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
+});
+
+test("policy invalidation refreshes the displayed battery source", async () => {
+  const entry = "batteries/github/appa.toml";
+  let batteryContent = 'name = "mcp/github/get_commit"';
+  server.use(
+    http.get(`${origin}/api/openappa/battery-policy-source`, () =>
+      HttpResponse.json({
+        entry,
+        name: "github",
+        content: batteryContent,
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
+    </QueryClientProvider>,
+  );
+  const source = await screen.findByRole("textbox", {
+    name: "GitHub battery policy TOML",
+  });
+  expect(source).toHaveValue(batteryContent);
+  batteryContent = 'name = "mcp/github/get_issue"';
+  await invalidatePolicyViews(client);
+  await waitFor(() => expect(source).toHaveValue(batteryContent));
 });
 
 test("GitHub-owned policy is read-only and becomes editable after disconnect", async () => {

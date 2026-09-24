@@ -37,6 +37,7 @@ export function ToolTable({
 }: ToolTableProps) {
   const [search, setSearch] = useState("");
   const [serverId, setServerId] = useState<string | undefined>();
+  const [policySource, setPolicySource] = useState<string | undefined>();
   const [pagination, setPagination] = useState(FIRST_PAGE);
   const updateSearch = (value: string) => {
     setSearch(value);
@@ -46,15 +47,32 @@ export function ToolTable({
     setServerId(value === DEFAULT_FILTER_ALL ? undefined : value);
     setPagination((current) => ({ ...current, pageIndex: 0 }));
   };
+  const updatePolicySource = (value: string) => {
+    setPolicySource(value === DEFAULT_FILTER_ALL ? undefined : value);
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  };
   const clearFilters = () => {
     setSearch("");
     setServerId(undefined);
+    setPolicySource(undefined);
     setPagination((current) => ({ ...current, pageIndex: 0 }));
   };
+  const battery = policySource?.startsWith("battery:")
+    ? policySource.slice("battery:".length)
+    : undefined;
   const tools = useCoverageTools({
     catalogId: catalogId ?? serverId,
     entityId,
     search: search || undefined,
+    governedBy: battery
+      ? "battery"
+      : (policySource as
+          | "root"
+          | "battery"
+          | "catchall"
+          | "built_in"
+          | undefined),
+    battery,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
   });
@@ -114,7 +132,9 @@ export function ToolTable({
               className={filterSearchClass}
             />
           }
-          onClearFilters={search || serverId ? clearFilters : undefined}
+          onClearFilters={
+            search || serverId || policySource ? clearFilters : undefined
+          }
         >
           {!catalogId && (
             <FilterSelect
@@ -131,6 +151,24 @@ export function ToolTable({
               ]}
             />
           )}
+          <FilterSelect
+            value={policySource ?? DEFAULT_FILTER_ALL}
+            onValueChange={updatePolicySource}
+            placeholder="Policy source"
+            ariaLabel="Policy source"
+            showSearch={false}
+            items={[
+              { value: DEFAULT_FILTER_ALL, label: "All policy sources" },
+              { value: "root", label: "Root rule" },
+              { value: "battery", label: "Battery" },
+              ...(tools.data?.batteries ?? []).map((name) => ({
+                value: `battery:${name}`,
+                label: `${name} battery`,
+              })),
+              { value: "catchall", label: "Catch-all" },
+              { value: "built_in", label: "Built-in fallback" },
+            ]}
+          />
         </FilterBar>
       </CollectionFilters>
       <DataTable
@@ -151,7 +189,7 @@ export function ToolTable({
             ? "No tools are currently reachable by you through this entity."
             : "Tools appear here once they are assigned or synced."
         }
-        hasActiveFilters={Boolean(search || serverId)}
+        hasActiveFilters={Boolean(search || serverId || policySource)}
         filteredEmptyMessage="No tool matches these filters."
         onClearFilters={clearFilters}
       />
@@ -175,13 +213,32 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
     return tool.policySource === "built_in" ? (
       <Badge variant="outline">Built-in fallback</Badge>
     ) : (
-      <GovernedByPill governedBy={{ source: "catchall" }} />
+      <GovernedByPill
+        governedBy={{ source: "catchall" }}
+        href={tool.fallbackLine ? policyHref(tool.fallbackLine) : undefined}
+        line={tool.fallbackLine}
+      />
     );
 
+  const href =
+    tool.rule.source === "battery" &&
+    tool.rule.batteryEntry &&
+    tool.rule.batteryStatus !== "refused"
+      ? `/openappa/policy?${new URLSearchParams({
+          entry: tool.rule.batteryEntry,
+          ...(tool.rule.line ? { line: String(tool.rule.line) } : {}),
+        })}`
+      : tool.rule.source === "root" && tool.enforced
+        ? policyHref(tool.rule.line)
+        : undefined;
   return (
     <div className="space-y-1">
       {tool.rule.source === "root" ? (
-        <GovernedByPill governedBy={{ source: "root" }} />
+        <GovernedByPill
+          governedBy={{ source: "root" }}
+          href={href}
+          line={tool.rule.line}
+        />
       ) : (
         <GovernedByPill
           governedBy={{
@@ -189,6 +246,8 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
             name: tool.rule.battery ?? "",
             status: tool.rule.batteryStatus ?? "refused",
           }}
+          href={href}
+          line={tool.rule.line}
         />
       )}
       {!tool.enforced && (
@@ -196,4 +255,8 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
       )}
     </div>
   );
+}
+
+function policyHref(line: number | null) {
+  return line ? `/openappa/policy?line=${line}` : "/openappa/policy";
 }

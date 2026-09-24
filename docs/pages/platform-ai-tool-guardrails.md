@@ -24,7 +24,7 @@ The feature makes the workspace available; the switch controls enforcement. Chec
 
 ## Policy Targets
 
-Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. You can filter the list by server.
+Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. Filter by server or policy source, then follow a source link to the rule in the organization policy or included battery.
 
 ## Configure with the Agent
 
@@ -38,7 +38,7 @@ The agent can save a validated local revision. If you [connect GitHub sync](#git
 
 ## Policy and Effective Policy
 
-Open **OpenAPPA → Policy** to inspect your policy. Its **Policy** subtab shows `organization.appa.toml`, the source for your organization's rules. It is a read-only reference; use the agent to propose changes. The **Effective policy** subtab shows the document OpenAPPA composed from that source and its included batteries.
+Open **OpenAPPA → Policy** to inspect your policy. In the **Policy** subtab, choose `organization.appa.toml` or search included batteries. The selector shows each battery's status. Select a source tag in **Overview** to open its matching TOML line here. These files are read-only references; use the agent to propose changes. The **Effective policy** subtab shows the composed document.
 
 ![The read-only policy view and its configuration-agent shortcut](/docs/automated_screenshots/platform-openappa_policy.webp)
 

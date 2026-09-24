@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { GuardrailsPolicyEditor } from "../guardrails-policy-editor";
 
-export default function OpenAppaPolicyPage() {
+export default async function OpenAppaPolicyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ entry?: string; line?: string }>;
+}) {
+  const { entry, line } = await searchParams;
+  const focusLine = Number(line);
   return (
     <div className="space-y-4">
       <InlineNotice variant="warning">
@@ -21,7 +27,15 @@ export default function OpenAppaPolicyPage() {
           </Link>
         </Button>
       </InlineNotice>
-      <GuardrailsPolicyEditor readOnly />
+      <GuardrailsPolicyEditor
+        readOnly
+        sourceEntry={entry}
+        focusLine={
+          Number.isSafeInteger(focusLine) && focusLine > 0
+            ? focusLine
+            : undefined
+        }
+      />
     </div>
   );
 }

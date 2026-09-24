@@ -7,6 +7,7 @@ import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   BatteryMatchesSchema,
+  BatteryPolicySourceSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   EffectivePolicySchema,
@@ -29,6 +30,7 @@ const PackageHashParamsSchema = z.object({
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 const MatchesQuerySchema = z.object({ catalogId: z.uuid() });
+const PolicySourceQuerySchema = z.object({ entry: z.string().min(1).max(512) });
 const DeletedSchema = z.object({ success: z.literal(true) });
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -75,6 +77,22 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       openappaBatteriesService.policyDeclarations(request.organizationId),
+  );
+  app.get(
+    "/api/openappa/battery-policy-source",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaBatteryPolicySource,
+        tags: ["OpenAPPA"],
+        querystring: PolicySourceQuerySchema,
+        response: constructResponseSchema(BatteryPolicySourceSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.policySource(
+        request.organizationId,
+        request.query.entry,
+      ),
   );
   app.get(
     "/api/openappa/effective-policy",

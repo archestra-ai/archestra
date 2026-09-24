@@ -1,6 +1,6 @@
 import config from "@/config";
 import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
-import { seedCoverage } from "@/test/openappa-coverage";
+import { ruleLine, seedCoverage } from "@/test/openappa-coverage";
 import routes from "./openappa-coverage.routes";
 
 describe("GET /api/openappa/coverage/tools", () => {
@@ -22,13 +22,19 @@ describe("GET /api/openappa/coverage/tools", () => {
         catalogId: string;
         catalogIcon: string | null;
         policySource: string;
+        fallbackLine: number | null;
         rule: {
           selector: string | null;
           source: string;
           battery: string | null;
+          batteryEntry: string | null;
+          batteryStatus: string | null;
+          line: number | null;
+          enforced: boolean;
         } | null;
       }>;
       servers: Array<{ id: string; name: string; icon: string | null }>;
+      batteries: string[];
       pagination: Record<string, unknown>;
     };
   };
@@ -61,6 +67,7 @@ describe("GET /api/openappa/coverage/tools", () => {
     expect(await tools()).toEqual({
       data: [],
       servers: [],
+      batteries: [],
       pagination: expect.objectContaining({ total: 0 }),
     });
   });
@@ -140,7 +147,13 @@ describe("GET /api/openappa/coverage/tools", () => {
       "docs__microsoft_docs_search",
       "mixed__list_items",
     ]);
+    expect(await rows("?governedBy=battery&battery=acme")).toEqual([
+      "acme__create_item",
+      "acme__list_items",
+      "mixed__list_items",
+    ]);
     expect(await rows("?governedBy=catchall")).toEqual(["docs__list_pages"]);
+    expect(await rows("?governedBy=built_in")).toEqual([]);
     expect(await rows("?kind=read")).toEqual([
       "acme__list_items",
       "docs__microsoft_docs_search(query:*azure*)",
@@ -173,6 +186,7 @@ describe("GET /api/openappa/coverage/tools", () => {
       { id: catalogIds.acme, name: "Acme", icon: null },
       { id: catalogIds.docs, name: "Docs", icon: "📚" },
     ]);
+    expect(firstPage.batteries).toEqual(["acme"]);
     expect(firstPage.data).toHaveLength(1);
     const filtered = await tools(
       `?entityId=${agentIds.alpha}&catalogId=${catalogIds.docs}`,
@@ -182,6 +196,7 @@ describe("GET /api/openappa/coverage/tools", () => {
     ]);
     expect(filtered.data[0]).toMatchObject({ catalogIcon: "📚" });
     expect(filtered.servers).toEqual(firstPage.servers);
+    expect(filtered.batteries).toEqual([]);
   });
 
   test("identifies root, battery, and fallback policy sources in entity details", async ({
@@ -190,25 +205,71 @@ describe("GET /api/openappa/coverage/tools", () => {
     makeAgent,
     makeAgentTool,
   }) => {
-    await seed({ makeInternalMcpCatalog, makeTool, makeAgent, makeAgentTool });
+    const { content } = await seed({
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    });
     const listed = (await tools("?limit=100")).data;
     expect(
       listed.find((row) => row.fullName === "acme__delete_item"),
     ).toMatchObject({
       policySource: "root",
-      rule: { source: "root", battery: null },
+      rule: {
+        source: "root",
+        battery: null,
+        batteryEntry: null,
+        line: ruleLine(content, "acme__delete_item"),
+      },
     });
     expect(
       listed.find((row) => row.fullName === "acme__list_items"),
     ).toMatchObject({
       policySource: "battery",
-      rule: { source: "battery", battery: "acme" },
+      rule: {
+        source: "battery",
+        battery: "acme",
+        batteryEntry: expect.stringMatching(/^batteries\/acme@sha256-/),
+        line: 4,
+      },
     });
     expect(
       listed.find((row) => row.fullName === "docs__list_pages"),
     ).toMatchObject({
       policySource: "fallback",
       rule: null,
+      fallbackLine: ruleLine(content, "*"),
+    });
+  });
+
+  test("does not attribute a rejected catch-all to the active policy", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    await seedCoverage({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      fixtures: { makeInternalMcpCatalog, makeTool, makeAgent, makeAgentTool },
+      refused: true,
+    });
+    const listed = (await tools("?limit=100")).data;
+    expect(
+      listed.find((row) => row.fullName === "docs__list_pages"),
+    ).toMatchObject({ policySource: "fallback", fallbackLine: null });
+    expect(
+      listed.find((row) => row.fullName === "acme__delete_item"),
+    ).toMatchObject({
+      policySource: "root",
+      rule: { enforced: false },
+    });
+    expect(
+      listed.find((row) => row.fullName === "acme__list_items"),
+    ).toMatchObject({
+      policySource: "battery",
+      rule: { batteryStatus: "refused", enforced: false },
     });
   });
 });

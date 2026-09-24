@@ -85842,6 +85842,93 @@ export type GetOpenappaPolicyDeclarationsResponses = {
 
 export type GetOpenappaPolicyDeclarationsResponse = GetOpenappaPolicyDeclarationsResponses[keyof GetOpenappaPolicyDeclarationsResponses];
 
+export type GetOpenappaBatteryPolicySourceData = {
+    body?: never;
+    path?: never;
+    query: {
+        entry: string;
+    };
+    url: '/api/openappa/battery-policy-source';
+};
+
+export type GetOpenappaBatteryPolicySourceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaBatteryPolicySourceError = GetOpenappaBatteryPolicySourceErrors[keyof GetOpenappaBatteryPolicySourceErrors];
+
+export type GetOpenappaBatteryPolicySourceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        entry: string;
+        name: string;
+        content: string;
+    };
+};
+
+export type GetOpenappaBatteryPolicySourceResponse = GetOpenappaBatteryPolicySourceResponses[keyof GetOpenappaBatteryPolicySourceResponses];
+
 export type GetOpenappaEffectivePolicyData = {
     body?: never;
     path?: never;
@@ -86716,7 +86803,8 @@ export type GetOpenappaCoverageToolsData = {
         search?: string;
         catalogId?: string;
         entityId?: string;
-        governedBy?: 'battery' | 'root' | 'catchall';
+        governedBy?: 'battery' | 'root' | 'catchall' | 'built_in';
+        battery?: string;
         kind?: 'read' | 'write' | 'approval';
     };
     url: '/api/openappa/coverage/tools';
@@ -86805,6 +86893,7 @@ export type GetOpenappaCoverageToolsResponses = {
             rule: {
                 source: 'root' | 'battery';
                 battery: string | null;
+                batteryEntry: string | null;
                 batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
                 line: number | null;
                 name: string;
@@ -86821,6 +86910,7 @@ export type GetOpenappaCoverageToolsResponses = {
                 annotator: string | null;
                 enforced: boolean;
             } | null;
+            fallbackLine: number | null;
             unlisted: boolean;
             enforced: boolean;
             agents: Array<{
@@ -86841,6 +86931,7 @@ export type GetOpenappaCoverageToolsResponses = {
             name: string;
             icon: string | null;
         }>;
+        batteries: Array<string>;
     };
 };
 

@@ -1,9 +1,17 @@
 "use client";
 
+import {
+  ArrowUpRight,
+  Asterisk,
+  BatteryCharging,
+  FileCode2,
+} from "lucide-react";
+import Link from "next/link";
 import type { ComponentProps } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { PolicyBattery } from "@/lib/openappa-batteries.query";
 import { cn } from "@/lib/utils";
+import { batteryDisplayName } from "./battery-display-name";
 
 type BatteryStatus = PolicyBattery["status"];
 
@@ -22,21 +30,6 @@ const BATTERY_STATUS_TONES: Record<BatteryStatus, CoverageTone> = {
   unavailable: "critical",
 };
 
-function TonedBadge({
-  tone,
-  className,
-  ...props
-}: ComponentProps<typeof Badge> & { tone: CoverageTone }) {
-  return (
-    <Badge
-      data-tone={tone}
-      variant={TONE_VARIANTS[tone]}
-      className={cn(TONE_CLASSES[tone], className)}
-      {...props}
-    />
-  );
-}
-
 /**
  * The source of a tool's matching policy rule, or its fallback.
  */
@@ -47,37 +40,64 @@ type GovernedBy =
 
 export function GovernedByPill({
   governedBy,
+  href,
+  line,
   className,
 }: {
   governedBy: GovernedBy;
+  href?: string;
+  line?: number | null;
   className?: string;
 }) {
-  switch (governedBy.source) {
-    case "battery":
-      return (
-        <TonedBadge
-          tone={BATTERY_STATUS_TONES[governedBy.status]}
-          className={className}
+  const tone =
+    governedBy.source === "battery"
+      ? BATTERY_STATUS_TONES[governedBy.status]
+      : null;
+  const Icon =
+    governedBy.source === "battery"
+      ? BatteryCharging
+      : governedBy.source === "root"
+        ? FileCode2
+        : Asterisk;
+  const label =
+    governedBy.source === "battery"
+      ? batteryDisplayName(governedBy.name)
+      : governedBy.source === "root"
+        ? "Root rule"
+        : "Catch-all";
+  const content = (
+    <>
+      <Icon aria-hidden="true" />
+      <span>{label}</span>
+      {href && (
+        <ArrowUpRight aria-hidden="true" className="ml-0.5 opacity-60" />
+      )}
+    </>
+  );
+  return (
+    <Badge
+      asChild={!!href}
+      data-tone={tone ?? undefined}
+      variant={tone ? TONE_VARIANTS[tone] : "outline"}
+      className={cn(
+        tone ? TONE_CLASSES[tone] : null,
+        governedBy.source === "catchall" && "text-muted-foreground",
+        href && "cursor-pointer",
+        className,
+      )}
+    >
+      {href ? (
+        <Link
+          href={href}
+          aria-label={`View source for ${label}${line ? ` at line ${line}` : ""}`}
         >
-          <span>{`${governedBy.name} battery`}</span>
-        </TonedBadge>
-      );
-    case "root":
-      return (
-        <Badge variant="outline" className={className}>
-          <span>Root rule</span>
-        </Badge>
-      );
-    case "catchall":
-      return (
-        <Badge
-          variant="outline"
-          className={cn("text-muted-foreground", className)}
-        >
-          <span>Catch-all</span>
-        </Badge>
-      );
-  }
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
+    </Badge>
+  );
 }
 
 const TONE_VARIANTS: Record<

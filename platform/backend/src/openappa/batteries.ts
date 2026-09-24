@@ -152,6 +152,23 @@ class OpenAppaBatteriesService {
     };
   }
 
+  /** Show the exact policy bytes an include currently resolves to. */
+  async policySource(organizationId: string, entry: string) {
+    const root = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    const included = resolution.entries.find((item) => item.entry === entry);
+    if (!included?.battery)
+      throw new ApiError(404, "This battery policy is no longer included");
+    return {
+      entry: included.entry,
+      name: included.name,
+      content: included.battery.policy,
+    };
+  }
+
   /** The policy the runtime opens for this organization, recomposed when it moved. */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     const inFlight = this.reading.get(organizationId);

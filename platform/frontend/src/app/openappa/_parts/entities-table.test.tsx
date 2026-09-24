@@ -24,6 +24,7 @@ import {
   vi,
 } from "vitest";
 import { OverviewTab } from "./overview-tab";
+import { ToolTable } from "./tool-table";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -195,4 +196,246 @@ test("shows agents and registry servers with combined tool coverage and scoped d
     "MCP server · Personal · 19 synced tools · 4 with active explicit rules",
   );
   expect(await screen.findByText("get_issue")).toBeVisible();
+});
+
+test("filters tool policy sources and links each rule to its TOML line", async () => {
+  const batteryEntry = "batteries/github/appa.toml";
+  const base = {
+    catalogId: serverId,
+    catalogName: "GitHub",
+    catalogIcon: "🐙",
+    prefix: "github",
+    kind: "read",
+    unlisted: false,
+    enforced: true,
+    agents: [],
+    fallbackLine: null,
+  };
+  const rows = [
+    {
+      ...base,
+      toolId: "tool-root",
+      name: "get_file_contents",
+      fullName: "github__get_file_contents",
+      policySource: "root",
+      rule: {
+        source: "root",
+        battery: null,
+        batteryEntry: null,
+        batteryStatus: null,
+        line: 12,
+        name: "github__get_file_contents",
+        selector: null,
+        delta: {},
+        requires: {},
+        annotator: null,
+        enforced: true,
+      },
+    },
+    {
+      ...base,
+      toolId: "tool-battery",
+      name: "get_commit",
+      fullName: "github__get_commit",
+      policySource: "battery",
+      rule: {
+        source: "battery",
+        battery: "github",
+        batteryEntry,
+        batteryStatus: "active",
+        line: 4,
+        name: "mcp/github/get_commit",
+        selector: null,
+        delta: {},
+        requires: {},
+        annotator: null,
+        enforced: true,
+      },
+    },
+    {
+      ...base,
+      toolId: "tool-fallback",
+      name: "unlisted",
+      fullName: "github__unlisted",
+      policySource: "fallback",
+      kind: "unlisted",
+      rule: null,
+      unlisted: true,
+      enforced: false,
+      fallbackLine: 23,
+    },
+  ];
+  server.use(
+    http.get(`${origin}/api/openappa/coverage/tools`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const source = params.get("governedBy");
+      const battery = params.get("battery");
+      return HttpResponse.json({
+        data: rows.filter(
+          (row) =>
+            (!source ||
+              (source === "catchall"
+                ? row.policySource === "fallback"
+                : row.policySource === source)) &&
+            (!battery || row.rule?.battery === battery),
+        ),
+        servers: [{ id: serverId, name: "GitHub", icon: "🐙" }],
+        batteries: ["github"],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: rows.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      });
+    }),
+  );
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ToolTable catalogId={serverId} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("get_commit")).toBeVisible();
+  expect(
+    screen.getByRole("link", {
+      name: "View source for Root rule at line 12",
+    }),
+  ).toHaveAttribute("href", "/openappa/policy?line=12");
+  const batterySource = screen.getByRole("link", {
+    name: "View source for GitHub at line 4",
+  });
+  expect(batterySource).toHaveTextContent("GitHub");
+  expect(batterySource).not.toHaveTextContent("battery");
+  expect(batterySource).toHaveAttribute(
+    "href",
+    expect.stringContaining(
+      "/openappa/policy?entry=batteries%2Fgithub%2Fappa.toml&line=4",
+    ),
+  );
+  expect(
+    screen.getByRole("link", {
+      name: "View source for Catch-all at line 23",
+    }),
+  ).toHaveAttribute("href", "/openappa/policy?line=23");
+
+  await userEvent.click(
+    screen.getByRole("combobox", { name: "Policy source" }),
+  );
+  await userEvent.click(screen.getByRole("option", { name: "github battery" }));
+  await waitFor(() => {
+    expect(screen.getByText("get_commit")).toBeVisible();
+    expect(screen.queryByText("get_file_contents")).not.toBeInTheDocument();
+    expect(screen.queryByText("unlisted")).not.toBeInTheDocument();
+  });
+});
+
+test("does not offer source links for a refused composition", async () => {
+  server.use(
+    http.get(`${origin}/api/openappa/coverage/tools`, () =>
+      HttpResponse.json({
+        data: [
+          {
+            toolId: "tool-root",
+            catalogId: serverId,
+            catalogName: "GitHub",
+            catalogIcon: null,
+            prefix: "github",
+            name: "get_file_contents",
+            fullName: "github__get_file_contents",
+            kind: "read",
+            policySource: "root",
+            rule: {
+              source: "root",
+              battery: null,
+              batteryEntry: null,
+              batteryStatus: null,
+              line: 12,
+              name: "github__get_file_contents",
+              selector: null,
+              delta: {},
+              requires: {},
+              annotator: null,
+              enforced: false,
+            },
+            fallbackLine: null,
+            unlisted: false,
+            enforced: false,
+            agents: [],
+          },
+          {
+            toolId: "tool-battery",
+            catalogId: serverId,
+            catalogName: "GitHub",
+            catalogIcon: null,
+            prefix: "github",
+            name: "get_commit",
+            fullName: "github__get_commit",
+            kind: "read",
+            policySource: "battery",
+            rule: {
+              source: "battery",
+              battery: "github",
+              batteryEntry: "batteries/github/appa.toml",
+              batteryStatus: "refused",
+              line: 4,
+              name: "mcp/github/get_commit",
+              selector: null,
+              delta: {},
+              requires: {},
+              annotator: null,
+              enforced: false,
+            },
+            fallbackLine: null,
+            unlisted: false,
+            enforced: false,
+            agents: [],
+          },
+          {
+            toolId: "tool-fallback",
+            catalogId: serverId,
+            catalogName: "GitHub",
+            catalogIcon: null,
+            prefix: "github",
+            name: "unlisted",
+            fullName: "github__unlisted",
+            kind: "unlisted",
+            policySource: "fallback",
+            rule: null,
+            fallbackLine: null,
+            unlisted: true,
+            enforced: false,
+            agents: [],
+          },
+        ],
+        servers: [{ id: serverId, name: "GitHub", icon: null }],
+        batteries: ["github"],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 3,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      }),
+    ),
+  );
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ToolTable catalogId={serverId} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("get_commit")).toBeVisible();
+  expect(screen.queryByRole("link", { name: /View source for/ })).toBeNull();
+  expect(screen.getAllByText("Not enforced")).toHaveLength(2);
 });

@@ -65,6 +65,17 @@ class OpenAppaCoverageService {
         ]),
       ).values(),
     ].sort(byName);
+    const batteries = [
+      ...new Set(
+        reachable.flatMap((tool) =>
+          (!params.catalogId || tool.catalogId === params.catalogId) &&
+          tool.rule?.source === "battery" &&
+          tool.rule.battery
+            ? [tool.rule.battery]
+            : [],
+        ),
+      ),
+    ].sort();
     const search = params.search?.toLowerCase();
     const matching = reachable.filter(
       (tool) =>
@@ -76,15 +87,18 @@ class OpenAppaCoverageService {
             tool.prefix,
           ].some((field) => field.toLowerCase().includes(search))) &&
         (!params.catalogId || tool.catalogId === params.catalogId) &&
+        (!params.battery || tool.rule?.battery === params.battery) &&
         (!params.governedBy ||
           (params.governedBy === "catchall"
-            ? tool.unlisted
-            : tool.rule?.source === params.governedBy)) &&
+            ? tool.policySource === "fallback"
+            : params.governedBy === "built_in"
+              ? tool.policySource === "built_in"
+              : tool.rule?.source === params.governedBy)) &&
         (!params.kind ||
           tool.kind === params.kind ||
           (params.kind === "write" && tool.kind === "approval")),
     );
-    return { ...page(matching, params), servers };
+    return { ...page(matching, params), servers, batteries };
   }
 
   async entities(
@@ -174,6 +188,15 @@ async function buildReport(
   const candidates: Candidate[] = [];
   const headerLines = toolHeaderLines(root.content);
   const rootEntries = toolEntries(root.content);
+  const rootLines =
+    headerLines.length === rootEntries.length ? headerLines : [];
+  const fallbackLine = refused
+    ? null
+    : rootEntries.reduce<number | null>(
+        (line, entry, index) =>
+          entry.name === "*" ? (rootLines[index] ?? null) : line,
+        null,
+      );
   rootEntries.forEach((entry, index) => {
     const spelled = splitSelector(entry.name);
     if (spelled.base === "*") return;
@@ -185,11 +208,9 @@ async function buildReport(
         source: {
           source: "root",
           battery: null,
+          batteryEntry: null,
           batteryStatus: null,
-          line:
-            headerLines.length === rootEntries.length
-              ? (headerLines[index] ?? null)
-              : null,
+          line: rootLines[index] ?? null,
         },
         enforced: !refused,
       }),
@@ -201,7 +222,9 @@ async function buildReport(
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
-    for (const entry of toolEntries(included.battery.policy)) {
+    const batteryEntries = toolEntries(included.battery.policy);
+    const batteryHeaderLines = toolHeaderLines(included.battery.policy);
+    for (const [index, entry] of batteryEntries.entries()) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
       if (!canonical) continue;
@@ -215,8 +238,12 @@ async function buildReport(
             source: {
               source: "battery",
               battery: included.name,
+              batteryEntry: included.entry,
               batteryStatus: status,
-              line: null,
+              line:
+                batteryHeaderLines.length === batteryEntries.length
+                  ? (batteryHeaderLines[index] ?? null)
+                  : null,
             },
             enforced: !refused && status === "active",
           }),
@@ -312,6 +339,7 @@ async function buildReport(
           kind: primary.kind,
           policySource: primary.rule.source,
           rule: primary.rule,
+          fallbackLine: null,
           unlisted: false,
           enforced: primary.rule.enforced,
         }
@@ -320,6 +348,7 @@ async function buildReport(
           kind: "unlisted",
           policySource: effective.rootRevision === 0 ? "built_in" : "fallback",
           rule: null,
+          fallbackLine,
           unlisted: true,
           enforced: false,
         };
@@ -332,6 +361,7 @@ async function buildReport(
             kind: entry.kind,
             policySource: entry.rule.source,
             rule: entry.rule,
+            fallbackLine: null,
             unlisted: false,
             enforced: entry.rule.enforced,
           },
@@ -471,7 +501,10 @@ function candidate(params: {
   entry: ToolEntry;
   spelled: { base: string; selector: string | null };
   match: string;
-  source: Pick<CoverageRule, "source" | "battery" | "batteryStatus" | "line">;
+  source: Pick<
+    CoverageRule,
+    "source" | "battery" | "batteryEntry" | "batteryStatus" | "line"
+  >;
   enforced: boolean;
 }): Candidate {
   const { entry, spelled, match, source, enforced } = params;

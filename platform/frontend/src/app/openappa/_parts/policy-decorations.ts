@@ -81,6 +81,18 @@ type ModelDecoration = NonNullable<
   Parameters<CodeEditor["createDecorationsCollection"]>[0]
 >[number];
 
+/** Reveal the rule header linked from a tool's policy source. */
+export function focusPolicyLine(editor: CodeEditor, line?: number) {
+  if (!line || line > (editor.getModel()?.getLineCount() ?? 0)) return;
+  editor.revealLineInCenter(line);
+  editor.setSelection({
+    startLineNumber: line,
+    startColumn: 1,
+    endLineNumber: line,
+    endColumn: editor.getModel()?.getLineMaxColumn(line) ?? 1,
+  });
+}
+
 function isWarning(annotation: PolicyAnnotation): boolean {
   return annotation.kind === "unusedAlias" || annotation.status !== "active";
 }

@@ -36,9 +36,11 @@ export const CoverageRuleSchema = z.object({
   source: z.enum(["root", "battery"]),
   /** The battery that declares the rule; null for a root rule. */
   battery: z.string().nullable(),
+  /** The exact include entry that supplies a battery rule; null for a root rule. */
+  batteryEntry: z.string().nullable(),
   /** That battery's status (`refused` while the composition fails); null for a root rule. */
   batteryStatus: BatteryInstallStatusSchema.nullable(),
-  /** The rule's line in the root text; null for a battery rule. */
+  /** The rule's header line in its source TOML, when it can be located. */
   line: z.number().int().nullable(),
   /** The tool name as the rule spells it, without its selector. */
   name: z.string(),
@@ -82,6 +84,8 @@ export const CoverageToolSchema = z.object({
   policySource: z.enum(["built_in", "fallback", "root", "battery"]),
   /** The rule this row is judged by; null when the catch-all judges it. */
   rule: CoverageRuleSchema.nullable(),
+  /** The root catch-all header line, when an unlisted tool uses one. */
+  fallbackLine: z.number().int().nullable(),
   unlisted: z.boolean(),
   enforced: z.boolean(),
   agents: z.array(CoverageAgentRefSchema),
@@ -116,7 +120,9 @@ export const CoverageToolsQuerySchema = PaginationQuerySchema.extend({
   catalogId: z.uuid().optional(),
   /** Tools reachable through this agent or MCP gateway, including Auto mode discovery. */
   entityId: z.uuid().optional(),
-  governedBy: z.enum(["battery", "root", "catchall"]).optional(),
+  governedBy: z.enum(["battery", "root", "catchall", "built_in"]).optional(),
+  /** Narrow battery rules to one included battery. */
+  battery: z.string().trim().min(1).max(100).optional(),
   kind: CoverageKindFilterSchema.optional(),
 });
 export type CoverageToolsQuery = z.infer<typeof CoverageToolsQuerySchema>;
@@ -138,6 +144,8 @@ export const CoverageToolsPageSchema = createPaginatedResponseSchema(
       icon: z.string().nullable(),
     }),
   ),
+  /** Batteries represented by the selected target, before source filtering. */
+  batteries: z.array(z.string()),
 });
 export type CoverageToolsPage = z.infer<typeof CoverageToolsPageSchema>;
 export const CoverageEntitiesPageSchema =

@@ -8,6 +8,14 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import {
+  AgentModel,
+  AgentToolModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
@@ -85,9 +93,6 @@ export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
 ): Promise<ToolAssignmentResult[]> {
-  const { assignToolToAgent } = await import(
-    "@/services/agent-tool-assignment"
-  );
   const results: ToolAssignmentResult[] = [];
   const preFetchedData = await buildAgentToolAssignmentPrefetch({
     agentId,
@@ -139,11 +144,6 @@ export async function assignSubAgentDelegations(
   agentId: string,
   subAgentIds: string[],
 ): Promise<SubAgentResult[]> {
-  const [{ default: AgentModel }, { default: AgentToolModel }] =
-    await Promise.all([
-      import("@/models/agent"),
-      import("@/models/agent-tool"),
-    ]);
   const results: SubAgentResult[] = [];
   for (const subAgentId of subAgentIds) {
     try {
@@ -440,15 +440,6 @@ async function buildAgentToolAssignmentPrefetch(params: {
   agentId: string;
   assignments: ToolAssignmentInput[];
 }) {
-  const [
-    { default: ToolModel },
-    { default: InternalMcpCatalogModel },
-    { default: McpServerModel },
-  ] = await Promise.all([
-    import("@/models/tool"),
-    import("@/models/internal-mcp-catalog"),
-    import("@/models/mcp-server"),
-  ]);
   const { agentId, assignments } = params;
   const uniqueToolIds = [
     ...new Set(assignments.map((assignment) => assignment.toolId)),

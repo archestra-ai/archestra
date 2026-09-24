@@ -23,7 +23,7 @@ Within each group, `backend/vitest.config.ts` splits files by module mocking at 
 Consequences:
 
 - **Prefer not mocking modules at all.** Every file that drops its last `vi.mock` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
-- **Import test APIs from `vitest` when the file does not use database fixtures.** `@/test` loads the entire fixture graph even when the test only needs `expect`, `test`, or hooks. This matters most in mock-using files, whose module graph is reloaded for each file. `pnpm --dir backend check:test-imports` rejects fixture-free imports from `@/test`.
+- **Import test APIs from `vitest` when the file does not use database fixtures.** `@/test` loads the entire fixture graph even when the test only needs `expect`, `test`, or hooks. This matters most in mock-using files, whose module graph is reloaded for each file. `useRouteTestApp` registers fixture-aware hooks, so files using it must still import `test` from `@/test`. `pnpm --dir backend check:test-imports` rejects fixture-free imports from `@/test`.
 - Database selection follows the explicit filename suffix; mock isolation is automatic. Adding `vi.mock` to a file safely moves it to the isolated project on the next run.
 - Route tests import `createFastifyInstance` and `FastifyInstanceWithZod` from `@/fastify-instance`, and `useRouteTestApp` from `@/test/route-test-app`. Do not import `@/server` in tests or re-export the route helper from the general `@/test` barrel; both load the server startup graph into unrelated tests.
 

@@ -2,12 +2,10 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_APP_NAME,
-  MEMBER_ROLE_NAME,
-  type SupportedProvider,
-} from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
+import { DEFAULT_APP_NAME } from "@archestra/shared/consts";
+import { MEMBER_ROLE_NAME } from "@archestra/shared/roles";
 import { and, eq, ne } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";

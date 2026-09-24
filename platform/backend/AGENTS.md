@@ -23,7 +23,9 @@
   fixtures for database behavior.
 - In database-backed tests that do not use fixtures, import test APIs directly
   from `vitest`; importing `@/test` loads the entire fixture graph. The
-  `check:test-imports` command rejects unused fixture imports.
+  `useRouteTestApp` helper uses fixtures internally, so its tests still need
+  `test` from `@/test`. The `check:test-imports` command rejects unused fixture
+  imports.
 - In route tests, import the Fastify factory from `@/fastify-instance` and the
   route helper from `@/test/route-test-app`. Do not import `@/server` from a test
   or re-export route helpers through the general `@/test` barrel.

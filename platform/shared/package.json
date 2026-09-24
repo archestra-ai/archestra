@@ -7,6 +7,7 @@
   "exports": {
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
+    "./archestra-mcp-server": "./archestra-mcp-server.ts",
     "./api-error": "./api-error.ts",
     "./consts": "./consts.ts",
     "./chat": "./chat.ts",
@@ -18,6 +19,7 @@
     "./model-constants": "./model-constants.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
+    "./roles": "./roles.ts",
     "./sso-template-helpers": "./sso-template-helpers.ts",
     "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts"

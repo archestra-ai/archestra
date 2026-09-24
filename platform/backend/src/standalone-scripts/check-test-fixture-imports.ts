@@ -38,7 +38,13 @@ for (const file of testFiles(sourceRoot)) {
       ts.isStringLiteral(statement.moduleSpecifier) &&
       statement.moduleSpecifier.text === "@/test",
   );
-  if (importsFixtureTest && !usesFixture(source)) {
+  const usesRouteFixtures = source.statements.some(
+    (statement) =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === "@/test/route-test-app",
+  );
+  if (importsFixtureTest && !usesFixture(source) && !usesRouteFixtures) {
     unnecessaryImports.push(path.relative(sourceRoot, file));
   }
 }

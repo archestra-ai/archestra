@@ -179,10 +179,12 @@ WITH candidates AS (
   FROM targets t
   WHERE t.visibility = 'org' AND t.resource IN ('agent', 'mcpGateway', 'llmModel')
   UNION ALL
+  -- The author of a personal object keeps it in full. So does the owner of
+  -- any project: a project owner managed and deleted it whatever its share.
   SELECT t.organization_id, t.resource, t.scope, 'user', t.author_id,
     ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']::text[]
   FROM targets t JOIN member m ON m.organization_id = t.organization_id AND m.user_id = t.author_id
-  WHERE t.visibility = 'personal'
+  WHERE t.visibility = 'personal' OR t.resource = 'project'
   UNION ALL
   SELECT t.organization_id, t.resource, t.scope, 'team', at.team_id, ARRAY['read', 'use']::text[]
   FROM targets t JOIN agent_team at ON at.agent_id = t.source_id

@@ -27,6 +27,8 @@ interface SearchableSelectItem {
 interface SearchableSelectProps {
   value: string;
   onValueChange: (value: string) => void;
+  onOpenChange?: (open: boolean) => void;
+  clearSearchOnClose?: boolean;
   placeholder?: string;
   /** Applied to the trigger, so a sibling `<Label htmlFor>` can point at it. */
   id?: string;
@@ -68,6 +70,8 @@ interface SearchableSelectProps {
    */
   showSearch?: boolean;
   hint?: string;
+  /** Optional action beneath the results, such as revealing more choices. */
+  footer?: React.ReactNode;
   onSearchQueryChange?: (value: string) => void;
   emptyMessage?: string;
   multiline?: boolean;
@@ -81,6 +85,8 @@ interface SearchableSelectProps {
 export function SearchableSelect({
   value,
   onValueChange,
+  onOpenChange,
+  clearSearchOnClose = false,
   placeholder = "Select...",
   id,
   ariaLabel,
@@ -96,6 +102,7 @@ export function SearchableSelect({
   showSearchIcon = true,
   showSearch = true,
   hint,
+  footer,
   onSearchQueryChange,
   emptyMessage = "No results found.",
   multiline = false,
@@ -107,6 +114,11 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next && clearSearchOnClose) setSearchQuery("");
+    onOpenChange?.(next);
+  };
 
   const filteredItems = React.useMemo(() => {
     if (!searchQuery) return items;
@@ -125,12 +137,12 @@ export function SearchableSelect({
 
   const selectItem = (nextValue: string) => {
     onValueChange(nextValue);
-    setOpen(false);
+    changeOpen(false);
     setSearchQuery("");
   };
   const navigation = useListboxNavigation({
     open,
-    onOpenChange: setOpen,
+    onOpenChange: changeOpen,
     values: [...(pinnedItems ?? []), ...filteredItems]
       .filter((item) => !item.disabled)
       .map((item) => item.value),
@@ -202,7 +214,7 @@ export function SearchableSelect({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -305,6 +317,7 @@ export function SearchableSelect({
             filteredItems.map(renderOption)
           )}
         </div>
+        {footer && <div className="border-t p-1">{footer}</div>}
       </PopoverContent>
     </Popover>
   );

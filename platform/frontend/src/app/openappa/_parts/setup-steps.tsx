@@ -463,8 +463,24 @@ export function RuleStep({
           guarded={draft.guarded}
           edit={{
             catalogs,
-            onSource: (source) => onChange({ ...draft, source }),
-            onGuarded: (guarded) => onChange({ ...draft, guarded }),
+            onSource: (source) =>
+              onChange({
+                ...draft,
+                source,
+                guarded:
+                  draft.guarded?.fullName === source.fullName
+                    ? null
+                    : draft.guarded,
+              }),
+            onGuarded: (guarded) =>
+              onChange({
+                ...draft,
+                source:
+                  draft.source?.fullName === guarded.fullName
+                    ? null
+                    : draft.source,
+                guarded,
+              }),
           }}
         />
       </div>
@@ -514,7 +530,8 @@ export function draftRule(draft: RuleDraft): SetupRule | null {
   if (!draft.guarded) return null;
   if (!hasSource(draft.shape))
     return { shape: draft.shape, guarded: draft.guarded.fullName };
-  if (!draft.source) return null;
+  if (!draft.source || draft.source.fullName === draft.guarded.fullName)
+    return null;
   return {
     shape: draft.shape,
     source: draft.source.fullName,

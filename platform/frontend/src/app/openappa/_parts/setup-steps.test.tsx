@@ -1,16 +1,27 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type CoverageEntity,
+  useAllCoverageToolsForCatalogs,
   useCoverageEntitiesForTools,
 } from "@/lib/openappa-coverage.query";
 import type { PickedTool } from "./setup-rule-flow";
-import { EnableStep, ToolsStep, type useSetupServers } from "./setup-steps";
+import {
+  draftRule,
+  EnableStep,
+  type RuleDraft,
+  RuleStep,
+  ToolsStep,
+  type useSetupServers,
+} from "./setup-steps";
 
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/openappa-coverage.query", async (importOriginal) => ({
   ...(await importOriginal()),
+  useAllCoverageToolsForCatalogs: vi.fn(),
   useCoverageEntitiesForTools: vi.fn(),
 }));
 
@@ -149,5 +160,91 @@ describe("EnableStep", () => {
     expect(
       screen.getByRole("region", { name: "Where your rule applies" }),
     ).toHaveTextContent("No agent or MCP gateway can call these tools yet.");
+  });
+});
+
+describe("RuleStep", () => {
+  test("changing to one tool and back cannot turn a source into its own guarded tool", async () => {
+    const user = userEvent.setup();
+    const source = picked("get_issue");
+    const guarded = picked("create_issue");
+    vi.mocked(useAllCoverageToolsForCatalogs).mockReturnValue({
+      tools: [
+        {
+          toolId: source.toolId,
+          catalogId: source.catalogId,
+          catalogName: source.server,
+          fullName: source.fullName,
+          name: source.name,
+          readOnly: true,
+          rule: null,
+        },
+      ],
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useAllCoverageToolsForCatalogs>);
+
+    function DraftEditor() {
+      const [draft, setDraft] = useState<RuleDraft>({
+        shape: "flow",
+        source,
+        guarded,
+      });
+      const rule = draftRule(draft);
+      return (
+        <>
+          <RuleStep
+            catalogs={[{ id: "github", name: "GitHub" }]}
+            draft={draft}
+            policy=""
+            onChange={setDraft}
+            errors={[]}
+          />
+          <output data-testid="completed-rule">
+            {rule ? `${rule.source ?? ""} -> ${rule.guarded}` : "Incomplete"}
+          </output>
+        </>
+      );
+    }
+
+    render(<DraftEditor />);
+    await user.click(
+      screen.getByRole("radio", { name: /^Ask before using a toolExample:/ }),
+    );
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Tool that needs approval: create_issue. Change",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Also list tools that only read" }),
+    );
+    await user.click(screen.getByRole("option", { name: /^get_issue/ }));
+    await user.click(
+      screen.getByRole("radio", {
+        name: /Ask before acting on outside content/,
+      }),
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Tool that reads: pick a tool" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("completed-rule")).toHaveTextContent(
+      "Incomplete",
+    );
+  });
+
+  test.each([
+    "flow",
+    "audience",
+  ] as const)("rejects an already conflicting %s draft by full name", (shape) => {
+    expect(
+      draftRule({
+        shape,
+        source: picked("get_issue"),
+        guarded: picked("get_issue"),
+      }),
+    ).toBeNull();
   });
 });

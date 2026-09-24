@@ -61,20 +61,20 @@ export function setupRuleText(rule: SetupRule, existing = ""): string {
     `tags = ["${REVIEW_TAG}"]`,
     "delta = {}",
   );
-  const authorities: { name: string; permits: string; hint: string }[] = [];
+  let authority: { name: string; permits: string; hint: string };
   if (rule.shape === "repeat") {
     const effect = JSON.stringify(`setup.${rule.guarded}.ran`);
     lines.push(
       `effects = [${effect}]`,
       `requires = { effects = { excludes = [${effect}] } }`,
     );
-    authorities.push({
+    authority = {
       name: `setup-repeat-${rule.guarded
         .replace(/[^A-Za-z0-9_-]+/g, "-")
         .replace(/^-|-$/g, "")}`,
       permits: `{ effects_containing = [${effect}] }`,
       hint: "This tool already ran in this conversation. Approve only if running it again is what you expect.",
-    });
+    };
   } else {
     lines.push(
       rule.shape === "flow"
@@ -83,15 +83,13 @@ export function setupRuleText(rule: SetupRule, existing = ""): string {
           ? 'requires = { audience = { contains = ["public"] } }'
           : `requires = { attention = ["${REVIEW_TAG}"] }`,
     );
-    authorities.push({
+    authority = {
       name: REVIEWER,
       permits: `{ trust_below = "trusted", audience_missing = ["public"], attention = ["${REVIEW_TAG}"] }`,
       hint: "Approve only if this call is what you expect. Each call asks again.",
-    });
+    };
   }
-  for (const authority of authorities) {
-    if (existing.includes(`[externals.authorities.${authority.name}]`))
-      continue;
+  if (!existing.includes(`[externals.authorities.${authority.name}]`)) {
     lines.push(
       "",
       "[[policy.authority]]",
@@ -109,7 +107,9 @@ export function setupRuleText(rule: SetupRule, existing = ""): string {
 
 /**
  * The current policy with the setup rule appended, and the 1-based lines the
- * rule takes in it.
+ * rule takes in it. A saved setup block is reused on retry: compare both
+ * generated forms because the reviewer may already exist elsewhere in the
+ * policy, in which case a new block omits its declaration.
  */
 export function withSetupRule(
   content: string,
@@ -117,6 +117,21 @@ export function withSetupRule(
 ): { content: string; added: { from: number; to: number } } {
   const base = content.trimEnd();
   const text = setupRuleText(rule, content);
+  const existingText = [setupRuleText(rule), text].find((candidate) =>
+    content.includes(candidate),
+  );
+  if (existingText) {
+    const from = content
+      .slice(0, content.indexOf(existingText))
+      .split("\n").length;
+    return {
+      content,
+      added: {
+        from,
+        to: from + existingText.trimEnd().split("\n").length - 1,
+      },
+    };
+  }
   const from = base.split("\n").length + 2;
   return {
     content: `${base}\n\n${text}`,

@@ -39,6 +39,12 @@ const STEPS = [
   { id: "next", title: "Next steps" },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
+type ReviewSnapshot = {
+  baseContent: string;
+  content: string;
+  revision: number;
+  preview: ReturnType<typeof withSetupRule> | null;
+};
 
 /**
  * `/openappa/setup`: a first run through OpenAPPA. It explains the idea, checks
@@ -52,8 +58,14 @@ export function OpenAppaSetupWizard() {
     source: null,
     guarded: null,
   });
-  const [skipRule, setSkipRule] = useState(false);
-  const [ruleErrors, setRuleErrors] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [ruleWarnings, setRuleWarnings] = useState<string[]>([]);
+  const [reviewed, setReviewed] = useState<ReviewSnapshot | null>(null);
+  const [didSaveRule, setDidSaveRule] = useState(false);
+  const activeValidation = useRef<ReviewSnapshot | null>(null);
+  const currentPolicy = useRef<{ content: string; revision: number } | null>(
+    null,
+  );
   const body = useRef<HTMLDivElement>(null);
 
   // Each step opens at its top. The app shell scrolls inside its own
@@ -80,35 +92,92 @@ export function OpenAppaSetupWizard() {
   const prevStep = STEPS[stepIndex - 1];
   const nextStep = STEPS[stepIndex + 1];
   const goToStep = (target: StepId) => {
-    // Coming back to the rule step means the rule is wanted again.
-    if (target === "rule") setSkipRule(false);
+    // Keep the review step available for enable retries after the rule saves.
+    if (
+      (didSaveRule || savePolicy.isPending || enable.isPending) &&
+      target !== "next"
+    )
+      return;
+    if (step === "enable" && target !== "next") {
+      setReviewed(null);
+      setValidationErrors([]);
+      setRuleWarnings([]);
+    }
     setStep(target);
   };
 
-  const rule = skipRule ? null : draftRule(draft);
-  const saved =
+  const rule = draftRule(draft);
+  const candidate =
     rule && policy.data ? withSetupRule(policy.data.content, rule) : null;
+  currentPolicy.current = policy.data
+    ? { content: policy.data.content, revision: policy.data.revision }
+    : null;
+  const skippedRule = reviewed?.preview === null;
+  const ruleNeedsSave = Boolean(
+    reviewed?.preview && reviewed.content !== reviewed.baseContent,
+  );
+  const reviewPolicy = reviewed
+    ? {
+        content: reviewed.content,
+        added:
+          ruleNeedsSave && !didSaveRule ? reviewed.preview?.added : undefined,
+      }
+    : null;
   const alreadyOn = deployment.data?.enabled === true;
   const saving = savePolicy.isPending || enable.isPending;
-  const blockedBy =
-    rule && !canSavePolicy
-      ? "Saving a rule needs permission to update the tool policy."
-      : !alreadyOn && !canEnable
-        ? "Only administrators can turn OpenAPPA on."
-        : null;
+  const busy = saving || validate.isPending;
+  const policyChanged =
+    reviewed &&
+    !didSaveRule &&
+    (!policy.data ||
+      policy.data.revision !== reviewed.revision ||
+      policy.data.content !== reviewed.baseContent);
+  const blockedBy = policyChanged
+    ? "The policy changed since validation. Go back and review it again."
+    : skippedRule && validationErrors.length > 0
+      ? "Fix the policy validation errors before turning on OpenAPPA."
+      : ruleNeedsSave && !didSaveRule && !canSavePolicy
+        ? "Saving a rule needs permission to update the tool policy."
+        : !alreadyOn && !canEnable
+          ? "Only administrators can turn OpenAPPA on."
+          : null;
+
+  const checkForReview = (snapshot: ReviewSnapshot) => {
+    // Validate the exact policy the review step will use.
+    setValidationErrors([]);
+    setRuleWarnings([]);
+    activeValidation.current = snapshot;
+    validate.mutate(snapshot.content, {
+      onSuccess: (result) => {
+        const latest = currentPolicy.current;
+        if (
+          activeValidation.current !== snapshot ||
+          latest?.revision !== snapshot.revision ||
+          latest.content !== snapshot.baseContent
+        )
+          return;
+        activeValidation.current = null;
+        setRuleWarnings(result?.warnings ?? []);
+        if (result?.valid || snapshot.preview === null) {
+          setReviewed(snapshot);
+          if (!result?.valid) setValidationErrors(result?.errors ?? []);
+          goToStep("enable");
+        } else setValidationErrors(result?.errors ?? []);
+      },
+    });
+  };
 
   const next = () => {
-    if (step !== "rule" || !rule || !policy.data) {
+    if (step !== "rule" || !candidate) {
       if (nextStep) goToStep(nextStep.id);
       return;
     }
-    // Checked the way a save checks it, so the last step does not fail late.
-    setRuleErrors([]);
-    validate.mutate(withSetupRule(policy.data.content, rule).content, {
-      onSuccess: (result) => {
-        if (result?.valid) goToStep("enable");
-        else setRuleErrors(result?.errors ?? []);
-      },
+    if (!policy.data) return;
+    checkForReview({
+      baseContent: policy.data.content,
+      content: candidate.content,
+      revision: policy.data.revision,
+      preview: candidate,
     });
   };
 
@@ -117,19 +186,27 @@ export function OpenAppaSetupWizard() {
       if (alreadyOn) goToStep("next");
       else enable.mutate(true, { onSuccess: () => goToStep("next") });
     };
-    if (!saved || !policy.data) return turnOn();
+    if (!reviewed || policyChanged) return;
+    if (didSaveRule || !reviewed.preview) return turnOn();
+    // Another visit can find this rule already in the saved policy.
+    if (reviewed.content === reviewed.baseContent) return turnOn();
     savePolicy.mutate(
       {
-        content: saved.content,
-        expectedRevision: policy.data.revision,
+        content: reviewed.content,
+        expectedRevision: reviewed.revision,
       },
-      { onSuccess: turnOn },
+      {
+        onSuccess: () => {
+          setDidSaveRule(true);
+          turnOn();
+        },
+      },
     );
   };
 
   const nextDisabled =
     (step === "tools" && setup.catalogs.length === 0) ||
-    (step === "rule" && (!rule || !policy.data || validate.isPending));
+    (step === "rule" && (!candidate || validate.isPending));
 
   return (
     <PageLayout
@@ -146,9 +223,11 @@ export function OpenAppaSetupWizard() {
             steps={STEPS}
             activeStep={step}
             onStepClick={(target) => {
-              // Once saved, going back would add the rule a second time.
+              // The review step must stay put while saving and after a save.
               if (
                 step !== "next" &&
+                !busy &&
+                !didSaveRule &&
                 STEPS.findIndex((s) => s.id === target) < stepIndex
               )
                 goToStep(target);
@@ -170,39 +249,71 @@ export function OpenAppaSetupWizard() {
               draft={draft}
               policy={policy.data?.content ?? ""}
               onChange={(next) => {
+                activeValidation.current = null;
                 setDraft(next);
-                setRuleErrors([]);
+                setValidationErrors([]);
+                setRuleWarnings([]);
               }}
-              errors={ruleErrors}
+              errors={validationErrors}
             />
           )}
           {step === "enable" && (
             <EnableStep
-              draft={rule ? draft : null}
+              draft={ruleNeedsSave && !didSaveRule ? draft : null}
               alreadyOn={alreadyOn}
-              policy={
-                saved ?? (policy.data ? { content: policy.data.content } : null)
-              }
+              policy={reviewPolicy}
               notice={
-                blockedBy ? (
-                  <InlineNotice variant="warning">
-                    <span className="font-medium">
-                      You cannot finish this step.
-                    </span>
-                    <InlineNoticeText>{blockedBy}</InlineNoticeText>
-                  </InlineNotice>
-                ) : null
+                <div className="space-y-3">
+                  {ruleWarnings.length > 0 && (
+                    <InlineNotice variant="neutral">
+                      <span className="font-medium">
+                        Policy validation warnings
+                      </span>
+                      <InlineNoticeText className="whitespace-pre-wrap font-mono">
+                        {ruleWarnings.join("\n")}
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  )}
+                  {didSaveRule && !alreadyOn && (
+                    <InlineNotice variant="info">
+                      <InlineNoticeText>
+                        Your rule was saved. OpenAPPA is still off. Try turning
+                        it on again.
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  )}
+                  {skippedRule && validationErrors.length > 0 && (
+                    <InlineNotice variant="error">
+                      <span className="font-medium">
+                        Policy validation errors
+                      </span>
+                      <InlineNoticeText className="whitespace-pre-wrap font-mono">
+                        {validationErrors.join("\n")}
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  )}
+                  {blockedBy && (
+                    <InlineNotice variant="warning">
+                      <span className="font-medium">
+                        You cannot finish this step.
+                      </span>
+                      <InlineNoticeText>{blockedBy}</InlineNoticeText>
+                    </InlineNotice>
+                  )}
+                </div>
               }
             />
           )}
-          {step === "next" && <NextStepsStep draft={rule ? draft : null} />}
+          {step === "next" && (
+            <NextStepsStep draft={ruleNeedsSave ? draft : null} />
+          )}
         </div>
         <WizardFooter>
           <div>
             {step === "next" ? null : prevStep ? (
               <Button
                 variant="outline"
-                disabled={saving}
+                disabled={busy || didSaveRule}
                 onClick={() => goToStep(prevStep.id)}
               >
                 <ArrowLeft />
@@ -218,9 +329,15 @@ export function OpenAppaSetupWizard() {
             {step === "rule" && (
               <Button
                 variant="ghost"
+                disabled={!policy.data || validate.isPending}
                 onClick={() => {
-                  setSkipRule(true);
-                  goToStep("enable");
+                  if (!policy.data) return;
+                  checkForReview({
+                    baseContent: policy.data.content,
+                    content: policy.data.content,
+                    revision: policy.data.revision,
+                    preview: null,
+                  });
                 }}
               >
                 Skip for now
@@ -239,10 +356,10 @@ export function OpenAppaSetupWizard() {
                 {saving && <Loader2 className="animate-spin" />}
                 <span>
                   {alreadyOn
-                    ? rule
+                    ? ruleNeedsSave && !didSaveRule
                       ? "Save rule"
                       : "Continue"
-                    : rule
+                    : ruleNeedsSave && !didSaveRule
                       ? "Save and turn on"
                       : "Turn on"}
                 </span>

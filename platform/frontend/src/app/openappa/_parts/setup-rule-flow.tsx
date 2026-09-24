@@ -8,11 +8,9 @@ import {
 import {
   ArrowDown,
   ArrowRight,
-  ChevronDown,
   FileInput,
   Hand,
   History,
-  Plus,
   ShieldAlert,
   ShieldCheck,
   Users,
@@ -20,24 +18,11 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   type CoverageTool,
-  useAllCoverageTools,
+  useAllCoverageToolsForCatalogs,
 } from "@/lib/openappa-coverage.query";
-import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 import { hasSource, type SetupShape } from "./setup-rule";
 
@@ -439,265 +424,205 @@ function ToolSlot({
   onPick?: (tool: PickedTool) => void;
   highlight: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  // Guessed from names, the split can be wrong; every tool stays one click away.
-  const [showAll, setShowAll] = useState(false);
-  const copy = USE_COPY[use];
-  // Keyed by the pick so a new choice fades in rather than swapping text in place.
-  const name = (
-    <span
-      key={tool?.fullName ?? "placeholder"}
-      className="grid min-w-0 text-left motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
-    >
-      {tool ? (
-        <>
-          <span className="truncate text-xs font-normal text-muted-foreground">
-            {tool.server}
-          </span>
-          <span className="truncate font-mono text-sm font-medium">
-            {tool.name}
-          </span>
-        </>
-      ) : (
-        <span className="text-sm font-medium">{placeholder}</span>
-      )}
-    </span>
-  );
+  if (edit && onPick)
+    return (
+      <ToolPicker
+        tool={tool}
+        placeholder={placeholder}
+        label={label}
+        use={use}
+        catalogs={edit.catalogs}
+        exclude={exclude}
+        onPick={onPick}
+        highlight={highlight}
+      />
+    );
 
-  if (!edit || !onPick) return name;
-  const pick = (picked: PickedTool) => {
-    onPick(picked);
-    setOpen(false);
-  };
-  const suggest =
+  return tool ? (
+    <SelectedToolName name={tool.name} server={tool.server} />
+  ) : (
+    <span className="text-sm font-medium">{placeholder}</span>
+  );
+}
+
+function ToolPicker({
+  tool,
+  placeholder,
+  label,
+  use,
+  catalogs,
+  exclude,
+  onPick,
+  highlight,
+}: {
+  tool: PickedTool | null;
+  placeholder: string;
+  label: string;
+  use: ToolUse;
+  catalogs: SetupCatalog[];
+  exclude?: string;
+  onPick: (tool: PickedTool) => void;
+  highlight: boolean;
+}) {
+  // The hint or name guess can be wrong; reveal tools outside the suggested category.
+  const [showAll, setShowAll] = useState(false);
+  const [open, setOpen] = useState(false);
+  const query = useAllCoverageToolsForCatalogs(
+    catalogs.map((catalog) => catalog.id),
+    { enabled: open },
+  );
+  const catalogNames = new Map(
+    catalogs.map((catalog) => [catalog.id, catalog.name]),
+  );
+  // Selector rules add extra coverage rows for one tool. Prefer its base row.
+  const rows = new Map<string, CoverageTool>();
+  for (const row of query.tools) {
+    const previous = rows.get(row.fullName);
+    if (!previous || (previous.rule?.selector && !row.rule?.selector))
+      rows.set(row.fullName, row);
+  }
+  const builtIns = [...rows.values()].filter(
+    (row) => row.catalogId === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  const suggested =
     use === "acts"
-      ? edit.catalogs.find((catalog) => catalog.id === ARCHESTRA_MCP_CATALOG_ID)
-      : undefined;
+      ? [...SUGGESTED_BUILT_INS].flatMap(([name, reason]) => {
+          const row = builtIns.find((candidate) => candidate.name === name);
+          return row ? [{ row, reason }] : [];
+        })
+      : [];
+  const suggestedNames = new Set(suggested.map(({ row }) => row.fullName));
+  const visible = [...rows.values()].filter(
+    (row) =>
+      (row.catalogId !== ARCHESTRA_MCP_CATALOG_ID ||
+        !UNCHECKED_BUILT_INS.has(row.name)) &&
+      !suggestedNames.has(row.fullName) &&
+      (showAll || toolReads(row) === (use === "reads")),
+  );
+  // A shape change can leave a picked tool outside the suggested category.
+  // Keep its friendly name on the trigger until the user chooses another.
+  const selected = tool && rows.get(tool.fullName);
+  if (
+    selected &&
+    !visible.some((row) => row.fullName === selected.fullName) &&
+    !suggestedNames.has(selected.fullName)
+  )
+    visible.unshift(selected);
+
+  const option = (row: CoverageTool, reason?: string) => {
+    const server = catalogNames.get(row.catalogId) ?? row.catalogName;
+    const note =
+      row.rule?.source === "battery"
+        ? `Has a rule from the ${row.rule.battery} battery`
+        : row.rule?.source === "root"
+          ? "Already has a rule"
+          : null;
+    return {
+      value: row.fullName,
+      label: row.name,
+      description: [
+        reason ? `Suggested: ${reason}` : server,
+        reason && server,
+        note,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      searchText: [row.name, server, reason, note].filter(Boolean).join(" "),
+      selectedContent: <SelectedToolName name={row.name} server={server} />,
+      disabled: row.fullName === exclude,
+    };
+  };
+  const options = [
+    ...suggested.map(({ row, reason }) => option(row, reason)),
+    ...visible.map((row) => option(row)),
+  ];
+  const selectedFallback =
+    tool && !options.some((item) => item.value === tool.fullName)
+      ? {
+          value: tool.fullName,
+          label: tool.name,
+          description: tool.server,
+          searchText: `${tool.name} ${tool.server}`,
+          selectedContent: (
+            <SelectedToolName name={tool.name} server={tool.server} />
+          ),
+          disabled: true,
+        }
+      : null;
+  const copy = USE_COPY[use];
 
   return (
-    <Popover
-      open={open}
+    <SearchableSelect
+      value={tool?.fullName ?? ""}
+      clearSearchOnClose
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) {
-          setSearch("");
-          setShowAll(false);
-        }
+        if (!next) setShowAll(false);
       }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          aria-label={
-            tool ? `${label}: ${tool.name}. Change` : `${label}: pick a tool`
-          }
-          className={cn(
-            "h-auto min-h-12 w-full justify-between gap-2 px-3 py-2 active:scale-[0.99]",
-            !tool && "border-dashed text-muted-foreground",
-            highlight && "border-primary text-foreground",
-          )}
-        >
-          {tool ? name : <span className="text-sm">{placeholder}</span>}
-          {tool ? <ChevronDown /> : <Plus />}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        {/* Plain token matching: cmdk's fuzzy ranking puts loose matches
-            from one server above an exact name from another. */}
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder={showAll ? "Search tools…" : copy.search}
-            value={search}
-            onValueChange={setSearch}
-          />
-          <CommandList>
-            <CommandEmpty>
-              {showAll ? "No tool matches." : copy.empty}
-            </CommandEmpty>
-            {suggest && (
-              <SuggestedTools
-                catalog={suggest}
-                search={search}
-                selected={tool?.fullName}
-                exclude={exclude}
-                onPick={pick}
-              />
-            )}
-            {edit.catalogs.map((catalog) => (
-              <CatalogTools
-                key={catalog.id}
-                catalog={catalog}
-                search={search}
-                use={showAll ? null : use}
-                hide={catalog === suggest ? SUGGESTED_BUILT_INS : undefined}
-                selected={tool?.fullName}
-                exclude={exclude}
-                onPick={pick}
-              />
-            ))}
-          </CommandList>
-          {!showAll && (
-            <div className="border-t p-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start font-normal text-muted-foreground"
-                onClick={() => setShowAll(true)}
-              >
-                {copy.all}
-              </Button>
-            </div>
-          )}
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** One catalog's tools in the picker, fetched by the group itself. */
-function CatalogTools({
-  catalog,
-  search,
-  use,
-  hide,
-  selected,
-  exclude,
-  onPick,
-}: {
-  catalog: SetupCatalog;
-  search: string;
-  /** Null lists every tool. */
-  use: ToolUse | null;
-  /** Short names listed elsewhere in the picker. */
-  hide?: ReadonlyMap<string, string>;
-  selected?: string;
-  exclude?: string;
-  onPick: (tool: PickedTool) => void;
-}) {
-  const tools = useAllCoverageTools(catalog.id);
-  // Selector rules add extra rows for one tool; the picker lists each tool once.
-  const rows = [
-    ...new Map(
-      (tools.data ?? [])
-        .filter(
-          (tool) =>
-            (catalog.id !== ARCHESTRA_MCP_CATALOG_ID ||
-              !UNCHECKED_BUILT_INS.has(tool.name)) &&
-            !hide?.has(tool.name) &&
-            (use === null || toolReads(tool) === (use === "reads")) &&
-            matchesSearchTokens(search, [tool.name, catalog.name]),
-        )
-        .map((tool) => [tool.fullName, tool]),
-    ).values(),
-  ];
-  if (rows.length === 0) return null;
-  return (
-    <CommandGroup heading={catalog.name}>
-      {rows.map((tool) => (
-        <ToolItem
-          key={tool.fullName}
-          tool={tool}
-          catalog={catalog}
-          selected={selected}
-          exclude={exclude}
-          onPick={onPick}
-        />
-      ))}
-    </CommandGroup>
-  );
-}
-
-/** The suggested built-in tools, in the order they are suggested. */
-function SuggestedTools({
-  catalog,
-  search,
-  selected,
-  exclude,
-  onPick,
-}: {
-  catalog: SetupCatalog;
-  search: string;
-  selected?: string;
-  exclude?: string;
-  onPick: (tool: PickedTool) => void;
-}) {
-  const tools = useAllCoverageTools(catalog.id);
-  const rows = [...SUGGESTED_BUILT_INS].flatMap(([name, reason]) => {
-    const tool = tools.data?.find(
-      (row) => row.name === name && !row.rule?.selector,
-    );
-    return tool && matchesSearchTokens(search, [tool.name, reason])
-      ? [{ tool, reason }]
-      : [];
-  });
-  if (rows.length === 0) return null;
-  return (
-    <CommandGroup heading="Suggested">
-      {rows.map(({ tool, reason }) => (
-        <ToolItem
-          key={tool.fullName}
-          tool={tool}
-          catalog={catalog}
-          reason={reason}
-          selected={selected}
-          exclude={exclude}
-          onPick={onPick}
-        />
-      ))}
-    </CommandGroup>
-  );
-}
-
-function ToolItem({
-  tool,
-  catalog,
-  reason,
-  selected,
-  exclude,
-  onPick,
-}: {
-  tool: CoverageTool;
-  catalog: SetupCatalog;
-  /** Why the tool is suggested. */
-  reason?: string;
-  selected?: string;
-  exclude?: string;
-  onPick: (tool: PickedTool) => void;
-}) {
-  const note =
-    tool.rule?.source === "battery"
-      ? `Has a rule from the ${tool.rule.battery} battery`
-      : tool.rule?.source === "root"
-        ? "Already has a rule"
-        : null;
-  return (
-    <CommandItem
-      value={tool.fullName}
-      disabled={tool.fullName === exclude}
-      data-checked={tool.fullName === selected}
-      className="flex-col items-start gap-0.5 data-[checked=true]:font-medium"
-      onSelect={() =>
+      onValueChange={(fullName) => {
+        const row = rows.get(fullName);
+        if (!row) return;
         onPick({
-          toolId: tool.toolId,
-          fullName: tool.fullName,
+          toolId: row.toolId,
+          fullName: row.fullName,
           rule:
-            tool.rule && tool.rule.selector === null
-              ? { source: tool.rule.source }
+            row.rule && row.rule.selector === null
+              ? { source: row.rule.source }
               : null,
-          name: tool.name,
-          server: catalog.name,
-          catalogId: catalog.id,
-        })
+          name: row.name,
+          server: catalogNames.get(row.catalogId) ?? row.catalogName,
+          catalogId: row.catalogId,
+        });
+      }}
+      ariaLabel={
+        tool ? `${label}: ${tool.name}. Change` : `${label}: pick a tool`
       }
-    >
-      <span className="font-mono">{tool.name}</span>
-      {(reason || note) && (
-        <span className="text-xs text-muted-foreground">
-          {/* Suggestions sit outside their server's group, so they name it. */}
-          {[reason && catalog.name, reason, note].filter(Boolean).join(" · ")}
-        </span>
+      placeholder={placeholder}
+      searchPlaceholder={showAll ? "Search tools…" : copy.search}
+      emptyMessage={
+        query.isPending
+          ? "Loading tools…"
+          : query.isError
+            ? "Could not load tools."
+            : showAll
+              ? "No tool matches."
+              : copy.empty
+      }
+      items={options}
+      pinnedItems={selectedFallback ? [selectedFallback] : undefined}
+      className={cn(
+        "h-auto min-h-12 w-full justify-between gap-2 px-3 py-2 active:scale-[0.99]",
+        !tool && "border-dashed text-muted-foreground",
+        highlight && "border-primary text-foreground",
       )}
-    </CommandItem>
+      contentClassName="w-80"
+      footer={
+        query.isError ? (
+          <Button variant="ghost" size="sm" onClick={query.refetch}>
+            Retry loading tools
+          </Button>
+        ) : !showAll ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start font-normal text-muted-foreground"
+            onClick={() => setShowAll(true)}
+          >
+            {copy.all}
+          </Button>
+        ) : null
+      }
+    />
+  );
+}
+
+function SelectedToolName({ name, server }: { name: string; server: string }) {
+  return (
+    <span className="grid min-w-0 text-left">
+      <span className="truncate text-xs font-normal text-muted-foreground">
+        {server}
+      </span>
+      <span className="truncate font-mono text-sm font-medium">{name}</span>
+    </span>
   );
 }

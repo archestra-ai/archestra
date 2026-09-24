@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { withSetupRule } from "./setup-rule";
+import { type SetupRule, withSetupRule } from "./setup-rule";
 
 const BASE = "[policy]\nversion = 2\n";
 
@@ -87,5 +87,70 @@ describe("withSetupRule", () => {
     expect(lines[added.from - 1]).toBe("# Added by OpenAPPA setup.");
     expect(lines[added.to - 1]).toBe('builtin = "hitl"');
     expect(lines.slice(added.to).join("")).toBe("");
+  });
+
+  test.each<SetupRule>([
+    {
+      shape: "flow",
+      source: "github__issue_read",
+      guarded: "slack__post_message",
+    },
+    {
+      shape: "audience",
+      source: "crm__get_customer",
+      guarded: "github__create_issue",
+    },
+    { shape: "tool", guarded: "archestra__edit_file" },
+    { shape: "repeat", guarded: "gmail__send_email" },
+  ])("does not append an already saved $shape rule", (rule) => {
+    const first = withSetupRule(BASE, rule);
+    const retried = withSetupRule(first.content, rule);
+
+    expect(retried.content).toBe(first.content);
+    const lines = retried.content.split("\n");
+    expect(lines[retried.added.from - 1]).toBe("# Added by OpenAPPA setup.");
+    expect(lines[retried.added.to - 1]).toBe('builtin = "hitl"');
+  });
+
+  test("still appends a different rule for the same tool", () => {
+    const first = withSetupRule(BASE, {
+      shape: "flow",
+      source: "github__issue_read",
+      guarded: "slack__post_message",
+    });
+    const second = withSetupRule(first.content, {
+      shape: "flow",
+      source: "github__issue_search",
+      guarded: "slack__post_message",
+    });
+
+    expect(second.content).not.toBe(first.content);
+    expect(second.content.match(/# Added by OpenAPPA setup\./g)).toHaveLength(
+      2,
+    );
+    expect(second.content.split("\n")[second.added.from - 1]).toBe(
+      "# Added by OpenAPPA setup.",
+    );
+  });
+
+  test("reuses a saved rule whose reviewer was declared by an earlier rule", () => {
+    const first = withSetupRule(BASE, {
+      shape: "tool",
+      guarded: "archestra__edit_file",
+    });
+    const rule: SetupRule = {
+      shape: "flow",
+      source: "github__issue_read",
+      guarded: "slack__post_message",
+    };
+    const second = withSetupRule(first.content, rule);
+    const retried = withSetupRule(second.content, rule);
+
+    expect(retried.content).toBe(second.content);
+    const lines = retried.content.split("\n");
+    expect(lines[retried.added.from - 1]).toBe("# Added by OpenAPPA setup.");
+    expect(lines[retried.added.to - 1]).toBe(
+      'requires = { trust = "trusted" }',
+    );
   });
 });

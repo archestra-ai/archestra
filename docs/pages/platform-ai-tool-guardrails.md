@@ -3,7 +3,7 @@ title: OpenAPPA
 category: LLM Proxy
 order: 5
 description: Configure policy for agent tool calls and results
-lastUpdated: 2026-09-23
+lastUpdated: 2026-09-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,9 +18,9 @@ The lethal trifecta is the combination of private data access, untrusted content
 
 ## Enable OpenAPPA
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. Then use the **OpenAPPA** switch in the sidebar to turn on enforcement. Administrators can turn it on when the current policy passes validation. They can always turn it off.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. On first use, open **OpenAPPA** and follow the setup wizard to choose a starter rule and turn on enforcement. You can skip the starter rule. The current policy must pass validation before enforcement turns on.
 
-The feature makes the workspace available; the switch controls enforcement. Check the policy before turning it on. The starting catch-all rule adds no restrictions to individual tools.
+The feature makes the workspace available; the switch controls enforcement. Administrators can turn enforcement off at any time. The starting catch-all rule adds no restrictions to individual tools.
 
 ## Policy Targets
 

@@ -1,0 +1,106 @@
+name: Backend Test Speed Benchmark
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  one-job:
+    name: Full backend suite on one runner
+    if: github.event.label.name == 'benchmark-backend-test-speed'
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Ensure Zsh for shell startup tests
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
+
+      - name: Cache Node compile data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/node-compile-cache
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-one-job-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          restore-keys: |
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-
+
+      - name: Build backend workspace dependencies
+        run: pnpm exec turbo build --filter="@backend^..."
+
+      - name: Run complete backend suite
+        working-directory: ./platform/backend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
+        run: pnpm exec vitest run --hookTimeout=120000
+
+  checkout:
+    name: Checkout ${{ matrix.mode }} sample ${{ matrix.sample }}
+    if: github.event.label.name == 'benchmark-backend-test-speed'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [full, sparse, blob-filter]
+        sample: [1, 2]
+    steps:
+      - name: Checkout full repository
+        if: matrix.mode == 'full'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout platform and actions only
+        if: matrix.mode == 'sparse'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github
+            platform
+
+      - name: Checkout with blob filter
+        if: matrix.mode == 'blob-filter'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          filter: blob:none
+
+      - name: Check backend inputs
+        run: |
+          test -f platform/pnpm-lock.yaml
+          test -f platform/agent_images/bin/archestra-tui-run
+          test -f .github/actions/setup-env/action.yml
+          du -sh platform

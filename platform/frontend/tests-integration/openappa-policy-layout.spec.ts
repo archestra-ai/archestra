@@ -25,6 +25,21 @@ for (const viewport of [
       });
       await mswControl.use({
         method: "get",
+        url: "/api/openappa/coverage/entities",
+        body: {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: 10,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        },
+      });
+      await mswControl.use({
+        method: "get",
         url: "/api/guardrails-policy",
         body: {
           organizationId: "org",
@@ -113,7 +128,7 @@ for (const viewport of [
         path: testInfo.outputPath("policy-source.png"),
         fullPage: true,
       });
-      await page.goto("/openappa");
+      await page.goto("/openappa/chat");
       await page.getByRole("button", { name: "Set up GitHub sync" }).click();
       const dialog = page.getByRole("dialog", {
         name: "Connect APPA to GitHub",

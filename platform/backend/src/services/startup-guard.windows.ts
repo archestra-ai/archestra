@@ -1033,7 +1033,37 @@ function ${client.binary} {
       if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ instructions = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
           : ""
     }
-    & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
+    ${
+      handoffEnabled && client.clientId === "codex"
+        ? `if ((Test-Path ($archGuard + '.handoff.cjs')) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+      $archPreviousLaunchArgs = $env:ARCHESTRA_CODEX_LAUNCH_ARGS
+      $archPreviousLaunchMarker = $env:ARCHESTRA_CODEX_LAUNCH_MARKER
+      $archLaunchMarker = Join-Path ([IO.Path]::GetTempPath()) ('archestra-codex-' + [IO.Path]::GetRandomFileName())
+      try {
+        $archArgsJson = if ($archLaunchArgs.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject ([string[]]$archLaunchArgs) -Compress }
+        $env:ARCHESTRA_CODEX_LAUNCH_ARGS = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($archArgsJson))
+        $env:ARCHESTRA_CODEX_LAUNCH_MARKER = $archLaunchMarker
+        & node ($archGuard + '.handoff.cjs') --launch $archReal.Source
+        if ($LASTEXITCODE -eq 125 -and -not (Test-Path $archLaunchMarker)) {
+          Write-Warning 'Could not launch the Codex handoff; starting Codex without it.'
+          & $archReal.Source @args
+        }
+      } catch {
+        if (Test-Path $archLaunchMarker) { throw }
+        Write-Warning 'Could not prepare the Codex handoff; starting Codex without it.'
+        & $archReal.Source @args
+      } finally {
+        Remove-Item $archLaunchMarker -Force -ErrorAction SilentlyContinue
+        if ($null -eq $archPreviousLaunchArgs) { Remove-Item Env:ARCHESTRA_CODEX_LAUNCH_ARGS -ErrorAction SilentlyContinue }
+        else { $env:ARCHESTRA_CODEX_LAUNCH_ARGS = $archPreviousLaunchArgs }
+        if ($null -eq $archPreviousLaunchMarker) { Remove-Item Env:ARCHESTRA_CODEX_LAUNCH_MARKER -ErrorAction SilentlyContinue }
+        else { $env:ARCHESTRA_CODEX_LAUNCH_MARKER = $archPreviousLaunchMarker }
+      }
+    } else {
+      & $archReal.Source @args
+    }`
+        : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
+    }
     ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }

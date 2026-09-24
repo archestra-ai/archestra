@@ -3842,19 +3842,7 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus === "success") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
 
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
@@ -5014,6 +5002,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(200);
+      await drainPendingReinstall(mcpServer.id);
       const [row] = await db
         .select()
         .from(schema.mcpServersTable)

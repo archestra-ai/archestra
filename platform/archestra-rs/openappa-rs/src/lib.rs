@@ -198,6 +198,11 @@ struct Input {
     session_id: String,
     #[serde(default)]
     parent_id: Option<String>,
+    /// The email of the user the session acts for, on every event: whichever event
+    /// opens the session names it as the session principal. A session opened
+    /// without one never gains one.
+    #[serde(default)]
+    principal: Option<String>,
     /// The session this one forks. Set on a new session whose history traces
     /// to an earlier session by the same caller. Its first event opens a root
     /// initialized from that session's state. Mutually exclusive with `parent_id`.
@@ -941,6 +946,7 @@ pub async fn execute_remedy_by_offer(
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
+        principal: None,
         fork_of: None,
         event: HookEventKind::Remedy,
         operation_id: None,
@@ -1338,6 +1344,7 @@ impl State {
             } else {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
+                    principal: input.principal.clone(),
                 }
             };
             let decision = start_under(policy_content, &self.runtime, start).await?;
@@ -2280,7 +2287,7 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
 /// The identity the runtime judges: the host's spelling derived through the
 /// Archestra adapter, the way the wire derives a served host's calls.
 fn canonical_tool(raw: &str) -> napi::Result<String> {
-    (adapter::adapter().derive)(raw)
+    (adapter::adapter().identify_tool)(raw)
         .map(|derived| derived.canonical.as_str().to_owned())
         .map_err(|refusal| {
             error(match refusal {

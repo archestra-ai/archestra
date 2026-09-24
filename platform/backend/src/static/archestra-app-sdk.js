@@ -4,7 +4,7 @@
  *
  * Apps author pure UI against `window.archestra`:
  *   archestra.ready                 — promise; resolves when the host handshake completes
- *   archestra.user                  — { id, name } of the authenticated viewer (auto-auth)
+ *   archestra.user                  — { id, name, email } of the authenticated viewer (auto-auth)
  *   archestra.storage.user.*        — get/set/list/delete, private to the viewer
  *   archestra.storage.shared.*      — get/set/list/delete, shared by all users of the app
  *     (values are plain JSON; get(key) resolves to an entry { value, revision,

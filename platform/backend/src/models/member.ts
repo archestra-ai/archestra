@@ -237,6 +237,23 @@ class MemberModel {
     return results;
   }
 
+  /** At most `limit` member emails of the organization. */
+  static async findEmailsByOrganization(params: {
+    organizationId: string;
+    limit: number;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ email: schema.usersTable.email })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.membersTable.organizationId, params.organizationId))
+      .limit(params.limit);
+    return rows.map((row) => row.email);
+  }
+
   /**
    * Members of the organization whose user id is in `userIds`, same shape as
    * findAllByOrganization. Lets a caller resolve a known subset (e.g. a member's

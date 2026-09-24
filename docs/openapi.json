@@ -331053,7 +331053,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {

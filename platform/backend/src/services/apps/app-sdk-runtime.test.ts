@@ -88,7 +88,7 @@ beforeAll(async () => {
     parent: { postMessage: () => {} },
     __ARCHESTRA_APP_SDK_URL__: `data:text/javascript,${encodeURIComponent(GUEST_MODULE)}`,
     __ARCHESTRA_APP_CONTEXT__: {
-      user: { id: "u1", name: "Alice" },
+      user: { id: "u1", name: "Alice", email: "alice@example.com" },
       tools: [
         { name: "hf__paper_search", description: "search", inputSchema: {} },
       ],
@@ -113,7 +113,11 @@ afterAll(() => {
 
 describe("Apps SDK runtime", () => {
   test("exposes the frozen viewer identity and the bootstrap tool list", async () => {
-    expect(archestra.user).toEqual({ id: "u1", name: "Alice" });
+    expect(archestra.user).toEqual({
+      id: "u1",
+      name: "Alice",
+      email: "alice@example.com",
+    });
     expect(Object.isFrozen(archestra.user)).toBe(true);
     expect(await archestra.tools.list()).toEqual([
       { name: "hf__paper_search", description: "search", inputSchema: {} },

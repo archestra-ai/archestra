@@ -6,6 +6,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import { initialPolicy } from "@/services/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import type {
   BatteryCredentialBindings,
@@ -486,12 +487,27 @@ delta = {}
   return contentHash;
 }
 
-/** The declarations of the organization's latest revision, as the parser reads them. */
+/**
+ * The declarations of the organization's latest revision, as the parser reads
+ * them, beyond the ones the shipped default already makes.
+ */
 async function declarationsOf(organizationId: string) {
   const latest = await GuardrailsPolicyModel.findLatest(organizationId);
   if (!latest) throw new Error(`No policy revision for ${organizationId}`);
   const native = await import("@archestra/openappa-rs");
   const parsed = await native.parseOpenappaDeclarations(latest.content);
   expect(parsed.errors).toEqual([]);
-  return { revision: latest.revision, ...parsed };
+  const shipped = await native.parseOpenappaDeclarations(initialPolicy());
+  const entries = new Set(shipped.include.map(({ entry }) => entry));
+  const namespaces = new Set(
+    shipped.serverAliases.map(({ namespace }) => namespace),
+  );
+  return {
+    revision: latest.revision,
+    ...parsed,
+    include: parsed.include.filter(({ entry }) => !entries.has(entry)),
+    serverAliases: parsed.serverAliases.filter(
+      ({ namespace }) => !namespaces.has(namespace),
+    ),
+  };
 }

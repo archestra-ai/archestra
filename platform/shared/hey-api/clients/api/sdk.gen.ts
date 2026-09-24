@@ -7992,7 +7992,7 @@ export const getOpenappaCoverageEntities = <ThrowOnError extends boolean = false
 export const getOpenappaCoverageTools = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageToolsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageToolsResponses, GetOpenappaCoverageToolsErrors, ThrowOnError>({ url: '/api/openappa/coverage/tools', ...options });
 
 /**
- * Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. Byte fields are base64.
+ * Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.
  *
  * Authentication:
  *

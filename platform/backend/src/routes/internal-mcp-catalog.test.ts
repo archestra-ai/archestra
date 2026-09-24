@@ -166,7 +166,7 @@ describe("internal MCP catalog routes", () => {
         namespace: "cloudflare",
         targets: ["cloud_prod"],
       });
-      expect(await batteryStatus(organizationId)).toBe("active");
+      expect(await batteryStatus(organizationId, "cloudflare")).toBe("active");
 
       const renamed = await app.inject({
         method: "PUT",
@@ -183,10 +183,11 @@ describe("internal MCP catalog routes", () => {
             content: latest.content,
           }),
       );
-      expect(declarations.aliases).toEqual([
-        { namespace: "cloudflare", servers: ["cloud_staging"], line: 4 },
-      ]);
-      expect(await batteryStatus(organizationId)).toBe("active");
+      expect(
+        declarations.aliases.find((alias) => alias.namespace === "cloudflare")
+          ?.servers,
+      ).toEqual(["cloud_staging"]);
+      expect(await batteryStatus(organizationId, "cloudflare")).toBe("active");
     } finally {
       config.openappa.enabled = wasEnabled;
     }
@@ -232,7 +233,9 @@ describe("internal MCP catalog routes", () => {
 
       const latest = await guardrailsPolicyService.get(organizationId);
       expect(latest.content).toContain('cloudflare = ["cloud_prod"]');
-      expect(await batteryStatus(organizationId)).toBe("server_missing");
+      expect(await batteryStatus(organizationId, "cloudflare")).toBe(
+        "server_missing",
+      );
     } finally {
       config.openappa.enabled = wasEnabled;
     }
@@ -321,6 +324,21 @@ describe("internal MCP catalog routes", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  test("POST /api/internal_mcp_catalog refuses a name that gives its tools the built-in tools' prefix", async () => {
+    for (const name of ["archestra", "Archestra"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+        },
+      });
+      expect(response.statusCode, name).toBe(409);
+    }
   });
 
   test("POST /api/internal_mcp_catalog accepts a clonedFrom in the active organization", async ({
@@ -782,12 +800,14 @@ async function declarePolicy(params: {
 }) {
   const { organizationId, namespace, targets } = params;
   const latest = await guardrailsPolicyService.get(organizationId);
-  const content = `include = ["batteries/${namespace}/appa.toml"]
-
-[server_aliases]
-${namespace} = [${targets.map((target) => `"${target}"`).join(", ")}]
-
-${latest.content}`;
+  const native = await import("@archestra/openappa-rs");
+  const edited = await native.editOpenappaPolicy(latest.content, [
+    { kind: "addInclude", entry: `batteries/${namespace}/appa.toml` },
+    { kind: "bindServers", namespace, servers: targets },
+  ]);
+  if (edited.errors.length > 0 || !edited.content)
+    throw new Error(`the policy edit failed: ${JSON.stringify(edited.errors)}`);
+  const content = edited.content;
   const saved = await GuardrailsPolicyModel.save({
     organizationId,
     updatedBy: policyAuthor,
@@ -799,10 +819,15 @@ ${latest.content}`;
   await openappaBatteriesService.recompile(organizationId);
 }
 
-async function batteryStatus(organizationId: string): Promise<string> {
+async function batteryStatus(
+  organizationId: string,
+  name: string,
+): Promise<string> {
   const declarations =
     await openappaBatteriesService.policyDeclarations(organizationId);
-  const [battery] = declarations.batteries;
-  if (!battery) throw new Error("the policy includes no battery");
+  const battery = declarations.batteries.find(
+    (candidate) => candidate.name === name,
+  );
+  if (!battery) throw new Error(`the policy includes no battery ${name}`);
   return battery.status;
 }

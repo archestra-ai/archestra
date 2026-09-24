@@ -5,7 +5,7 @@ import { SkillModel } from "@/models";
 import AgentSkillModel from "@/models/agent-skill";
 import {
   guardrailsPolicyService,
-  INITIAL_POLICY,
+  initialPolicy,
 } from "@/services/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
@@ -172,7 +172,7 @@ describe("APPA Guide feature availability", () => {
     const [header, read, write, fallback, remote, declarations] = blocks;
     expect(blocks).toHaveLength(6);
     expect(header).toContain("[policy.deployment]\ncontext_control = true");
-    expect(INITIAL_POLICY).toContain(
+    expect(initialPolicy()).toContain(
       "[policy.deployment]\ncontext_control = true",
     );
     const binding =

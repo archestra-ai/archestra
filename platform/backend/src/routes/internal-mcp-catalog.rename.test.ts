@@ -275,6 +275,21 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     expect(catalogRow.name).toBe("beta");
   });
 
+  test("the 409 gate rejects the built-in tools' prefix", async () => {
+    const beta = await createCatalog({ name: "beta", serverType: "remote" });
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${beta.id}`,
+      payload: { name: "Archestra" },
+    });
+
+    expect(putResponse.statusCode).toBe(409);
+    expect(putResponse.json().error.internal_code).toBe(
+      "catalog_name_conflict",
+    );
+  });
+
   test("a case-only self-rename is allowed (self excluded from the 409 gate)", async () => {
     const beta = await createCatalog({ name: "beta", serverType: "remote" });
 

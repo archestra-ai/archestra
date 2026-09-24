@@ -85905,7 +85905,7 @@ export type GetOpenappaExternalConsultsResponses = {
             durationMs: number;
             role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'claude_code' | 'hitl';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;

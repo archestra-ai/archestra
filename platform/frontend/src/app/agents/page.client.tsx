@@ -953,9 +953,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
     {
       id: "provider",
-      header: "Provider",
+      header: () => <span className="whitespace-nowrap">Provider</span>,
       enableSorting: false,
-      size: 80,
+      size: 96,
       cell: ({ row }) =>
         row.original.type === "external" ? (
           <span className="text-muted-foreground">—</span>

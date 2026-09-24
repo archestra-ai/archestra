@@ -5,6 +5,7 @@ mod adapter;
 mod batteries;
 mod consults;
 mod declarations;
+mod deployments;
 mod policy;
 
 use appa_eventlog::{
@@ -17,8 +18,8 @@ use appa_eventlog::{
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation,
-        RemedyRefusal, Runtime,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PreparedDeployment, RemedyOutcome,
+        RemedyPresentation, RemedyRefusal, Runtime,
     },
     hooks,
 };
@@ -47,10 +48,10 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
-/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
-/// the start hook that opens a trajectory only. A root keeps its opening policy
-/// revision. A fork keeps its parent's revision even when this slot serves a
-/// newer policy for new roots. Dispatch otherwise runs concurrently.
+/// Process-wide runtime slot. The mutex covers initialize only. Every dispatch
+/// runs through a view pinned to its organization's deployment (see
+/// [`deployments`]), so dispatches run concurrently and none changes what another
+/// serves. A root keeps its opening policy revision, and a fork its parent's.
 /// Same-trajectory exclusion uses an in-process root lock and an advisory session
 /// lock. Ledger writes use short self-committing transactions.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
@@ -62,7 +63,7 @@ struct State {
     /// One permit per pooled connection, so a dispatch waits for a connection
     /// here, asynchronously, and never inside the store.
     connections: Arc<Semaphore>,
-    policy_content: Arc<str>,
+    deployments: Arc<deployments::Deployments>,
     reporting: Option<ReportingOptions>,
 }
 
@@ -228,6 +229,13 @@ struct Input {
     /// Fully scoped child trajectory on a parent-side SpawnResult.
     #[serde(default)]
     spawned_id: Option<String>,
+    /// Spawn call a ChildEnd answers, retained with the operation so the
+    /// parent side can bind a returned value to its fork without a carrier.
+    #[serde(default)]
+    spawn_call_id: Option<String>,
+    /// Client-native child identity a ChildEnd answers, retained likewise.
+    #[serde(default)]
+    child_native_id: Option<String>,
     #[serde(default)]
     outcome: Option<ExecutionOutcome>,
     #[serde(skip_deserializing, default)]
@@ -356,15 +364,49 @@ fn identity(input: &Input) -> String {
     session_actor(&input.session_id)
 }
 
+/// The key of a session's `openappa_sessions` row, and a child session's trajectory id.
 fn session_actor(session_id: &str) -> String {
     format!("archestra:{}", sha256_hex(session_id.as_bytes()))
 }
+
+/// The root a top-level session opens. The runtime shares in-process state by root id
+/// alone, so the root formula names the organization. The session's row key is still
+/// its actor, which hashes the session id alone: a session id already started in
+/// another organization is refused as a changed identity. Neither identity may hold
+/// a control character, which makes the separator unambiguous.
+fn root_id(organization_id: &str, session_id: &str) -> String {
+    format!(
+        "archestra:{}",
+        sha256_hex(format!("{organization_id}\n{session_id}"))
+    )
+}
+
+/// The effective policy of the dispatching organization, with the values the host
+/// resolved for the credential variables the runtime reads itself.
+#[napi(object)]
+pub struct DispatchPolicy {
+    pub content: String,
+    /// Variable → value, for the document's `runtimeCredentials`. Secrets.
+    pub credentials: HashMap<String, String>,
+}
+
+impl From<DispatchPolicy> for deployments::HostedPolicy {
+    fn from(policy: DispatchPolicy) -> Self {
+        deployments::HostedPolicy {
+            content: policy.content,
+            credentials: deployments::HostCredentials::new(policy.credentials),
+        }
+    }
+}
+
+/// What the runtime serves before any organization dispatches. Every dispatch
+/// serves its own organization's deployment instead.
+const INITIAL_POLICY: &str = "[policy]\nversion = 2\n";
 
 #[napi(js_name = "initializeOpenappa")]
 pub async fn initialize_openappa(
     database_url: String,
     postgres_max_connections: u32,
-    policy_content: String,
     reporting: Option<ReportingOptions>,
 ) -> napi::Result<()> {
     let max_connections = usize::try_from(postgres_max_connections)
@@ -377,7 +419,7 @@ pub async fn initialize_openappa(
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
-        let mut config = policy::compile(&policy_content).map_err(error)?;
+        let mut config = policy::compile(INITIAL_POLICY, |_| None).map_err(error)?;
         config.reporting.agent_yell = reporting.is_some();
         let store = Arc::new(
             LogStore::open(Backend::Postgres {
@@ -391,7 +433,7 @@ pub async fn initialize_openappa(
             runtime: Arc::new(runtime),
             store,
             connections: Arc::new(Semaphore::new(max_connections.get())),
-            policy_content: policy_content.into(),
+            deployments: Arc::default(),
             reporting,
         })
     })
@@ -518,6 +560,10 @@ pub struct PolicyDeclarations {
     pub credentials: Vec<CredentialDeclaration>,
     /// The annotators the root's own `[[policy.tool]]` rules route calls to.
     pub routed_annotators: Vec<String>,
+    /// The `[credentials]` variables the runtime resolves itself, because an external
+    /// or profile of the document names them as its `token_env`. A dispatch carries
+    /// their values in `DispatchPolicy.credentials`.
+    pub runtime_credentials: Vec<String>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -558,6 +604,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     })
                     .collect(),
                 routed_annotators: parsed.routed_annotators,
+                runtime_credentials: parsed.runtime_credentials,
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))
@@ -733,10 +780,10 @@ pub async fn inspect_openappa_battery(
 }
 
 #[napi(js_name = "dispatchHook")]
-pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> napi::Result<String> {
+pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     validate(&input)?;
-    run(input, policy_content).await
+    run(input, policy.into()).await
 }
 
 /// Validates input fields and event requirements before processing.
@@ -827,25 +874,21 @@ fn validate(input: &Input) -> napi::Result<()> {
     Ok(())
 }
 
-/// Runs one validated event against the shared runtime.
-async fn run(input: Input, policy_content: Option<String>) -> napi::Result<String> {
+/// Runs one validated event through a view pinned to its organization's deployment.
+async fn run(input: Input, policy: deployments::HostedPolicy) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
-        let state = {
-            let mut slot = state_mutex().lock().await;
-            let state = slot
-                .as_mut()
-                .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-            // Reloads are serialized by the mutex; when concurrent dispatches
-            // carry different policy contents, the last one to take the mutex
-            // serves until the next reload. That can land before this
-            // dispatch's start, so the start serves its own content again
-            // (see `start_under`).
-            if let Some(content) = policy_content.as_deref() {
-                state.serve(content)?;
-            }
-            state.clone()
-        };
-        state.dispatch(input, policy_content.as_deref()).await
+        let state = initialized().await?;
+        let deployment = state
+            .deployments
+            .deployment(
+                &state.runtime,
+                &input.organization_id,
+                &policy,
+                state.reporting.is_some(),
+            )
+            .await
+            .map_err(error)?;
+        state.pinned(&deployment).dispatch(input).await
     })
     .catch_unwind()
     .await;
@@ -856,38 +899,20 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
     }
 }
 
-/// Runs a start hook under the policy content its dispatch carried, on the
-/// runtime this dispatch already leased. A new root keeps that opening policy
-/// for its whole life; a fork already has its parent's policy in its durable
-/// opening, so this reload cannot replace its revision. A sibling dispatch
-/// carrying other content can reload after this dispatch's reload in `run`, so
-/// a new root's start serves its own content again under the same mutex hold.
-///
-/// The connection is leased before `dispatch` takes this mutex, so the hold
-/// covers only an in-memory recompile-and-reload plus the start's own ledger
-/// write on the connection this dispatch already holds — never a wait for a
-/// free one. `Runtime::on` views share one `Shared` with the runtime `serve`
-/// reloads (see its own doc), so `runtime` reflects that reload immediately.
-async fn start_under(
-    policy_content: Option<&str>,
-    runtime: &Runtime,
-    start: HookEvent,
-) -> napi::Result<HookDecision> {
-    let mut slot = state_mutex().lock().await;
-    let state = slot
-        .as_mut()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-    if let Some(content) = policy_content {
-        state.serve(content)?;
-    }
-    Ok(hooks::handle(runtime, start).await)
+async fn initialized() -> napi::Result<State> {
+    state_mutex()
+        .lock()
+        .await
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))
 }
 
 /// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
 #[napi(js_name = "executeRemedyByOffer")]
 pub async fn execute_remedy_by_offer(
     input: String,
-    policy_content: Option<String>,
+    policy: DispatchPolicy,
 ) -> napi::Result<String> {
     let input: OfferInput = serde_json::from_str(&input).map_err(error)?;
     if input.organization_id.is_empty()
@@ -921,12 +946,7 @@ pub async fn execute_remedy_by_offer(
         .as_deref()
         .map(Principal::parse)
         .transpose()?;
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?
-            .clone()
-    };
+    let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
         routing_owner(
@@ -957,6 +977,8 @@ pub async fn execute_remedy_by_offer(
         spawn: false,
         output: None,
         spawned_id: None,
+        spawn_call_id: None,
+        child_native_id: None,
         outcome: None,
         owner_root: Some(owner.root),
         spelling: owner.spelling,
@@ -966,8 +988,7 @@ pub async fn execute_remedy_by_offer(
         precheck_refusal: input.precheck_refusal,
     };
     validate(&input)?;
-    let response: Value =
-        serde_json::from_str(&run(input, policy_content).await?).map_err(error)?;
+    let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
 }
 
@@ -997,12 +1018,7 @@ pub async fn load_offer_review(
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
-    let state = {
-        let slot = state_mutex().lock().await;
-        slot.as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?
-            .clone()
-    };
+    let state = initialized().await?;
     let leased = state.lease().await?;
     let pg = postgres_store(&leased.state.store)?;
     // The SQL closure needs its own offer id copy because it must be 'static.
@@ -1049,6 +1065,81 @@ pub async fn load_offer_review(
         tool,
         arguments,
     }))
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct ChildReturnRecord {
+    /// Fully scoped session id of the child whose return crossed.
+    pub child_session_id: String,
+    /// The spawn call the return answers, when the child named it at ChildEnd.
+    pub spawn_call_id: Option<String>,
+    /// The client-native child identity, when the child named one.
+    pub child_native_id: Option<String>,
+    /// The exact bytes the runtime admitted across the child boundary.
+    pub value: String,
+}
+
+/// Loads the child returns a parent's family durably crossed, from the
+/// retained ChildEnd operations in PostgreSQL. This is the authority the
+/// parent side verifies an arriving completion against; nothing the client
+/// carries proves a return.
+#[napi(js_name = "loadChildReturns")]
+pub async fn load_child_returns(
+    organization_id: String,
+    parent_session_id: String,
+) -> napi::Result<Vec<ChildReturnRecord>> {
+    // Mirror load_offer_review: clone state, drop the mutex, then lease a
+    // connection before host SQL so lookups never contend with dispatches.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    pg.with_client(move |client| {
+        // session_id is the leading PK column of openappa_operations, and
+        // organization_id is an additional tenancy guard. Each crossing has
+        // one base ChildEnd: a staged return carries decision.value and a
+        // released one carries input.output. The echo repeats those bytes but
+        // is not another crossing. An earlier crossing stays beside a later
+        // one, even for the same spawn call, so a completion already delivered
+        // to the parent still verifies. A bare end that crossed nothing has
+        // no value and is skipped — it must never fail the whole lookup.
+        // Blocked ends are not crossings and never qualify either.
+        let rows = client.query(
+            "SELECT o.session_id AS child_session_id, \
+              COALESCE(o.input->'semantic'->>'spawn_call_id', o.input->>'spawn_call_id') AS spawn_call_id, \
+              COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
+              COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') AS value \
+              FROM openappa_operations o \
+              WHERE o.organization_id=$1 AND o.status='complete' \
+              AND EXISTS (SELECT 1 FROM openappa_sessions s \
+                WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
+              AND o.operation_id NOT LIKE '%:echo' \
+              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+              AND o.decision->>'decision' IN ('ack', 'child_return') \
+              AND COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
+              ORDER BY o.session_id, o.created_at DESC",
+            &[&organization_id, &parent_session_id],
+        )?;
+        let mut records = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let value: Option<String> = row.get("value");
+            records.push(ChildReturnRecord {
+                child_session_id: row.get("child_session_id"),
+                spawn_call_id: row.get("spawn_call_id"),
+                child_native_id: row.get("child_native_id"),
+                value: value.ok_or_else(|| {
+                    PostgresError("OpenAPPA retained a child return without a value".into())
+                })?,
+            });
+        }
+        Ok(records)
+    })
+    .map_err(error)
 }
 
 struct SessionLock {
@@ -1121,7 +1212,7 @@ impl State {
         pg: &PostgresStore,
         input: &Input,
         fork_of: &str,
-        actor_id: &str,
+        root: &str,
     ) -> napi::Result<Option<SystemTime>> {
         if input.parent_id.is_some() {
             return Err(error(
@@ -1134,19 +1225,25 @@ impl State {
             input.organization_id.clone(),
             input.caller_id.clone(),
         );
-        let parent_root = pg
+        let (parent_root, parent_is_child) = pg
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2 AND caller_id IS NOT DISTINCT FROM $3",
+                        "SELECT root, parent_id IS NOT NULL FROM openappa_sessions WHERE actor = $1 AND organization_id = $2 AND caller_id IS NOT DISTINCT FROM $3",
                         &[&lookup, &organization_id, &caller_id],
                     )?
-                    .map(|row| row.get::<_, String>(0)))
+                    .map(|row| (row.get::<_, String>(0), row.get::<_, bool>(1))))
             })
             .map_err(error)?
             .ok_or_else(|| error("the session this one forks has not started"))?;
+        // A top-level session's trajectory is its root, a child's is its actor.
+        let parent_trajectory = if parent_is_child {
+            parent_actor
+        } else {
+            parent_root.clone()
+        };
 
-        let fork_root = actor_id.to_owned();
+        let fork_root = root.to_owned();
         let already_opened = pg
             .with_client(move |client| {
                 Ok(client
@@ -1164,8 +1261,8 @@ impl State {
             self.runtime
                 .open_root_fork(
                     &TrajectoryId(parent_root),
-                    &TrajectoryId(parent_actor),
-                    &TrajectoryId(actor_id.to_owned()),
+                    &TrajectoryId(parent_trajectory),
+                    &TrajectoryId(root.to_owned()),
                 )
                 .map_err(error)?;
             return Ok(None);
@@ -1177,8 +1274,8 @@ impl State {
         self.runtime
             .open_root_fork(
                 &TrajectoryId(parent_root),
-                &TrajectoryId(parent_actor),
-                &TrajectoryId(actor_id.to_owned()),
+                &TrajectoryId(parent_trajectory),
+                &TrajectoryId(root.to_owned()),
             )
             .map_err(error)?;
         // A parent result claims `created_at` under this same parent lock. The
@@ -1192,19 +1289,13 @@ impl State {
         .map_err(error)
     }
 
-    /// Makes `content` the serving policy unless it already is. A refused
-    /// candidate leaves the serving deployment in place. `Runtime::on` views
-    /// share one `Shared` with the runtime reloaded here (see its own doc),
-    /// so this is visible through every dispatch's leased view immediately.
-    fn serve(&mut self, content: &str) -> napi::Result<()> {
-        if *self.policy_content == *content {
-            return Ok(());
+    /// This state with its runtime pinned to `deployment`: every lease of it, and
+    /// every view made of such a lease, serves that deployment.
+    fn pinned(&self, deployment: &PreparedDeployment) -> State {
+        State {
+            runtime: Arc::new(self.runtime.pinned(deployment)),
+            ..self.clone()
         }
-        let mut config = policy::compile(content).map_err(error)?;
-        config.reporting.agent_yell = self.reporting.is_some();
-        self.runtime.reload(config).map_err(error)?;
-        self.policy_content = content.into();
-        Ok(())
     }
 
     /// This state over one pooled connection: the store is a lease of it and
@@ -1222,7 +1313,7 @@ impl State {
         })
     }
 
-    async fn dispatch(&self, input: Input, policy_content: Option<&str>) -> napi::Result<Value> {
+    async fn dispatch(&self, input: Input) -> napi::Result<Value> {
         let actor_id = identity(&input);
         let parent = input.parent_id.clone().map(|id| Input {
             session_id: id,
@@ -1249,7 +1340,7 @@ impl State {
                 })
                 .map_err(error)?
         } else {
-            actor_id.clone()
+            self.session_root(&input, &actor_id).await?
         };
         let _root = RootLock::acquire(root.clone()).await;
         let mut leased = self.lease().await?;
@@ -1260,15 +1351,31 @@ impl State {
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
         };
-        let result = leased
-            .state
-            .dispatch_on_lease(input, root, actor_id, policy_content)
-            .await;
+        let result = leased.state.dispatch_on_lease(input, root, actor_id).await;
         // On the dispatch's own connection, after its session lock is released.
         if let Ok(pg) = postgres_store(&leased.state.store) {
             consults::store(pg, attribution, &consults);
         }
         result
+    }
+
+    /// The root a top-level session governs: the one its row records once it has
+    /// started, [`root_id`] before. A session that started while roots were named by
+    /// the session id alone keeps that root, so its history carries on.
+    async fn session_root(&self, input: &Input, actor_id: &str) -> napi::Result<String> {
+        let (actor, organization_id) = (actor_id.to_owned(), input.organization_id.clone());
+        let leased = self.lease().await?;
+        let recorded = postgres_store(&leased.state.store)?
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                        &[&actor, &organization_id],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?;
+        Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
     /// The session lock and the runtime's appends lock the same key, which
@@ -1278,7 +1385,6 @@ impl State {
         input: Input,
         root: String,
         actor_id: String,
-        policy_content: Option<&str>,
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
@@ -1294,7 +1400,10 @@ impl State {
 
         let actor = Actor {
             root: TrajectoryId(root.clone()),
-            child: (root != actor_id).then(|| TrajectoryId(actor_id.clone())),
+            child: input
+                .parent_id
+                .is_some()
+                .then(|| TrajectoryId(actor_id.clone())),
         };
         let lookup = actor_id.clone();
         let existing = pg
@@ -1332,7 +1441,7 @@ impl State {
             let forked_at = input
                 .fork_of
                 .as_deref()
-                .map(|fork_of| self.open_fork(pg, &input, fork_of, &actor_id))
+                .map(|fork_of| self.open_fork(pg, &input, fork_of, &root))
                 .transpose()?
                 .flatten();
             let start = if let Some(child) = &actor.child {
@@ -1347,7 +1456,7 @@ impl State {
                     principal: input.principal.clone(),
                 }
             };
-            let decision = start_under(policy_content, &self.runtime, start).await?;
+            let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
                 return Err(error(wire(&decision)?));
             }
@@ -1495,7 +1604,7 @@ impl State {
                 return Ok(decision);
             }
         }
-        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "spawn_call_id": input.spawn_call_id, "child_native_id": input.child_native_id });
         let context = (input.event == HookEventKind::ToolCall).then(|| {
             json!({
                 "tool": input.tool,
@@ -2502,6 +2611,24 @@ mod typed_tests {
         assert_eq!(
             super::session_actor("abc"),
             "archestra:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    /// The root formula names the organization, and a root is never a session's row
+    /// key, which remains the actor.
+    #[test]
+    fn a_root_names_its_organization() {
+        assert_eq!(
+            super::root_id("org", "session"),
+            "archestra:25fa5093fa99432cd7453063ddade778c3d57e7a67f33c93ba4ad77600046654"
+        );
+        assert_ne!(
+            super::root_id("org-a", "session"),
+            super::root_id("org-b", "session")
+        );
+        assert_ne!(
+            super::root_id("org", "session"),
+            super::session_actor("session")
         );
     }
 

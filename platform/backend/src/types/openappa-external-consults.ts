@@ -17,6 +17,7 @@ export const ExternalConsultBackendSchema = z.enum([
   "command",
   "module",
   "llm",
+  "jev",
   "claude_code",
   "hitl",
 ]);

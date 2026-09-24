@@ -108,14 +108,15 @@ builtin = "hitl"
   const ledgerName = `openappa-smoke-${randomUUID()}`;
   const ledgerUrl = new URL(databaseUrl);
   ledgerUrl.searchParams.set('application_name', ledgerName);
-  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
+  await native.initializeOpenappa(ledgerUrl.toString(), 4);
+  const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
-  const hook = async (session, event, policyContent) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policyContent));
+  const hook = async (session, event) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const call = (session, id, tool, arguments_ = {}) => hook(session, {
     event: 'tool_call', operation_id: `call:${id}`, tool, arguments: arguments_,
   });
@@ -152,7 +153,7 @@ builtin = "hitl"
       ...rest,
     };
   };
-  const byOffer = (session, event) => native.executeRemedyByOffer(JSON.stringify(offerInput(session, event))).then(JSON.parse);
+  const byOffer = (session, event) => native.executeRemedyByOffer(JSON.stringify(offerInput(session, event)), policy).then(JSON.parse);
   const remoteOffer = (session, event) => onReplica({ operation: 'by_offer', input: offerInput(session, event) });
   const eventCount = async (session) => Number((await client.query('SELECT count(*) AS n FROM openappa_events WHERE root=(SELECT root FROM openappa_sessions WHERE session_id=$1)', [session.session_id])).rows[0].n);
 
@@ -614,6 +615,8 @@ builtin = "hitl"
       event: 'child_end',
       operation_id: 'child-end:return',
       output: 'REPORT-RAW-KOALA-0831',
+      spawn_call_id: 'spawn-retry',
+      child_native_id: 'worker-1',
     };
     const staged = await hook(child, childEnd);
     assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
@@ -626,6 +629,8 @@ builtin = "hitl"
       event: 'child_end',
       operation_id: 'child-end:return:echo',
       output: staged.value,
+      spawn_call_id: 'spawn-retry',
+      child_native_id: 'worker-1',
     });
     assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
     const spawnResult = await hook(parent, {
@@ -642,6 +647,25 @@ builtin = "hitl"
     if (spawnResult.decision === 'child_return') {
       assert.equal(spawnResult.value, staged.value);
     }
+
+    // The retained ChildEnd is the durable authority the parent verifies
+    // completions against: exact crossed bytes and spawn correlation.
+    const childReturns = await native.loadChildReturns(organization_id, parent.session_id);
+    assert.equal(childReturns.length, 1, 'the echo is not a second crossing');
+    assert.ok(childReturns.every((record) => record.childSessionId === child.session_id
+      && record.spawnCallId === 'spawn-retry'
+      && record.childNativeId === 'worker-1'
+      && record.value === 'approved scrubbed output'));
+    assert.deepEqual(
+      await native.loadChildReturns(organization_id, child.session_id),
+      [],
+      'a child with no crossed grandchildren has no child returns',
+    );
+    assert.deepEqual(
+      await native.loadChildReturns(organization_id, scope().session_id),
+      [],
+      'an unrelated parent sees no child returns',
+    );
     await assert.rejects(
       () => hook(parent, {
         event: 'child_end',
@@ -650,6 +674,120 @@ builtin = "hitl"
       }),
       /not a child session/,
     );
+  });
+
+  // Shared setup for the durable child-return ledger regressions: a parent
+  // whose declared return handling releases spawn_worker calls.
+  const openReturnDeclaredParent = async () => {
+    const parent = scope();
+    const presentation = {
+      control_tool: 'archestra__execute_remedy_plan',
+      supports_delegation: true,
+    };
+    const proposeSpawn = (id) => hook(parent, {
+      event: 'tool_call',
+      operation_id: `call:${id}`,
+      tool: 'spawn_worker',
+      arguments: { prompt: 'Read the return-only report' },
+      spawn: true,
+      presentation,
+    });
+    const held = await proposeSpawn('spawn-held');
+    assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+    const offer = held.offers?.find((offer) => offer.returns?.sanitizer === 'scrub') ?? held.offers?.at(-1);
+    assert.ok(offer?.offer_id, `the spawn offered a scrubbed return: ${JSON.stringify(held)}`);
+    const declaration = await byOffer(parent, {
+      tool_call_id: 'declare-return',
+      arguments: { offer_id: offer.offer_id, label: { audience: ['insider'] } },
+      presentation,
+    });
+    assert.notEqual(declaration.result?.isError, true, JSON.stringify(declaration));
+    return { parent, proposeSpawn };
+  };
+  const startChild = async (parent, name) => {
+    const child = {
+      ...parent,
+      session_id: `${parent.session_id}:${name}`,
+      parent_id: parent.session_id,
+    };
+    assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
+    return child;
+  };
+  const crossReturn = async (child, operationId, spawnCallId) => {
+    const staged = await hook(child, {
+      event: 'child_end',
+      operation_id: operationId,
+      output: `RAW-${operationId}`,
+      spawn_call_id: spawnCallId,
+      child_native_id: 'w1',
+    });
+    assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
+    const crossed = await hook(child, {
+      event: 'child_end',
+      operation_id: `${operationId}:echo`,
+      output: staged.value,
+      spawn_call_id: spawnCallId,
+      child_native_id: 'w1',
+    });
+    assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
+    return staged.value;
+  };
+
+  await t.test('a void child end never poisons the durable child-return ledger', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('spawn-real')).decision, 'allow_call');
+    const child = await startChild(parent, 'child');
+    const value = await crossReturn(child, 'child-end:real', 'spawn-real');
+
+    // A later stop that crosses nothing retains a bare ack with no value —
+    // exactly the row an empty released ChildEnd persists. It must neither
+    // fail the whole lookup nor displace the genuine crossing it is grouped
+    // with, even though it is the group's latest row.
+    const voidStop = await hook(child, {
+      event: 'child_end',
+      operation_id: 'child-end:void-stop',
+      spawn_call_id: 'spawn-real',
+    });
+    assert.equal(voidStop.decision, 'ack', JSON.stringify(voidStop));
+
+    const crossings = await native.loadChildReturns(organization_id, parent.session_id);
+    assert.ok(crossings.some((record) => record.childSessionId === child.session_id
+      && record.spawnCallId === 'spawn-real' && record.value === value));
+    assert.ok(crossings.every((record) => record.value !== null && record.value !== ''));
+  });
+
+  await t.test('an earlier crossing survives the child returning again in the durable ledger', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('spawn-one')).decision, 'allow_call');
+    const child = await startChild(parent, 'child');
+    const first = await crossReturn(child, 'child-end:first', 'spawn-one');
+
+    // The child continues and returns again for a later call. Both crossings
+    // stay on record, so a completion the parent already received still
+    // verifies against the first one.
+    assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
+    const second = await crossReturn(child, 'child-end:second', 'spawn-two');
+
+    const crossings = await native.loadChildReturns(organization_id, parent.session_id);
+    assert.ok(crossings.some((record) => record.childSessionId === child.session_id
+      && record.spawnCallId === 'spawn-one' && record.value === first));
+    assert.ok(crossings.some((record) => record.childSessionId === child.session_id
+      && record.spawnCallId === 'spawn-two' && record.value === second));
+    assert.equal(crossings.length, 2, 'each spawned return stays on record once');
+  });
+
+  await t.test('repeated crossings for one spawn retain each admitted value', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('spawn-repeat')).decision, 'allow_call');
+    const child = await startChild(parent, 'child');
+    const first = await crossReturn(child, 'child-end:first', 'spawn-repeat');
+    assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
+    const second = await crossReturn(child, 'child-end:another-value', 'spawn-repeat');
+
+    const crossings = await native.loadChildReturns(organization_id, parent.session_id);
+    assert.ok(crossings.some((record) => record.spawnCallId === 'spawn-repeat' && record.value === first));
+    assert.ok(crossings.some((record) => record.spawnCallId === 'spawn-repeat' && record.value === second));
+    assert.equal(crossings.length, 2, 'each authentic return survives without its echo');
   });
 
   await t.test('concurrent dispatches open one fork root and session row', async () => {
@@ -811,7 +949,7 @@ builtin = "hitl"
       () => native.dispatchHook(JSON.stringify({
         ...scope(),
         event: 'invented_event',
-      })),
+      }), policy),
       /unknown variant|expected one of/,
     );
   });

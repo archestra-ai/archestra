@@ -260,11 +260,9 @@ mod tests {
             jev.credentials,
             vec!["APPA_PROVIDER_JEV_API_KEY".to_owned()]
         );
-        assert!(jev.externals.iter().any(|external| {
-            external.kind == "annotators"
-                && external.name == "jev.tool-call"
-                && external.token_env.as_deref() == Some("APPA_PROVIDER_JEV_API_KEY")
-        }));
+        // The runtime asks Jev itself: the battery ships no helper to run.
+        assert!(jev.helpers.is_empty());
+        assert!(jev.externals.is_empty());
     }
 
     #[test]

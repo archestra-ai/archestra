@@ -7,6 +7,8 @@ const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
 const allow = '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
 const deny = '[policy]\nversion = 2\n[[policy.tool]]\nname = "different"\ndelta = {}\n';
+// A dispatch carries its organization's policy and the credential values it reads.
+const hosted = (content) => ({ content, credentials: {} });
 
 test('validates policy semantics and refuses container access', async () => {
   assert.deepEqual(await native.validateOpenappaPolicy(allow), []);
@@ -28,9 +30,9 @@ delta = {}
 name = "host/archestra/Bash"
 delta = {}
 `;
-  await native.initializeOpenappa(databaseUrl, 2, policy);
+  await native.initializeOpenappa(databaseUrl, 2);
   const session = { organization_id: 'native-tool-identities', caller_id: 'user:test', session_id: randomUUID() };
-  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
   assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
   for (const tool of ['exec_command', 'read_file', 'Bash']) {
     assert.equal(
@@ -48,9 +50,9 @@ delta = {}
 });
 
 test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
-  await native.initializeOpenappa(databaseUrl, 2, allow);
+  await native.initializeOpenappa(databaseUrl, 2);
   const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });
-  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
   const old = scope();
   assert.equal((await hook(old, { event: 'session_start' }, allow)).decision, 'ack');
   const fresh = scope();
@@ -58,7 +60,7 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
   assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
   assert.equal((await hook(old, call, deny)).decision, 'allow_call');
-  // A refused candidate never replaces the last working deployment.
+  // A refused policy leaves the organization's last working deployment serving.
   await assert.rejects(hook(scope(), { event: 'session_start' }, '[policy]\nversion = 999'));
   const next = scope();
   assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
@@ -66,9 +68,9 @@ test('saved text changes enforcement for new sessions and preserves existing ses
 });
 
 test('a fork keeps its parent policy revision when its dispatch carries newer text', { skip: !databaseUrl }, async () => {
-  await native.initializeOpenappa(databaseUrl, 2, allow);
+  await native.initializeOpenappa(databaseUrl, 2);
   const scope = () => ({ organization_id: 'fork-policy-test', caller_id: 'user:test', session_id: randomUUID() });
-  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
   const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
 
   const parent = scope();
@@ -78,18 +80,18 @@ test('a fork keeps its parent policy revision when its dispatch carries newer te
   assert.equal((await hook(fork, call, deny)).decision, 'allow_call');
 });
 
-test('a new session opens under the text its dispatch carried while a stale sibling reloads', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
+test('a new session opens under the text its dispatch carried while a stale sibling dispatches', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
   // A pool of one would serialize fresh and stale on the same connection,
   // masking the race: this needs both to hold a connection at once.
-  await native.initializeOpenappa(databaseUrl, 2, allow);
+  await native.initializeOpenappa(databaseUrl, 2);
   // Holding a root's ledger advisory lock parks its dispatch on its own
-  // pooled connection after the reload and before the session opens.
+  // pooled connection after it pinned its deployment and before the session opens.
   const ledger = new Client({ connectionString: databaseUrl });
   await ledger.connect();
   t.after(() => ledger.end());
   const scope = () => ({ organization_id: 'policy-race-test', caller_id: 'user:test', session_id: randomUUID() });
-  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
-  const root = (session) => `archestra:${createHash('sha256').update(session.session_id).digest('hex')}`;
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
+  const root = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
   const hold = (session) => ledger.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [root(session)]);
   const release = (session) => ledger.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [root(session)]);
   const parked = async (session) => {
@@ -111,17 +113,17 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   const stale = scope();
   await hold(fresh);
   await hold(stale);
-  // The fresh session read the saved text and reloads to it.
+  // The fresh session read the saved text.
   const freshStart = hook(fresh, { event: 'session_start' }, deny);
   await parked(fresh);
-  // A request that read the text just before the save reloads back to it.
+  // A request that read the text just before the save carries that text.
   const staleStart = hook(stale, { event: 'session_start' }, allow);
   await delay(250);
   await release(fresh);
-  // The stale dispatch reaches its ledger lock only after its reload, and the
-  // fresh session cannot open while that lock query holds the connection.
+  // The stale dispatch is parked on its ledger lock, and the fresh session
+  // cannot open while that lock query holds the connection.
   await parked(stale);
-  assert.equal(await opened(fresh), false, 'the stale reload landed before the fresh session opened');
+  assert.equal(await opened(fresh), false, 'the stale dispatch pinned its text before the fresh session opened');
   await release(stale);
   assert.equal((await freshStart).decision, 'ack');
   assert.equal((await staleStart).decision, 'ack');
@@ -159,9 +161,9 @@ requires = { trust = "trusted" }
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
   assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
-  await native.initializeOpenappa(databaseUrl, 2, policy);
+  await native.initializeOpenappa(databaseUrl, 2);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
-  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), policy));
+  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), hosted(policy)));
   assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
   const call = async (name, id) => hook({ event: 'tool_call', operation_id: `call:${id}`, tool: name, arguments: {} });
   const result = async id => hook({ event: 'tool_result', operation_id: `result:${id}`, tool_call_id: id, output: 'result', outcome: 'success' });

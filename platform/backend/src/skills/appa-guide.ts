@@ -209,7 +209,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
-- Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
+- Keep secrets out of policy text. A remote binding's \`token_env\` reads the organization runtime credential bound to it in \`[credentials]\`, never a backend environment variable. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
 - A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 `,
@@ -428,7 +428,7 @@ version = 2
 context_control = true
 \`\`\`
 
-This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Never claim the child is protected. Confirm the deployment can issue signed lineage and return receipts without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
+This setting alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Never claim the child is protected. Confirm the deployment can issue signed lineage and verify returns against the durable child crossing without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
 
 This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 

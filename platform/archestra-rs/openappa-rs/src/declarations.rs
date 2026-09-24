@@ -40,6 +40,10 @@ pub(crate) struct Declarations {
     pub credentials: Vec<CredentialDeclaration>,
     /// The annotators the root's own tool rules route calls to.
     pub routed_annotators: Vec<String>,
+    /// The `[credentials]` variables the runtime resolves itself, because an external
+    /// or a profile of the document names them as its `token_env`; the host answers
+    /// them per dispatch. A helper's own variables reach only its sandbox.
+    pub runtime_credentials: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -61,6 +65,17 @@ pub(crate) fn parse(content: &str) -> Declarations {
     read_credentials(content, &document, &mut declarations);
     if let Ok(table) = toml::from_str::<toml::Table>(content) {
         declarations.routed_annotators = crate::policy::routed_annotators(&table);
+        let named: std::collections::BTreeSet<&str> = crate::policy::external_bindings(&table)
+            .into_iter()
+            .filter_map(|(_, _, binding)| binding.get("token_env")?.as_str())
+            .collect();
+        declarations.runtime_credentials = declarations
+            .credentials
+            .iter()
+            .map(|credential| credential.variable.as_str())
+            .filter(|variable| named.contains(variable))
+            .map(str::to_owned)
+            .collect();
     }
     declarations
 }

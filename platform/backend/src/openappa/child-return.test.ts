@@ -2,10 +2,9 @@ import { vi } from "vitest";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
-  childReturnReceiptsConfigured,
+  childReturnMarkersConfigured,
   collectAndStripChildReturns,
-  mintChildReturnReceipt,
-  verifyChildReturnReceipt,
+  mintChildReturnMarker,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { stampToolCallId } from "./trajectory-stamp";
@@ -22,7 +21,7 @@ const RETURN = {
   value: "SUMMARY(24 characters): safe",
 } as const;
 
-describe("OpenAPPA stateless child-return receipts", () => {
+describe("OpenAPPA child-return markers", () => {
   beforeEach(() => {
     config.openappa.offerSigningSecret = SECRET;
   });
@@ -57,7 +56,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(body.messages[2]).toMatchObject({ content: prose[1] });
     expect(body.messages[3]).toMatchObject({ content: prose[2] });
     expect(body.messages[5]).toMatchObject({ content: toolJson });
-    expect(collected.receipts).toEqual([]);
     expect(collected.completions).toEqual([]);
   });
 
@@ -69,8 +67,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(collected.completions).toEqual([
       expect.objectContaining({ childNativeId: "child", value: RETURN.value }),
     ]);
-    expect(collected.receipts).toHaveLength(1);
-    expect(verify(collected.receipts[0])).not.toBeNull();
     expect(nativeResultContent(body)).toBe(
       `<task_result>${RETURN.value}</task_result>`,
     );
@@ -108,7 +104,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(unsignedCompletions).toEqual([
       expect.objectContaining({ childNativeId: "child", value: "RAW" }),
     ]);
-    expect(unsignedCompletions[0]).not.toHaveProperty("receipt");
 
     expect(() =>
       collectAndStripChildReturns(
@@ -163,13 +158,15 @@ describe("OpenAPPA stateless child-return receipts", () => {
     });
   });
 
-  test("keeps a signed leading newline inside an unwrapped task_result", () => {
+  test("keeps a leading newline inside an unwrapped task_result", () => {
     const multiline = { ...RETURN, value: "\nLEADING" };
     const { body, collected } = collectNativeResult(
       `<task_result>${carrier(requiredMarker(multiline), multiline.value)}</task_result>`,
       "task",
     );
-    expect(verify(collected.receipts[0])).not.toBeNull();
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: multiline.value }),
+    ]);
     expect(nativeResultContent(body)).toBe(
       `<task_result>${multiline.value}</task_result>`,
     );
@@ -182,7 +179,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
     });
     const { body, collected } = collectNativeResult(raw, "wait_agent");
 
-    expect(collected.receipts).toEqual([]);
     expect(collected.completions).toEqual([
       expect.objectContaining({ childNativeId: "child", value: "RAW" }),
     ]);
@@ -217,7 +213,7 @@ describe("OpenAPPA stateless child-return receipts", () => {
 
     expect(body).toEqual(before);
     expect(body.input[1].output).toBe(output);
-    expect(collected).toEqual({ receipts: [], completions: [] });
+    expect(collected).toEqual({ completions: [] });
   });
 
   test("keeps flat and native Codex namespaces eligible for completion", () => {
@@ -253,18 +249,19 @@ describe("OpenAPPA stateless child-return receipts", () => {
     }
   });
 
-  test("mints one display marker followed by a self-contained machine proof", () => {
+  test("mints a display-only marker without any machine line", () => {
     const marker = requiredMarker(RETURN);
 
     expect(marker).toMatch(
-      /^▄█▄▄▄█▄\n██▄█▄██ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child return appar-[A-Za-z0-9_-]+\.[0-9a-f]{64}\.$/,
+      /^▄█▄▄▄█▄\n██▄█▄██ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
     expect(requiredMarker({ ...RETURN, format: "inline" })).toMatch(
-      /^finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child return appar-/,
+      /^finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
+    expect(marker).not.toContain("[appa]");
   });
 
-  test("round-trips direct, JSON, and Claude notification carriers", () => {
+  test("strips direct, JSON, and Claude notification carriers", () => {
     const marker = requiredMarker(RETURN);
     const body = {
       messages: [
@@ -292,12 +289,15 @@ describe("OpenAPPA stateless child-return receipts", () => {
 
     const collected = collectAndStripChildReturns(body);
 
-    expect(collected.receipts).toHaveLength(3);
-    expect(collected.completions).toHaveLength(2);
+    expect(collected.completions).toHaveLength(3);
     expect(collected.completions.map((item) => item.envelopeId)).toEqual([
+      "direct",
       "wait",
       "spawn-call",
     ]);
+    expect(
+      collected.completions.every((item) => item.value === RETURN.value),
+    ).toBe(true);
     expect(body.messages[1].content).toBe(RETURN.value);
     const waitContent = body.messages[2]?.content;
     if (typeof waitContent !== "string")
@@ -309,17 +309,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
       `<result>${RETURN.value}</result>`,
     );
     expect(JSON.stringify(body)).not.toContain("finished subagent");
-    expect(JSON.stringify(body)).not.toContain("[appa] child return");
-
-    for (const receipt of collected.receipts) {
-      expect(verify(receipt)).toMatchObject({
-        parentId: RETURN.parentId,
-        childId: RETURN.childId,
-        childNativeId: RETURN.childNativeId,
-        spawnCallId: RETURN.spawnCallId,
-        value: RETURN.value,
-      });
-    }
   });
 
   test("correlates Responses function-call outputs by native call site", () => {
@@ -353,11 +342,16 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(body.input[1].output).toBe(
       JSON.stringify({ status: { child: { completed: RETURN.value } } }),
     );
-    expect(collected.receipts).toHaveLength(1);
-    expect(verify(collected.receipts[0])).not.toBeNull();
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        childNativeId: "child",
+        envelopeId: "wait-response",
+        value: RETURN.value,
+      }),
+    ]);
   });
 
-  test("reconstructs XML task notifications from signed admitted output only", () => {
+  test("reconstructs XML task notifications from the completion value only", () => {
     const marker = requiredMarker(RETURN);
     const body = {
       role: "user",
@@ -371,10 +365,13 @@ describe("OpenAPPA stateless child-return receipts", () => {
     );
     expect(body.content).not.toContain("UNSIGNED-RAW");
     expect(body.content).not.toContain("DROP-ME");
-    expect(verify(collected.receipts[0])).toMatchObject({
-      childNativeId: RETURN.childNativeId,
-      spawnCallId: RETURN.spawnCallId,
-    });
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        childNativeId: RETURN.childNativeId,
+        spawnCallId: RETURN.spawnCallId,
+        value: RETURN.value,
+      }),
+    ]);
   });
 
   test("reconstructs JSON subagent notifications without raw sidecars", () => {
@@ -401,10 +398,13 @@ describe("OpenAPPA stateless child-return receipts", () => {
     );
     expect(body.content).not.toContain("UNSIGNED");
     expect(body.content).not.toContain("DROP-ME");
-    expect(verify(collected.receipts[0])).toMatchObject({
-      childNativeId: RETURN.childNativeId,
-      spawnCallId: RETURN.spawnCallId,
-    });
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        childNativeId: RETURN.childNativeId,
+        spawnCallId: RETURN.spawnCallId,
+        value: RETURN.value,
+      }),
+    ]);
   });
 
   test("canonicalizes subagent notifications with an empty completed value", () => {
@@ -425,81 +425,64 @@ describe("OpenAPPA stateless child-return receipts", () => {
       `<subagent_notification>\n${JSON.stringify({ agent_id: "child", tool_use_id: "spawn-call", status: { completed: "" } })}\n</subagent_notification>`,
     );
     expect(body.content).not.toContain("UNSIGNED-ROOT");
-    expect(collected.receipts).toEqual([]);
     expect(collected.completions).toEqual([
       expect.objectContaining({ childNativeId: "child", value: "" }),
     ]);
   });
 
-  test("preserves exact admitted bytes and rejects unsigned suffixes", () => {
+  test("preserves exact bytes around the marker, suffix included", () => {
     const exact = "  admitted bytes  \n\n";
     const returned = { ...RETURN, value: exact };
     const marker = requiredMarker(returned);
     const exactResult = collectNativeResult(`${exact}\n\n${marker}`, "Task");
-    const [exactReceipt] = exactResult.collected.receipts;
 
     expect(nativeResultContent(exactResult.body)).toBe(exact);
-    expect(verify(exactReceipt, returned)).not.toBeNull();
+    expect(exactResult.collected.completions).toEqual([
+      expect.objectContaining({ value: exact }),
+    ]);
 
+    // A suffix beside the marker stays part of the completion value, so the
+    // durable crossing check downstream rejects what the child never returned.
     const suffixResult = collectNativeResult(
       `${exact}\n\n${marker}\nUNSIGNED-SUFFIX`,
       "Task",
     );
-    const [suffixReceipt] = suffixResult.collected.receipts;
     expect(nativeResultContent(suffixResult.body)).toBe(
       `${exact}\nUNSIGNED-SUFFIX`,
     );
-    expect(verify(suffixReceipt, returned)).toBeNull();
+    expect(suffixResult.collected.completions).toEqual([
+      expect.objectContaining({ value: `${exact}\nUNSIGNED-SUFFIX` }),
+    ]);
   });
 
-  test("strips a nested trajectory proof from a complete direct return before hash verification", () => {
+  test("strips a nested trajectory proof from a complete direct return", () => {
     const fullCarrier = completeResponseCarrier(RETURN);
     const result = collectNativeResult(fullCarrier, "Task");
-    const [receipt] = result.collected.receipts;
 
     expect(nativeResultContent(result.body)).toBe(RETURN.value);
     expect(nativeResultContent(result.body)).not.toContain("appact2-");
-    expect(verify(receipt)).toMatchObject({
-      childId: RETURN.childId,
-      value: RETURN.value,
-    });
+    expect(result.collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
   });
 
-  test("uses signed claims rather than the display code and rejects proof mutations", () => {
+  test("treats the display code as display-only", () => {
     const marker = requiredMarker(RETURN);
     const prettyTampered = marker.replace(
       /finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}/,
       "finished subagent ZZZ-ZZZZ",
     );
-    const [prettyReceipt] = collectNativeResult(carrier(prettyTampered), "Task")
-      .collected.receipts;
-    expect(prettyReceipt.displayCode).toBe("ZZZ-ZZZZ");
-    expect(verify(prettyReceipt)).toMatchObject({ childId: RETURN.childId });
+    const result = collectNativeResult(carrier(prettyTampered), "Task");
 
-    const forgedCarrier = carrier(mutateProofMac(marker));
-    const [forgedReceipt] = collectNativeResult(forgedCarrier, "Task").collected
-      .receipts;
-    expect(forgedReceipt.token).toMatch(/^appar-/);
-    expect(verify(forgedReceipt)).toBeNull();
-
-    expect(verify({ ...prettyReceipt, value: "forged value" })).toBeNull();
-    expect(
-      verify({ ...prettyReceipt, childNativeId: "different-child" }),
-    ).toBeNull();
+    // Any well-formed code strips; authority is the retained crossing, so a
+    // painted code cannot weaken or strengthen a completion.
+    expect(result.collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
+    expect(nativeResultContent(result.body)).toBe(RETURN.value);
   });
 
-  test("rejects foreign scope and role claims", () => {
-    const [receipt] = collectNativeResult(
-      carrier(requiredMarker(RETURN)),
-      "Task",
-    ).collected.receipts;
-
-    expect(verify(receipt, RETURN, { organizationId: "other-org" })).toBeNull();
-    expect(verify(receipt, RETURN, { callerId: "other-user" })).toBeNull();
-    expect(verify(receipt, RETURN, { parentId: "other-parent" })).toBeNull();
-  });
-
-  test("authenticates each own assistant echo and arrived grandchild separately", () => {
+  test("records an assistant echo separately from an arrived grandchild", () => {
     const currentSession = RETURN.childId;
     const ownMarker = requiredMarker(RETURN);
     const grandchild = {
@@ -521,43 +504,34 @@ describe("OpenAPPA stateless child-return receipts", () => {
     };
 
     const collected = collectAndStripChildReturns(body);
-    const [own, arrived] = collected.receipts;
 
-    expect(
-      verifyChildReturnReceipt({
-        receipt: own,
-        organizationId: RETURN.organizationId,
-        callerId: RETURN.callerId,
-        parentId: currentSession,
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        assistantOrigin: true,
+        value: RETURN.value,
       }),
-    ).toMatchObject({ childId: currentSession });
-    expect(
-      verifyChildReturnReceipt({
-        receipt: arrived,
-        organizationId: RETURN.organizationId,
-        callerId: RETURN.callerId,
-        parentId: currentSession,
+      expect.objectContaining({
+        assistantOrigin: false,
+        childNativeId: "grandchild",
+        spawnCallId: "spawn-grandchild",
+        value: grandchild.value,
       }),
-    ).toMatchObject({ childId: grandchild.childId });
-    expect(
-      verifyChildReturnReceipt({
-        receipt: { ...own, assistantOrigin: false },
-        organizationId: RETURN.organizationId,
-        callerId: RETURN.callerId,
-        parentId: currentSession,
-      }),
-    ).toBeNull();
+    ]);
+    expect(body.messages[0].content).toBe(RETURN.value);
+    expect(body.messages[1].content).toContain(
+      `<result>${grandchild.value}</result>`,
+    );
   });
 
-  test("binds explicit spawn hints and normalizes trajectory stamps", () => {
+  test("records spawn hints from notification metadata verbatim", () => {
     const marker = requiredMarker(RETURN);
     const notification = (spawnCallId: string) => ({
       content: `<task-notification>\n<task-id>child</task-id>\n<tool-use-id>${spawnCallId}</tool-use-id>\n<status>completed</status>\n<result>${carrier(marker)}</result>\n</task-notification>`,
     });
-    const [wrong] = collectAndStripChildReturns(
+    const [other] = collectAndStripChildReturns(
       notification("another-spawn-call"),
-    ).receipts;
-    expect(verify(wrong)).toBeNull();
+    ).completions;
+    expect(other).toMatchObject({ spawnCallId: "another-spawn-call" });
 
     const stampedSpawnCallId = stampToolCallId({
       callId: RETURN.spawnCallId,
@@ -568,11 +542,11 @@ describe("OpenAPPA stateless child-return receipts", () => {
     });
     const [stamped] = collectAndStripChildReturns(
       notification(stampedSpawnCallId),
-    ).receipts;
-    expect(verify(stamped)).toMatchObject({ spawnCallId: RETURN.spawnCallId });
+    ).completions;
+    expect(stamped).toMatchObject({ spawnCallId: stampedSpawnCallId });
   });
 
-  test("keeps native child identity optional when signed spawn correlation is present", () => {
+  test("records the notification's native child identity", () => {
     const returned = { ...RETURN, childNativeId: undefined };
     const marker = requiredMarker(returned);
     const body = {
@@ -580,16 +554,17 @@ describe("OpenAPPA stateless child-return receipts", () => {
     };
 
     const collected = collectAndStripChildReturns(body);
-    const verified = verify(collected.receipts[0], returned);
 
-    expect(verified).toMatchObject({
-      childId: RETURN.childId,
-      childNativeId: "observed-later",
-      spawnCallId: RETURN.spawnCallId,
-    });
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        childNativeId: "observed-later",
+        spawnCallId: RETURN.spawnCallId,
+        value: RETURN.value,
+      }),
+    ]);
   });
 
-  test("enumerates every Codex completion when only one child is signed", () => {
+  test("enumerates every Codex completion whether or not a marker is present", () => {
     const marker = requiredMarker(RETURN);
     const body = {
       messages: [
@@ -617,9 +592,6 @@ describe("OpenAPPA stateless child-return receipts", () => {
         childNativeId: "child",
         envelopeId: "wait-call",
         value: RETURN.value,
-        receipt: expect.objectContaining({
-          token: collected.receipts[0].token,
-        }),
       }),
       {
         assistantOrigin: false,
@@ -632,7 +604,7 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(body.messages[1].content).not.toContain("raw_output");
   });
 
-  test("rejects malformed proof carriers in genuine completed leaves", () => {
+  test("rejects malformed marker carriers in genuine completed leaves", () => {
     const body = {
       messages: [
         {
@@ -645,7 +617,7 @@ describe("OpenAPPA stateless child-return receipts", () => {
           content: JSON.stringify({
             status: {
               child: {
-                completed: `${RETURN.value}\n\nfinished subagent ABC-1234`,
+                completed: `${RETURN.value}\n\nfinished subagent`,
               },
             },
           }),
@@ -654,32 +626,22 @@ describe("OpenAPPA stateless child-return receipts", () => {
     };
 
     expect(() => collectAndStripChildReturns(body)).toThrow(
-      "OpenAPPA received a malformed child-return receipt",
+      "OpenAPPA received a malformed child-return marker",
     );
   });
 
-  test("verifies through a fresh module graph without process-local state", async () => {
-    const [receipt] = collectNativeResult(
-      carrier(requiredMarker(RETURN)),
-      "Task",
-    ).collected.receipts;
+  test("mints deterministically through a fresh module graph", async () => {
+    const marker = requiredMarker(RETURN);
 
     vi.resetModules();
     const reloadedConfig = (await import("@/config")).default;
     reloadedConfig.openappa.offerSigningSecret = SECRET;
     const reloaded = await import("./child-return");
 
-    expect(
-      reloaded.verifyChildReturnReceipt({
-        receipt,
-        organizationId: RETURN.organizationId,
-        callerId: RETURN.callerId,
-        parentId: RETURN.parentId,
-      }),
-    ).toMatchObject({ childId: RETURN.childId });
+    expect(reloaded.mintChildReturnMarker(RETURN)).toBe(marker);
   });
 
-  test("bounds machine-proof parsing and scans large indentation linearly", () => {
+  test("bounds marker scanning and scans large indentation linearly", () => {
     const marker = requiredMarker(RETURN);
     const result = collectNativeResult(
       `${RETURN.value}\n\n${" ".repeat(512 * 1024)}${marker}`,
@@ -687,32 +649,23 @@ describe("OpenAPPA stateless child-return receipts", () => {
     );
 
     expect(nativeResultContent(result.body)).toBe(RETURN.value);
-    expect(result.collected.receipts).toHaveLength(1);
-
-    expect(
-      verify({
-        ...result.collected.receipts[0],
-        token: `appar-${"A".repeat(24 * 1024 + 1)}.${"0".repeat(64)}`,
-      }),
-    ).toBeNull();
+    expect(result.collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
   }, 30_000);
 
-  test("requires a signing key to mint or verify", () => {
-    const marker = requiredMarker(RETURN);
-    const [receipt] = collectNativeResult(carrier(marker), "Task").collected
-      .receipts;
+  test("requires a signing key to mint", () => {
     config.openappa.offerSigningSecret = "";
 
-    expect(childReturnReceiptsConfigured()).toBe(false);
-    expect(mintChildReturnReceipt(RETURN)).toBeUndefined();
-    expect(verify(receipt)).toBeNull();
+    expect(childReturnMarkersConfigured()).toBe(false);
+    expect(mintChildReturnMarker(RETURN)).toBeUndefined();
   });
 });
 
 function requiredMarker(
-  returned: Parameters<typeof mintChildReturnReceipt>[0],
+  returned: Parameters<typeof mintChildReturnMarker>[0],
 ): string {
-  const marker = mintChildReturnReceipt(returned);
+  const marker = mintChildReturnMarker(returned);
   if (!marker) throw new Error("expected a child-return marker");
   return marker;
 }
@@ -722,7 +675,7 @@ function carrier(marker: string, value: string = RETURN.value): string {
 }
 
 function completeResponseCarrier(
-  returned: Parameters<typeof mintChildReturnReceipt>[0],
+  returned: Parameters<typeof mintChildReturnMarker>[0],
 ): string {
   const trajectory = mintChildTrajectoryReceipt({
     organizationId: returned.organizationId,
@@ -770,26 +723,4 @@ function nativeResultContent(
   const content = body.messages[1]?.content;
   if (typeof content !== "string") throw new Error("expected tool content");
   return content;
-}
-
-function mutateProofMac(marker: string): string {
-  return marker.replace(
-    /([0-9a-f])\.$/,
-    (_match, last: string) => `${last === "0" ? "1" : "0"}.`,
-  );
-}
-
-function verify(
-  receipt: Parameters<typeof verifyChildReturnReceipt>[0]["receipt"],
-  returned: Parameters<typeof mintChildReturnReceipt>[0] = RETURN,
-  scope: Partial<
-    Omit<Parameters<typeof verifyChildReturnReceipt>[0], "receipt">
-  > = {},
-) {
-  return verifyChildReturnReceipt({
-    receipt,
-    organizationId: scope.organizationId ?? returned.organizationId,
-    callerId: scope.callerId ?? returned.callerId,
-    parentId: scope.parentId ?? returned.parentId,
-  });
 }

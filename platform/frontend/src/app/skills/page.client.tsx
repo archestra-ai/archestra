@@ -22,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -86,7 +87,7 @@ import {
   useSkillLabelKeys,
   useSkillLabelValues,
 } from "@/lib/entity-labels.query";
-import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
   useBulkSelection,
@@ -177,7 +178,6 @@ function SkillsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const appName = useAppName();
   const appIconLogo = useAppIconLogo();
 
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
@@ -202,6 +202,10 @@ function SkillsList() {
   const pluginsEnabled = useFeature("plugins") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const { data: canOpenPluginDetails } = useHasPermissions(
+    { plugin: ["read", "update"] },
+    "*",
+  );
   const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind =
@@ -746,14 +750,44 @@ function SkillsList() {
       ),
       size: 420,
       cell: ({ row }) => (
-        <ListedSkillName
-          item={row.original}
-          appName={appName}
-          appIconLogo={appIconLogo}
-        />
+        <ListedSkillName item={row.original} appIconLogo={appIconLogo} />
       ),
     },
-
+    {
+      id: "source",
+      size: 220,
+      header: "Source",
+      cell: ({ row }) => {
+        const source = listedSkillSource(row.original);
+        if (row.original.source === "plugin" && canOpenPluginDetails) {
+          return (
+            <RowClickShield className="min-w-0">
+              <Link
+                href={`/plugins/${row.original.skill.pluginId}`}
+                className="block truncate text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                title={source.label}
+              >
+                {source.label}
+              </Link>
+            </RowClickShield>
+          );
+        }
+        return (
+          <span
+            className="block truncate text-sm text-muted-foreground"
+            title={source.label}
+          >
+            {source.isRepo ? (
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                {source.label}
+              </code>
+            ) : (
+              source.label
+            )}
+          </span>
+        );
+      },
+    },
     {
       id: "files",
       size: 90,
@@ -1035,7 +1069,9 @@ function SkillsList() {
                             </Link>
                             <ListedSkillSourceBadge
                               item={item}
-                              appName={appName}
+                              canOpenPluginDetails={
+                                canOpenPluginDetails === true
+                              }
                             />
                             {standalone ? (
                               <LabelTags labels={standalone.labels} />
@@ -1107,7 +1143,7 @@ function SkillsList() {
                   onRowSelectionChange={onRowSelectionChange}
                   onPageRowIdsChange={selection.onPageRowIdsChange}
                   rangeSelection={rangeSelection}
-                  fixedWidthColumnIds={["visibility", "files", "usageCount"]}
+                  fixedWidthColumnIds={["source", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}
                 />
               </section>
@@ -1263,11 +1299,9 @@ function listedSkillFileCount(item: ListedSkill) {
 
 function ListedSkillName({
   item,
-  appName,
   appIconLogo,
 }: {
   item: ListedSkill;
-  appName: string;
   appIconLogo: string;
 }) {
   const standalone = item.source === "standalone" ? item.skill : null;
@@ -1282,7 +1316,26 @@ function ListedSkillName({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="truncate font-medium">{item.skill.name}</span>
-          <ListedSkillSourceBadge item={item} appName={appName} />
+          {compatibility && (
+            <RowClickShield className="inline-flex shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    role="img"
+                    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the compatibility note without implying a click action
+                    tabIndex={0}
+                    aria-label="Compatibility notes"
+                    className="inline-flex size-5 cursor-help items-center justify-center rounded-sm text-amber-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-amber-400"
+                  >
+                    <Info className="size-3.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  {compatibility}
+                </TooltipContent>
+              </Tooltip>
+            </RowClickShield>
+          )}
           {standalone?.labels ? <LabelTags labels={standalone.labels} /> : null}
           {standalone?.githubSyncInterval && (
             <Tooltip>
@@ -1335,42 +1388,56 @@ function ListedSkillName({
           Disabled
         </Badge>
       )}
-      {compatibility && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="outline" className="gap-1">
-              <Info className="h-3 w-3" />
-              compatibility
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{compatibility}</TooltipContent>
-        </Tooltip>
-      )}
     </div>
   );
 }
 
 function ListedSkillSourceBadge({
   item,
-  appName,
+  canOpenPluginDetails,
 }: {
   item: ListedSkill;
-  appName: string;
+  canOpenPluginDetails: boolean;
 }) {
-  if (item.source === "external_mcp") {
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.serverName} · MCP`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
+  const source = listedSkillSource(item);
+  if (
+    item.source === "standalone" &&
+    item.skill.sourceType !== "built_in" &&
+    !source.isRepo
+  ) {
+    return null;
+  }
+  const badge = (
+    <Badge
+      variant="secondary"
+      title={source.label}
+      className="inline-flex max-w-56 shrink overflow-hidden font-normal"
+    >
+      <span className={cn("truncate", source.isRepo && "font-mono")}>
+        {source.label}
+      </span>
+    </Badge>
+  );
+  return item.source === "plugin" && canOpenPluginDetails ? (
+    <RowClickShield className="inline-flex min-w-0 shrink">
+      <Link
+        href={`/plugins/${item.skill.pluginId}`}
+        className="min-w-0 rounded-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <span className="truncate">{item.skill.serverName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">MCP</span>
-      </Badge>
-    );
+        {badge}
+      </Link>
+    </RowClickShield>
+  ) : (
+    badge
+  );
+}
+
+function listedSkillSource(item: ListedSkill): {
+  label: string;
+  isRepo: boolean;
+} {
+  if (item.source === "external_mcp") {
+    return { label: `${item.skill.serverName} · MCP`, isRepo: false };
   }
   if (item.source === "plugin") {
     const repo =
@@ -1379,52 +1446,23 @@ function ListedSkillSourceBadge({
       item.skill.pluginName.toLowerCase() === "openappa" &&
       repo?.toLowerCase() === "archestra-ai/openappa";
     if (isOpenAppa) {
-      return (
-        <Badge
-          variant="secondary"
-          title="OpenAPPA"
-          className="inline-flex max-w-48 shrink items-center overflow-hidden font-normal"
-        >
-          <span className="truncate">OpenAPPA</span>
-        </Badge>
-      );
+      return { label: "OpenAPPA", isRepo: false };
     }
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.pluginName} · Plugin`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
-      >
-        <span className="truncate">{item.skill.pluginName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">Plugin</span>
-      </Badge>
-    );
+    return { label: `${item.skill.pluginName} · Plugin`, isRepo: false };
   }
   if (item.skill.sourceType === "built_in") {
-    const label =
-      item.skill.sourceRef === "builtin:appa-guide" ? "OpenAPPA" : appName;
-    return (
-      <Badge variant="secondary" title={label} className="shrink-0 font-normal">
-        <span>{label}</span>
-      </Badge>
-    );
+    return { label: "Built in", isRepo: false };
   }
   const repo = parseRepoFromSourceRef(
     item.skill.sourceRef,
     item.skill.sourceOrigin,
   );
-  return repo ? (
-    <Badge
-      variant="secondary"
-      title={repo}
-      className="inline-flex max-w-48 shrink overflow-hidden font-normal"
-    >
-      <span className="truncate font-mono">{repo}</span>
-    </Badge>
-  ) : null;
+  return repo
+    ? { label: repo, isRepo: true }
+    : {
+        label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
+        isRepo: false,
+      };
 }
 
 function ListedSkillIcon({

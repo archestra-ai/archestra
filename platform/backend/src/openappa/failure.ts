@@ -29,6 +29,22 @@ export function openappaFailure(error: unknown): ApiError {
   return apiError;
 }
 
+/**
+ * A credential the organization's policy binds that could not be read for it:
+ * its configuration, not the runtime, so retrying cannot help.
+ */
+export class OpenappaCredentialError extends Error {
+  constructor(
+    readonly variable: string,
+    cause: unknown,
+  ) {
+    super(`the credential bound to ${variable} could not be resolved`, {
+      cause,
+    });
+    this.name = "OpenappaCredentialError";
+  }
+}
+
 // ===
 
 const FAILURE_PREFIX = "OpenAPPA could not safely complete this operation";
@@ -56,6 +72,11 @@ const POLICY_REFUSALS = [
 ];
 
 function classify(error: unknown): { statusCode: 500 | 503; detail: string } {
+  if (error instanceof OpenappaCredentialError)
+    return {
+      statusCode: 500,
+      detail: `${error.message}. An administrator can rebind it on the OpenAPPA page.`,
+    };
   const message = error instanceof Error ? error.message : "";
   if (POLICY_REFUSALS.some((pattern) => pattern.test(message)))
     return {

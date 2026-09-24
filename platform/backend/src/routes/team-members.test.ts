@@ -727,6 +727,51 @@ describe("team routes", () => {
   // ===================================================================
 
   describe("team member management", () => {
+    test.for([
+      "",
+      "missing-synthetic-user",
+    ])("rejects an unknown target user %j without changing the team", async (userId, {
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const before = await TeamModel.getTeamMembersWithUsers(team.id);
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/members`,
+        payload: { userId, role: "member" },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe(
+        "User not found in this organization",
+      );
+      expect(await TeamModel.getTeamMembersWithUsers(team.id)).toEqual(before);
+    });
+
+    test("rejects a user outside the team's organization", async ({
+      makeTeam,
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const outsider = await makeUser();
+      const otherOrg = await makeOrganization();
+      await makeMember(outsider.id, otherOrg.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/members`,
+        payload: { userId: outsider.id, role: "member" },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe(
+        "User not found in this organization",
+      );
+      expect(await TeamModel.isUserInTeam(team.id, outsider.id)).toBe(false);
+    });
+
     test("returns hydrated team members with user details", async ({
       makeTeam,
       makeUser,
@@ -756,9 +801,14 @@ describe("team routes", () => {
       ]);
     });
 
-    test("adds a member to a team", async ({ makeTeam, makeUser }) => {
+    test("adds a member to a team", async ({
+      makeTeam,
+      makeUser,
+      makeMember,
+    }) => {
       const team = await makeTeam(organizationId, adminUser.id);
       const newMember = await makeUser({ email: "newmember@test.com" });
+      await makeMember(newMember.id, organizationId);
 
       const response = await app.inject({
         method: "POST",
@@ -773,9 +823,11 @@ describe("team routes", () => {
     test("adding a member writes a team.updated audit row with a members diff", async ({
       makeTeam,
       makeUser,
+      makeMember,
     }) => {
       const team = await makeTeam(organizationId, adminUser.id);
       const newMember = await makeUser({ email: "audit-add@test.com" });
+      await makeMember(newMember.id, organizationId);
 
       const response = await app.inject({
         method: "POST",
@@ -835,12 +887,14 @@ describe("team routes", () => {
     test("rejects duplicate team membership", async ({
       makeTeam,
       makeUser,
+      makeMember,
       makeTeamMember,
     }) => {
       const team = await makeTeam(organizationId, adminUser.id);
       const existingMember = await makeUser({
         email: "duplicate-member@test.com",
       });
+      await makeMember(existingMember.id, organizationId);
       await makeTeamMember(team.id, existingMember.id);
 
       const response = await app.inject({
@@ -1625,10 +1679,12 @@ describe("team routes", () => {
 
     test("the creator can manage members of the team they just created", async ({
       makeUser,
+      makeMember,
     }) => {
       const created = await createTeam("Engineering");
       const teamId = created.json().id as string;
       const teammate = await makeUser();
+      await makeMember(teammate.id, organizationId);
 
       const added = await app.inject({
         method: "POST",

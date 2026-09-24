@@ -9,7 +9,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
-import { chatOpenAppaSession } from "@/openappa/service";
+import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import {
@@ -50,6 +50,7 @@ describe("chat tool execution", () => {
     offerId: string,
     overrides: {
       sessionId?: string;
+      parentId?: string;
       callerId?: string | null;
       secret?: string;
     } = {},
@@ -58,6 +59,7 @@ describe("chat tool execution", () => {
       unsignedOfferClaims({
         organizationId: mockContext.organizationId as string,
         sessionId: overrides.sessionId ?? sessionId,
+        parentId: overrides.parentId,
         callerId:
           overrides.callerId === null
             ? undefined
@@ -389,6 +391,200 @@ describe("chat tool execution", () => {
       selected: ["Approve"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  test.each([
+    "missing",
+    "parent",
+    "raw parent",
+  ])("a child review is decided under its signed scope when the gateway session is %s", async (gatewaySession) => {
+    const offerId = "offer-child-review";
+    const parentId = `user:${mockContext.userId}|parent-session`;
+    const session: OpenAppaSession = {
+      organization_id: mockContext.organizationId as string,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: `${parentId}:child-agent`,
+      parent_id: parentId,
+    };
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Approve this child's exact call?" },
+    });
+    const requests: string[] = [];
+    mockContext = {
+      ...mockContext,
+      sessionId: undefined,
+      openappaSession:
+        gatewaySession === "missing"
+          ? undefined
+          : {
+              ...session,
+              session_id:
+                gatewaySession === "raw parent" ? "parent-session" : parentId,
+              parent_id: undefined,
+            },
+      elicitation: {
+        elicit: async ({ message }) => {
+          requests.push(message);
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "Approve" },
+            },
+          };
+        },
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Approve something else?",
+        options: [{ label: "Approve" }, { label: "Deny" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [
+          sessionOffer(offerId, {
+            sessionId: session.session_id,
+            parentId,
+          }),
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Approve"],
+    });
+    expect(requests).toEqual(["Approve this child's exact call?"]);
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    expect(
+      await consumeHitlRuling({
+        session: { ...session, session_id: parentId, parent_id: undefined },
+        offerId,
+      }),
+    ).toBeUndefined();
+  });
+
+  test.each([
+    "root offer",
+    "other owner's child offer",
+  ])("a headerless gateway does not accept an unrelated %s", async (caseName) => {
+    const offerId = "offer-unrelated";
+    const parentId = `user:${mockContext.userId}|parent-session`;
+    const child = caseName !== "root offer";
+    const callerId = child
+      ? "service:other-owner"
+      : `user:${mockContext.userId}`;
+    const session: OpenAppaSession = {
+      organization_id: mockContext.organizationId as string,
+      caller_id: callerId,
+      session_id: child ? `${parentId}:child-agent` : parentId,
+      parent_id: child ? parentId : undefined,
+    };
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Do not route this review." },
+    });
+    const requests: string[] = [];
+    mockContext = {
+      ...mockContext,
+      sessionId: undefined,
+      openappaSession: undefined,
+      elicitation: {
+        elicit: async ({ message }) => {
+          requests.push(message);
+          return {
+            status: "answered" as const,
+            result: { action: "decline" as const },
+          };
+        },
+      },
+    };
+
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Ordinary question?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [
+          sessionOffer(offerId, {
+            sessionId: session.session_id,
+            parentId: session.parent_id,
+            callerId,
+          }),
+        ],
+      },
+      mockContext,
+    );
+    expect(requests).toEqual(["Ordinary question?"]);
+    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+  });
+
+  test.each([
+    "mixed child scopes",
+    "mismatched declared ID",
+  ])("a %s cannot route a review to the wrong child", async (caseName) => {
+    const offerId = "offer-child-one";
+    const parentId = `user:${mockContext.userId}|parent-session`;
+    const session: OpenAppaSession = {
+      organization_id: mockContext.organizationId as string,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: `${parentId}:child-one`,
+      parent_id: parentId,
+    };
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Do not route this review." },
+    });
+    const requests: string[] = [];
+    mockContext = {
+      ...mockContext,
+      openappaSession: {
+        ...session,
+        session_id: parentId,
+        parent_id: undefined,
+      },
+      elicitation: {
+        elicit: async ({ message }) => {
+          requests.push(message);
+          return {
+            status: "answered" as const,
+            result: { action: "decline" as const },
+          };
+        },
+      },
+    };
+
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Ordinary question?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [
+          caseName === "mixed child scopes" ? offerId : "offer-child-two",
+        ],
+        remedy_offers: [
+          sessionOffer(offerId, {
+            sessionId: session.session_id,
+            parentId,
+          }),
+          ...(caseName === "mixed child scopes"
+            ? [
+                sessionOffer("offer-child-two", {
+                  sessionId: `${parentId}:child-two`,
+                  parentId,
+                }),
+              ]
+            : []),
+        ],
+      },
+      mockContext,
+    );
+    expect(requests).toEqual(["Ordinary question?"]);
+    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
   });
 
   test("a staged HITL review without a viewer fails closed", async () => {

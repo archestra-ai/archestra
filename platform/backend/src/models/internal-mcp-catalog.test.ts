@@ -1,4 +1,8 @@
-import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_APP_NAME,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -646,12 +650,17 @@ describe("InternalMcpCatalogModel", () => {
 
     test("findById with access check denies non-authorized user", async ({
       makeUser,
+      makeMember,
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
+      // Grants reach organization members only; both are members, so the
+      // denial below is the personal grant at work, not a missing membership.
+      await makeMember(author.id, org.id);
+      await makeMember(otherUser.id, org.id);
 
       const catalog = await makeInternalMcpCatalog({
         access: "personal",
@@ -675,13 +684,23 @@ describe("InternalMcpCatalogModel", () => {
       });
       expect(denied).toBeNull();
 
-      // Admin can access
+      // An admin reaches it through the admin role's Full grant at `*`; the
+      // `isAdmin` hint alone no longer opens it.
+      const adminUser = await makeUser();
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
       const adminAccess = await InternalMcpCatalogModel.findById(catalog.id, {
-        userId: otherUser.id,
+        userId: adminUser.id,
         isAdmin: true,
         organizationId: org.id,
       });
       expect(adminAccess).not.toBeNull();
+      expect(
+        await InternalMcpCatalogModel.findById(catalog.id, {
+          userId: otherUser.id,
+          isAdmin: true,
+          organizationId: org.id,
+        }),
+      ).toBeNull();
     });
 
     // Writing the retired team rows on update no longer changes who the item
@@ -711,12 +730,17 @@ describe("InternalMcpCatalogModel", () => {
 
     test("searchByQuery respects scope filtering", async ({
       makeUser,
+      makeMember,
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
-      const org = await makeOrganization({ legacyPermissions: true });
+      const org = await makeOrganization();
+      // Grants reach organization members only; both are members, so the
+      // denial below is the personal grant at work, not a missing membership.
+      await makeMember(author.id, org.id);
+      await makeMember(otherUser.id, org.id);
 
       await makeInternalMcpCatalog({
         name: "searchscope-personal-item",

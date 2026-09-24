@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
 import db, { schema } from "@/database";
@@ -87,6 +88,7 @@ test("getUserAccessibleCatalogIds returns global items for admin", async ({
 
 test("userHasCatalogAccess checks access correctly for all scope types", async ({
   makeUser,
+  makeMember,
   makeOrganization,
   makeTeam,
   makeTeamMember,
@@ -95,7 +97,13 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
   const author = await makeUser();
   const teamMember = await makeUser();
   const otherUser = await makeUser();
-  const org = await makeOrganization({ legacyPermissions: true });
+  const admin = await makeUser();
+  const org = await makeOrganization();
+  // Grants reach organization members only, so every user here is one; the
+  // denials below come from the grants, not from a missing membership.
+  await makeMember(author.id, org.id);
+  await makeMember(otherUser.id, org.id);
+  await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
   const team = await makeTeam(org.id, author.id);
   await makeTeamMember(team.id, teamMember.id);
 
@@ -154,10 +162,10 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
     }),
   ).toBe(false);
 
-  // Admin: always has access
+  // Admin: reaches every item through the admin role's Full grant at `*`
   expect(
     await McpCatalogTeamModel.userHasCatalogAccess({
-      userId: otherUser.id,
+      userId: admin.id,
       catalogId: personalCatalog.id,
       organizationId: org.id,
     }),

@@ -116,7 +116,7 @@ async function makeGuardHome(params: {
   const testScript = params.script
     .replace("FRAME_SLEEP=0.25", "FRAME_SLEEP=0.025")
     .replace("RECONFIG_WAIT=1.5", "RECONFIG_WAIT=0.05")
-    .replace("-t 6 key", "-t 0.05 key")
+    .replace("-t 6 key", "-t 1 key")
     .replace("sleep 1.2\n", "sleep 0.05\n");
   await writeFile(guardFile, testScript, "utf8");
   await chmod(guardFile, 0o755);

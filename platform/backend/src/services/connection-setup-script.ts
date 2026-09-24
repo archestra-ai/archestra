@@ -196,7 +196,7 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
  * config, so the renderers close with a restart step.
  */
 export function opencodeOAuthNextStep(serverName: string): string {
-  return `Run \`opencode mcp auth ${serverName}\` now and keep it running while the user completes browser sign-in — this second browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
+  return `Run \`opencode mcp list\` first. If "${serverName}" is connected (OAuth), skip sign-in. Otherwise check \`opencode mcp auth list\`: if "${serverName}" is authenticated but not connected, report the connection error rather than forcing re-authentication. If authentication is missing or expired, run \`opencode mcp auth ${serverName}\` with CI=true set for the process so its browser URL stays visible in captured output. Keep it running while the user completes sign-in — this browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {

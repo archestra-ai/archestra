@@ -3,8 +3,9 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { KnowledgeBaseModel, OrganizationModel } from "@/models";
+import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { makeTestPdf } from "@/test/pdf";
@@ -41,10 +42,11 @@ describe("knowledge file routes", () => {
     await app.register(knowledgeFileRoutes);
   }
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "editor" });
     await bootAs(user, organizationId);
   });
 
@@ -505,7 +507,7 @@ describe("knowledge file routes", () => {
         url: "/api/knowledge-files/index",
         payload: { fileIds: [fileId], newKnowledgeBaseName: "Contracts" },
       });
-      expect(indexed.statusCode).toBe(200);
+      expect(indexed.statusCode, indexed.body).toBe(200);
       const body = indexed.json();
       expect(body.indexed).toBe(0);
       expect(body.failures).toHaveLength(1);
@@ -530,9 +532,19 @@ describe("knowledge file routes", () => {
       expect(indexed.statusCode).toBe(200);
       const knowledgeBaseId = indexed.json().knowledgeBaseId;
       const team = await makeTeam(organizationId, (await makeUser()).id);
-      await KnowledgeBaseModel.update(knowledgeBaseId, {
-        visibility: "team-scoped",
-        teamIds: [team.id],
+      // Restrict the base to a team the uploader is not in.
+      const key = {
+        organizationId,
+        resource: "knowledgeBase" as const,
+        scope: knowledgeBaseId,
+      };
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision:
+          (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+        grants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       });
       const listed = await app.inject({
         method: "GET",
@@ -724,6 +736,7 @@ describe("knowledge file routes", () => {
       await upload({ filename: "secret.txt", directoryId });
 
       const colleague = await makeUser({ email: "limited@test.com" });
+      await makeMember(colleague.id, organizationId, { role: "editor" });
       await bootAs(colleague, organizationId);
       const response = await app.inject({
         method: "POST",
@@ -780,10 +793,11 @@ describe("knowledge file audit records", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     const actor = await makeUser();
+    await makeMember(actor.id, organizationId, { role: "editor" });
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (

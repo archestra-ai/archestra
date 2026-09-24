@@ -1530,6 +1530,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(toolEcho.body).not.toContain("protected session");
   });
 
+  test("marks a Claude Code root whose native session is in metadata only", async () => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "claude-cli/2.1.281 (external, cli)",
+      },
+      payload: {
+        ...payload(false),
+        metadata: {
+          user_id: JSON.stringify({ session_id: sessionId }),
+        },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain("protected session");
+    expect(JSON.stringify(providerRequests.at(-1))).not.toContain(
+      "protected session",
+    );
+  });
+
   test("treats a broken or old-format marker as inert text", async () => {
     providerRequests.length = 0;
     const response = await app.inject({
@@ -3851,10 +3880,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         JSON.stringify(events),
       ).toBe(true);
       expect(child.body).toContain(admitted);
+      expect(child.body).toContain("started subagent");
       expect(child.body).toContain("finished subagent");
       expect(child.body).not.toContain(rawMarker);
       expect(child.body).not.toContain("protected session");
-      if (!stream) expect(child.body).not.toContain("appact2-");
+      expect(child.body).toContain("appact2-");
       expect(events.filter((event) => event.event === "child_end")).toEqual([
         expect.objectContaining({
           session_id: `user:${userId}|${session}:a1`,
@@ -3866,7 +3896,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output: admitted,
         }),
       ]);
-      const carrier = childReturnCarrier(child.body, admitted);
+      const carrier = stream
+        ? child.body
+            .split("\n")
+            .filter((line) => line.startsWith("data: "))
+            .map((line) => JSON.parse(line.slice("data: ".length)))
+            .filter((event) => event.delta?.type === "text_delta")
+            .map((event) => event.delta.text as string)
+            .join("")
+        : `${
+            (child.json().content as Array<{ type: string; text?: string }>)
+              .find((block) => block.text?.includes("started subagent"))
+              ?.text?.split("\n\n", 1)[0]
+          }\n\n${childReturnCarrier(child.body, admitted)}`;
+      expect(carrier).toContain("started subagent");
+      expect(carrier).toContain("finished subagent");
 
       providerRequests.length = 0;
       options = { includeToolUse: false, streamStopReason: "end_turn" };
@@ -3895,7 +3939,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(toolFreeChild.statusCode, toolFreeChild.body).toBe(200);
       expect(toolFreeChild.body).toContain(admitted);
       expect(toolFreeChild.body).not.toContain(rawMarker);
-      expect(toolFreeChild.body).not.toContain("appact2-");
+      expect(toolFreeChild.body).toContain("started subagent");
       expect(events.filter((event) => event.event === "child_end")).toEqual([
         expect.objectContaining({ output: expect.stringContaining(rawMarker) }),
         expect.objectContaining({ output: admitted }),

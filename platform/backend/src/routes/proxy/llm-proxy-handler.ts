@@ -88,6 +88,7 @@ import {
 } from "@/openappa/child-return";
 import {
   type AppaChildTrajectoryReceipt,
+  appendChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
 } from "@/openappa/child-trajectory-receipt";
 import {
@@ -1590,6 +1591,7 @@ export async function handleLLMProxy<
           : {};
         hasNativeClientSession =
           appaIdentity.provenance === "claude-code-header" ||
+          appaIdentity.provenance === "claude-code-metadata" ||
           appaIdentity.provenance === "codex-turn-metadata" ||
           appaIdentity.provenance === "opencode-session-header" ||
           appaIdentity.provenance === "opencode-hosted-header";
@@ -2772,7 +2774,14 @@ async function handleStreaming<
         bufferedModelEvents.length = 0;
         bufferedPolicyEvents.length = 0;
         bufferedPolicyEvents.push(
-          ...streamAdapter.formatCompleteTextSSE(bufferedOutcome.responseText),
+          ...streamAdapter.formatCompleteTextSSE(
+            childTrajectoryReceipt
+              ? appendChildTrajectoryReceipt(
+                  bufferedOutcome.responseText,
+                  childTrajectoryReceipt.footer,
+                )
+              : bufferedOutcome.responseText,
+          ),
         );
         response = streamAdapter.toProviderResponse();
       }
@@ -3433,7 +3442,6 @@ async function handleNonStreaming<
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
         : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
-  let bufferedResponseReplaced = false;
   if (
     pluginRegistry &&
     pluginContext &&
@@ -3452,7 +3460,6 @@ async function handleNonStreaming<
           "LLM provider cannot safely replace a governed child response",
         );
       }
-      bufferedResponseReplaced = true;
       clientResponse = responseAdapter.withReplacedText(
         bufferedOutcome.responseText,
       );
@@ -3584,9 +3591,7 @@ async function handleNonStreaming<
     return reply.send(clientResponse);
   }
   const outboundResponse = structuredClone(clientResponse);
-  const completedProtectedChildReturn =
-    bufferedResponseReplaced || containsChildReturnProof(rewrittenToolCalls);
-  if (childTrajectoryReceipt && !completedProtectedChildReturn) {
+  if (childTrajectoryReceipt) {
     appendChildTrajectoryReceiptToResponse({
       family: childTrajectoryReceipt.family,
       response: outboundResponse,
@@ -3656,16 +3661,6 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
     return true;
   }
   return !sawDataLine;
-}
-
-function containsChildReturnProof(
-  toolCalls: readonly AccumulatedToolCall[] | null,
-): boolean {
-  return Boolean(
-    toolCalls?.some((call) =>
-      String(call.arguments).includes("[appa] child return appar-"),
-    ),
-  );
 }
 
 async function evaluateProxyPluginToolCalls(

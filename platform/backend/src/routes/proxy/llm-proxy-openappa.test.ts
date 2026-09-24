@@ -2386,10 +2386,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("answers every call of an all-denied batch with its own notice (stream=%s)", async (stream) => {
+  ])("replaces every call in an all-denied batch with a notice (stream=%s)", async (stream) => {
     block = true;
-    // A second denied call ahead of the stub's own: both must be ruled on,
-    // and each ruling must reach the client under the call's own id.
+    // Inject a second denied call. Both calls must be evaluated, and each
+    // ruling must reach the client under its original call ID.
     const extra = {
       type: "tool_use" as const,
       id: "toolu_test_time",
@@ -2443,14 +2443,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const response = await post(body);
 
     expect(response.statusCode, response.body).toBe(200);
-    // Two denials still cost exactly one provider call.
+    // Two denials require exactly one provider call.
     expect(providerRequests).toHaveLength(1);
     expect(
       events
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
     ).toEqual(["get_time", "get_weather"]);
-    // Nothing was admitted, so nothing is cancelled.
+    // No call was admitted, so no call is cancelled.
     expect(events.map((event) => event.event)).not.toContain("cancel_call");
     expect(response.body).not.toContain('"name":"get_weather"');
     expect(response.body).not.toContain('"name":"get_time"');
@@ -2491,7 +2491,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             name: block.name as string,
             input: block.input as Record<string, unknown>,
           }));
-    // Same positions, same provider call ids; only the projection changed.
+    // Positions and call IDs remain identical. Only tool names and arguments change.
     expect(notices.map((notice) => notice.id)).toEqual([
       "toolu_test_time",
       "toolu_test_weather",
@@ -2504,7 +2504,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
     }
-    // The denied arguments travel inside the notice, verbatim per call.
+    // Notices carry the original tool arguments without changes.
     expect(notices[0].input.arguments).toBe(JSON.stringify(extra.input));
     expect(notices[1].input.arguments).toBe(
       stream
@@ -2512,13 +2512,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         : JSON.stringify({ location: "SF" }),
     );
   });
-
-  test("conveys an unanswered notice's ruling on the next turn, inventing no result for the admitted sibling", async () => {
-    // The interrupted-batch sequence: the model's batch was [admitted A,
-    // denied B]; the client ran A, never answered B's notice, and opened a
-    // new user turn. The provider must still see B's ruling as B's result —
-    // Anthropic refuses a tool_use with no result — and exactly one result
-    // for A: the client's own, approved.
+  test("returns ruling for unanswered notice on next turn without duplicating admitted result", async () => {
+    // Interrupted batch sequence: The batch contained admitted call A and
+    // denied call B. The client executed call A, left notice B unanswered,
+    // and started a new turn. The provider must receive the ruling for B as B's
+    // result, and exactly one result for call A.
     block = true;
     const admitted = {
       type: "tool_use" as const,
@@ -2542,6 +2540,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     const body = payload(false);
     body.tools.push({ ...body.tools[0], name: "allowed_first" });
+
     const first = await post(body);
     expect(first.statusCode, first.body).toBe(200);
     const received = (
@@ -2552,7 +2551,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(releasedA).toBeDefined();
     expect(notice.name).toBe("archestra__get_remedy_plans");
 
-    // The follow-up turn answers only the admitted call.
+    // The follow-up turn returns results only for the admitted call.
     vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
       const client = createAnthropicTestClient({
         includeToolUse: false,
@@ -2601,8 +2600,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       messages: { role: string; content: Record<string, unknown>[] }[];
       tools: { name: string }[];
     };
-    // History shows the calls the model made: A as admitted, B restored to
-    // its own name and arguments — never the proxy's notice envelope.
+    // Request history restores call B to its original name and arguments.
     expect(sent.messages[1].content).toContainEqual({
       type: "tool_use",
       id: "allowed-first",
@@ -2621,7 +2619,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const results = sent.messages[2].content.filter(
       (block) => block.type === "tool_result",
     );
-    // B's ruling is conveyed exactly once, as B's own error result.
+    // The proxy sends B's ruling once as an error result.
     expect(results.filter((block) => block.tool_use_id === notice.id)).toEqual([
       {
         type: "tool_result",
@@ -2631,8 +2629,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         is_error: true,
       },
     ]);
-    // A is answered exactly once, by the client's own result as approved —
-    // no second A result is invented to fill the interrupted turn.
+    // The proxy sends A's approved result once without creating duplicate entries.
     expect(
       results.filter((block) => block.tool_use_id === "allowed-first"),
     ).toHaveLength(1);
@@ -4714,7 +4711,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test.each([
       true,
       false,
-    ])("an unmarkable nested spawn interrupts the whole batch and cancels its admitted siblings (stream=%s)", async (stream) => {
+    ])("cancels admitted sibling calls when an invalid child spawn aborts the batch (stream=%s)", async (stream) => {
       config.openappa.offerSigningSecret = secret;
       const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
       const spawn = {
@@ -4756,16 +4753,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         });
       };
 
-      // The root turn mints the marker the child session binds with.
+      // The root turn creates the marker for child session binding.
       const root = await send(undefined, [
         { role: "user", content: "Fix the build" },
       ]);
       expect(root.statusCode, root.body).toBe(200);
       const marked = noticeFrom(root.body, stream);
 
-      // The child's batch: an ordinary allowed call beside a spawn whose blank
-      // prompt cannot carry a marker. The runtime admitted both; the wire
-      // batch as a whole cannot run, so the admitted sibling is cancelled.
+      // Child batch: an allowed call and a spawn call with an empty prompt.
+      // Because the spawn cannot carry a marker, the proxy cancels the batch.
       const sibling = {
         type: "tool_use" as const,
         id: "toolu_test_time",
@@ -4833,9 +4829,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]);
 
       if (stream) {
-        // The response stream has already opened when the batch is
-        // interrupted, so the refusal arrives as an in-band error event —
-        // before any tool_use block, and with no native diagnostics.
+        // The refusal arrives as a stream error before any tool_use block.
         expect(nested.statusCode, nested.body).toBe(200);
         expect(nested.body).not.toContain('"type":"tool_use"');
         const errorFrame = nested.body
@@ -4854,22 +4848,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           "cannot safely start a nested child because its delegation marker could not be attached",
         );
       }
-      // Both calls were evaluated before the batch was interrupted...
+      // Both calls were evaluated before the batch stopped.
       expect(
         events
           .filter((event) => event.event === "tool_call")
           .map((event) => event.tool),
       ).toEqual(["get_time", "Agent"]);
-      // ...and both admitted calls are cancelled with the runtime: nothing
-      // from this evaluated batch may run.
+      // The proxy cancels both admitted calls in the runtime.
       expect(
         events
           .filter((event) => event.event === "cancel_call")
           .map((event) => event.tool_call_id)
           .sort(),
       ).toEqual(["toolu_test_time", "toolu_test_weather"]);
-      // The refusal happens on the way back: the provider answered once, and
-      // the client receives neither call.
+      // The client receives neither call.
       expect(providerRequests).toHaveLength(1);
       expect(nested.body).not.toContain('"name":"get_time"');
     });
@@ -6353,9 +6345,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
 });
 
 /**
- * Parallel-call rulings on the OpenAI wire families: a batch's calls are
- * evaluated one by one, and each ruling reaches the client under the call's
- * own id — allowed calls untouched, denied calls as notices.
+ * Evaluates parallel tool calls on OpenAI Chat Completions and Responses APIs.
+ *
+ * Each call in a batch is evaluated independently. Allowed calls pass through
+ * unchanged. Denied calls return as notices with their original call IDs.
  */
 describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   const CHAT_SESSION = "ses_01J8ZQ3V0R1Y8M0P4K0W3M7P9B";
@@ -6403,8 +6396,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     providerBodies = [];
     denyTools = new Set();
     native.initializeOpenappa.mockResolvedValue(undefined);
-    // Mirrors the real binding: the runtime answers each call's evaluation
-    // with that call's own ruling.
+    // Returns a ruling for each evaluated tool call.
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
@@ -6762,7 +6754,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
         ? ["delete_file"]
         : ["read_file", "delete_file"];
 
-  /** What the client must hold after a batch ruled on under `mode`. */
+  /** Expected client calls for the given test mode. */
   const expectMatrix = (
     calls: { id: string; name: string; arguments: string }[],
     mode: MatrixMode,
@@ -6770,11 +6762,10 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     expect(calls).toHaveLength(2);
     for (const [index, expected] of batchCalls.entries()) {
       const received = calls[index];
-      // The call keeps its own id, whatever the ruling.
+      // Preserves the original call ID for every ruling.
       expect(received.id).toBe(expected.id);
       if (deniedIn(mode).includes(expected.name)) {
-        // A denied call is projected through the notice tool, ruling and
-        // original arguments in the clear.
+        // Denied calls return as notice calls with original arguments and ruling.
         expect(received.name).toBe("archestra__get_remedy_plans");
         const notice = JSON.parse(received.arguments) as Record<
           string,
@@ -6785,7 +6776,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
         expect(notice.arguments).toBe(expected.arguments);
         expect(notice.notice).toEqual({ v: 1, call_id: expected.id });
       } else {
-        // An admitted call reaches the client untouched, arguments and all.
+        // Allowed calls reach the client unchanged.
         expect(received.name).toBe(expected.name);
         expect(received.arguments).toBe(expected.arguments);
       }
@@ -6814,14 +6805,14 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    // However the batch is ruled on, it costs one provider call.
+    // Each batch uses exactly one provider request.
     expect(providerBodies).toHaveLength(1);
     expect(
       events
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
     ).toEqual(["read_file", "delete_file"]);
-    // Nothing admitted is withdrawn: the runtime sees no cancellation.
+    // Admitted calls are not cancelled.
     expect(events.map((event) => event.event)).not.toContain("cancel_call");
     expectMatrix(chatCallsFrom(response.body, stream), mode);
   });
@@ -6848,12 +6839,14 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
+    // Each batch uses exactly one provider request.
     expect(providerBodies).toHaveLength(1);
     expect(
       events
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
     ).toEqual(["read_file", "delete_file"]);
+    // Admitted calls are not cancelled.
     expect(events.map((event) => event.event)).not.toContain("cancel_call");
     expectMatrix(responsesCallsFrom(response.body, stream), mode);
   });

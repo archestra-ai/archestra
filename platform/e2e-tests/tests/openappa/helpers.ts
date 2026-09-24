@@ -1,9 +1,10 @@
 /**
- * Shared plumbing for the OpenAPPA e2e specs: the WireMock stub builders for
- * the scripted Anthropic provider turns, the guardrails policy and tool
- * lookups, and the chat UI message-stream reader. Scenario-specific pieces —
- * the offer-id templates, the installed policies, and each spec's stack
- * setup/teardown — stay in the specs.
+ * Shared helpers for OpenAPPA end-to-end tests.
+ *
+ * This module provides WireMock stub builders for Anthropic provider turns,
+ * helpers to read and write guardrails policies, tool lookup utilities,
+ * and a parser for the chat UI message stream. Each test file keeps its own
+ * policy definitions, offer templates, and setup or teardown routines.
  */
 import { randomUUID } from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
@@ -32,11 +33,11 @@ export type MakeApiRequest = (args: {
 // === WireMock stub builders ================================================
 
 /**
- * A stub on POST /anthropic/v1/messages. `templates` maps a placeholder
- * written into the tool input to the Handlebars expression it is swapped for
- * after serialization — writing the expression straight into the input would
- * bury it under two rounds of JSON escaping (the SSE event, then the
- * `input_json_delta` payload), and WireMock renders the body as plain text.
+ * Builds a WireMock stub for POST /anthropic/v1/messages.
+ *
+ * The `templates` map replaces placeholder strings in the serialized body
+ * with Handlebars expressions. We replace placeholders after JSON serialization
+ * because WireMock renders the body as plain text.
  */
 export function anthropicMapping(params: {
   priority: number;
@@ -70,12 +71,12 @@ export function anthropicMapping(params: {
   };
 }
 
-/** Negative body match. `(?s)` so a body carrying a newline still matches. */
+/** Negative body match. Uses `(?s)` so strings that contain newlines still match. */
 export function absent(needle: string): Record<string, unknown> {
   return { doesNotMatch: `(?s).*${needle}.*` };
 }
 
-/** One assistant message proposing `calls.length` tool calls, one content block each. */
+/** Creates assistant message events with one content block for each tool call. */
 export function toolUseEvents(
   messageId: string,
   calls: Array<{
@@ -124,7 +125,7 @@ export function toolUseEvents(
   return events;
 }
 
-/** One assistant message carrying a plain-text answer. */
+/** Creates assistant message events with a plain text response. */
 export function textAnswerEvents(messageId: string, text: string): SseEvent[] {
   return [
     messageStart(messageId),
@@ -248,10 +249,10 @@ export async function findToolId(
 }
 
 /**
- * Posts one user turn and returns every chunk of the UI message stream.
+ * Sends one user message and returns all events from the UI message stream.
  *
- * Chat runs the agentic loop server-side, so this single request spans all
- * scripted provider turns and the tool executions between them.
+ * The chat service executes the agent loop on the server. As a result, this
+ * single request covers all provider turns and tool executions.
  */
 export async function runChatTurn(
   request: APIRequestContext,
@@ -312,7 +313,7 @@ export function outputFor(outputs: ToolOutput[], toolCallId: string): unknown {
   return match.output;
 }
 
-/** A tool result reaches the stream as text or as MCP content blocks. */
+/** Converts a tool output into a string. */
 export function textOf(output: unknown): string {
   return typeof output === "string" ? output : JSON.stringify(output);
 }
@@ -322,10 +323,10 @@ export function asObject(value: unknown): unknown {
 }
 
 /**
- * The offer the ruling names.
+ * Extracts the offer ID from a ruling string.
  *
- * Tolerant of the two shapes the ruling can arrive in on this side: raw text,
- * or re-serialized MCP content blocks where the quotes carry backslashes.
+ * Handles both plain text rulings and serialized MCP content blocks with
+ * escaped quotes.
  */
 export function readOfferId(ruling: string): string {
   const match = /execute_remedy_plan\(offer_id:\s*\\*"([0-9a-f]+)/.exec(ruling);

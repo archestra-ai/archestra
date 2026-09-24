@@ -39,10 +39,10 @@ This file stands in for something the session may read but must not forward
 unredacted. The only thing that matters about it is the marker above.
 SECRET
 
-# A second independently gated read lets one model turn produce two denials.
+# A second restricted file enables two denials in one model turn.
 cat > "$lab/secret-other.txt" <<'SECRET'
 LAB-SECRET-OTTER-9361
-This is a separate restricted file for parallel-call qualification.
+This file is a second restricted target for parallel-call tests.
 SECRET
 
 # S3. Reading this file stages its output behind the `summarize` output

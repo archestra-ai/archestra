@@ -75,7 +75,7 @@ scenario files the policy names by absolute path:
 | Path | Purpose |
 | --- | --- |
 | `$APPA_LAB_HOME/lab/secret.txt` | S1/S2 — holds a `LAB-SECRET-…` marker the `redactor` sanitizer rewrites |
-| `$APPA_LAB_HOME/lab/secret-other.txt` | S6 — a second, independently gated read for two denials in one response |
+| `$APPA_LAB_HOME/lab/secret-other.txt` | S6 — a second gated file for two denials in one response |
 | `$APPA_LAB_HOME/lab/report.txt` | S3 — prose long enough that the `summarize` sanitizer's replacement is visible |
 | `$APPA_LAB_HOME/{claude,codex,opencode}/` | per-client config and state |
 | `$APPA_LAB_HOME/transcripts/<client>/` | transcripts and stderr, one pair per session id |
@@ -355,53 +355,63 @@ session id.
 
 ### S6 — parallel tool calls
 
-Use a fresh session id for **every row and client**. Ask for the two independent
-calls in the model's **first assistant turn**. A final answer that happens to
-mention both tools does not prove parallel admission: inspect the client
-transcript (OpenCode: `opencode export <session-id>`) and confirm the first
-assistant message contains two tool parts. Codex emits two `command_execution`
-items without another model message between them; Claude Code emits two
-`tool_use` blocks in one assistant message.
+Use a fresh session id for each test row and each client. Ask for the two
+independent calls in the first assistant turn of the model.
+
+Do not rely on the final answer to verify parallel admission. Inspect the
+client transcript instead (for OpenCode: `opencode export <session-id>`).
+Confirm that the first assistant message contains two tool parts.
+Codex emits two `command_execution` items without another model message
+between them. Claude Code emits two `tool_use` blocks in one assistant message.
 
 | Case | Claude Code prompt (use `Read`/`Glob`) | Codex prompt (use `exec_command`) | OpenCode prompt (use `read`/`glob`) | Expected first response |
 | --- | --- | --- | --- | --- |
-| Both allowed | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `ls <LAB>` as two separate calls together. | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Two unchanged calls, two ordinary results; no notice. |
-| Mixed | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `wc -c <LAB>/secret.txt` together. | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | One unchanged call and one `get_remedy_plans` notice with the denied call's own id. Accept the offer, then retry the blocked call. |
-| Both denied | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Run separate `wc -c` commands for `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Two distinct notices under the two original call ids, with distinct offer ids. Accept both offers and retry both reads. |
+| Both allowed | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `ls <LAB>` as two separate calls together. | Read `<LAB>/return.txt` and Glob `*.txt` under `<LAB>` together. | Two unchanged calls and two ordinary results. No notice. |
+| Mixed | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | Run `pwd` and `wc -c <LAB>/secret.txt` together. | Read `<LAB>/secret.txt` and Glob `*.txt` under `<LAB>` together. | One unchanged call and one `get_remedy_plans` notice with the denied call ID. Accept the offer, then retry the blocked call. |
+| Both denied | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Run separate `wc -c` commands for `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Read `<LAB>/secret.txt` and `<LAB>/secret-other.txt` together. | Two distinct notices under the two original call IDs, with distinct offer IDs. Accept both offers and retry both reads. |
 
-For each row, check the first model turn, the tool results, and the next
-provider request. The admitted sibling must not wait for a remedy; the denied
-sibling must not execute before its remedy. The provider sees the original calls
-and one result per call after notice restoration. A model that issues the two
-calls in separate turns did not qualify that row: retry with a fresh session id.
+For each row, examine the first model turn, the tool results, and the next
+provider request:
+- The admitted call must not wait for a remedy.
+- The denied call must not execute before its remedy.
+- After notice restoration, the provider sees the original calls and one result per call.
+- If the model issues the two calls in separate turns, that run is invalid. Start again with a fresh session id.
 
 The policy covers both restricted files under `host/claude-code/*`,
-`host/archestra/*`, and the `builtin:*` forms. When adding a new file or client
-spelling, update all relevant forms. A missing host rule makes the call appear
-allowed and invalidates the two-denial case.
+`host/archestra/*`, and `builtin:*`. When you add a new file or client name,
+update all relevant forms. A missing host rule makes the call appear allowed
+and invalidates the two-denial case.
 
 ### S7 — interrupt a parallel batch
 
-Start the mixed case, but leave the notice unanswered and send a new user
-instruction before the next provider request. The allowed sibling may finish;
-the denied sibling must never execute. Verify that restoration gives the model
-the recorded ruling even though the client did not call `get_remedy_plans`, and
-that a later retry must still pass OpenAPPA. The one-shot runners normally
-execute notices automatically, so interruption requires an interactive client
-session or a scripted provider/client turn. The route-level tests pin the
-deterministic partial-batch failure path.
+Start the mixed case. Leave the notice unanswered, and send a new user prompt
+before the next provider request.
+
+The allowed call can finish. The denied call must never execute.
+
+Make sure that restoration provides the recorded ruling to the model even when
+the client did not call `get_remedy_plans`. A later retry must still pass OpenAPPA.
+
+One-shot runners execute notices automatically. Because of this, test interruption
+with an interactive client session or a scripted turn. Route-level tests verify
+the deterministic partial-batch failure path.
 
 ### S8 — repeat a remedy attempt
 
-After the mixed case yields an acceptance offer, ask the client to submit the
-same `execute_remedy_plan` call twice, using the same offer id and input.
-With distinct client call ids, one attempt succeeds and the other gets a
-terminal no-live-offer response; the effect must happen only once. A transport
-retry of the *same* stamped call replays its recorded result, while a repeat
-with changed input is rejected. Inspect the MCP gateway results rather than
-trusting the final answer; if the chosen plan calls the authority, also check
-the fixture's `/calls` count. The runtime smoke test pins concurrent duplicate
-attempts; model cooperation is required for a live CLI run.
+Run the mixed case until the runtime provides an acceptance offer. Then, ask the
+client to send the same `execute_remedy_plan` call two times with the same offer ID
+and input.
+
+When the calls use distinct client call IDs, one attempt succeeds and the other
+receives a terminal no-live-offer response. The remedy takes effect only once.
+
+A transport retry of the same stamped call replays its recorded result. A repeat
+with changed input is rejected.
+
+Examine the MCP gateway results rather than trusting the final answer. If the
+chosen plan calls an authority, also check the `/calls` endpoint on the fixture.
+The runtime smoke test verifies concurrent duplicate attempts. Live CLI runs
+require model cooperation.
 
 ---
 
@@ -517,23 +527,24 @@ Requests to `/anthropic/v1/messages` without the `/v1` prefix return `401 Unauth
 
 ## What this does not cover
 
-- **Live external-client CI.** Chat's acceptance-plan and parallel-call flows
+- **Live external-client CI.** Chat acceptance-plan and parallel-call flows
   are automated in `platform/e2e-tests/tests/openappa/` (the `openappa`
-  project). The three external CLI runs are not: they need live
+  project). The three external CLI runs are not automated in CI. They require live
   provider credentials and three third-party CLIs whose flags change between
   releases. The proxy-side unit and route tests
   (`platform/backend/src/openappa/`, `platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts`,
   and `platform/backend/src/routes/proxy/llm-proxy-gateway-attestation.test.ts`
-  for every client form under any label) are what pin the behavior; this
-  harness proves the stock clients actually drive it.
+  for every client form under any label) verify the wire rules deterministically.
+  This test harness proves that stock clients drive the behavior.
 - **Real authorities and real sanitizers.** The fixture stands in for both. A
   deployment's own HTTP authority is not exercised beyond the envelope shape.
 - **Providers beyond Anthropic Messages and OpenAI Responses/Chat Completions.**
   The other proxy adapters are out of scope here.
 - **Cross-root concurrency.** S6 checks parallel calls within one model turn,
   not interleaved roots or races between two clients on one session id.
-- **Policy authoring, RBAC and revision conflicts.** Covered by the guardrails
+- **Policy authoring, RBAC, and revision conflicts.** Covered by the guardrails
   policy route tests, not by this runbook.
-- **Long-horizon sessions.** S1-S6 use a one-shot runner with a 300s timeout;
-  S7 needs an interactive interruption, and S8 may require another turn to
-  induce a duplicate. Restoration across many unrelated turns is not covered.
+- **Long-horizon sessions.** Scenarios S1 through S6 use a one-shot runner with
+  a 300-second timeout. Scenario S7 requires interactive interruption, and
+  scenario S8 can require an extra turn to induce a duplicate call. Restoration
+  across many unrelated turns is not covered.

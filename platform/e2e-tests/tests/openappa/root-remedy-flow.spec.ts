@@ -59,8 +59,8 @@ import {
   writePolicy,
 } from "./helpers";
 
-// Both scenarios mutate the deployment-wide switch and the shared policy, so
-// they cannot run beside each other under the project's fullyParallel default.
+// Both scenarios modify the deployment switch and shared policy.
+// Run tests serially rather than in parallel.
 test.describe.configure({ mode: "serial" });
 
 const NOTICE_TOOL = "archestra__get_remedy_plans";

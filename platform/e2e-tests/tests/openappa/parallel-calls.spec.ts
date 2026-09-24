@@ -1,54 +1,36 @@
 /**
- * OpenAPPA governance of PARALLEL tool calls, end to end through Archestra
- * Chat against the real stack.
+ * OpenAPPA governance of parallel tool calls in Archestra Chat.
  *
- * `root-remedy-flow.spec.ts` covers the single-call root remedy flow; this
- * spec covers the matrix the runbook leaves manual: a provider turn that
- * proposes several tool calls at once. Everything is real — the platform
- * container, PostgreSQL, the OpenAPPA native runtime, the MCP gateway, the
- * LLM proxy and Chat's own agentic loop. The only stubbed boundary is the
- * upstream Anthropic Messages API, served by WireMock.
+ * This test suite covers scenarios where the LLM proposes multiple tool calls
+ * in a single turn. All platform components run live: PostgreSQL, the OpenAPPA
+ * native runtime, the MCP gateway, the LLM proxy, and the Chat agent loop.
+ * WireMock stubs only the upstream Anthropic Messages API.
  *
- * The runtime rules on each call in a batch independently
- * (`appa-plugin-archestra/plugin.ts` `onToolCalls`): allowed siblings are
- * released as written, while each denied call is replaced — in its own
- * position, under its own provider call id — with an
- * `archestra__get_remedy_plans` notice whose arguments name the denied tool
- * and carry that denial's signed offers. The matrix:
+ * The OpenAPPA runtime evaluates each call in a batch independently:
+ * - Allowed calls pass through to the client unchanged.
+ * - Denied calls become `archestra__get_remedy_plans` notice calls under their
+ *   original call IDs. Each notice includes the original arguments and signed
+ *   remedy offers.
  *
- *   1. All allowed: two unrestricted calls in one turn pass through
- *      untouched while a policy that restricts other tools is installed.
- *   2. Mixed: one denied, one allowed in the same turn — the allowed
- *      sibling executes while the denied one arrives as a notice, then the
- *      remedy clears the denial and the retry is released.
- *   3. Multiple denials: two denied calls in one turn produce two notices
- *      naming distinct offers; two remedy executions (one per offer) clear
- *      both, and both parallel retries are released.
- *   4. Duplicate remedy: re-executing an already-spent offer cannot
- *      release anything — the second execution is ruled unknown, and the
- *      single retry still releases exactly once.
+ * Test cases in this file:
+ * 1. All allowed: Unrestricted calls pass through unchanged while the policy
+ *    restricts other tools.
+ * 2. Mixed: An allowed call runs immediately, while a denied call returns a notice.
+ *    Executing the remedy clears the denial and releases the retried call.
+ * 3. Multiple denials: Two denied calls return two notices with distinct offers.
+ *    Executing both remedies releases both retried calls.
+ * 4. Duplicate remedy: Executing a spent offer returns an error. The retried call
+ *    releases only once.
  *
- * Interruption (aborting the stream mid-batch) is deliberately not in this
- * matrix: the server-side loop keeps no client-observable contract about
- * which in-flight executions land after an abort, so any assertion would
- * pin timing, not behavior.
+ * Policy settling:
+ * The runtime recomposes policy rules asynchronously after updates. A conversation
+ * uses the policy version active at creation time. Each test uses
+ * `openSettledConversation` to verify that the runtime enforces the new policy
+ * before running test assertions.
  *
- * Policy settling: the runtime recomposes the enforced policy asynchronously
- * after a revision lands, and a conversation keeps the policy it started
- * with. Every test therefore opens its conversation through
- * `openSettledConversation`, which runs the scripted first turn and keeps the
- * conversation only when the observed governance matches the policy the test
- * installed — otherwise it deletes the conversation and probes a fresh one
- * until the runtime settles. Without this, the first test after a policy
- * change races the recomposition (observed on a retained stack: undeclared
- * tools refused under the previous policy while the new one allows them).
- *
- * This spec requires a stack booted with `ARCHESTRA_OPENAPPA_ENABLED=true`.
- * It lives in the `openappa` Playwright project for exactly that reason and
- * must never be added to another project's testMatch — see the note on
- * `testPatterns.openappa` in playwright.config.ts. The second switch —
- * deployment-wide, database-backed, off on a fresh stack — each test turns
- * on itself and restores afterwards.
+ * Requirements:
+ * The test stack must run with `ARCHESTRA_OPENAPPA_ENABLED=true`.
+ * Run these tests through the `openappa` Playwright project.
  */
 import { randomUUID } from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
@@ -78,8 +60,8 @@ import {
   writePolicy,
 } from "./helpers";
 
-// Every test mutates the deployment-wide switch and the shared policy, so
-// they cannot run beside each other under the project's fullyParallel default.
+// Every test modifies the deployment switch and shared policy.
+// Run tests serially rather than in parallel.
 test.describe.configure({ mode: "serial" });
 
 const NOTICE_TOOL = "archestra__get_remedy_plans";
@@ -89,49 +71,40 @@ const BLOCKED_WHOAMI = "archestra__whoami";
 const ALLOWED_TEAMS = "archestra__list_teams";
 
 /**
- * Extracts the FIRST live `offer_id` from the ruling the runtime wrote, read
- * out of the request body WireMock is answering. Same mechanism as
- * `root-remedy-flow.spec.ts`: the ruling renders the remedy as
+ * Extracts the first live `offer_id` from the WireMock request body.
  *
- *     archestra__execute_remedy_plan(offer_id: "<16 lowercase hex chars>")
+ * The runtime formats the remedy call as:
+ * archestra__execute_remedy_plan(offer_id: "<hex-id>")
  *
- * and it reaches the provider inside a JSON string, so the quote arrives as
- * the two bytes `\"`. The lookbehind avoids backslashes (`[(]` for the paren,
- * `..` for the `\"` pair) and stays fixed-length, as Java's regex engine
- * requires.
+ * Because this appears inside a JSON string, quotes are escaped as `\"`.
+ * The regular expression uses a fixed-length lookbehind to match Java requirements.
  */
 const FIRST_OFFER_TEMPLATE =
   "{{regexExtract request.body '(?<=execute_remedy_plan[(]offer_id: ..)[0-9a-f]+'}}";
 
 /**
- * Extracts the SECOND live `offer_id` from a request body carrying two
- * rulings. `regexExtract` with a variable name assigns capture groups instead
- * of returning the whole match, so group 1 here is the second offer's id: the
- * first offer is consumed by the pattern's own prefix. The request body is a
- * single-line JSON document, so `.*?` reaches the second ruling wherever it
- * sits. When no second offer exists the helper throws and the stub 500s —
- * which is the correct, loud failure for a turn that expected two denials.
+ * Extracts the second live `offer_id` from a request body with two rulings.
+ *
+ * WireMock captures the second offer ID in group 1. If a second offer does
+ * not exist, the helper throws an error and WireMock returns status 500.
  */
 const SECOND_OFFER_TEMPLATE =
   "{{regexExtract request.body 'execute_remedy_plan[(]offer_id: ..[0-9a-f]+.*?execute_remedy_plan[(]offer_id: ..([0-9a-f]+)' 'offers'}}{{offers.0}}";
 
 /**
- * Stand-ins for the templates inside the stub's JSON, swapped for the real
- * Handlebars expressions after serialization — writing them straight into the
- * tool input would bury them under two rounds of JSON escaping (the SSE
- * event, then the `input_json_delta` payload), and WireMock renders the body
- * as plain text.
+ * Placeholders for Handlebars templates inside the stub JSON.
+ *
+ * The test replaces these placeholders with Handlebars expressions after JSON
+ * serialization. This prevents multiple layers of JSON escaping.
  */
 const FIRST_OFFER_PLACEHOLDER = "APPA_FIRST_OFFER_FROM_RULING";
 const SECOND_OFFER_PLACEHOLDER = "APPA_SECOND_OFFER_FROM_RULING";
 
 /**
- * A policy that blocks each `blocked` tool by the same audience delta the
- * runbook uses (offering an acceptance plan per denial) and explicitly allows
- * each `allowed` tool. The allowed entries matter: a policy can refuse a tool
- * it does not name, so leaving the batch's unrestricted members undeclared
- * would make the tests depend on the default posture instead of pinning the
- * intended one. Deliberately no [externals] block: this flow needs no sidecar.
+ * Creates a policy that blocks specified tools and allows specified tools.
+ *
+ * Blocked tools receive an audience restriction that requires an acceptance plan.
+ * Allowed tools are listed explicitly to avoid relying on default policy behavior.
  */
 function policyGoverning(params: {
   blocked: string[];
@@ -149,7 +122,7 @@ function policyGoverning(params: {
   return `[policy]\nversion = 2\ntrust_chain = ["untrusted", "trusted"]\n\n${entries}\n`;
 }
 
-test("releases every call untouched when the policy allows the whole batch", async ({
+test("releases all calls unchanged when the policy allows the entire batch", async ({
   request,
   makeApiRequest,
   createAgent,
@@ -218,9 +191,7 @@ test("releases every call untouched when the policy allows the whole batch", asy
     const toolInputs = collect<ToolInput>(events, "tool-input-available");
     const toolOutputs = collect<ToolOutput>(events, "tool-output-available");
 
-    // Both calls reached the client exactly as the model wrote them — no
-    // notice was injected and nothing was rewritten, even though APPa is
-    // enforcing and a policy restricting another tool is installed.
+    // Both calls reach the client unchanged without notice replacement.
     expect(toolInputs.map((call) => call.toolName)).toEqual([
       BLOCKED_WHOAMI,
       ALLOWED_TEAMS,
@@ -230,7 +201,7 @@ test("releases every call untouched when the policy allows the whole batch", asy
       teamsCallId,
     ]);
 
-    // Both executed for real: whoami answers with this agent's own name.
+    // Both calls execute. The whoami tool returns the agent name.
     const whoamiOutput = textOf(outputFor(toolOutputs, whoamiCallId));
     expect(whoamiOutput).toContain(suffix);
     const teamsOutput = textOf(outputFor(toolOutputs, teamsCallId));
@@ -250,7 +221,7 @@ test("releases every call untouched when the policy allows the whole batch", asy
   }
 });
 
-test("releases the allowed sibling while the denied call arrives as a notice, then releases the retry", async ({
+test("releases allowed call immediately, returns notice for denied call, and releases retried call after remedy", async ({
   request,
   makeApiRequest,
   createAgent,
@@ -376,8 +347,8 @@ test("releases the allowed sibling while the denied call arrives as a notice, th
     expect(noticeInput.ruling).toContain("[appa] Blocked");
     expect(noticeInput.notice).toEqual({ v: 1, call_id: blockedCallId });
 
-    // The allowed sibling in the SAME denied batch executed for real — the
-    // runtime did not hold or refuse it alongside its denied neighbour.
+    // The allowed call in the mixed batch executed immediately without
+    // waiting for a remedy.
     expect(allowed.toolCallId).toBe(allowedCallId);
     const allowedOutput = textOf(outputFor(toolOutputs, allowedCallId));
     expect(allowedOutput).not.toContain("[appa] Blocked");
@@ -407,7 +378,7 @@ test("releases the allowed sibling while the denied call arrives as a notice, th
   }
 });
 
-test("rules two denied calls independently: two notices, two offers spent in one turn, both retries released", async ({
+test("evaluates two denied calls independently, emits two notices, and releases both retries after remedies", async ({
   request,
   makeApiRequest,
   createAgent,
@@ -581,23 +552,21 @@ test("rules two denied calls independently: two notices, two offers spent in one
     );
     expect(skillsOffer).not.toBe(whoamiOffer);
 
-    // The model spent exactly those two offers — no more, no less. Set
-    // comparison, because which scripted remedy call extracted which offer
-    // from the request body is indeterminate.
+    // Verify that the model executed both distinct remedy offers.
     const spent = [
       (remedyOne.input as { offer_id: string }).offer_id,
       (remedyTwo.input as { offer_id: string }).offer_id,
     ].sort();
     expect(spent).toEqual([skillsOffer, whoamiOffer].sort());
 
-    // Both remedies were authorized: neither output is a ruling.
+    // Both remedies succeeded: neither output contains a ruling or error.
     for (const remedyId of [remedyOneId, remedyTwoId]) {
       const remedyOutput = textOf(outputFor(toolOutputs, remedyId));
       expect(remedyOutput).not.toContain("[appa] Blocked");
       expect(remedyOutput).not.toContain("No live offer");
     }
 
-    // Both parallel retries were released and executed for real.
+    // Both parallel retries were released and executed.
     expect(retrySkills.toolCallId).toBe(retrySkillsId);
     expect(retryWhoami.toolCallId).toBe(retryWhoamiId);
     for (const retryId of [retrySkillsId, retryWhoamiId]) {
@@ -620,7 +589,7 @@ test("rules two denied calls independently: two notices, two offers spent in one
   }
 });
 
-test("a spent offer cannot be executed twice: the duplicate is ruled unknown and the retry releases exactly once", async ({
+test("prevents duplicate remedy execution and releases retried call only once", async ({
   request,
   makeApiRequest,
   createAgent,
@@ -767,8 +736,7 @@ test("a spent offer cannot be executed twice: the duplicate is ruled unknown and
     expect(duplicateOutput).toContain("no live offer with this id exists");
     expect(duplicateOutput).not.toEqual(remedyOutput);
 
-    // The session survived the duplicate: the blocked tool ran exactly once,
-    // on the released retry.
+    // The session handled the duplicate: the blocked tool ran exactly once.
     expect(retry.toolCallId).toBe(retryCallId);
     expect(
       toolInputs.filter((call) => call.toolName === BLOCKED_SKILLS),
@@ -815,11 +783,9 @@ type StackHandle = {
 };
 
 /**
- * Flips the deployment-wide switch on, installs the test policy (recording
- * the deployment's own for restore), and builds an agent carrying the named
- * tools on the WireMock-backed Anthropic provider. The APPA tool pair is
- * asserted advertised, which fails cheaply when the stack is not actually
- * enforcing.
+ * Enables guardrails deployment, installs the test policy, and creates a test agent.
+ *
+ * Confirms that the gateway advertises both OpenAPPA notice and control tools.
  */
 async function setupGovernedChat(params: {
   request: APIRequestContext;
@@ -914,7 +880,7 @@ async function setupGovernedChat(params: {
   };
 }
 
-/** Creates a conversation pinned to the WireMock provider, after the policy is installed. */
+/** Creates a conversation configured to use the WireMock provider. */
 async function openConversation(params: {
   request: APIRequestContext;
   makeApiRequest: MakeApiRequest;
@@ -942,20 +908,13 @@ async function openConversation(params: {
 }
 
 /**
- * Opens a conversation whose first turn PROVES the runtime is enforcing the
- * policy the test just installed, and returns that conversation's full event
- * stream.
+ * Opens a conversation and confirms that the runtime enforces the new policy.
  *
- * The runtime recomposes the enforced policy asynchronously after a revision
- * lands, and a conversation keeps the policy it started with — a conversation
- * opened inside the recomposition gap is governed by the previous policy for
- * its whole life. There is no REST read of the composed policy, so the only
- * honest probe is a governed turn: open a conversation, run the scripted
- * turn, and keep the conversation only when the observed tool sequence
- * matches the installed policy. On a mismatch (or a stream error, which is
- * how an unservable scripted turn surfaces) the conversation is deleted and a
- * fresh one is probed after a short wait; the runtime settles within a few
- * attempts.
+ * The runtime updates policy rules asynchronously after a policy update.
+ * A conversation uses the policy version active at conversation creation.
+ * This helper tests the initial turn and verifies that observed tool calls
+ * match the expected policy. If the policy has not settled yet, it deletes
+ * the conversation and retries until the runtime applies the new policy.
  */
 async function openSettledConversation(params: {
   request: APIRequestContext;
@@ -1011,8 +970,8 @@ function sameToolNames(inputs: ToolInput[], expected: string[]): boolean {
 }
 
 /**
- * Best-effort restore: WireMock mappings, the conversation, the agent, the
- * deployment's own policy, and the deployment switch if this test flipped it.
+ * Restores initial environment state. Removes WireMock mappings, the test
+ * conversation, the test agent, and restores original policy settings.
  */
 async function teardownGovernedChat(params: {
   request: APIRequestContext;

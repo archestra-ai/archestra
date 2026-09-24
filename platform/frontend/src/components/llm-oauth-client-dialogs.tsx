@@ -141,14 +141,6 @@ export function EditOAuthClientDialog({
         {/* Provenance before the editable fields: who to ask before you
               change somebody else's credential. */}
         <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
-      </div>
-
-      <div hidden={activeSection !== "access"} className="space-y-4">
         {isAuthorizationCode ? (
           <RedirectUrisField
             value={redirectUrisText}
@@ -161,6 +153,11 @@ export function EditOAuthClientDialog({
             providerApiKeys={providerApiKeys}
           />
         )}
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
       </div>
 
       {/* Kept mounted on every tab, so Save Changes commits its edits. */}

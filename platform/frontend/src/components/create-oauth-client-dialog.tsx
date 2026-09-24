@@ -200,15 +200,6 @@ export function CreateOAuthClientDialog({
           value={grantType}
           onChange={(next) => setGrantType(next as GrantType)}
         />
-
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
-      </div>
-
-      <div hidden={activeSection !== "access"} className="space-y-4">
         {isMcp ? (
           isAuthorizationCode ? (
             <>
@@ -248,6 +239,12 @@ export function CreateOAuthClientDialog({
             providerApiKeys={providerApiKeys}
           />
         )}
+
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
       </div>
 
       <div hidden={activeSection !== "permissions"}>

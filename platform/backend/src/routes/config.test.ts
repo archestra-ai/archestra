@@ -1,6 +1,9 @@
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { OrganizationModel } from "@/models";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 

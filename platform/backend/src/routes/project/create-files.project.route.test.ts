@@ -3,10 +3,10 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ProjectShareModel } from "@/models";
 import FileModel from "@/models/file";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";

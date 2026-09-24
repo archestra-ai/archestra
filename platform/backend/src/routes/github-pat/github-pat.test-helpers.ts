@@ -1,8 +1,8 @@
 import type { Action, Resource } from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { userHasPermission } from "@/auth/utils";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { createFastifyInstance } from "@/server";
 import { ApiError, type User } from "@/types";
 import githubPatRoutes from "./github-pat.routes";
 

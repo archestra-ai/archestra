@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ChatOpsConfigModel, OrganizationModel } from "@/models";
-import { createFastifyInstance } from "@/server";
 import { beforeEach, describe, expect, test } from "@/test";
 import chatopsRoutes from "./chatops";
 

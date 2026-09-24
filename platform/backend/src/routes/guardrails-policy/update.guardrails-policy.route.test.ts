@@ -7,11 +7,14 @@ import {
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./guardrails-policy.routes";
 

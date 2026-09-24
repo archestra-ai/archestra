@@ -23,6 +23,12 @@ import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-i
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 export default async function setup() {
+  // Both database-backed projects call this setup. Vitest initializes their
+  // global setups sequentially in one process, so the first project owns the
+  // snapshot and its teardown; the second reuses the path it publishes.
+  const existingSnapshotPath = process.env[SNAPSHOT_PATH_ENV];
+  if (existingSnapshotPath && fs.existsSync(existingSnapshotPath)) return;
+
   // The MCP-App connector inlines this generated, gitignored bundle and the
   // connector route tests read it, so build it once if a fresh checkout (CI)
   // hasn't — `build`/`dev` generate it via tsdown otherwise.
@@ -50,5 +56,6 @@ export default async function setup() {
   // Teardown: remove the temp snapshot once the whole suite finishes.
   return () => {
     fs.rmSync(snapshotPath, { force: true });
+    delete process.env[SNAPSHOT_PATH_ENV];
   };
 }

@@ -2,6 +2,10 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
@@ -9,7 +13,6 @@ import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connec
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { helperUrlBase } from "@/openappa/declarations";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import {
   deleteRuntimeCredentialConnection,
   deleteRuntimeCredentialDefinition,

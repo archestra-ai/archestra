@@ -12,9 +12,9 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { OrganizationModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   afterEach,
   beforeEach,

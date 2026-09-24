@@ -1,6 +1,7 @@
 import config from "@/config";
-import { beforeEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { ruleLine, seedCoverage } from "@/test/openappa-coverage";
+import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-coverage.routes";
 
 describe("GET /api/openappa/coverage/tools", () => {

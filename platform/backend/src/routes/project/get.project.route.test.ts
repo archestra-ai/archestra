@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ProjectShareModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

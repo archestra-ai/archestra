@@ -1,7 +1,8 @@
 import { and, count, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import type { InsertSkill } from "@/types";
 import skillRoutes from "./skill.routes";
 import { MANIFEST } from "./skill.test-helpers";

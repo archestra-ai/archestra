@@ -1,7 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-batteries.routes";
 

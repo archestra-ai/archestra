@@ -9,6 +9,8 @@ import {
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
@@ -16,8 +18,6 @@ import InteractionDeltaManager from "@/models/interaction-delta-manager";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction, InteractionResponse, User } from "@/types";
 

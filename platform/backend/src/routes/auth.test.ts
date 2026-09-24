@@ -9,13 +9,13 @@ import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OAuthClientModel from "@/models/oauth-client";
 import OrganizationModel from "@/models/organization";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,

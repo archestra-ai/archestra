@@ -1,7 +1,7 @@
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { conversationFilesService } from "@/services/conversation-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";

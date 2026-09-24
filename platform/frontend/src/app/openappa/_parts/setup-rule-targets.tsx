@@ -4,7 +4,6 @@ import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ScopeBadge } from "@/components/scope-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -77,9 +76,6 @@ export function RuleTargets({ tools }: { tools: PickedTool[] }) {
               <TableRow>
                 <TableHead className="w-[35%]">Name</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  Visibility
-                </TableHead>
                 <TableHead>Tools</TableHead>
               </TableRow>
             </TableHeader>
@@ -96,9 +92,6 @@ export function RuleTargets({ tools }: { tools: PickedTool[] }) {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {entityTypeLabel(entity.type)}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <ScopeBadge scope={entity.scope} showLabel />
                   </TableCell>
                   <TableCell>
                     {/* One line, so a row reaching both tools is as tall as the rest. */}

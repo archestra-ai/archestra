@@ -1585,8 +1585,10 @@ export function LlmProviderApiKeyForm({
                 <FieldDescription>
                   <span>
                     {existingPrimaryKey
-                      ? `"${existingPrimaryKey.name}" is already the primary ${shared ? "shared" : "own"} key for this provider.`
-                      : `When you have several ${shared ? "shared" : "own"} keys for one provider, the primary key is preferred.`}
+                      ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
+                      : shared
+                        ? "When there are several shared keys for one provider, the primary key is preferred."
+                        : "When you have several keys for one provider, your primary key is preferred."}
                   </span>{" "}
                   {/* The mechanism, which the sentence above only implies: key
                       resolution takes the conversation's pinned key, then the

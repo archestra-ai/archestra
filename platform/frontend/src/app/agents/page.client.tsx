@@ -1220,7 +1220,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     onClick={openBulkVisibility}
                   >
                     <Pencil className="h-4 w-4" />
-                    <span>Edit visibility</span>
+                    <span>Share</span>
                   </PermissionButton>
                 )}
                 <PermissionButton

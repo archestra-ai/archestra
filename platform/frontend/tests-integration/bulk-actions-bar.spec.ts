@@ -94,7 +94,7 @@ test.describe("Bulk actions bar", () => {
     mswControl,
   }) => {
     // Skills now offer a single bulk action, which fits a phone. A selected
-    // remote A2A agent still offers both Edit visibility and Delete, which
+    // remote A2A agent still offers both Share and Delete, which
     // crowd the rail.
     await mswControl.use({
       method: "get",
@@ -105,7 +105,7 @@ test.describe("Bulk actions bar", () => {
     await page.goto("/agents");
     await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Share", exact: true }),
     ).toBeVisible();
 
     const metrics = await page

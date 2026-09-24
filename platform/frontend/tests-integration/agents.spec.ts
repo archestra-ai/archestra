@@ -72,7 +72,7 @@ test.describe("Agents", () => {
     // Internal agents are shared through grants on each agent's Permissions
     // tab, so a selection that includes one offers no bulk visibility edit.
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Share", exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Delete", exact: true }),
@@ -88,7 +88,7 @@ test.describe("Agents", () => {
       url: "/api/a2a/remote-agents/:id",
       body: externalAgent,
     });
-    await page.getByRole("button", { name: "Edit visibility" }).click();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
     const visibilityDialog = page.getByRole("dialog", {
       name: "Share remote agents",
     });
@@ -327,7 +327,7 @@ test.describe("Agents", () => {
       })
       .click();
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Share", exact: true }),
     ).toBeEnabled();
     await mswControl.use({
       method: "get",
@@ -337,7 +337,7 @@ test.describe("Agents", () => {
         externalAgents: [{ ...externalAgent, scope: "org" }],
       }),
     });
-    await page.getByRole("button", { name: "Edit visibility" }).click();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
 
     const visibilityDialog = page.getByRole("dialog", {
       name: "Share remote agents",
@@ -391,7 +391,7 @@ test.describe("Agents", () => {
       })
       .click();
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Share", exact: true }),
     ).toBeEnabled();
 
     await mswControl.use({
@@ -408,7 +408,7 @@ test.describe("Agents", () => {
         url.searchParams.get("selectableOnly") === "true"
       );
     });
-    await page.getByRole("button", { name: "Edit visibility" }).click();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
     await page.evaluate(() => {
       window.history.pushState({}, "", "/agents?status=deleted");
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -554,7 +554,7 @@ test.describe("Agents", () => {
       page.getByText("Select at most 500 items at a time."),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Share", exact: true }),
     ).toBeDisabled();
     await expect(
       page.getByRole("button", { name: "Delete", exact: true }),

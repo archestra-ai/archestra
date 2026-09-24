@@ -238,7 +238,7 @@ test.describe("LLM Provider API Keys", () => {
     await expect(secondarySwitch).not.toBeChecked();
     await expect(secondarySwitch).toBeDisabled();
     await expect(
-      page.getByText(new RegExp(`"${PRIMARY}" is already the primary own key`)),
+      page.getByText(new RegExp(`"${PRIMARY}" is already your primary key`)),
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Cancel" }).click();

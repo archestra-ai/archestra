@@ -333,7 +333,7 @@ describe("LlmProviderApiKeyForm", () => {
     });
 
     expect(
-      screen.getByText(/"My OpenAI" is already the primary own key/),
+      screen.getByText(/"My OpenAI" is already your primary key/),
     ).toBeInTheDocument();
   });
 

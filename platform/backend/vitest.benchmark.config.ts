@@ -11,7 +11,10 @@ export default defineConfig({
         test: {
           name: "session-storage-benchmark",
           include: ["../benchmarks/session-storage.test.ts"],
-          globalSetup: [],
+          isolate: false,
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
+          env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
         },
       },
     ],

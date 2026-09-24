@@ -50,6 +50,7 @@ export function ResourceAccessSection({
         resource={resource}
         grants={grants ?? []}
         onChange={onGrantsChange ?? (() => {})}
+        standalone={standalone}
       />
     );
   // The panel carries the one heading. A second "Who has access" above the

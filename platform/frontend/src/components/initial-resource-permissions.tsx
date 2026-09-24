@@ -44,12 +44,15 @@ export function InitialResourcePermissions({
   ownerName,
   grants,
   onChange,
+  standalone,
 }: {
   resource: ScopedResource;
   scope?: string;
   ownerName?: string;
   grants: InitialPermissionGrant[];
   onChange: (grants: InitialPermissionGrant[]) => void;
+  /** Set when the section is a tab pane of its own, not one field among many. */
+  standalone?: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
@@ -64,7 +67,7 @@ export function InitialResourcePermissions({
     organizationPolicy.data?.effectiveActions.includes("manage-permissions") ??
     false;
   return (
-    <PermissionsPanel embedded>
+    <PermissionsPanel embedded standalone={standalone}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium">Permissions</h3>

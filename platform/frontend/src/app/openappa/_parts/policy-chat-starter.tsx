@@ -76,7 +76,7 @@ export function PolicyChatStarter({
   const isPolicyConversation = conversation.data?.origin === "openappa";
   // History links omit the target query. Recover the scope from a persisted
   // user message so later turns remain scoped after reopening the conversation.
-  const persistedPolicyTarget = useMemo(() => {
+  const activePolicyTarget = useMemo(() => {
     const persistedMessages = conversation.data?.messages as
       | UIMessage[]
       | undefined;
@@ -86,17 +86,11 @@ export function PolicyChatStarter({
         ChatMessageMetadataSchema.safeParse(message.metadata).data
           ?.openAppaPolicyTarget,
     );
-    return ChatMessageMetadataSchema.safeParse(lastScopedMessage?.metadata).data
-      ?.openAppaPolicyTarget;
-  }, [conversation.data?.messages]);
-  const activePolicyTarget = useMemo(
-    () =>
-      persistedPolicyTarget ??
-      (policyTarget
-        ? { kind: policyTarget.kind, id: policyTarget.id }
-        : undefined),
-    [policyTarget, persistedPolicyTarget],
-  );
+    return (
+      ChatMessageMetadataSchema.safeParse(lastScopedMessage?.metadata).data
+        ?.openAppaPolicyTarget ?? policyTarget
+    );
+  }, [conversation.data?.messages, policyTarget]);
   const selectedModel = conversation.data?.modelId ?? "";
   const modelName = models.data?.find(
     (model) => model.dbId === selectedModel,

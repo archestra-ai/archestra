@@ -4,7 +4,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { SuggestedPrompt } from "@/app/chat/suggested-prompt-pills";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
@@ -12,6 +11,7 @@ import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-ha
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import OpenAppaConversationPage from "../[conversationId]/page";
 import { PolicyChatStarter } from "./policy-chat-starter";
 
 vi.mock("@/lib/auth/auth.query");
@@ -72,22 +72,14 @@ const replace = vi.fn();
 const renderStarter = (
   initialPrompt?: string,
   conversationId?: string,
-  options?: {
-    title?: string;
-    subtitle?: string;
-    suggestedPrompts?: readonly SuggestedPrompt[];
-    policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
-  },
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string },
 ) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <PolicyChatStarter
         initialPrompt={initialPrompt}
         conversationId={conversationId}
-        title={options?.title}
-        subtitle={options?.subtitle}
-        suggestedPrompts={options?.suggestedPrompts}
-        policyTarget={options?.policyTarget}
+        policyTarget={policyTarget}
       />
     </QueryClientProvider>,
   );
@@ -247,69 +239,13 @@ test("starts with a policy-specific suggested prompt", async () => {
   );
 });
 
-test("shows a target-scoped title, subtitle, and suggested prompts on the welcome screen", async () => {
-  const view = renderStarter(undefined, undefined, {
-    title: "What should the policy do for Research assistant?",
-    subtitle: 'Describe a change for the agent "Research assistant".',
-    suggestedPrompts: [
-      {
-        summaryTitle: "Explain the policy for Research assistant",
-        prompt: "Explain the policy for the agent Research assistant.",
-      },
-    ],
-    policyTarget: { kind: "agent", id: targetId },
-  });
-  expect(
-    screen.getByText("What should the policy do for Research assistant?"),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText(/Describe a change for the agent "Research assistant"/),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByText("What should the policy do?"),
-  ).not.toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Explain the policy for Research assistant",
-    }),
-  );
-  await vi.waitFor(() =>
-    expect(push).toHaveBeenCalledWith(
-      `/openappa/conversation-1?targetType=agent&targetId=${targetId}`,
-    ),
-  );
-  view.unmount();
-  renderStarter(undefined, "conversation-1");
-  await vi.waitFor(() =>
-    expect(sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        parts: [
-          {
-            type: "text",
-            text: "Explain the policy for the agent Research assistant.",
-          },
-        ],
-      }),
-    ),
-  );
-});
-
-test("does not auto-send when a conversation is scoped to a policy target", () => {
-  renderStarter(undefined, undefined, {
-    title: "What should the policy do for Research assistant?",
-    policyTarget: { kind: "agent", id: targetId },
-  });
-  // The target flow never passes an initial prompt, so the auto-send effect
-  // (gated on `initialPrompt`) must not fire: the user lands on the welcome
-  // screen with nothing sent, not mid-conversation.
-  expect(create).not.toHaveBeenCalled();
-  expect(push).not.toHaveBeenCalled();
-});
-
 test("attaches the scoped policy target as hidden metadata on the opening message", async () => {
   const view = renderStarter(undefined, undefined, {
-    policyTarget: { kind: "mcp_server", id: targetId },
+    kind: "mcp_server",
+    id: targetId,
   });
+  expect(screen.getByText("What should the policy do?")).toBeVisible();
+  expect(create).not.toHaveBeenCalled();
   fireEvent.change(
     screen.getByRole("textbox", {
       name: "Describe the OpenAPPA policy change",
@@ -324,10 +260,15 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
   );
   view.unmount();
   // The opening message goes through the create → handoff → sendMessage
-  // round-trip, so the metadata must survive that hop.
-  renderStarter(undefined, "conversation-1", {
-    policyTarget: { kind: "mcp_server", id: targetId },
+  // round-trip, including the conversation route's target forwarding.
+  const page = await OpenAppaConversationPage({
+    params: Promise.resolve({ conversationId: "conversation-1" }),
+    searchParams: Promise.resolve({
+      targetType: "mcp_server",
+      targetId,
+    }),
   });
+  renderStarter(undefined, "conversation-1", page.props.policyTarget);
   await vi.waitFor(() =>
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -337,64 +278,6 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
         }),
       }),
     ),
-  );
-});
-
-test("carries the policy target through the create-and-redirect navigation URL", async () => {
-  renderStarter(undefined, undefined, {
-    policyTarget: { kind: "mcp_server", id: targetId },
-  });
-  fireEvent.change(
-    screen.getByRole("textbox", {
-      name: "Describe the OpenAPPA policy change",
-    }),
-    { target: { value: "What can this server do?" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
-  // `/openappa/[conversationId]` remounts this component from scratch with no
-  // policyTarget prop of its own, so the target must ride in the URL the
-  // redirect navigates to (resolved back into a prop by the page's own
-  // `resolveOpenAppaPolicyTarget` call) or the scope is silently dropped for
-  // the deferred opening message and every follow-up on that conversation.
-  await vi.waitFor(() =>
-    expect(push).toHaveBeenCalledWith(
-      `/openappa/conversation-1?targetType=mcp_server&targetId=${targetId}`,
-    ),
-  );
-});
-
-test("omits the target query params when redirecting an unscoped conversation", async () => {
-  renderStarter();
-  fireEvent.change(
-    screen.getByRole("textbox", {
-      name: "Describe the OpenAPPA policy change",
-    }),
-    { target: { value: "Require approval for outbound messages" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
-  await vi.waitFor(() =>
-    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
-  );
-});
-
-test("attaches the scoped policy target to every follow-up message", () => {
-  renderStarter(undefined, "conversation-1", {
-    policyTarget: { kind: "mcp_server", id: targetId },
-  });
-  fireEvent.change(
-    screen.getByRole("textbox", {
-      name: "Describe the OpenAPPA policy change",
-    }),
-    { target: { value: "And now?" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
-  expect(sendMessage).toHaveBeenCalledWith(
-    expect.objectContaining({
-      parts: [{ type: "text", text: "And now?" }],
-      metadata: expect.objectContaining({
-        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
-      }),
-    }),
   );
 });
 
@@ -415,7 +298,7 @@ test("recovers the policy target when a conversation is reopened from history", 
       ],
     },
   } as unknown as ReturnType<typeof useConversation>);
-  const view = renderStarter(undefined, "conversation-1");
+  renderStarter(undefined, "conversation-1");
   fireEvent.change(
     screen.getByRole("textbox", {
       name: "Describe the OpenAPPA policy change",
@@ -431,46 +314,6 @@ test("recovers the policy target when a conversation is reopened from history", 
       }),
     }),
   );
-  view.unmount();
-  sendMessage.mockClear();
-  renderStarter(undefined, "conversation-1", {
-    policyTarget: {
-      kind: "agent",
-      id: "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0",
-    },
-  });
-  fireEvent.change(
-    screen.getByRole("textbox", {
-      name: "Describe the OpenAPPA policy change",
-    }),
-    { target: { value: "And after reopening this link?" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
-  expect(sendMessage).toHaveBeenCalledWith(
-    expect.objectContaining({
-      metadata: expect.objectContaining({
-        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
-      }),
-    }),
-  );
-});
-
-test("omits policy-target metadata for an unscoped conversation", () => {
-  renderStarter(undefined, "conversation-1");
-  fireEvent.change(
-    screen.getByRole("textbox", {
-      name: "Describe the OpenAPPA policy change",
-    }),
-    { target: { value: "General question" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
-  expect(sendMessage).toHaveBeenCalledWith(
-    expect.objectContaining({
-      parts: [{ type: "text", text: "General question" }],
-    }),
-  );
-  const [sent] = sendMessage.mock.calls.at(-1) ?? [];
-  expect(sent.metadata).not.toHaveProperty("openAppaPolicyTarget");
 });
 
 test("loads an existing policy conversation without creating or resending it", () => {

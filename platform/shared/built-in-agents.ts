@@ -59,19 +59,6 @@ export function describeOpenAppaPolicyTarget(
   return `the ${OPENAPPA_POLICY_TARGET_KIND_LABELS[kind]} "${name}"`;
 }
 
-/** Chat landing title for an OpenAPPA conversation scoped to one policy target. */
-export function openAppaTargetChatTitle(name: string): string {
-  return `What should the policy do for ${name}?`;
-}
-
-/** Chat landing subtitle for an OpenAPPA conversation scoped to one policy target. */
-export function openAppaTargetChatSubtitle(
-  kind: OpenAppaPolicyTargetKind,
-  name: string,
-): string {
-  return `Describe a change for ${describeOpenAppaPolicyTarget(kind, name)}.`;
-}
-
 /**
  * Hidden scope reminder for a policy-target conversation. Use only the stable
  * UUID and a validated kind: target names are free text and must not be

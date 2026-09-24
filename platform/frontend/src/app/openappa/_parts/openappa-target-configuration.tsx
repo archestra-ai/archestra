@@ -1,16 +1,14 @@
 "use client";
 
 import {
+  describeOpenAppaPolicyTarget,
   type OpenAppaPolicyTargetKind,
-  openAppaTargetChatSubtitle,
-  openAppaTargetChatTitle,
   openAppaTargetSuggestedPrompts,
 } from "@archestra/shared";
 import { TriangleAlert } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCoverageEntities } from "@/lib/openappa-coverage.query";
 import { OpenAppaOverview } from "./openappa-overview";
 
@@ -20,7 +18,6 @@ export function OpenAppaTargetConfiguration({
 }: {
   policyTarget: { kind: OpenAppaPolicyTargetKind; id: string };
 }) {
-  const registryRead = useHasPermissions({ mcpRegistry: ["read"] });
   const entities = useCoverageEntities({
     entityId: policyTarget.id,
     type: policyTarget.kind,
@@ -28,30 +25,8 @@ export function OpenAppaTargetConfiguration({
     offset: 0,
   });
 
-  if (
-    entities.isLoading ||
-    entities.isPlaceholderData ||
-    (policyTarget.kind === "mcp_server" && registryRead.isPending)
-  )
+  if (entities.isLoading || entities.isPlaceholderData)
     return <Skeleton className="h-32 w-full" />;
-  if (policyTarget.kind === "mcp_server" && registryRead.isError)
-    return (
-      <QueryLoadError
-        title="Could not check registry access"
-        onRetry={() => registryRead.refetch()}
-      />
-    );
-  if (policyTarget.kind === "mcp_server" && registryRead.data !== true)
-    return (
-      <InlineNotice>
-        <TriangleAlert />
-        <span className="font-medium">Registry access required</span>
-        <InlineNoticeText>
-          You need permission to read the MCP registry to configure this server
-          with chat.
-        </InlineNoticeText>
-      </InlineNotice>
-    );
   if (entities.isLoadingError)
     return (
       <QueryLoadError
@@ -78,8 +53,8 @@ export function OpenAppaTargetConfiguration({
 
   return (
     <OpenAppaOverview
-      title={openAppaTargetChatTitle(target.name)}
-      subtitle={openAppaTargetChatSubtitle(policyTarget.kind, target.name)}
+      title={`What should the policy do for ${target.name}?`}
+      subtitle={`Describe a change for ${describeOpenAppaPolicyTarget(policyTarget.kind, target.name)}.`}
       suggestedPrompts={openAppaTargetSuggestedPrompts(
         policyTarget.kind,
         target.name,

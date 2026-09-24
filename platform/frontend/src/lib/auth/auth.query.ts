@@ -77,7 +77,6 @@ export function useHasPermissions(
     error,
     isSuccess,
     status,
-    refetch,
   } = useAllPermissions();
 
   const scopedCheck = permissionScope !== undefined;
@@ -105,7 +104,6 @@ export function useHasPermissions(
     error,
     isSuccess,
     status,
-    refetch,
   };
 }
 

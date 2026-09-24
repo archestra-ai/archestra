@@ -201,10 +201,15 @@ describe("buildChatContext", () => {
       const policyChat = await run({
         ...common,
         conversationOrigin: "openappa",
+        openAppaPolicyTargetContext: "scoped to target ID",
       });
-      const ordinaryChat = await run(common);
+      const ordinaryChat = await run({
+        ...common,
+        openAppaPolicyTargetContext: "scoped to target ID",
+      });
       expect(policyChat.systemPrompt).toContain("appa-guide");
       expect(policyChat.systemPrompt).toContain("preview proposed changes");
+      expect(policyChat.systemPrompt).toContain("scoped to target ID");
       expect(Object.keys(policyChat.mcpTools)).toEqual([
         policyTool,
         getAgentTool,
@@ -215,53 +220,7 @@ describe("buildChatContext", () => {
       expect(ordinaryChat.systemPrompt).not.toContain(
         "You are helping the user configure this deployment's OpenAPPA policy",
       );
-    } finally {
-      config.openappa.enabled = originalEnabled;
-    }
-  });
-
-  test("appends the policy-target scope to a policy chat's system prompt", async ({
-    makeAgent,
-    makeConversation,
-    makeOrganization,
-    makeUser,
-  }) => {
-    const originalEnabled = config.openappa.enabled;
-    config.openappa.enabled = true;
-    try {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const agent = await makeAgent({ organizationId: org.id });
-      const conversation = await makeConversation(agent.id, {
-        organizationId: org.id,
-        userId: user.id,
-      });
-      const common = {
-        conversationId: conversation.id,
-        agentId: agent.id,
-        agentName: agent.name,
-        organizationId: org.id,
-        user: { id: user.id, email: user.email, name: user.name },
-      };
-
-      const policyChat = await run({
-        ...common,
-        conversationOrigin: "openappa",
-        openAppaPolicyTargetContext: 'scoped to the MCP server "GitHub"',
-      });
-      const ordinaryChat = await run({
-        ...common,
-        openAppaPolicyTargetContext: 'scoped to the MCP server "GitHub"',
-      });
-
-      expect(policyChat.systemPrompt).toContain(
-        'scoped to the MCP server "GitHub"',
-      );
-      // The target context is policy-chat-only wording — an ordinary chat's
-      // prompt never gains policy language just because the field is set.
-      expect(ordinaryChat.systemPrompt ?? "").not.toContain(
-        'scoped to the MCP server "GitHub"',
-      );
+      expect(ordinaryChat.systemPrompt).not.toContain("scoped to target ID");
     } finally {
       config.openappa.enabled = originalEnabled;
     }

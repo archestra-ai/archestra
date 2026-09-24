@@ -165,6 +165,20 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   );
 
   expect(await screen.findByText("Research assistant")).toBeVisible();
+  expect(
+    screen.getByRole("link", {
+      name: "Configure with chat Research assistant",
+    }),
+  ).toHaveAttribute(
+    "href",
+    `/openappa/configure?targetType=agent&targetId=${entityId}`,
+  );
+  expect(
+    screen.getByRole("link", { name: "Configure with chat GitHub" }),
+  ).toHaveAttribute(
+    "href",
+    `/openappa/configure?targetType=mcp_server&targetId=${serverId}`,
+  );
   expect(screen.getByRole("heading", { name: "Policy targets" })).toBeVisible();
   expect(screen.getByRole("columnheader", { name: "Type" })).toBeVisible();
   expect(
@@ -214,34 +228,6 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   ).toHaveTextContent("19synced tools");
   expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
-});
-
-test("links the configure-with-chat action to the selected policy target", async () => {
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <OverviewTab />
-    </QueryClientProvider>,
-  );
-
-  expect(await screen.findByText("Research assistant")).toBeVisible();
-  expect(
-    screen.getByRole("link", {
-      name: "Configure with chat Research assistant",
-    }),
-  ).toHaveAttribute(
-    "href",
-    `/openappa/configure?targetType=agent&targetId=${entityId}`,
-  );
-  expect(
-    screen.getByRole("link", { name: "Configure with chat GitHub" }),
-  ).toHaveAttribute(
-    "href",
-    `/openappa/configure?targetType=mcp_server&targetId=${serverId}`,
-  );
 });
 
 test("disables server chat when registry read access is missing", async () => {

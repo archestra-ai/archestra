@@ -73,6 +73,10 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import {
+  parseSlackRichReply,
+  SLACK_RICH_REPLY_INSTRUCTIONS,
+} from "./slack-rich-reply";
 import TelegramProvider from "./telegram-provider";
 import {
   buildAgentFooter,
@@ -956,7 +960,7 @@ export class ChatOpsManager {
       if (permalink) {
         contextLines.push(`- Message permalink: ${permalink}`);
       }
-      systemPrefix = contextLines.join("\n");
+      systemPrefix = `${contextLines.join("\n")}\n\n${SLACK_RICH_REPLY_INSTRUCTIONS}`;
     }
 
     // Group conversations: the agent receives every message, so frame the
@@ -2168,7 +2172,11 @@ export class ChatOpsManager {
     const text = (resultMessage.parts || [])
       .map((part) => part.text)
       .join("\n");
-    let agentResponse = compactChatOpsResponse(stripThinkingBlocks(text));
+    const cleanedResponse = stripThinkingBlocks(text);
+    let agentResponse =
+      provider.providerId === "slack" && parseSlackRichReply(cleanedResponse)
+        ? cleanedResponse
+        : compactChatOpsResponse(cleanedResponse);
 
     // The agent's way to stay silent in group conversations — post nothing.
     // The sentinel ANYWHERE in the response means silence: models often

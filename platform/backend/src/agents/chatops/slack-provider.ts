@@ -60,6 +60,7 @@ import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
+import { parseSlackRichReply } from "./slack-rich-reply";
 import {
   EventDedupMap,
   errorMessage,
@@ -449,9 +450,11 @@ class SlackProvider implements ChatOpsProvider {
     // seen it on earlier bot replies replayed as thread history. Drop that echo
     // before anything else so the reply renders exactly one footer — and before
     // chunking, so an echo can't survive inside a chunk's markdown block.
+    const richReply = parseSlackRichReply(options.text);
+    const replyText = richReply?.text ?? options.text;
     const body = options.footer
-      ? stripDuplicateAgentFooter(options.text, options.footer)
-      : options.text;
+      ? stripDuplicateAgentFooter(replyText, options.footer)
+      : replyText;
 
     // Slack expands `markdown` blocks server-side into Block Kit primitives
     // (one per heading, table, list, code block, paragraph) and rejects any
@@ -460,7 +463,9 @@ class SlackProvider implements ChatOpsProvider {
     // we post one message per chunk and thread the follow-ups so the user sees
     // the full reply. Non-final messages reserve their footer slot for a
     // "continued in a message below" hint.
-    const chunks = splitSlackMarkdownText(protectSlackUrlBoundaries(body));
+    const chunks = richReply
+      ? [body]
+      : splitSlackMarkdownText(protectSlackUrlBoundaries(body));
 
     let firstTs = "";
     for (let i = 0; i < chunks.length; i++) {
@@ -471,9 +476,11 @@ class SlackProvider implements ChatOpsProvider {
       // that was nothing but an echoed footer) contributes no body block and
       // renders as the footer alone.
       // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-      const blocks: any[] = chunkText.trim()
-        ? [{ type: "markdown", text: chunkText }]
-        : [];
+      const blocks: any[] = richReply
+        ? [...richReply.blocks]
+        : chunkText.trim()
+          ? [{ type: "markdown", text: chunkText }]
+          : [];
 
       if (!isFinal) {
         blocks.push({

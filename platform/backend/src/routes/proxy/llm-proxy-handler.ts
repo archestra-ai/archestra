@@ -869,8 +869,8 @@ export async function handleLLMProxy<
     }
   }
 
-  // A ChatGPT bearer needs platform-side user and proxy-access checks before
-  // it may be sent to the subscription endpoint, not api.openai.com.
+  // A ChatGPT bearer requires user and proxy-access checks before Archestra
+  // sends it to the subscription endpoint instead of api.openai.com.
   if (
     !authOverride &&
     !passthroughVirtualKeyId &&
@@ -890,7 +890,7 @@ export async function handleLLMProxy<
   }
 
   // The client owns refresh and rotation for this access token. Keep the
-  // credential in request-local client options; never resolve or persist it as
+  // credential in request-local client options. Never resolve or save it as
   // an Archestra-managed provider credential.
   const openAiCodexPassthrough = passthroughVirtualKeyId
     ? resolveOpenAiCodexPassthrough({

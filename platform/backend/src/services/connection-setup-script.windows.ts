@@ -321,7 +321,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           );
         }
         steps.push(
-          `Open a new PowerShell session and run \`codex\` — ${ctx.proxy.proxyName} is now the default model provider.`,
+          `Open a new PowerShell session and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
         );
       }
       if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {

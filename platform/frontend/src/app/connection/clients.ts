@@ -457,7 +457,7 @@ claude`,
         steps: [
           {
             title: `Run the ${appName} setup command`,
-            body: "The setup selects the proxy and adds your personal access header. Codex can use its existing ChatGPT login or an OpenAI API-key login.",
+            body: "The setup selects the proxy and adds your personal access header. Codex can use its existing ChatGPT login or an OpenAI API key.",
           },
         ],
       }),

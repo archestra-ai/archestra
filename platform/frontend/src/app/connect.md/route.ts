@@ -35,7 +35,7 @@ Follow the client's normal approval flow. Do not disable sandboxing or retry a d
 The bootstrap opens a separate OS terminal. After handoff, end the task immediately:
 do not run cleanup, polling, or verification while waiting for Desktop to restart.
 After installation, authorize the gateway under Settings > Connectors and install shared skills
-under Settings > Plugins. Send a fresh message to check that inference works.
+under Settings > Plugins. Send a message to make sure that inference works.
 
 ## Setup
 
@@ -67,8 +67,8 @@ under Settings > Plugins. Send a fresh message to check that inference works.
    user to /mcp here. OpenCode's separate CLI can read the updated config now.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: use its MCP settings to connect/authenticate the configured server.
-   Codex: use codex mcp login SERVER_NAME. Open a new terminal and run plain codex;
-   the setup selects the proxy as its default provider.
+   Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
+   The setup script selects the proxy as the default provider.
    OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
    skip authentication; do not re-authenticate a working connection. Otherwise
    run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,
@@ -94,12 +94,12 @@ under Settings > Plugins. Send a fresh message to check that inference works.
    now with opencode mcp list, but must restart to load new tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
-   Codex: check that config.toml selects the proxy provider at the top level,
-   then send a short prompt in a fresh Codex session. Gateway OAuth alone does
-   not prove inference uses the proxy. If OpenAPPA is enabled, the first text
-   reply in a new protected root session also displays a protected-session mark.
-   If the provider is not selected or the prompt fails, report the connection
-   as incomplete instead of claiming setup succeeded.
+   Codex: make sure that config.toml selects the proxy provider at the top level.
+   Then send a short prompt in a new Codex session. Gateway OAuth alone does
+   not show that inference uses the proxy. If OpenAPPA is enabled, the first text
+   reply in a new protected session also shows a protected-session mark.
+   If the provider is not selected or the prompt fails, report that the connection
+   is incomplete. Do not report that setup succeeded.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 

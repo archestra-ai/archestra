@@ -24,9 +24,10 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`7468837da348135cc018fc24cc82e3d18318e1e6`, after the merge of
-archestra-ai/OpenAPPA#402 and #401 (the consult recorder and url diagnostics)
-on top of archestra-ai/OpenAPPA#394 (the annotator-only `jev` battery), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
+`c7c5381b07eb2833f2ed31716e11d6fcf65b4e54`, after the merge of
+archestra-ai/OpenAPPA#423 (the native `jev` annotator), #433 (per-dispatch
+pinned deployments and the host credential lookup) and #424 (the shared label
+guide), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
@@ -105,7 +106,7 @@ The proxy derives the organization from the resolved agent. Internal agent runs,
 including Chat, Slack and A2A, use the existing local-request trust boundary.
 Caller identity provides audit attribution. For external clients, it scopes the session and binds remedy offers to the authenticated credential. External callers authenticate through existing proxy mechanisms.
 
-The native actor ID hashes the session ID. Authorized users share guardrail state within one organization. An organization change is refused.
+The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
 
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 

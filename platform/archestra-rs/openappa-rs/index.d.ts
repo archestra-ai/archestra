@@ -78,7 +78,17 @@ export interface CredentialDeclaration {
   line: number
 }
 
-export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
+export declare function dispatchHook(input: string, policy: DispatchPolicy): Promise<string>
+
+/**
+ * The effective policy of the dispatching organization, with the values the host
+ * resolved for the credential variables the runtime reads itself.
+ */
+export interface DispatchPolicy {
+  content: string
+  /** Variable → value, for the document's `runtimeCredentials`. Secrets. */
+  credentials: Record<string, string>
+}
 
 export interface EditedPolicy {
   /** The edited document, absent when an edit was refused. */
@@ -95,7 +105,7 @@ export interface EditedPolicy {
 export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
 /** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
-export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
+export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
 export interface HelperBindingInput {
   /**
@@ -113,7 +123,7 @@ export interface IncludeDeclaration {
   line: number
 }
 
-export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, reporting?: ReportingOptions | undefined | null): Promise<void>
 
 /**
  * Validates an uploaded battery package with the marketplace's own checks and reads
@@ -168,6 +178,12 @@ export interface PolicyDeclarations {
   credentials: Array<CredentialDeclaration>
   /** The annotators the root's own `[[policy.tool]]` rules route calls to. */
   routedAnnotators: Array<string>
+  /**
+   * The `[credentials]` variables the runtime resolves itself, because an external
+   * or profile of the document names them as its `token_env`. A dispatch carries
+   * their values in `DispatchPolicy.credentials`.
+   */
+  runtimeCredentials: Array<string>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.

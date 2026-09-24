@@ -108,14 +108,15 @@ builtin = "hitl"
   const ledgerName = `openappa-smoke-${randomUUID()}`;
   const ledgerUrl = new URL(databaseUrl);
   ledgerUrl.searchParams.set('application_name', ledgerName);
-  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
+  await native.initializeOpenappa(ledgerUrl.toString(), 4);
+  const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
-  const hook = async (session, event, policyContent) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policyContent));
+  const hook = async (session, event) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const call = (session, id, tool, arguments_ = {}) => hook(session, {
     event: 'tool_call', operation_id: `call:${id}`, tool, arguments: arguments_,
   });
@@ -152,7 +153,7 @@ builtin = "hitl"
       ...rest,
     };
   };
-  const byOffer = (session, event) => native.executeRemedyByOffer(JSON.stringify(offerInput(session, event))).then(JSON.parse);
+  const byOffer = (session, event) => native.executeRemedyByOffer(JSON.stringify(offerInput(session, event)), policy).then(JSON.parse);
   const remoteOffer = (session, event) => onReplica({ operation: 'by_offer', input: offerInput(session, event) });
   const eventCount = async (session) => Number((await client.query('SELECT count(*) AS n FROM openappa_events WHERE root=(SELECT root FROM openappa_sessions WHERE session_id=$1)', [session.session_id])).rows[0].n);
 
@@ -948,7 +949,7 @@ builtin = "hitl"
       () => native.dispatchHook(JSON.stringify({
         ...scope(),
         event: 'invented_event',
-      })),
+      }), policy),
       /unknown variant|expected one of/,
     );
   });

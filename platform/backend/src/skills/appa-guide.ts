@@ -209,7 +209,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
-- Keep secrets out of policy text. Remote bindings can use backend environment variables with \`token_env\`. Never put raw credentials in policy text.
+- Keep secrets out of policy text. A remote binding's \`token_env\` reads the organization runtime credential bound to it in \`[credentials]\`, never a backend environment variable. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
 - A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 `,

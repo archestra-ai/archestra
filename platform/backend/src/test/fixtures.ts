@@ -11,30 +11,28 @@ import {
 import { and, eq, ne } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
-import {
-  AgentModel,
-  AgentToolModel,
-  AppDataModel,
-  AppModel,
-  AppToolModel,
-  AppVersionModel,
-  InternalMcpCatalogModel,
-  KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
-  MemberModel,
-  ScheduleTriggerModel,
-  ScheduleTriggerRunModel,
-  SecretModel,
-  SessionModel,
-  SkillModel,
-  TeamModel,
-  ToolInvocationPolicyModel,
-  ToolModel,
-  TrustedDataPolicyModel,
-  VirtualApiKeyModel,
-} from "@/models";
+import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
+import AppModel from "@/models/app";
+import AppDataModel from "@/models/app-data";
+import AppToolModel from "@/models/app-tool";
+import AppVersionModel from "@/models/app-version";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import KnowledgeBaseModel from "@/models/knowledge-base";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
+import SecretModel from "@/models/secret";
+import SessionModel from "@/models/session";
+import SkillModel from "@/models/skill";
+import TeamModel from "@/models/team";
+import ToolModel from "@/models/tool";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
+import TrustedDataPolicyModel from "@/models/trusted-data-policy";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,

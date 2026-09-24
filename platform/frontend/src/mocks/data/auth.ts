@@ -109,7 +109,9 @@ export const adminPermissionsSeed = makeUserPermissions();
 /**
  * The admin role's grants at `*` — managing every object of each kind, which
  * the retired `admin` role actions became. Listed by hand: the shared barrel
- * cannot be imported into the MSW handlers.
+ * cannot be imported into the MSW handlers. Keep it in step with
+ * `ScopedResourceSchema`; a missing entry hides admin-only UI, such as the
+ * logs User filter behind `log:read` at `*`.
  */
 export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitiesResponses["200"] =
   [
@@ -120,15 +122,21 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "app",
     "llmModel",
     "project",
+    "conversation",
+    "agentRun",
     "plugin",
     "knowledgeBase",
     "knowledgeConnector",
     "knowledgeFile",
     "llmVirtualKey",
     "llmProviderApiKey",
+    "mcpOauthClient",
+    "llmOauthClient",
     "environment",
     "serviceAccount",
     "scheduledTask",
+    "log",
+    "auditLog",
   ].flatMap((resource) =>
     (["read", "use", "update", "delete", "manage-permissions"] as const).map(
       (action) => ({ resource, scope: "*", action }),

@@ -170,7 +170,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (renamedTools.length > 0)
             await openappaBatteriesService.onCatalogPrefixesRenamed({
               catalogId: ARCHESTRA_MCP_CATALOG_ID,
-              organizationId,
+              // The built-in catalog is global: every organization spells it.
+              organizationId: null,
               userId: user.id,
               renamedTools,
             });

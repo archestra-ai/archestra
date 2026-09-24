@@ -141,7 +141,7 @@ describe("GET /api/openappa/external-consults", () => {
     ).toEqual([mine]);
   });
 
-  test("an audience source's answer is withheld from a caller who cannot read members", async ({
+  test("an audience source's consult is withheld from a caller who cannot read members", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -149,19 +149,18 @@ describe("GET /api/openappa/external-consults", () => {
     const logReader = await makeCustomRole(organizationId, {
       permission: { log: ["read"] },
     });
-    const rawResponse = Buffer.from('{"version":1}');
+    const bytes = {
+      rawResponse: Buffer.from('{"version":1}'),
+      diagnostics: Buffer.from("helper stderr"),
+    };
     const exported = async () => {
-      await seedConsult({
-        organizationId,
-        callerId: `user:${caller.id}`,
-        role: "audience_source",
-        rawResponse,
-      });
-      await seedConsult({
-        organizationId,
-        callerId: `user:${caller.id}`,
-        rawResponse,
-      });
+      for (const role of ["audience_source", "annotator"] as const)
+        await seedConsult({
+          organizationId,
+          callerId: `user:${caller.id}`,
+          role,
+          ...bytes,
+        });
       const json = (await list()).json().data;
       const jsonl = (await list("?format=jsonl")).body
         .split("\n")
@@ -169,20 +168,30 @@ describe("GET /api/openappa/external-consults", () => {
         .map((line) => JSON.parse(line));
       expect(jsonl).toEqual(json);
       return json.map(
-        (row: {
-          role: string;
-          outcome: string;
-          answer: unknown;
-          rawResponse: string | null;
-        }) => ({
-          role: row.role,
-          outcome: row.outcome,
-          answer: row.answer,
-          rawResponse: row.rawResponse,
+        ({
+          role,
+          outcome,
+          request,
+          answer,
+          rawResponse,
+          diagnostics,
+        }: Record<string, unknown>) => ({
+          role,
+          outcome,
+          request,
+          answer,
+          rawResponse,
+          diagnostics,
         }),
       );
     };
-    const encoded = rawResponse.toString("base64");
+    const visible = {
+      outcome: "answered",
+      request: { version: 1 },
+      answer: { verdict: "ok" },
+      rawResponse: bytes.rawResponse.toString("base64"),
+      diagnostics: bytes.diagnostics.toString("base64"),
+    };
 
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: logReader.role });
@@ -191,29 +200,19 @@ describe("GET /api/openappa/external-consults", () => {
         {
           role: "audience_source",
           outcome: "answered",
+          request: null,
           answer: null,
           rawResponse: null,
+          diagnostics: null,
         },
-        {
-          role: "annotator",
-          outcome: "answered",
-          answer: { verdict: "ok" },
-          rawResponse: encoded,
-        },
+        { role: "annotator", ...visible },
       ]),
     );
 
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: EDITOR_ROLE_NAME });
     expect(await exported()).toEqual(
-      expect.arrayContaining([
-        {
-          role: "audience_source",
-          outcome: "answered",
-          answer: { verdict: "ok" },
-          rawResponse: encoded,
-        },
-      ]),
+      expect.arrayContaining([{ role: "audience_source", ...visible }]),
     );
   });
 

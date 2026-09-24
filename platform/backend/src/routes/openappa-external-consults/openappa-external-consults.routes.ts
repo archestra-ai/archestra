@@ -48,7 +48,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source answers with people, so its `answer` and `rawResponse` are null for a caller without `member:read`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -112,9 +112,10 @@ function exporter(viewer: {
     const withheld = row.role === "audience_source" && !viewer.canSeeMembers;
     return {
       ...row,
+      request: withheld ? null : row.request,
       answer: withheld ? null : row.answer,
       rawResponse: withheld ? null : base64(row.rawResponse),
-      diagnostics: base64(row.diagnostics),
+      diagnostics: withheld ? null : base64(row.diagnostics),
     };
   };
 }

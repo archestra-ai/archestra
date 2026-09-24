@@ -838,6 +838,16 @@ button.plugin-featured-action::after {
   background-color: var(--color-amber-500);
 }
 
+/* ── OpenAPPA setup: policy text the wizard adds or just rewrote ── */
+
+.openappa-line-added {
+  background-color: color-mix(in oklab, var(--color-emerald-500) 12%, transparent);
+}
+
+.openappa-line-changed {
+  background-color: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
+}
+
 /* ── OpenAPPA policy editor: the line a source link points at ──
    A tinted row plus a solid bar in the line-decoration gutter, pulsed once on
    arrival so the eye lands on it before it settles. */

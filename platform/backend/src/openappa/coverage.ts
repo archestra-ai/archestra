@@ -104,17 +104,26 @@ class OpenAppaCoverageService {
     params: { organizationId: string } & CoverageEntitiesQuery &
       CoverageVisibility,
   ): Promise<CoverageEntitiesPage> {
-    const { entities } = await buildReport(params.organizationId, {
+    const { tools, entities } = await buildReport(params.organizationId, {
       ...params,
       // Server rows count inventory, not which Auto-mode agents can reach it.
       includeAutoModeTools: params.type !== "mcp_server",
     });
+    const tool = params.toolId
+      ? tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
+      : undefined;
+    const reaching = params.toolId
+      ? new Set(
+          tool ? [tool.catalogId, ...tool.agents.map((agent) => agent.id)] : [],
+        )
+      : null;
     const search = params.search?.toLowerCase();
     return page(
       entities.filter(
         (entity) =>
           (!search || entity.name.toLowerCase().includes(search)) &&
-          (!params.type || entity.type === params.type),
+          (!params.type || entity.type === params.type) &&
+          (!reaching || reaching.has(entity.id)),
       ),
       params,
     );
@@ -324,6 +333,7 @@ async function buildReport(
       prefix,
       name: toolName,
       fullName: tool.name,
+      readOnly: tool.readOnlyHint,
       agents,
     };
     const primary = matched.find((entry) => entry.rule.selector === null);

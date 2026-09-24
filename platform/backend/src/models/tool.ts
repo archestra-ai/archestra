@@ -2902,6 +2902,8 @@ class ToolModel {
       id: string;
       catalogId: string;
       name: string;
+      /** The MCP `readOnlyHint` annotation; null when the server gave none. */
+      readOnlyHint: boolean | null;
     }>;
     assignments: Array<{
       toolId: string;
@@ -3011,6 +3013,11 @@ class ToolModel {
           id: schema.toolsTable.id,
           catalogId: schema.toolsTable.catalogId,
           name: schema.toolsTable.name,
+          // Servers write `meta` freely; anything but a JSON boolean reads as unknown.
+          readOnlyHint: sql<boolean | null>`case
+            when jsonb_typeof(${schema.toolsTable.meta} -> 'annotations' -> 'readOnlyHint') = 'boolean'
+            then (${schema.toolsTable.meta} -> 'annotations' ->> 'readOnlyHint')::boolean
+          end`,
         })
         .from(schema.toolsTable)
         .where(toolConditions),

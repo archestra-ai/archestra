@@ -318,6 +318,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
+  ])("forwards Claude's provider-hosted advisor without treating it as a client call (stream=%s)", async (stream) => {
+    options = { includeToolUse: false };
+    const body = payload(stream);
+    const response = await post({
+      ...body,
+      tools: [
+        ...body.tools,
+        { type: "advisor_20260301", name: "advisor", model: "claude-opus-4-8" },
+      ],
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(JSON.stringify(providerRequests)).toContain("advisor_20260301");
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+  });
+
+  test.each([
+    true,
+    false,
   ])("a denied call reaches the client as a denial notice, with no extra provider request (stream=%s)", async (stream) => {
     block = true;
 

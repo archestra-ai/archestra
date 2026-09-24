@@ -683,6 +683,9 @@ export type GeminiGenerateContentRequestInput = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
+        googleMaps?: unknown;
+        enterpriseWebSearch?: unknown;
+        fileSearch?: unknown;
     }> | {
         functionDeclarations?: Array<{
             /**
@@ -729,6 +732,9 @@ export type GeminiGenerateContentRequestInput = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
+        googleMaps?: unknown;
+        enterpriseWebSearch?: unknown;
+        fileSearch?: unknown;
     };
     /**
      * Tool configuration for any Tool specified in the request.
@@ -848,6 +854,9 @@ export type GeminiGenerateContentRequestInput = {
             codeExecution?: unknown;
             googleSearch?: unknown;
             urlContext?: unknown;
+            googleMaps?: unknown;
+            enterpriseWebSearch?: unknown;
+            fileSearch?: unknown;
         }> | {
             functionDeclarations?: Array<{
                 /**
@@ -894,6 +903,9 @@ export type GeminiGenerateContentRequestInput = {
             codeExecution?: unknown;
             googleSearch?: unknown;
             urlContext?: unknown;
+            googleMaps?: unknown;
+            enterpriseWebSearch?: unknown;
+            fileSearch?: unknown;
         };
         /**
          * Tool configuration for any Tool specified in the request.
@@ -6983,6 +6995,9 @@ export type GeminiGenerateContentRequest = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
+        googleMaps?: unknown;
+        enterpriseWebSearch?: unknown;
+        fileSearch?: unknown;
     }> | {
         functionDeclarations?: Array<{
             /**
@@ -7029,6 +7044,9 @@ export type GeminiGenerateContentRequest = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
+        googleMaps?: unknown;
+        enterpriseWebSearch?: unknown;
+        fileSearch?: unknown;
     };
     /**
      * Tool configuration for any Tool specified in the request.
@@ -7148,6 +7166,9 @@ export type GeminiGenerateContentRequest = {
             codeExecution?: unknown;
             googleSearch?: unknown;
             urlContext?: unknown;
+            googleMaps?: unknown;
+            enterpriseWebSearch?: unknown;
+            fileSearch?: unknown;
         }> | {
             functionDeclarations?: Array<{
                 /**
@@ -7194,6 +7215,9 @@ export type GeminiGenerateContentRequest = {
             codeExecution?: unknown;
             googleSearch?: unknown;
             urlContext?: unknown;
+            googleMaps?: unknown;
+            enterpriseWebSearch?: unknown;
+            fileSearch?: unknown;
         };
         /**
          * Tool configuration for any Tool specified in the request.

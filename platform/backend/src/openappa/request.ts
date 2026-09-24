@@ -32,7 +32,7 @@ import {
   type DeclaredToolSpelling,
   declaredToolEntries,
   declaredToolNamespaces,
-  isResultGovernedHostedTool,
+  isClientRunToolType,
   providerHostedTool,
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
@@ -122,7 +122,65 @@ export function prepareAppaRequest(params: {
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  if (params.interactionType === "azure:responses" && declared.length > 0) {
+  refuseDeferredTools(declared);
+  refuseUnsupportedToolTypes(declared);
+  // Provider-run tools never return a client call to gate. Responses web search
+  // remains governed by the response adapter, not by its declaration.
+  const clientEntries = entries.filter((entry) => {
+    if (providerHostedTool(entry.tool)) return false;
+    if (
+      params.interactionType === "gemini:generateContent" &&
+      !entry.grouped &&
+      entry.name === undefined
+    ) {
+      // Only known Gemini server tools may be unnamed. Future tool types
+      // cannot silently bypass the client-call gate.
+      const tool = asRecord(entry.tool);
+      return (
+        !tool ||
+        Object.keys(tool).length === 0 ||
+        Object.keys(tool).some((key) => !GEMINI_HOSTED_TOOL_KEYS.has(key))
+      );
+    }
+    return true;
+  });
+  const hostedNames = new Set(
+    entries
+      .filter((entry) => !clientEntries.includes(entry) && entry.name)
+      .map((entry) =>
+        params.identity.canonicalize(entry.name as string, entry.namespace),
+      ),
+  );
+  const clientNames = new Set(
+    clientEntries
+      .filter((entry) => entry.name)
+      .map((entry) =>
+        params.identity.canonicalize(entry.name as string, entry.namespace),
+      ),
+  );
+  if ([...hostedNames].some((name) => clientNames.has(name))) {
+    throw new ApiError(
+      400,
+      "A provider-hosted tool conflicts with a client tool; rename or remove that declaration.",
+    );
+  }
+  if (
+    params.interactionType === "azure:responses" &&
+    declared.some((tool) =>
+      ["web_search", "web_search_preview"].includes(
+        asToolDeclaration(tool)?.type ?? "",
+      ),
+    )
+  ) {
+    throw new ApiError(
+      400,
+      "OpenAPPA cannot govern hosted web-search results on Azure Responses. Use OpenAI Responses or remove web search from this session.",
+    );
+  }
+  if (
+    params.interactionType === "azure:responses" &&
+    clientEntries.length > 0
+  ) {
     throw new ApiError(
       400,
       "OpenAPPA cannot govern tool traffic over Azure Responses. Use Azure Chat Completions or disable OpenAPPA for this client.",
@@ -204,7 +262,7 @@ export function prepareAppaRequest(params: {
 
   // A tool-free child can still return a value. Keep turn accounting available
   // without introducing tool governance for a tool-free root.
-  if (declared.length === 0) {
+  if (declared.length === 0 || (clientEntries.length === 0 && !family)) {
     return {
       tools: undefined,
       ...(historicalControlToolName ? { historicalControlToolName } : {}),
@@ -223,15 +281,9 @@ export function prepareAppaRequest(params: {
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
-  refuseProviderHostedTools({ family, declared });
-  refuseDeferredTools(declared);
-
   const customTools = new Set<string>();
   const declaredTools: DeclaredToolSpelling[] = [];
-  for (const entry of entries) {
-    // The provider runs it, so the client never names or calls it: its calls
-    // are ruled on from the response, not matched against a declared spelling.
-    if (isResultGovernedHostedTool({ family, tool: entry.tool })) continue;
+  for (const entry of clientEntries) {
     if (entry.name === undefined) {
       // A tool this proxy cannot name is a tool it cannot gate or render.
       throw new ApiError(
@@ -249,7 +301,7 @@ export function prepareAppaRequest(params: {
 
   const askUserDeclarations = platformDeclarationsOf(
     TOOL_ASK_USER_SHORT_NAME,
-    entries,
+    clientEntries,
     params.identity,
     params.trustBarePlatformTools === true,
   );
@@ -260,7 +312,7 @@ export function prepareAppaRequest(params: {
   const remedyTool = (shortName: ArchestraToolShortName) =>
     oneRemedyDeclaration({
       shortName,
-      entries,
+      entries: clientEntries,
       identity: params.identity,
     });
   let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
@@ -293,6 +345,25 @@ export function prepareAppaRequest(params: {
     // declaration carries no attestation and could never be trusted.
     if (params.identity.mode !== "attested") {
       const prefix = appaDeclarationPrefix({ control, notice });
+      if (
+        (!notice &&
+          hostedNames.has(
+            params.identity.canonicalize(
+              `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}`,
+            ),
+          )) ||
+        (!control &&
+          hostedNames.has(
+            params.identity.canonicalize(
+              `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}`,
+            ),
+          ))
+      ) {
+        throw new ApiError(
+          400,
+          "A provider-hosted tool conflicts with the OpenAPPA remedy tools; rename or remove that declaration.",
+        );
+      }
       if (!notice) {
         notice = { name: `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}` };
         appendDeclaredTool(params.body, family, notice.name);
@@ -315,7 +386,7 @@ export function prepareAppaRequest(params: {
 
   // The proxy, not the model, writes stamped arguments; the provider's schema
   // never offers them.
-  for (const { tool, name, namespace } of entries) {
+  for (const { tool, name, namespace } of clientEntries) {
     const isAskUser = askUserDeclarations.some(
       (declaration) =>
         declaration.name === name && declaration.namespace === namespace,
@@ -614,9 +685,14 @@ function appendDeclaredTool(
 
 /** Refuses sessions where tools are deferred to a provider tool search. */
 function refuseDeferredTools(declared: readonly unknown[]): void {
-  const deferred = declared.some(
-    (tool) => asToolDeclaration(tool)?.type === "tool_search",
-  );
+  const deferred = declared.some((tool) => {
+    const declaration = asToolDeclaration(tool);
+    return (
+      declaration?.type === "tool_search" ||
+      declaration?.type?.startsWith("tool_search_tool_") === true ||
+      declaration?.defer_loading === true
+    );
+  });
   if (deferred) {
     throw new ApiError(
       400,
@@ -625,22 +701,24 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
   }
 }
 
-/**
- * Refuses sessions declaring provider-hosted tools that bypass proxy gating.
- * A hosted tool whose result this wire can withhold is governed instead.
- */
-function refuseProviderHostedTools(params: {
-  family: AppaWireFamily | undefined;
-  declared: readonly unknown[];
-}): void {
-  for (const tool of params.declared) {
-    const hosted = providerHostedTool(tool);
-    if (!hosted) continue;
-    if (isResultGovernedHostedTool({ family: params.family, tool })) continue;
-    throw new ApiError(
-      400,
-      `OpenAPPA cannot govern the provider-hosted tool \`${hosted}\`, which runs inside the provider. Remove it from this session or disable OpenAPPA for this client.`,
-    );
+function refuseUnsupportedToolTypes(declared: readonly unknown[]): void {
+  for (const tool of declared) {
+    const type = asToolDeclaration(tool)?.type;
+    if (typeof type !== "string") continue;
+    if (
+      ["local_shell", "computer_use_preview", "computer_use"].includes(type)
+    ) {
+      throw new ApiError(
+        400,
+        `OpenAPPA cannot govern client-executed tool type \`${type}\` on this wire; its calls are not intercepted by the proxy.`,
+      );
+    }
+    if (!providerHostedTool(tool) && !isClientRunToolType(type)) {
+      throw new ApiError(
+        400,
+        `OpenAPPA cannot classify tool type \`${type}\` as provider-hosted or client-executed; declare a supported tool type before retrying.`,
+      );
+    }
   }
 }
 
@@ -668,12 +746,23 @@ function refuseCodexCodeMode(params: {
 
 type ToolDeclaration = {
   type?: string;
+  defer_loading?: boolean;
   name?: string;
   format?: unknown;
   additional_tools?: unknown;
   input?: unknown;
   tools?: unknown;
 };
+
+const GEMINI_HOSTED_TOOL_KEYS = new Set([
+  "googleSearchRetrieval",
+  "googleSearch",
+  "codeExecution",
+  "urlContext",
+  "googleMaps",
+  "enterpriseWebSearch",
+  "fileSearch",
+]);
 
 function asToolDeclaration(value: unknown): ToolDeclaration | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)

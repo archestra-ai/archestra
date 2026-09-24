@@ -264,6 +264,35 @@ describe("APPA feature boundary", () => {
     ).toEqual(["call:first", "call:second"]);
   });
 
+  test("names a member's email as the session principal, and nobody else's", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const member = await makeUser({ email: "alice@example.com" });
+    await makeMember(member.id, organizationId);
+    const outsider = await makeUser({ email: "mallory@example.com" });
+    const calls = [{ id: "first", name: "read_file", arguments: {} }];
+    const canonicalize = { canonicalize: (name: string) => name };
+
+    for (const callerId of [
+      `user:${member.id}`,
+      `user:${outsider.id}`,
+      "app:assistant",
+    ])
+      await evaluateToolCalls(
+        { ...session, caller_id: callerId },
+        calls,
+        canonicalize,
+      );
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(["alice@example.com", undefined, undefined]);
+  });
+
   test("holds what a provider-run call brought in behind the runtime's staged ruling", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);

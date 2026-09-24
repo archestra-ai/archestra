@@ -1,5 +1,6 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
 

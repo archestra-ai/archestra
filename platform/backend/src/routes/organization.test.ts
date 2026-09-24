@@ -1,10 +1,15 @@
+import { createHash } from "node:crypto";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -12,8 +17,8 @@ import McpServerModel from "@/models/mcp-server";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import { openappaBatteriesService } from "@/openappa/batteries";
+import { initialPolicy } from "@/services/guardrails-policy";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -66,7 +71,7 @@ describe("organization routes", () => {
   test("syncs built-in MCP branding when appName changes under full white labeling", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
-      .mockResolvedValue();
+      .mockResolvedValue([]);
 
     const response = await app.inject({
       method: "PATCH",
@@ -84,8 +89,70 @@ describe("organization routes", () => {
     });
   });
 
+  test("refuses an appName whose built-in tool prefix an MCP server already gives its tools", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const wasWhiteLabeled = config.enterpriseFeatures.fullWhiteLabeling;
+    config.enterpriseFeatures.fullWhiteLabeling = true;
+    try {
+      await makeInternalMcpCatalog({ organizationId, name: "acme copilot" });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { appName: "Acme Copilot" },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(
+        (await OrganizationModel.getById(organizationId))?.appName,
+      ).not.toBe("Acme Copilot");
+    } finally {
+      config.enterpriseFeatures.fullWhiteLabeling = wasWhiteLabeled;
+    }
+  });
+
+  test("a saved policy's built-in alias follows an appName change", async () => {
+    const wasWhiteLabeled = config.enterpriseFeatures.fullWhiteLabeling;
+    const wasEnabled = config.openappa.enabled;
+    config.enterpriseFeatures.fullWhiteLabeling = true;
+    config.openappa.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const content = initialPolicy();
+      await GuardrailsPolicyModel.save({
+        organizationId,
+        updatedBy: user.id,
+        content,
+        contentHash: createHash("sha256").update(content).digest("hex"),
+        expectedRevision: 0,
+      });
+      const archestra = async () =>
+        (
+          await openappaBatteriesService.policyDeclarations(organizationId)
+        ).batteries.find((battery) => battery.name === "archestra");
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { appName: "Acme Copilot" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await archestra()).toMatchObject({
+        status: "active",
+        servers: [
+          { target: "acme_copilot", catalogId: ARCHESTRA_MCP_CATALOG_ID },
+        ],
+      });
+    } finally {
+      config.enterpriseFeatures.fullWhiteLabeling = wasWhiteLabeled;
+      config.openappa.enabled = wasEnabled;
+    }
+  });
+
   test("re-brands the built-in skill rows when appName changes", async () => {
-    vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue();
+    vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue([]);
     const { syncBuiltInSkillsForOrganization } = await import(
       "@/database/seed"
     );
@@ -733,7 +800,7 @@ describe("organization routes", () => {
   test("does not resync built-in MCP branding when appName is unchanged", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
-      .mockResolvedValue();
+      .mockResolvedValue([]);
 
     const response = await app.inject({
       method: "PATCH",
@@ -748,7 +815,7 @@ describe("organization routes", () => {
   test("does not resync built-in MCP branding when only logo assets change", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
-      .mockResolvedValue();
+      .mockResolvedValue([]);
 
     const response = await app.inject({
       method: "PATCH",
@@ -766,7 +833,7 @@ describe("organization routes", () => {
   test("resyncs built-in MCP branding when iconLogo changes", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
-      .mockResolvedValue();
+      .mockResolvedValue([]);
 
     const response = await app.inject({
       method: "PATCH",

@@ -1,9 +1,9 @@
 import { CHANNEL_INSTRUCTIONS_MAX_LENGTH } from "@archestra/shared";
 import { vi } from "vitest";
 import { hasPermission } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ChatOpsChannelBindingModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 import chatopsRoutes from "./chatops";

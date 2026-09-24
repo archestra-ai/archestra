@@ -5,7 +5,10 @@ import { AgentTeamModel } from "@/models";
 
 vi.mock("@/auth");
 
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { afterEach, beforeEach, expect, test } from "@/test";
 
 let app: FastifyInstanceWithZod;

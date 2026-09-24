@@ -1,15 +1,21 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { PolicyEditInput } from "@archestra/openappa-rs";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import ToolModel from "@/models/tool";
+import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { helperUrlBase } from "@/openappa/declarations";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { bundledEntry, helperUrlBase } from "@/openappa/declarations";
 import {
   deleteRuntimeCredentialConnection,
   deleteRuntimeCredentialDefinition,
@@ -52,6 +58,8 @@ describe("guardrails batteries", () => {
     adminId = user.id;
     await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
     config.openappa.enabled = true;
+    // The shipped default governs the built-in tools, as every deployment seeds them.
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });
@@ -87,19 +95,27 @@ describe("guardrails batteries", () => {
     return { APPA_PROVIDER_GITHUB_TOKEN: "github-token" };
   };
 
-  const declarations = async () =>
-    (
+  /** The declarations view, less the battery the shipped default includes. */
+  const declarations = async () => {
+    const view = (
       await app.inject({
         method: "GET",
         url: "/api/openappa/policy-declarations",
       })
     ).json();
+    return {
+      ...view,
+      batteries: view.batteries.filter(
+        (battery: { entry: string }) => battery.entry !== SHIPPED_ENTRY,
+      ),
+    };
+  };
 
   /** The derived rows a recompose left, in the order the model returns them. */
   const installRows = async () =>
-    (await openappaBatteriesService.listBatteries(organizationId)).flatMap(
-      (battery) => battery.installs,
-    );
+    (await openappaBatteriesService.listBatteries(organizationId))
+      .filter((battery) => battery.name !== ARCHESTRA_BATTERY)
+      .flatMap((battery) => battery.installs);
 
   test("an install declares the battery and joins the composed policy once its credential is bound", async ({
     makeInternalMcpCatalog,
@@ -647,7 +663,13 @@ describe("guardrails batteries", () => {
     await guardrailsPolicyService.update({
       organizationId,
       userId: adminId,
-      content: `include = ["batteries/acme@sha256-${uploaded.json().contentHash}/appa.toml"]\n\n[server_aliases]\nacme = ["acme_gone"]\n\n${declared.content}`,
+      content: await edited(declared.content, [
+        {
+          kind: "addInclude",
+          entry: `batteries/acme@sha256-${uploaded.json().contentHash}/appa.toml`,
+        },
+        { kind: "bindServers", namespace: "acme", servers: ["acme_gone"] },
+      ]),
       expectedRevision: declared.revision,
     });
     expect(await declarations()).toMatchObject({
@@ -1294,3 +1316,16 @@ describe("guardrails batteries", () => {
     }
   });
 });
+
+const SHIPPED_ENTRY = bundledEntry(ARCHESTRA_BATTERY);
+
+async function edited(
+  content: string,
+  edits: PolicyEditInput[],
+): Promise<string> {
+  const native = await import("@archestra/openappa-rs");
+  const result = await native.editOpenappaPolicy(content, edits);
+  if (result.errors.length > 0 || !result.content)
+    throw new Error(`the policy edit failed: ${JSON.stringify(result.errors)}`);
+  return result.content;
+}

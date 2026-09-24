@@ -2,13 +2,13 @@ import type { AddressInfo } from "node:net";
 import { vi } from "vitest";
 import type { A2AExecuteParams } from "@/agents/a2a-executor";
 import config from "@/config";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const {

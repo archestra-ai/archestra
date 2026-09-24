@@ -10,6 +10,7 @@ import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
+import { archestraAudience } from "./archestra-audience";
 import { openappaDeclarations } from "./declarations";
 
 /**
@@ -122,6 +123,17 @@ class OpenAppaHelperBridge {
       (candidate) => candidate.name === params.externalName,
     );
     if (!battery || !external) return { kind: "not_found" };
+    if (
+      archestraAudience.serves({
+        batteryName: install.batteryName,
+        packageHash: install.packageHash,
+        externalName: external.name,
+      })
+    )
+      return archestraAudience.consult({
+        organizationId: install.organizationId,
+        request: params.request,
+      });
 
     const resolved = await Promise.all(
       battery.credentials.map((credential) =>

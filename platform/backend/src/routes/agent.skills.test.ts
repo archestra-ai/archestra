@@ -10,6 +10,8 @@ import { type Mock, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentExcludedToolModel,
@@ -19,8 +21,6 @@ import {
   ToolModel,
 } from "@/models";
 import SkillModel from "@/models/skill";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type InsertSkill, type Skill, type User } from "@/types";

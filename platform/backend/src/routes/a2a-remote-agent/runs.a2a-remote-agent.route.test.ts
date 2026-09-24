@@ -1,6 +1,7 @@
 import { A2aOutboundRunModel } from "@/models";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 

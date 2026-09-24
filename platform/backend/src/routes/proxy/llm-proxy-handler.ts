@@ -18,6 +18,7 @@ import {
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
+  isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
   OPENCODE_CLIENT_ID,
@@ -360,7 +361,7 @@ function resolveOpenAiCodexPassthrough(params: {
   if (
     provider.provider === "openai" &&
     provider.interactionType === "openai:responses" &&
-    originator === "codex_cli_rs" &&
+    isCodexOriginator(originator) &&
     accessToken &&
     isJwtLike(accessToken) &&
     accountId === undefined
@@ -373,7 +374,7 @@ function resolveOpenAiCodexPassthrough(params: {
     (readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !==
       "true" &&
       !(
-        originator === "codex_cli_rs" &&
+        isCodexOriginator(originator) &&
         accountId !== undefined &&
         accessToken &&
         isJwtLike(accessToken)
@@ -876,7 +877,7 @@ export async function handleLLMProxy<
     !passthroughVirtualKeyId &&
     provider.provider === "openai" &&
     provider.interactionType === "openai:responses" &&
-    readSingleHeader(request.raw.headers, "originator") === "codex_cli_rs" &&
+    isCodexOriginator(readSingleHeader(request.raw.headers, "originator")) &&
     isJwtLike(
       readSingleHeader(request.raw.headers, "authorization")?.match(
         /^Bearer\s+([^\s]+)$/i,

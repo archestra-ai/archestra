@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ModelModel from "@/models/model";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Model, User } from "@/types";
 

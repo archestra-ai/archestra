@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -7,6 +7,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import ToolModel from "@/models/tool";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
@@ -37,27 +38,35 @@ describe("bundled batteries", () => {
     expect(names).toContain("github");
     // A battery for another host's own tools has nothing to say here.
     expect(names).not.toContain("claude-code");
+    const input = (battery: (typeof bundled)[number]) => ({
+      entry: `batteries/${battery.name}/appa.toml`,
+      name: battery.name,
+      policy: battery.policy,
+      helpers:
+        battery.externals.length > 0
+          ? { urlBase: "http://127.0.0.1:9000/helpers/install", tokenEnv }
+          : undefined,
+    });
+    const shipped = bundled.filter((battery) => battery.name === "archestra");
+    expect(shipped).toHaveLength(1);
     for (const battery of bundled) {
-      const entry = `batteries/${battery.name}/appa.toml`;
-      const aliases = battery.namespaces
-        .map(
-          (namespace) =>
-            `${namespace} = ["${namespace.replaceAll("-", "_")}_prod"]`,
-        )
-        .join("\n");
+      const edited = await native.editOpenappaPolicy(
+        root.content,
+        shipped.includes(battery)
+          ? []
+          : [
+              { kind: "addInclude", entry: input(battery).entry },
+              ...battery.namespaces.map((namespace) => ({
+                kind: "bindServers",
+                namespace,
+                servers: [`${namespace.replaceAll("-", "_")}_prod`],
+              })),
+            ],
+      );
+      expect(edited.errors, battery.name).toEqual([]);
       const composed = await native.composeOpenappaPolicy({
-        root: `include = ["${entry}"]\n\n[server_aliases]\n${aliases}\n\n${root.content}`,
-        batteries: [
-          {
-            entry,
-            name: battery.name,
-            policy: battery.policy,
-            helpers:
-              battery.externals.length > 0
-                ? { urlBase: "http://127.0.0.1:9000/helpers/install", tokenEnv }
-                : undefined,
-          },
-        ],
+        root: edited.content ?? "",
+        batteries: [...new Set([...shipped, battery])].map(input),
       });
       expect(composed.errors, battery.name).toEqual([]);
     }
@@ -69,10 +78,38 @@ describe("composing an organization's declarations", () => {
     config.openappa.enabled = true;
   });
 
+  test("the shipped default governs the built-in tools with the archestra battery", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    expect(effective.lastError).toBeNull();
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        ({ batteryName, catalogId, status }) => ({
+          batteryName,
+          catalogId,
+          status,
+        }),
+      ),
+    ).toEqual([
+      {
+        batteryName: "archestra",
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        status: "active",
+      },
+    ]);
+  });
+
   test("recompiles a cached revision-zero policy when the shipped default changes", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     const initial =
       await openappaBatteriesService.getEffectivePolicy(organizationId);
     const oldContent = "[policy]\nversion = 2\n";

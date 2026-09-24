@@ -169,9 +169,18 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   fireEvent.click(
     screen.getByRole("button", { name: "Details for Research assistant" }),
   );
-  expect(await screen.findByRole("dialog")).toHaveTextContent(
-    "Organization · 3 tools reachable for you · 2 with active explicit rules · 1 may use the catch-all · 1 built-in tool",
-  );
+  const researchSummary = within(await screen.findByRole("dialog"));
+  expect(researchSummary.getByText("Organization")).toBeVisible();
+  for (const [value, label] of [
+    ["3", "tools reachable for you"],
+    ["2", "with explicit rules"],
+    ["1", "may use the catch-all"],
+    ["1", "built-in tool"],
+  ]) {
+    expect(researchSummary.getByText(label).parentElement).toHaveTextContent(
+      `${value}${label}`,
+    );
+  }
   expect(await screen.findByText("Built-in fallback")).toBeVisible();
   const dialog = screen.getByRole("dialog");
   expect(
@@ -192,9 +201,11 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   });
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   fireEvent.click(screen.getByRole("button", { name: "Details for GitHub" }));
-  expect(await screen.findByRole("dialog")).toHaveTextContent(
-    "MCP server · Personal · 19 synced tools · 4 with active explicit rules",
-  );
+  const githubSummary = within(await screen.findByRole("dialog"));
+  expect(
+    githubSummary.getByText("synced tools").parentElement,
+  ).toHaveTextContent("19synced tools");
+  expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
 });
 

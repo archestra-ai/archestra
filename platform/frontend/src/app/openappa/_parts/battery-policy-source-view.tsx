@@ -21,7 +21,9 @@ export function BatteryPolicySourceView({
 }) {
   const source = useBatteryPolicySource(entry);
   const onMount = useCallback<OnMount>(
-    (editor) => focusPolicyLine(editor, focusLine),
+    (editor) => {
+      focusPolicyLine(editor, focusLine);
+    },
     [focusLine],
   );
 

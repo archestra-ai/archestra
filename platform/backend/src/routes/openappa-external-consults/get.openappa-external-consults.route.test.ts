@@ -8,7 +8,10 @@ import {
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import routes from "./openappa-external-consults.routes";
@@ -138,6 +141,81 @@ describe("GET /api/openappa/external-consults", () => {
     ).toEqual([mine]);
   });
 
+  test("an audience source's consult is withheld from a caller who cannot read members", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const logReader = await makeCustomRole(organizationId, {
+      permission: { log: ["read"] },
+    });
+    const bytes = {
+      rawResponse: Buffer.from('{"version":1}'),
+      diagnostics: Buffer.from("helper stderr"),
+    };
+    const exported = async () => {
+      for (const role of ["audience_source", "annotator"] as const)
+        await seedConsult({
+          organizationId,
+          callerId: `user:${caller.id}`,
+          role,
+          ...bytes,
+        });
+      const json = (await list()).json().data;
+      const jsonl = (await list("?format=jsonl")).body
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(jsonl).toEqual(json);
+      return json.map(
+        ({
+          role,
+          outcome,
+          request,
+          answer,
+          rawResponse,
+          diagnostics,
+        }: Record<string, unknown>) => ({
+          role,
+          outcome,
+          request,
+          answer,
+          rawResponse,
+          diagnostics,
+        }),
+      );
+    };
+    const visible = {
+      outcome: "answered",
+      request: { version: 1 },
+      answer: { verdict: "ok" },
+      rawResponse: bytes.rawResponse.toString("base64"),
+      diagnostics: bytes.diagnostics.toString("base64"),
+    };
+
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: logReader.role });
+    expect(await exported()).toEqual(
+      expect.arrayContaining([
+        {
+          role: "audience_source",
+          outcome: "answered",
+          request: null,
+          answer: null,
+          rawResponse: null,
+          diagnostics: null,
+        },
+        { role: "annotator", ...visible },
+      ]),
+    );
+
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: EDITOR_ROLE_NAME });
+    expect(await exported()).toEqual(
+      expect.arrayContaining([{ role: "audience_source", ...visible }]),
+    );
+  });
+
   test("a caller without log:read is refused", async ({
     makeUser,
     makeMember,
@@ -180,6 +258,7 @@ async function seedConsult(params: {
   rawResponse?: Buffer;
   diagnostics?: Buffer;
   callerId?: string;
+  role?: "annotator" | "audience_source";
 }): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date(Date.now() - (params.secondsAgo ?? 0) * 1000);
@@ -191,7 +270,7 @@ async function seedConsult(params: {
     createdAt,
     startedAt: createdAt,
     durationMs: 12,
-    role: "annotator",
+    role: params.role ?? "annotator",
     externalName: params.externalName ?? "scan",
     backend: "url",
     request: { version: 1 },

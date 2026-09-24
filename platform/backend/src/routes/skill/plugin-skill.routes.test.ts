@@ -2,14 +2,8 @@ import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginSkillUsageEventModel } from "@/models";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";

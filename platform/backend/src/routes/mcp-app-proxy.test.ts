@@ -372,7 +372,9 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // Session (Archestra's own) render links the assets — no inline bundle.
     expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
       "<h1>hello app</h1>",
-      expect.stringContaining(`"id":"${user.id}"`),
+      expect.stringContaining(
+        `"user":{"id":"${user.id}","name":"${user.name}","email":"${user.email}"}`,
+      ),
       expect.any(String),
       expect.any(String),
       undefined,
@@ -1031,7 +1033,9 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // never fetches it).
     expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
       "<h1>hello app</h1>",
-      expect.stringContaining('"sdkUrl":null'),
+      expect.stringContaining(
+        `"user":{"id":"${user.id}","name":"${user.name}","email":"${user.email}"}`,
+      ),
       expect.any(String),
       expect.any(String),
       expect.objectContaining({
@@ -1039,6 +1043,13 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         shim: expect.any(String),
         baseCss: expect.any(String),
       }),
+    );
+    expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
+      "<h1>hello app</h1>",
+      expect.stringContaining('"sdkUrl":null'),
+      expect.any(String),
+      expect.any(String),
+      expect.any(Object),
     );
   });
 

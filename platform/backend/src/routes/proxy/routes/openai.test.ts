@@ -1227,6 +1227,55 @@ describe("OpenAI Responses proxy", () => {
     expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
+  test("routes a codex exec ChatGPT bearer to the subscription backend", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex exec subscription" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-exec-subscription",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (_apiKey, options) => {
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+    const accessToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature";
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+        originator: "codex_exec",
+        "user-agent": "codex_exec/0.156.1",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(capturedOptions?.openAiCodexPassthrough).toMatchObject({
+      accessToken,
+      accountId: "account_123",
+      originator: "codex_exec",
+    });
+  });
+
   test("does not forward a Codex ChatGPT bearer without proxy access", async ({
     makeAgent,
   }) => {
@@ -1281,6 +1330,22 @@ describe("OpenAI Responses proxy", () => {
     });
     expect(denied.statusCode).toBe(401);
 
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          models: [
+            {
+              slug: "gpt-5.6-sol",
+              display_name: "GPT-5.6 Sol",
+              context_window: 272000,
+              default_reasoning_level: "high",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchStub);
     const allowed = await app.inject({
       method: "GET",
       url: `/v1/openai/${agent.id}/models`,
@@ -1293,13 +1358,135 @@ describe("OpenAI Responses proxy", () => {
         expect.objectContaining({ object: "model", owned_by: "openai" }),
       ]),
     );
-    expect(allowed.json().models).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          slug: expect.any(String),
-          display_name: expect.any(String),
+    expect(allowed.json().models).toEqual([
+      {
+        slug: "gpt-5.6-sol",
+        display_name: "GPT-5.6 Sol",
+        context_window: 272000,
+        default_reasoning_level: "high",
+      },
+    ]);
+    expect(fetchStub).toHaveBeenCalledOnce();
+    expect(fetchStub.mock.calls[0]?.[0].toString()).toBe(
+      "https://chatgpt.com/backend-api/codex/models",
+    );
+    const forwardedHeaders = new Headers(fetchStub.mock.calls[0]?.[1]?.headers);
+    expect(forwardedHeaders.get("authorization")).toBe(headers.authorization);
+    expect(forwardedHeaders.get("chatgpt-account-id")).toBe("account_123");
+    expect(forwardedHeaders.get("originator")).toBe("codex_cli_rs");
+    expect(forwardedHeaders.has("x-archestra-virtual-key")).toBe(false);
+  });
+
+  test("reports an upstream models error without exposing the subscription token", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex models error" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-models-error",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const accessToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature";
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Forbidden", { status: 403 }))
+      .mockResolvedValueOnce(new Response("<html>Unavailable</html>"))
+      .mockRejectedValueOnce(new Error("network unavailable"));
+    vi.stubGlobal("fetch", fetchStub);
+
+    for (const status of [403, 502, 502]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/openai/${agent.id}/models`,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "x-archestra-virtual-key": passthroughToken,
+          "chatgpt-account-id": "account_123",
+          originator: "codex_exec",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(status);
+      expect(response.body).not.toContain(accessToken);
+    }
+    expect(fetchStub).toHaveBeenCalledTimes(3);
+  });
+
+  test("lists subscription models for codex exec without sending its bearer to OpenAI", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex exec models" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-exec-model-listing",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          models: [
+            {
+              slug: "gpt-5.6-sol",
+              display_name: "GPT-5.6 Sol",
+              context_window: 272000,
+            },
+          ],
         }),
-      ]),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const denied = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/models`,
+      headers: {
+        authorization:
+          "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
+        "chatgpt-account-id": "account_123",
+        originator: "codex_exec",
+      },
+    });
+    expect(denied.statusCode).toBe(401);
+    expect(fetchStub).not.toHaveBeenCalled();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/models?client_version=0.156.1`,
+      headers: {
+        authorization:
+          "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+        originator: "codex_exec",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().models).toEqual([
+      {
+        slug: "gpt-5.6-sol",
+        display_name: "GPT-5.6 Sol",
+        context_window: 272000,
+      },
+    ]);
+    expect(fetchStub).toHaveBeenCalledOnce();
+    expect(fetchStub.mock.calls[0]?.[0].toString()).toBe(
+      "https://chatgpt.com/backend-api/codex/models?client_version=0.156.1",
     );
   });
 

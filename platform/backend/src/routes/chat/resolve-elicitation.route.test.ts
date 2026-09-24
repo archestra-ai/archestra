@@ -2,14 +2,8 @@ import type { UIMessageChunk } from "ai";
 import { vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import chatRoutes from "./routes";
 
 // The shared cache the waiter and the answer route meet in, as a Map-backed

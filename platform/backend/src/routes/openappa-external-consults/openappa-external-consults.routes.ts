@@ -48,7 +48,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -60,12 +60,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       const { format, limit, cursor, from, to, ...rest } = query;
       // log:read scopes the export to the caller's own consults;
       // log:admin lifts it within the active organization.
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const [canSeeAllLogs, canSeeMembers] = await Promise.all([
+        userHasPermission(user.id, organizationId, "log", "admin"),
+        userHasPermission(user.id, organizationId, "member", "read"),
+      ]);
+      const toExport = exporter({ canSeeMembers });
       const filters = {
         ...rest,
         from: from ? new Date(from) : undefined,
@@ -96,7 +95,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           // describe one, so the cast only steps past the schema's type.
           return reply
             .type("application/x-ndjson")
-            .send(Readable.from(jsonLines(rows)) as never);
+            .send(Readable.from(jsonLines(rows, toExport)) as never);
         }
       }
     },
@@ -106,11 +105,18 @@ export default routes;
 
 // === Internal ===
 
-function toExport(row: ExternalConsult): ExternalConsultExport {
-  return {
-    ...row,
-    rawResponse: base64(row.rawResponse),
-    diagnostics: base64(row.diagnostics),
+function exporter(viewer: {
+  canSeeMembers: boolean;
+}): (row: ExternalConsult) => ExternalConsultExport {
+  return (row) => {
+    const withheld = row.role === "audience_source" && !viewer.canSeeMembers;
+    return {
+      ...row,
+      request: withheld ? null : row.request,
+      answer: withheld ? null : row.answer,
+      rawResponse: withheld ? null : base64(row.rawResponse),
+      diagnostics: withheld ? null : base64(row.diagnostics),
+    };
   };
 }
 
@@ -121,6 +127,7 @@ function base64(bytes: Uint8Array | null): string | null {
 
 async function* jsonLines(
   rows: AsyncIterable<ExternalConsult>,
+  toExport: (row: ExternalConsult) => ExternalConsultExport,
 ): AsyncGenerator<string> {
   for await (const row of rows) yield `${JSON.stringify(toExport(row))}\n`;
 }

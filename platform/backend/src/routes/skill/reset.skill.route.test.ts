@@ -1,19 +1,13 @@
 import { syncBuiltInSkills } from "@/database/seed";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   builtInSkillSourceRef,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
 

@@ -6,7 +6,7 @@ import type {
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
-import { INITIAL_POLICY } from "@/services/guardrails-policy";
+import { initialPolicy } from "@/services/guardrails-policy";
 import {
   BATTERY_CREDENTIAL_VARIABLE,
   type BatteryInstall,
@@ -398,7 +398,7 @@ async function latestRevision(
 ): Promise<{ content: string; revision: number }> {
   const latest = await GuardrailsPolicyModel.findLatest(organizationId);
   return {
-    content: latest?.content ?? INITIAL_POLICY,
+    content: latest?.content ?? initialPolicy(),
     revision: latest?.revision ?? 0,
   };
 }

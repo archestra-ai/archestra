@@ -4,7 +4,7 @@ import config from "@/config";
 import { GithubAppConfigModel } from "@/models";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { secretManager } from "@/secrets-manager";
-import { INITIAL_POLICY } from "@/services/guardrails-policy";
+import { initialPolicy } from "@/services/guardrails-policy";
 import { expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
@@ -16,7 +16,7 @@ import {
 const server = useMswServer();
 const baseSha = "a".repeat(40);
 const fileSha = "b".repeat(40);
-const changed = `${INITIAL_POLICY}\n# Reviewable policy change\n`;
+const changed = `${initialPolicy()}\n# Reviewable policy change\n`;
 
 test("a locally managed change validates and saves a new revision", async ({
   makeOrganization,
@@ -40,7 +40,7 @@ test("a locally managed change validates and saves a new revision", async ({
   expect(result).toMatchObject({
     delivery: "revision",
     revision: 1,
-    before: INITIAL_POLICY,
+    before: initialPolicy(),
     after: changed,
   });
 });
@@ -86,8 +86,8 @@ test("GitHub sync creates a policy PR with the configured App and reports its st
     organizationId: org.id,
     revision: source.revision,
     outcome: {
-      content: INITIAL_POLICY,
-      contentHash: createHash("sha256").update(INITIAL_POLICY).digest("hex"),
+      content: initialPolicy(),
+      contentHash: createHash("sha256").update(initialPolicy()).digest("hex"),
       sourceCommit: baseSha,
     },
   });
@@ -177,7 +177,7 @@ test("GitHub sync creates a policy PR with the configured App and reports its st
     delivery: "pull_request",
     number: 17,
     url: "https://github.com/example/policies/pull/17",
-    before: INITIAL_POLICY,
+    before: initialPolicy(),
     after: changed,
   });
   expect(

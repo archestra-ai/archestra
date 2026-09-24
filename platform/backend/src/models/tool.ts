@@ -2106,14 +2106,28 @@ class ToolModel {
     return tools.map((tool) => tool.id);
   }
 
+  /** Re-brands the built-in tools; returns the ones whose names moved. */
   static async syncArchestraBuiltInCatalog(params: {
     organization: Pick<Organization, "appName" | "iconLogo"> | null;
-  }): Promise<void> {
+  }): Promise<Array<{ oldName: string; newName: string }>> {
+    const names = () =>
+      db
+        .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+    const before = await names();
     archestraMcpBranding.syncFromOrganization(params.organization);
     await ToolModel.seedArchestraTools(
       ARCHESTRA_MCP_CATALOG_ID,
       params.organization,
     );
+    const after = new Map((await names()).map((tool) => [tool.id, tool.name]));
+    return before.flatMap((tool) => {
+      const newName = after.get(tool.id);
+      return newName !== undefined && newName !== tool.name
+        ? [{ oldName: tool.name, newName }]
+        : [];
+    });
   }
 
   /**

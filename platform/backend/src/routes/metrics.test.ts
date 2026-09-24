@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, describe, expect, test } from "@/test";
 
 vi.mock("fastify-metrics", () => ({
@@ -24,10 +25,9 @@ vi.mock("@/config", async () =>
 );
 
 import {
-  createFastifyInstance,
   registerMetricsPlugin,
   registerStandaloneMetricsEndpoint,
-} from "@/server";
+} from "@/metrics-registration";
 import { HEALTH_PATH, METRICS_PATH } from "./route-paths";
 
 describe("metrics routes", () => {

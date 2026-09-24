@@ -5,19 +5,24 @@ description: Use when writing or modifying Archestra backend unit tests (platfor
 
 # Archestra Backend Unit Tests
 
-Run commands from `platform/` unless specifically instructed otherwise. Run a single file with `cd backend && npx vitest run <file>`.
+Run commands from `platform/` unless specifically instructed otherwise. Run a single file with `pnpm --dir backend exec vitest run <file>`.
 
-## The two vitest projects (why mocking style matters)
+## Test projects and database opt-in
 
-`backend/vitest.config.ts` splits test files into two projects at config-load time by grepping file content:
+Use `*.unit.test.ts` only for tests whose runtime import graph is database-free. These files run without PGlite setup or the migrated database snapshot. Import assertions and lifecycle functions directly from `vitest`; do not import `@/test`, database fixtures, models, or the server entry point. Keep the code under test free of those runtime imports too. `pnpm --dir backend check:test-imports` checks this transitive boundary with dependency-cruiser. Type-only imports are fine because they do not load code at runtime.
 
-- **`clean`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache, so the backend module graph is imported once per worker instead of once per file. This is the fast path.
-- **`mocked`** — files using module mocking keep full isolation, because Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894).
+Use ordinary `*.test.ts` for tests that need real database behavior, fixtures, or route integration. They opt into the PGlite setup and migrated snapshot. Never rename a database-backed test to `*.unit.test.ts` merely to make it run faster.
+
+Within each group, `backend/vitest.config.ts` splits files by module mocking at config-load time:
+
+- **`clean` / `unit`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
+- **`mocked` / `unit-mocked`** — files using module mocking keep full isolation, because Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894).
 
 Consequences:
 
 - **Prefer not mocking modules at all.** Every file that drops its last `vi.mock` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
-- Routing is automatic — never maintain a file list; adding `vi.mock` to a file safely moves it to the isolated project on the next run.
+- Database selection follows the explicit filename suffix; mock isolation is automatic. Adding `vi.mock` to a file safely moves it to the isolated project on the next run.
+- Route tests import `createFastifyInstance` and `FastifyInstanceWithZod` from `@/fastify-instance`, and `useRouteTestApp` from `@/test/route-test-app`. Do not import `@/server` in tests or re-export the route helper from the general `@/test` barrel; both load the server startup graph into unrelated tests.
 
 ## HTTP boundary mocking (instead of vi.mock on client libraries)
 
@@ -92,11 +97,11 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
 
 ## Database
 
-- Never mock `@/database` or model modules for DB behavior — every file gets a real PGlite loaded from a pre-migrated snapshot (`src/test/global-setup.ts` + `src/test/setup.ts`); tables are truncated between tests.
+- Never mock `@/database` or model modules for DB behavior — database-backed files get a real PGlite loaded from a pre-migrated snapshot (`src/test/global-setup.ts` + `src/test/setup.ts`); tables are truncated between tests. `*.unit.test.ts` files have no PGlite setup.
 - Create data through fixtures from `@/test` (`makeUser`, `makeOrganization`, `makeAgent`, ...) — see the Backend Test Fixtures section in platform/AGENTS.md.
 - On file teardown the injected DB is cleared: module-level code that runs between files gets getDb()'s "Database not initialized" (a handled condition), never a closed PGlite.
 
 ## Performance etiquette
 
 - The suite's budget is module-import cost. Heavy new top-level imports in widely-imported modules cost every worker; test-only helpers belong under `src/test/`.
-- Local full-suite runs cap workers at half the cores (config) so the machine stays usable, further bounded by a ~5 GB-per-fork memory cap; CI uses all cores under the same memory cap and runs 4 shards via `vitest run --shard=k/4` behind the `Backend Unit Tests` gate job.
+- Local full-suite runs cap workers at half the cores (config) so the machine stays usable, further bounded by a ~5 GB-per-fork memory cap; CI uses all cores under the same memory cap and runs 8 shards via `vitest run --shard=k/8` behind the `Backend Unit Tests` gate job.

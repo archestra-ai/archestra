@@ -1,8 +1,8 @@
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types";

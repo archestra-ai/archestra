@@ -262,7 +262,9 @@ export async function buildAppUiResource(
         text: await injectAppSdk(
           head.html,
           {
-            user: viewer ? { id: viewer.id, name: viewer.name } : null,
+            user: viewer
+              ? { id: viewer.id, name: viewer.name, email: viewer.email }
+              : null,
             tools: await buildAppSdkTools(appId, tokenAuth),
             appId,
             version: head.version,

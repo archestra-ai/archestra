@@ -84,7 +84,7 @@ export interface AppSdkTool {
  * @public — consumed by the injection tests, which knip --production ignores
  */
 export interface AppSdkContext {
-  user: { id: string; name: string } | null;
+  user: { id: string; name: string; email: string } | null;
   tools: AppSdkTool[];
   appId: string;
   version: number;

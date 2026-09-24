@@ -1022,6 +1022,57 @@ class TeamModel {
     }));
   }
 
+  /**
+   * The emails of every user who can reach what is shared with the team named
+   * by id or name in the organization: its direct members and the members of
+   * its descendant teams, since membership in a child team inherits access from
+   * every ancestor. `ambiguous` when several teams carry the name.
+   */
+  static async findSubtreeMemberEmails(params: {
+    organizationId: string;
+    idOrName: string;
+    limit: number;
+  }): Promise<
+    | { kind: "found"; emails: string[] }
+    | { kind: "missing" }
+    | { kind: "ambiguous" }
+  > {
+    const hierarchy = await db
+      .select({
+        id: schema.teamsTable.id,
+        name: schema.teamsTable.name,
+        parentId: schema.teamsTable.parentId,
+      })
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.organizationId, params.organizationId));
+    const byId = hierarchy.find((team) => team.id === params.idOrName);
+    const byName = hierarchy.filter((team) => team.name === params.idOrName);
+    const root = byId ?? (byName.length === 1 ? byName[0] : undefined);
+    if (!root) return { kind: byName.length > 1 ? "ambiguous" : "missing" };
+
+    const subtree = [
+      root.id,
+      ...TeamModel.findDescendants(hierarchy, root.id).map((team) => team.id),
+    ];
+    const rows = await db
+      .selectDistinct({ email: schema.usersTable.email })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.usersTable.id),
+          eq(schema.membersTable.organizationId, params.organizationId),
+        ),
+      )
+      .where(inArray(schema.teamMembersTable.teamId, subtree))
+      .limit(params.limit);
+    return { kind: "found", emails: rows.map((row) => row.email) };
+  }
+
   // ==========================================
   // External Group Sync Methods
   // ==========================================

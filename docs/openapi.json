@@ -1844,7 +1844,10 @@
                     },
                     "codeExecution": {},
                     "googleSearch": {},
-                    "urlContext": {}
+                    "urlContext": {},
+                    "googleMaps": {},
+                    "enterpriseWebSearch": {},
+                    "fileSearch": {}
                   },
                   "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                 }
@@ -1922,7 +1925,10 @@
                   },
                   "codeExecution": {},
                   "googleSearch": {},
-                  "urlContext": {}
+                  "urlContext": {},
+                  "googleMaps": {},
+                  "enterpriseWebSearch": {},
+                  "fileSearch": {}
                 },
                 "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
               }
@@ -2187,7 +2193,10 @@
                         },
                         "codeExecution": {},
                         "googleSearch": {},
-                        "urlContext": {}
+                        "urlContext": {},
+                        "googleMaps": {},
+                        "enterpriseWebSearch": {},
+                        "fileSearch": {}
                       },
                       "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                     }
@@ -2265,7 +2274,10 @@
                       },
                       "codeExecution": {},
                       "googleSearch": {},
-                      "urlContext": {}
+                      "urlContext": {},
+                      "googleMaps": {},
+                      "enterpriseWebSearch": {},
+                      "fileSearch": {}
                     },
                     "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
                   }
@@ -22367,7 +22379,10 @@
                     },
                     "codeExecution": {},
                     "googleSearch": {},
-                    "urlContext": {}
+                    "urlContext": {},
+                    "googleMaps": {},
+                    "enterpriseWebSearch": {},
+                    "fileSearch": {}
                   },
                   "additionalProperties": false,
                   "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22449,7 +22464,10 @@
                   },
                   "codeExecution": {},
                   "googleSearch": {},
-                  "urlContext": {}
+                  "urlContext": {},
+                  "googleMaps": {},
+                  "enterpriseWebSearch": {},
+                  "fileSearch": {}
                 },
                 "additionalProperties": false,
                 "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22724,7 +22742,10 @@
                         },
                         "codeExecution": {},
                         "googleSearch": {},
-                        "urlContext": {}
+                        "urlContext": {},
+                        "googleMaps": {},
+                        "enterpriseWebSearch": {},
+                        "fileSearch": {}
                       },
                       "additionalProperties": false,
                       "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -22806,7 +22827,10 @@
                       },
                       "codeExecution": {},
                       "googleSearch": {},
-                      "urlContext": {}
+                      "urlContext": {},
+                      "googleMaps": {},
+                      "enterpriseWebSearch": {},
+                      "fileSearch": {}
                     },
                     "additionalProperties": false,
                     "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n"
@@ -329089,7 +329113,7 @@
                           "slug",
                           "display_name"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": {}
                       }
                     }
                   },
@@ -329420,7 +329444,7 @@
                           "slug",
                           "display_name"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": {}
                       }
                     }
                   },
@@ -335150,7 +335174,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
         "parameters": [
           {
             "schema": {

@@ -1,5 +1,6 @@
 import { OrganizationModel, SkillMarketplaceRepoModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillMarketplaceRoutes from "./skill-marketplace.routes";
 
 describe("GET /api/skill-marketplace", () => {

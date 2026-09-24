@@ -1,8 +1,8 @@
 import type { RouteId } from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { type Mock, vi } from "vitest";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 

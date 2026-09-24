@@ -3,10 +3,10 @@ import { vi } from "vitest";
 import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import OrganizationRoleModel from "@/models/organization-role";
 import TeamModel from "@/models/team";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 

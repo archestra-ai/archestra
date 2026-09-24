@@ -6,18 +6,14 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
+import { isOpenAppaChatPath } from "@/lib/openappa-routes";
 import { BatteriesUploadAction } from "./batteries-panel";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The setup wizard lays out its own page: no tabs, the wizard column.
   if (pathname === "/openappa/setup") return children;
-  const isChat =
-    pathname === "/openappa/configure" ||
-    (pathname.startsWith("/openappa/") &&
-      !["/openappa/batteries", "/openappa/policy", "/openappa/chat"].includes(
-        pathname,
-      ));
+  const isChat = isOpenAppaChatPath(pathname);
 
   return (
     <PageLayout

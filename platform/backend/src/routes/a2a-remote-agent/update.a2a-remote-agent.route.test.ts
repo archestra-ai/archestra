@@ -4,7 +4,8 @@ import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentToolModel from "@/models/agent-tool";
 import { secretManager } from "@/secrets-manager";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import {
   makeAgentCard,

@@ -847,3 +847,36 @@ button.plugin-featured-action::after {
 .openappa-line-changed {
   background-color: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
 }
+
+/* ── OpenAPPA policy editor: the line a source link points at ──
+   A tinted row plus a solid bar in the line-decoration gutter, pulsed once on
+   arrival so the eye lands on it before it settles. */
+
+.openappa-focus-line {
+  background-color: color-mix(in oklab, var(--color-blue-500) 22%, transparent);
+  animation: openappa-focus-line-pulse 1.4s ease-out;
+}
+
+.openappa-focus-line-gutter {
+  width: 3px !important;
+  margin-left: 3px;
+  border-radius: 2px;
+  background-color: var(--color-blue-500);
+}
+
+@keyframes openappa-focus-line-pulse {
+  0%,
+  30% {
+    background-color: color-mix(
+      in oklab,
+      var(--color-blue-500) 45%,
+      transparent
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .openappa-focus-line {
+    animation: none;
+  }
+}

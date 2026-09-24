@@ -151,7 +151,7 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   expect(
     within(dialog).queryByRole("button", { name: "Done" }),
   ).not.toBeInTheDocument();
-  await user.click(within(dialog).getByRole("button", { name: "Close" }));
+  await user.keyboard("{Escape}");
   expect(
     screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
   ).toHaveTextContent("Discard unsaved changes");

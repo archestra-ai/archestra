@@ -125,6 +125,23 @@ it("explains organization-wide access without making inherited permissions edita
       sourceScope: "*",
     },
   ];
+  // The viewer can read the all-entries policy but not manage it.
+  server.use(
+    http.get(
+      `${origin}/api/resource-permissions/mcpRegistry/:scope`,
+      ({ request }) => {
+        if (!decodeURIComponent(new URL(request.url).pathname).endsWith("/*"))
+          return HttpResponse.json(policy);
+        return HttpResponse.json({
+          ...policy,
+          scope: "*",
+          grants: [],
+          inheritedGrants: [],
+          effectiveActions: ["read"],
+        });
+      },
+    ),
+  );
   const user = userEvent.setup();
   renderEditor();
   const allSource = await screen.findByRole("button", {
@@ -135,10 +152,10 @@ it("explains organization-wide access without making inherited permissions edita
     await screen.findByRole("dialog", { name: "Access source for Editor" }),
   ).toHaveTextContent("every MCP registry entry, including new ones");
   expect(
-    screen.getByRole("button", {
+    screen.queryByRole("button", {
       name: "permissions for all MCP registry entries",
     }),
-  ).toBeInTheDocument();
+  ).not.toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(allSource).toHaveFocus();
   allSource.focus();

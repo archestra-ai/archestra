@@ -112,7 +112,7 @@ describe("recompile coalescing", () => {
       afterWrite,
       alsoAfterWrite,
     ]);
-    expect(native.composed).toEqual([[], ["acme"]]);
+    expect(native.composed).toEqual([["archestra"], ["archestra", "acme"]]);
     expect(second.installFingerprint).not.toBe(first.installFingerprint);
     expect(third.installFingerprint).toBe(second.installFingerprint);
     expect(
@@ -214,7 +214,13 @@ async function storeUnrelatedComposition(organizationId: string) {
  */
 async function declare(params: { organizationId: string; userId: string }) {
   const latest = await guardrailsPolicyService.get(params.organizationId);
-  const content = `include = ["batteries/acme/appa.toml"]\n\n[server_aliases]\nacme = ["acme"]\n\n${latest.content}`;
+  const { editOpenappaPolicy } = await import("@archestra/openappa-rs");
+  const edited = await editOpenappaPolicy(latest.content, [
+    { kind: "addInclude", entry: "batteries/acme/appa.toml" },
+    { kind: "bindServers", namespace: "acme", servers: ["acme"] },
+  ]);
+  if (!edited.content) throw new Error(edited.errors.join("\n"));
+  const content = edited.content;
   const saved = await GuardrailsPolicyModel.save({
     organizationId: params.organizationId,
     updatedBy: params.userId,

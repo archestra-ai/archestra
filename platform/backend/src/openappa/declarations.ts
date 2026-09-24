@@ -15,6 +15,7 @@ import type {
   BatterySource,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import { archestraAudience } from "./archestra-audience";
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -299,13 +300,28 @@ class OpenAppaDeclarations {
     return grants;
   }
 
-  /** The batteries bundled with the pinned OpenAPPA checkout. */
+  /**
+   * The batteries bundled with the pinned OpenAPPA checkout. One whose helpers
+   * the platform answers itself reads no credential and needs no setup.
+   */
   async bundledBatteries(): Promise<NativeBatteryPackage[]> {
     const native = await loadNative();
-    this.bundled ??= native.listBundledOpenappaBatteries().catch((error) => {
-      this.bundled = null;
-      throw error;
-    });
+    this.bundled ??= native
+      .listBundledOpenappaBatteries()
+      .then((batteries) =>
+        batteries.map((battery) =>
+          archestraAudience.servesBattery({
+            batteryName: battery.name,
+            packageHash: null,
+          })
+            ? { ...battery, credentials: [], setup: undefined }
+            : battery,
+        ),
+      )
+      .catch((error) => {
+        this.bundled = null;
+        throw error;
+      });
     return this.bundled;
   }
 

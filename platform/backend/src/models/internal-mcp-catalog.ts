@@ -1,3 +1,4 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import {
   and,
   count,
@@ -13,6 +14,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -676,6 +678,43 @@ class InternalMcpCatalogModel {
   }
 
   /**
+   * Whether a catalog of this name would give its tools the prefix the built-in
+   * server's tools carry in every organization.
+   */
+  static takesBuiltInToolPrefix(name: string): boolean {
+    return (
+      ToolModel.sanitizeServerNameForSlug(name) ===
+      archestraMcpBranding.serverName
+    );
+  }
+
+  /** Live organization catalogs whose tools take the built-in tools' prefix. */
+  static async findTakingBuiltInToolPrefix(): Promise<
+    Array<{ id: string; organizationId: string }>
+  > {
+    const rows = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+        organizationId: schema.internalMcpCatalogTable.organizationId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+          isNotNull(schema.internalMcpCatalogTable.organizationId),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
+    return rows.flatMap(({ id, name, organizationId }) =>
+      organizationId !== null &&
+      InternalMcpCatalogModel.takesBuiltInToolPrefix(name)
+        ? [{ id, organizationId }]
+        : [],
+    );
+  }
+
+  /**
    * Root-catalog lookup within an organization by sanitized tool-slug prefix —
    * the rename 409 gate. Tool names embed `sanitizeServerNameForSlug(name)` and
    * tool-call routing resolves purely by name string, so a sibling catalog whose
@@ -688,6 +727,8 @@ class InternalMcpCatalogModel {
     name: string;
     organizationId: string;
   }): Promise<{ id: string } | null> {
+    if (InternalMcpCatalogModel.takesBuiltInToolPrefix(params.name))
+      return { id: ARCHESTRA_MCP_CATALOG_ID };
     const targetSlug = ToolModel.sanitizeServerNameForSlug(params.name);
     const rows = await db
       .select({

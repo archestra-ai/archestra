@@ -1,9 +1,10 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-batteries.routes";
@@ -16,6 +17,8 @@ describe("guardrails battery matches", () => {
     const user = await makeUser();
     await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
     config.openappa.enabled = true;
+    // The shipped default governs the built-in tools, as every deployment seeds them.
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });

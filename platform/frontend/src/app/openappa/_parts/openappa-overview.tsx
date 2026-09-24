@@ -8,22 +8,25 @@ import { GithubSyncNotice } from "./github-sync-notice";
 import { PolicyChatStarter } from "./policy-chat-starter";
 
 export function OpenAppaOverview({
-  conversationId,
   initialPrompt,
+  conversationId,
 }: {
-  conversationId?: string;
   initialPrompt?: string;
+  conversationId?: string;
 }) {
-  const [chatStarted, setChatStarted] = useState(Boolean(conversationId));
+  const [chatStarted, setChatStarted] = useState(false);
+  const showChat = chatStarted || Boolean(conversationId);
   return (
-    <div className={chatStarted ? "" : "space-y-6"}>
+    <div
+      className={`flex min-h-[28rem] flex-1 flex-col ${showChat ? "" : "gap-6"}`}
+    >
       <div
         data-openappa-notices
         className="grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out"
         style={{
-          gridTemplateRows: chatStarted ? "0fr" : "1fr",
-          opacity: chatStarted ? 0 : 1,
-          transform: chatStarted ? "translateY(-8px)" : "translateY(0)",
+          gridTemplateRows: showChat ? "0fr" : "1fr",
+          opacity: showChat ? 0 : 1,
+          transform: showChat ? "translateY(-8px)" : "translateY(0)",
         }}
       >
         <div className="min-h-0 space-y-2 overflow-hidden">
@@ -45,8 +48,8 @@ export function OpenAppaOverview({
         </div>
       </div>
       <PolicyChatStarter
-        initialConversationId={conversationId}
         initialPrompt={initialPrompt}
+        conversationId={conversationId}
         onConversationStart={() => setChatStarted(true)}
       />
     </div>

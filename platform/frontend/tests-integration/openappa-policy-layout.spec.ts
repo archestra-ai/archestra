@@ -1,3 +1,4 @@
+import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
 for (const viewport of [
@@ -25,6 +26,21 @@ for (const viewport of [
       });
       await mswControl.use({
         method: "get",
+        url: "/api/openappa/coverage/entities",
+        body: {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: 10,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        },
+      });
+      await mswControl.use({
+        method: "get",
         url: "/api/guardrails-policy",
         body: {
           organizationId: "org",
@@ -44,6 +60,21 @@ for (const viewport of [
       await mswControl.use({
         method: "get",
         url: "/api/credentials",
+        body: [],
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/llm-provider-api-keys",
+        body: [makeLlmProviderApiKey({ provider: "openai" })],
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/llm-provider-api-keys/available",
+        body: [makeLlmProviderApiKey({ provider: "openai" })],
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/llm-models/available",
         body: [],
       });
       await mswControl.use({
@@ -113,7 +144,7 @@ for (const viewport of [
         path: testInfo.outputPath("policy-source.png"),
         fullPage: true,
       });
-      await page.goto("/openappa");
+      await page.goto("/openappa/configure");
       await page.getByRole("button", { name: "Set up GitHub sync" }).click();
       const dialog = page.getByRole("dialog", {
         name: "Connect APPA to GitHub",
@@ -148,6 +179,34 @@ for (const viewport of [
       // The repository field holds an unsaved value, so Cancel asks first.
       await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
+      await page.goto("/openappa");
+      await expect(
+        page.getByRole("link", { name: "Configure with chat" }),
+      ).toHaveCount(0);
+      await page.goto("/openappa/policy");
+      await expect(page.getByText("Configure with the agent")).toHaveCount(0);
+      await page.getByRole("link", { name: "Configure with chat" }).click();
+      await expect(page).toHaveURL(/\/openappa\/configure$/);
+      await expect(
+        page.getByRole("region", { name: "Change OpenAPPA policy with chat" }),
+      ).toBeVisible();
+      await expect(page.getByText("Selected automatically")).toBeVisible();
+      const policyPrompt = page.getByPlaceholder(
+        "Ask about or change your policy…",
+      );
+      await policyPrompt.scrollIntoViewIfNeeded();
+      await expect(policyPrompt).toBeInViewport();
+      await page.screenshot({
+        path: testInfo.outputPath("configure-chat.png"),
+        fullPage: true,
+      });
+      await expect(page.getByRole("link", { name: "Batteries" })).toHaveCount(
+        0,
+      );
+      await page.getByRole("link", { name: "Policy", exact: true }).click();
+      await expect(page).toHaveURL(/\/openappa\/policy$/);
+      await page.goto("/openappa/chat");
+      await expect(page).toHaveURL(/\/openappa\/configure$/);
       await page.goto("/openappa/policy");
       await expect(policySource).toBeInViewport();
     });

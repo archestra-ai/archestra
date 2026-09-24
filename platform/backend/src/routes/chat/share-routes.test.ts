@@ -71,6 +71,41 @@ describe("chat share routes", () => {
     });
   });
 
+  test("rejects sharing and forking a previously shared policy conversation", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId);
+    const agent = await makeAgent({ organizationId, teams: [] });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      origin: "openappa",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/share`,
+      payload: { visibility: "organization" },
+    });
+    expect(response.statusCode).toBe(400);
+
+    const legacyShare = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: currentUser.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+    const fork = await app.inject({
+      method: "POST",
+      url: `/api/chat/shared/${legacyShare.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+    expect(fork.statusCode).toBe(400);
+  });
+
   test("rejects users outside the organization", async ({
     makeAgent,
     makeMember,

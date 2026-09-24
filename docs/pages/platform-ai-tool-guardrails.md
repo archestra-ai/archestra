@@ -22,11 +22,15 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the worksp
 
 The feature makes the workspace available; the switch controls enforcement. Check the policy before turning it on. The starting catch-all rule adds no restrictions to individual tools.
 
+## Policy Targets
+
+Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. Filter by server or policy source, then follow a source link to the rule in the organization policy or included battery.
+
 ## Configure with the Agent
 
-Open **OpenAPPA → Overview** and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
+Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
 
-The agent needs an available LLM provider key. If none is configured, the Overview page offers provider setup. Configuration sessions reopen inside the OpenAPPA workspace.
+The agent needs an available LLM provider key. If none is configured, the configuration chat offers provider setup. Configuration sessions appear in AI chat history. Reopen one there to continue the conversation with its agent and model fixed.
 
 Ask the agent to identify the tools and data flows you want to govern. Review its proposed diff and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
 
@@ -34,9 +38,7 @@ The agent can save a validated local revision. If you [connect GitHub sync](#git
 
 ## Policy and Effective Policy
 
-Open **OpenAPPA → Policy** to inspect your policy. Its **Policy** subtab shows `organization.appa.toml`, the source for your organization's rules. It is a read-only reference; use the agent to propose changes. The **Effective policy** subtab shows the document OpenAPPA composed from that source and its included batteries.
-
-![The read-only policy view and its configuration-agent shortcut](/docs/automated_screenshots/platform-openappa_policy.webp)
+Open **OpenAPPA → Policy** to inspect your policy. In the **Policy** subtab, choose `organization.appa.toml` or search included batteries. The selector shows each battery's status. Select a source tag in **Overview** to open its matching TOML line here. These files are read-only references; use the agent to propose changes. The **Effective policy** subtab shows the composed document.
 
 Review the effective policy after a change. It reports batteries that could not become active and shows the last working document if composition fails.
 
@@ -60,7 +62,7 @@ Helpers run in the [code execution sandbox](./platform-code-sandbox). Enable tha
 
 ## GitHub Policy Review
 
-Administrators can connect a repository and GitHub App from **OpenAPPA → Overview** or **Settings → OpenAPPA**. The agent then creates a pull request for a policy change. The new policy takes effect after the pull request is merged and the repository sync succeeds.
+Administrators can connect a repository and GitHub App from the configuration chat or **Settings → OpenAPPA**. The agent then creates a pull request for a policy change. The new policy takes effect after the pull request is merged and the repository sync succeeds.
 
 The repository owns the policy text while sync is configured. Battery changes must be made through the agent's pull request or in the repository. A pull that changes credential bindings or drops deployed batteries can be held for administrator review. Use **Accept repository text** in the **Repository text held** notice on **OpenAPPA → Batteries** to release it.
 

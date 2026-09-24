@@ -1943,6 +1943,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryPolicySource]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { toolPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
@@ -1960,6 +1961,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ConsultOpenappaBatteryHelper]: {},
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Read-only views of what the policy covers; nothing here changes state.
+  [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageTools]: { toolPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

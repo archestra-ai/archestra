@@ -25,6 +25,8 @@ export type PolicyDeclarations =
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
 export type EffectivePolicy =
   archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
+export type BatteryPolicySource =
+  archestraApiTypes.GetOpenappaBatteryPolicySourceResponses["200"];
 /** What an attach names: the battery, and the catalog unless it governs the organization. */
 type CreateInstallParams = Pick<
   archestraApiTypes.CreateOpenappaBatteryInstallData["body"],
@@ -66,6 +68,21 @@ export function useEffectivePolicy(enabled = true) {
         await archestraApiSdk.getOpenappaEffectivePolicy();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
+    },
+  });
+}
+
+/** The source TOML of one exact include in the current organization policy. */
+export function useBatteryPolicySource(entry: string) {
+  return useQuery({
+    queryKey: [...batteriesQueryKey, "policy-source", entry],
+    queryFn: async (): Promise<BatteryPolicySource> => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaBatteryPolicySource({
+          query: { entry },
+        });
+      throwOnApiError(error, { toastOnError: false });
+      return answered(data);
     },
   });
 }

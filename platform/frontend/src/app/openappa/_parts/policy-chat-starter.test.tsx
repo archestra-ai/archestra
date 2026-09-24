@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useRouter } from "next/navigation";
+import { StrictMode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useConversation,
-  useCreateConversation,
-  useUpdateConversation,
-} from "@/lib/chat/chat.query";
+import { useConversation, useCreateConversation } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
+import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { PolicyChatStarter } from "./policy-chat-starter";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("next/navigation");
 vi.mock("@/lib/chat/chat.query");
 vi.mock("@/lib/chat/global-chat.context");
 vi.mock("@/app/chat/prompt-input", () => ({
@@ -64,15 +64,24 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
 
 const create = vi.fn();
 const sendMessage = vi.fn();
-const renderStarter = (initialPrompt?: string) =>
+const push = vi.fn();
+const replace = vi.fn();
+const renderStarter = (initialPrompt?: string, conversationId?: string) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <PolicyChatStarter initialPrompt={initialPrompt} />
+      <PolicyChatStarter
+        initialPrompt={initialPrompt}
+        conversationId={conversationId}
+      />
     </QueryClientProvider>,
   );
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+    replace,
+  } as unknown as ReturnType<typeof useRouter>);
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockReturnValue({
@@ -90,14 +99,10 @@ beforeEach(() => {
     mutateAsync: create,
     isPending: false,
   } as unknown as ReturnType<typeof useCreateConversation>);
-  vi.mocked(useUpdateConversation).mockReturnValue({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  } as unknown as ReturnType<typeof useUpdateConversation>);
   vi.mocked(useConversation).mockImplementation(
     (id) =>
       ({
-        data: id ? { id, messages: [] } : undefined,
+        data: id ? { id, origin: "openappa", messages: [] } : undefined,
       }) as ReturnType<typeof useConversation>,
   );
   vi.mocked(useChatSession).mockImplementation(({ conversationId }) =>
@@ -136,8 +141,8 @@ beforeEach(() => {
   } as ReturnType<typeof useLlmModels>);
 });
 
-test("starts a policy conversation on this page and sends the user's request", async () => {
-  renderStarter();
+test("opens a durable policy URL and sends the opening request after navigation", async () => {
+  const view = renderStarter();
   fireEvent.change(
     screen.getByRole("textbox", {
       name: "Describe the OpenAPPA policy change",
@@ -148,13 +153,15 @@ test("starts a policy conversation on this page and sends the user's request", a
 
   await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );
   await vi.waitFor(() =>
-    expect(screen.getByTestId("policy-messages")).toBeInTheDocument(),
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
   );
+  view.unmount();
+  renderStarter(undefined, "conversation-1");
+  expect(screen.getByTestId("policy-messages")).toBeInTheDocument();
   expect(sendMessage).toHaveBeenCalledWith(
     expect.objectContaining({
       parts: [{ type: "text", text: "Require approval for outbound messages" }],
@@ -163,11 +170,15 @@ test("starts a policy conversation on this page and sends the user's request", a
 });
 
 test("starts a prompted configuration session when a model is available", async () => {
-  renderStarter("Review my policy before changing it");
+  const view = renderStarter("Review my policy before changing it");
 
   await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+  );
+  view.unmount();
+  renderStarter(undefined, "conversation-1");
+  await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );
@@ -193,13 +204,17 @@ test("does not start a prompted session before a provider key is available", () 
 });
 
 test("starts with a policy-specific suggested prompt", async () => {
-  renderStarter();
+  const view = renderStarter();
   fireEvent.click(
     screen.getByRole("button", { name: "Explain my current policy" }),
   );
   await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+  );
+  view.unmount();
+  renderStarter(undefined, "conversation-1");
+  await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );
@@ -214,6 +229,70 @@ test("starts with a policy-specific suggested prompt", async () => {
       }),
     ),
   );
+});
+
+test("loads an existing policy conversation without creating or resending it", () => {
+  renderStarter(undefined, "conversation-1");
+  expect(screen.getByTestId("policy-messages")).toBeInTheDocument();
+  expect(create).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
+});
+
+test("back and forward navigation does not create or resend a policy conversation", async () => {
+  const configure = renderStarter();
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "Explain my current policy" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+  );
+  configure.unmount();
+
+  const firstVisit = renderStarter(undefined, "conversation-1");
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+  firstVisit.unmount();
+
+  const back = renderStarter();
+  expect(screen.getByText("What should the policy do?")).toBeInTheDocument();
+  back.unmount();
+
+  renderStarter(undefined, "conversation-1");
+  expect(screen.getByTestId("policy-messages")).toBeInTheDocument();
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+});
+
+test("sends the handed-off request once under StrictMode effect replay", async () => {
+  setPendingProjectChatHandoff({
+    conversationId: "conversation-1",
+    prompt: "Explain the policy",
+  });
+  render(
+    <StrictMode>
+      <QueryClientProvider client={new QueryClient()}>
+        <PolicyChatStarter conversationId="conversation-1" />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      parts: [{ type: "text", text: "Explain the policy" }],
+    }),
+  );
+});
+
+test("redirects a non-policy conversation to its chat route", () => {
+  vi.mocked(useConversation).mockReturnValue({
+    data: { id: "conversation-1", origin: "user", messages: [] },
+  } as unknown as ReturnType<typeof useConversation>);
+  renderStarter(undefined, "conversation-1");
+  expect(replace).toHaveBeenCalledWith("/chat/conversation-1");
+  expect(sendMessage).not.toHaveBeenCalled();
 });
 
 test("offers provider setup when no chat credential is available", () => {

@@ -423,6 +423,21 @@ describe("ChatSidebarSection", () => {
     );
   });
 
+  it("treats a focused policy conversation as the current sidebar chat", () => {
+    mockConversations = [
+      {
+        ...makeConv("policy-session", "Review policy"),
+        origin: "openappa",
+        unread: true,
+      },
+    ];
+    mockChatState.pathname = "/openappa/policy-session";
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(
+      screen.queryByTestId(getChatItemUnreadIndicatorTestId("policy-session")),
+    ).not.toBeInTheDocument();
+  });
+
   it("collapses pinned and date groups independently and restores their chats", () => {
     mockConversations = [
       makeConv("pinned", "Pinned chat", { pinnedAt: new Date().toISOString() }),

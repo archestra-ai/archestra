@@ -726,7 +726,7 @@ describe("APPA feature boundary", () => {
 
   test("announces a spawn tool so the runtime can open a child branch", async () => {
     native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "allow_call" }),
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
     );
     expect(
       await evaluateToolCalls(
@@ -747,6 +747,48 @@ describe("APPA feature boundary", () => {
       spawn: true,
       presentation: { supports_delegation: true },
     });
+  });
+
+  test.each([
+    "allow_call",
+    "pass_control",
+  ] as const)("does not release a spawn without a fork binding (%s)", async (decision) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify({
+        decision: event.event === "tool_call" ? decision : "ack",
+      });
+    });
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "spawn", name: "spawn_agent", arguments: { message: "Go" } }],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (name) => name === "spawn_agent",
+        supportsDelegation: true,
+      },
+    );
+
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: expect.stringContaining("context_control"),
+      },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual(
+      decision === "allow_call"
+        ? [
+            expect.objectContaining({ event: "tool_call", spawn: true }),
+            expect.objectContaining({
+              event: "cancel_call",
+              tool_call_id: "spawn",
+            }),
+          ]
+        : [expect.objectContaining({ event: "tool_call", spawn: true })],
+    );
   });
 
   test("keeps a successful spawn launch pending until the child binds", async () => {

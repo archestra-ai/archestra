@@ -215,6 +215,9 @@ function hash(content: string) {
 export const INITIAL_POLICY = `[policy]
 version = 2
 
+[policy.deployment]
+context_control = true
+
 [[policy.annotator]]
 name = "noop"
 

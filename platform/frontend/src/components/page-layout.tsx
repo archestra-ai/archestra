@@ -54,6 +54,7 @@ export function PageLayout({
   maxWidth: maxWidthKey = "wide",
   minWidth: minWidthKey = "none",
   contentOverflowX = "auto",
+  fillContent = false,
 }: {
   children: React.ReactNode;
   /**
@@ -123,6 +124,8 @@ export function PageLayout({
   minWidth?: keyof typeof MIN_WIDTH_CLASSES;
   /** Clip without creating a nested scroll container, so form footers can stick to the page. */
   contentOverflowX?: "auto" | "clip";
+  /** Let a page's content fill the available app viewport. */
+  fillContent?: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -185,11 +188,19 @@ export function PageLayout({
 
   return (
     <PageHeaderBannerSlotContext.Provider value={bannerSlot}>
-      <div className="flex min-h-full w-full min-w-0 flex-col">
+      <div
+        className={cn(
+          "flex w-full min-w-0 flex-col",
+          fillContent ? "min-h-0 flex-1" : "min-h-full",
+        )}
+      >
         <div
           ref={setHeaderElement}
           data-page-header
-          className="border-b border-border bg-background md:sticky md:top-0 md:z-20"
+          className={cn(
+            "border-b border-border bg-background md:sticky md:top-0 md:z-20",
+            fillContent && "shrink-0",
+          )}
         >
           <div
             className={cn(
@@ -438,6 +449,7 @@ export function PageLayout({
           data-page-content
           className={cn(
             "w-full flex-1",
+            fillContent && "flex min-h-0 flex-col",
             minWidth && "min-w-0",
             minWidth &&
               (contentOverflowX === "clip"
@@ -448,6 +460,7 @@ export function PageLayout({
           <div
             className={cn(
               "mx-auto w-full",
+              fillContent && "flex min-h-0 flex-1 flex-col",
               minWidth || "min-w-0",
               maxWidth,
               "px-6 py-6 md:px-6",

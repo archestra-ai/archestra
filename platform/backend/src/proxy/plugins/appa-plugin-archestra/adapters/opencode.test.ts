@@ -32,3 +32,29 @@ describe("OpenCode question from ask_user", () => {
     expect(question.questions[0].header).toBe(expected);
   });
 });
+
+test("a background task launch is not a child completion", () => {
+  const adapter = new AppaOpenCodeAdapter();
+  const result = {
+    id: "spawn-call",
+    name: "task",
+    isError: false,
+    content:
+      '<task id="child" state="running">\n<summary>Background task started</summary>\n</task>',
+  };
+
+  expect(adapter.isChildCompletionResult(result)).toBe(false);
+  expect(
+    adapter.isChildCompletionResult({
+      ...result,
+      content: "<task state = 'pending' id='child'>queued</task>",
+    }),
+  ).toBe(false);
+  expect(
+    adapter.isChildCompletionResult({
+      ...result,
+      content:
+        '<task id="child" state="completed">\n<task_result>done</task_result>\n</task>',
+    }),
+  ).toBe(true);
+});

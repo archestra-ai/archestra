@@ -152,6 +152,42 @@ class OpenAppaBatteriesService {
     };
   }
 
+  /** The one root and resolved composition used to classify coverage rows. */
+  async coverageSnapshot(organizationId: string): Promise<{
+    rootContent: string;
+    resolution: PolicyResolution;
+    batteries: PolicyBatteryView[];
+    rootRevision: number;
+    lastError: string | null;
+  }> {
+    const { root, resolution, batteries, policy } =
+      await this.current(organizationId);
+    return {
+      rootContent: root.content,
+      resolution,
+      batteries,
+      rootRevision: policy.rootRevision,
+      lastError: policy.lastError,
+    };
+  }
+
+  /** Show the exact policy bytes an include currently resolves to. */
+  async policySource(organizationId: string, entry: string) {
+    const root = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    const included = resolution.entries.find((item) => item.entry === entry);
+    if (!included?.battery)
+      throw new ApiError(404, "This battery policy is no longer included");
+    return {
+      entry: included.entry,
+      name: included.name,
+      content: included.battery.policy,
+    };
+  }
+
   /** The policy the runtime opens for this organization, recomposed when it moved. */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     const inFlight = this.reading.get(organizationId);
@@ -647,7 +683,15 @@ class OpenAppaBatteriesService {
   ): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    if (effective && effective.rootRevision === root.revision) return effective;
+    // Revision zero is shipped policy text and can change without a database revision.
+    if (
+      effective &&
+      effective.rootRevision === root.revision &&
+      effective.installFingerprint.endsWith(
+        root.revision === 0 ? `:${root.contentHash}` : "",
+      )
+    )
+      return effective;
     return this.recompile(organizationId);
   }
 
@@ -708,12 +752,13 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const fingerprint = hash(
-      JSON.stringify({
-        batteries: this.composeInputs({ planned, installs }),
-        credentials: planned.resolution.credentials,
-      }),
-    );
+    const fingerprint =
+      hash(
+        JSON.stringify({
+          batteries: this.composeInputs({ planned, installs }),
+          credentials: planned.resolution.credentials,
+        }),
+      ) + (root.revision === 0 ? `:${root.contentHash}` : "");
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)
@@ -742,12 +787,13 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
-      const installFingerprint = hash(
-        JSON.stringify({
-          batteries: composed,
-          credentials: planned.resolution.credentials,
-        }),
-      );
+      const installFingerprint =
+        hash(
+          JSON.stringify({
+            batteries: composed,
+            credentials: planned.resolution.credentials,
+          }),
+        ) + (root.revision === 0 ? `:${root.contentHash}` : "");
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
         expected &&
@@ -1018,6 +1064,7 @@ class OpenAppaBatteriesService {
       resolution.entries.flatMap((entry) => entry.battery?.namespaces ?? []),
     );
     return {
+      root,
       resolution,
       batteries,
       rows: [...rows.values()],
@@ -1492,6 +1539,7 @@ type CatalogPrefixes = {
 type PlannedBattery = PolicyBatteryView;
 
 type PlannedComposition = {
+  root: GuardrailsPolicy;
   resolution: PolicyResolution;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];

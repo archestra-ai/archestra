@@ -95,6 +95,13 @@ export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 export const BatterySourceSchema = z.enum(["bundled", "upload"]);
 export type BatterySource = z.infer<typeof BatterySourceSchema>;
 
+/** The policy file supplied by an exact include in the organization's root TOML. */
+export const BatteryPolicySourceSchema = z.object({
+  entry: z.string(),
+  name: z.string(),
+  content: z.string(),
+});
+
 /** What a catalog entry was matched on; a name alone is a weak signal. */
 export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
 export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;

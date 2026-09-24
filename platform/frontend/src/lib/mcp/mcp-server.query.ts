@@ -25,6 +25,7 @@ import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import { coverageQueryPrefix } from "@/lib/openappa-policy-views";
 import {
   externalMcpSkillDetailQueryKey,
   externalMcpSkillsQueryKey,
@@ -500,6 +501,10 @@ export function useReloadMcpServerTools() {
     onError: (_error, variables) => {
       toast.error(`Failed to refresh ${variables.name ?? "server"} tools`);
     },
+    // A sync can change the tools' prefix, which is what the policy's rules
+    // and aliases name: what the policy covers has to be read again.
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: [coverageQueryPrefix] }),
   });
 }
 

@@ -139,6 +139,20 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     expect(claudeCode.isChildCompletionResult?.(realBackgroundLaunch)).toBe(
       false,
     );
+    const contentBlocks = {
+      ...realBackgroundLaunch,
+      content: [{ type: "text", text: realBackgroundLaunch.content }],
+    };
+    expect(claudeCode.normalizeChildLaunchResult(contentBlocks)).toBe(
+      "Async agent launched successfully.\nagentId: aba0d3860dedb562b",
+    );
+    expect(claudeCode.isChildCompletionResult?.(contentBlocks)).toBe(false);
+    expect(
+      claudeCode.normalizeChildLaunchResult({
+        ...contentBlocks,
+        content: [...contentBlocks.content, { type: "text", text: "extra" }],
+      }),
+    ).toBeUndefined();
     const prefixedRawOutput = {
       ...claudeLaunch,
       content:

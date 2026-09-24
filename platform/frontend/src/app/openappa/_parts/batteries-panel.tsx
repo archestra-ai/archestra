@@ -85,7 +85,7 @@ import {
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
-import { BATTERY_STATUS_BADGES } from "./policy-decorations";
+import { batteryStatusBadge } from "./policy-decorations";
 
 /**
  * What the organization's policy text includes, as the text declares it. The
@@ -287,11 +287,8 @@ export function BatteriesPanel() {
         if (!entry)
           return <span className="text-muted-foreground">Available</span>;
         const status = enforced ? entry.status : "refused";
-        return (
-          <Badge variant={BATTERY_STATUS_BADGES[status].variant}>
-            {BATTERY_STATUS_BADGES[status].label}
-          </Badge>
-        );
+        const badge = batteryStatusBadge(status);
+        return <Badge variant={badge.variant}>{badge.label}</Badge>;
       },
     },
     {
@@ -571,6 +568,7 @@ function IncludedBattery({
   const remove = useRemoveBatteryInclude();
   const [removing, setRemoving] = useState(false);
   const status = enforced ? battery.status : "refused";
+  const badge = batteryStatusBadge(status);
   const source =
     battery.source === "bundled"
       ? "Bundled"
@@ -580,9 +578,7 @@ function IncludedBattery({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{battery.name}</span>
         <Badge variant="outline">{source}</Badge>
-        <Badge variant={BATTERY_STATUS_BADGES[status].variant}>
-          {BATTERY_STATUS_BADGES[status].label}
-        </Badge>
+        <Badge variant={badge.variant}>{badge.label}</Badge>
         {writable && (
           <Button
             variant="ghost"

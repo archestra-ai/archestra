@@ -159,6 +159,16 @@ describe("chat conversation and message routes", () => {
     });
     expect(read.statusCode).toBe(200);
     expect(read.json().origin).toBe("openappa");
+
+    const override = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: {
+        origin: "openappa",
+        modelId: ordinaryAgent.id,
+      },
+    });
+    expect(override.statusCode).toBe(400);
   });
 
   test("rejects a policy chat while OpenAPPA is unavailable", async ({
@@ -174,6 +184,73 @@ describe("chat conversation and message routes", () => {
       method: "POST",
       url: "/api/chat/conversations",
       payload: { agentId: agent.id, origin: "openappa" },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("keeps policy conversation identity and model fixed while allowing automatic titles", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      origin: "openappa",
+    });
+
+    for (const body of [
+      { agentId: agent.id },
+      { modelId: null },
+      { chatApiKeyId: null },
+      { projectId: null },
+      { title: "Manual title" },
+      { pinnedAt: new Date().toISOString() },
+      { thinkingEffort: "low" },
+    ]) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/chat/conversations/${conversation.id}`,
+        payload: body,
+      });
+      expect(response.statusCode).toBe(400);
+    }
+
+    const regenerate = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: { regenerate: true },
+    });
+    expect(regenerate.statusCode).toBe(400);
+
+    const autoTitle = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+    expect(autoTitle.statusCode).toBe(200);
+  });
+
+  test("does not fork a policy conversation", async ({ makeAgent }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      origin: "openappa",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: { agentId: agent.id },
     });
     expect(response.statusCode).toBe(400);
   });

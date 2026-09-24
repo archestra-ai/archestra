@@ -1,9 +1,8 @@
 import { archestraApiSdk, type ErrorExtended } from "@archestra/shared";
 import { notFound } from "next/navigation";
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { PageLayout } from "@/components/page-layout";
 import { getServerApiHeaders } from "@/lib/utils/server";
-import { BatteriesUploadAction } from "./_parts/batteries-panel";
+import { OpenAppaPageLayout } from "./_parts/openappa-page-layout";
 
 export default async function OpenAppaLayout({
   children,
@@ -19,18 +18,5 @@ export default async function OpenAppaLayout({
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 
-  return (
-    <PageLayout
-      title="OpenAPPA"
-      description="Manage the policy that governs tool calls and their results."
-      tabs={[
-        { label: "Overview", href: "/openappa" },
-        { label: "Batteries", href: "/openappa/batteries" },
-        { label: "Policy", href: "/openappa/policy" },
-      ]}
-      actionButton={<BatteriesUploadAction />}
-    >
-      {children}
-    </PageLayout>
-  );
+  return <OpenAppaPageLayout>{children}</OpenAppaPageLayout>;
 }

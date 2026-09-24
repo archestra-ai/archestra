@@ -18,6 +18,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -38,32 +39,29 @@ import {
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { batteryDisplayName } from "./_parts/battery-display-name";
+import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
+import { BATTERY_STATUS } from "./_parts/battery-status";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
 import {
   annotationDecorations,
+  focusPolicyLine,
   policyAnnotations,
 } from "./_parts/policy-decorations";
+import { POLICY_EDITOR_OPTIONS } from "./_parts/policy-editor-options";
 
 export function GuardrailsPolicyEditor({
   readOnly = false,
+  sourceEntry,
+  focusLine,
 }: {
   readOnly?: boolean;
+  sourceEntry?: string;
+  focusLine?: number;
 }) {
-  const policy = useGuardrailsPolicy();
-  const sync = useAppaGithubSync();
+  const declarations = usePolicyDeclarations();
+  const router = useRouter();
   const [tab, setTab] = useState<"policy" | "effective">("policy");
-  if (policy.isLoading || sync.isPending)
-    return <Skeleton className="h-[65vh] w-full" />;
-  if (policy.isError || !policy.data || sync.isError)
-    return (
-      <QueryLoadError
-        title="Could not load policy"
-        onRetry={() => {
-          policy.refetch();
-          sync.refetch();
-        }}
-      />
-    );
   return (
     // Editable drafts stay mounted while switching; the read-only details page
     // shows only the selected document so it never presents two editors.
@@ -92,11 +90,47 @@ export function GuardrailsPolicyEditor({
         forceMount={readOnly ? undefined : true}
         className="data-[state=inactive]:hidden"
       >
-        <PolicyForm
-          policy={policy.data}
-          synced={!!sync.data?.source?.interval}
-          readOnly={readOnly}
-        />
+        {readOnly && (
+          <div className="flex flex-wrap items-center gap-3 py-3">
+            <span className="text-sm font-medium">Source</span>
+            <SearchableSelect
+              value={sourceEntry ?? "root"}
+              onValueChange={(value) =>
+                router.push(
+                  value === "root"
+                    ? "/openappa/policy"
+                    : `/openappa/policy?${new URLSearchParams({ entry: value })}`,
+                )
+              }
+              ariaLabel="Policy source file"
+              searchPlaceholder="Search included batteries"
+              className="w-72 max-w-full"
+              pinnedItems={[{ value: "root", label: "Organization policy" }]}
+              items={(declarations.data?.batteries ?? []).map((battery) => ({
+                value: battery.entry,
+                label: batteryDisplayName(battery.name),
+                description:
+                  BATTERY_STATUS[
+                    declarations.data?.lastError ? "refused" : battery.status
+                  ].label,
+                disabled: battery.status === "unavailable",
+              }))}
+            />
+          </div>
+        )}
+        {readOnly && sourceEntry ? (
+          <BatteryPolicySourceView
+            key={`${sourceEntry}:${focusLine ?? ""}`}
+            entry={sourceEntry}
+            focusLine={focusLine}
+          />
+        ) : (
+          <RootPolicyForm
+            readOnly={readOnly}
+            focusLine={focusLine}
+            declarations={declarations.data}
+          />
+        )}
       </TabsContent>
       <TabsContent
         value="effective"
@@ -109,14 +143,52 @@ export function GuardrailsPolicyEditor({
   );
 }
 
+function RootPolicyForm({
+  readOnly,
+  focusLine,
+  declarations,
+}: {
+  readOnly: boolean;
+  focusLine?: number;
+  declarations: PolicyDeclarations | null | undefined;
+}) {
+  const policy = useGuardrailsPolicy();
+  const sync = useAppaGithubSync();
+  if (policy.isLoading || sync.isPending)
+    return <Skeleton className="h-[65vh] w-full" />;
+  if (policy.isError || !policy.data || sync.isError)
+    return (
+      <QueryLoadError
+        title="Could not load policy"
+        onRetry={() => {
+          policy.refetch();
+          sync.refetch();
+        }}
+      />
+    );
+  return (
+    <PolicyForm
+      policy={policy.data}
+      synced={!!sync.data?.source?.interval}
+      readOnly={readOnly}
+      focusLine={focusLine}
+      declarations={declarations}
+    />
+  );
+}
+
 function PolicyForm({
   policy,
   synced,
   readOnly,
+  focusLine,
+  declarations,
 }: {
   policy: GuardrailsPolicy;
   synced: boolean;
   readOnly: boolean;
+  focusLine?: number;
+  declarations: PolicyDeclarations | null | undefined;
 }) {
   const { data: hasEditPermission } = useHasPermissions({
     toolPolicy: ["update"],
@@ -133,7 +205,6 @@ function PolicyForm({
   const dirty = form.formState.isDirty;
   const save = useUpdateGuardrailsPolicy();
   const validation = useValidateGuardrailsPolicy();
-  const declarations = usePolicyDeclarations();
   const busy = save.isPending || validation.isPending;
   const changedElsewhere = policy.revision !== revision;
   const checked =
@@ -273,11 +344,12 @@ function PolicyForm({
           <AnnotatedEditor
             content={content}
             readOnly={!canEdit || save.isPending}
+            focusLine={focusLine}
             declarations={
               // The annotations are line numbers into the revision they were read
               // at. An edit moves every line below it, so a dirty buffer gets none.
-              !dirty && declarations.data?.rootRevision === policy.revision
-                ? declarations.data
+              !dirty && declarations?.rootRevision === policy.revision
+                ? declarations
                 : null
             }
             onChange={(value) => {
@@ -290,7 +362,7 @@ function PolicyForm({
               Saved changes apply to new conversations. Existing conversations
               keep their original policy.
             </span>
-            <CompositionSummary declarations={declarations.data} />
+            <CompositionSummary declarations={declarations} />
           </div>
         </div>
         {changedElsewhere && dirty && (
@@ -331,11 +403,13 @@ function PolicyForm({
 function AnnotatedEditor({
   content,
   readOnly,
+  focusLine,
   declarations,
   onChange,
 }: {
   content: string;
   readOnly: boolean;
+  focusLine?: number;
   declarations: PolicyDeclarations | null;
   onChange: (value: string) => void;
 }) {
@@ -352,6 +426,9 @@ function AnnotatedEditor({
     const collection = editor.createDecorationsCollection(decorations);
     return () => collection.clear();
   }, [editor, decorations]);
+  useEffect(() => {
+    if (editor) focusPolicyLine(editor, focusLine);
+  }, [editor, focusLine]);
   return (
     <Editor
       height="min(50vh, 560px)"
@@ -360,16 +437,10 @@ function AnnotatedEditor({
       onMount={setEditor}
       onChange={(value) => onChange(value ?? "")}
       options={{
+        ...POLICY_EDITOR_OPTIONS,
         readOnly,
         ariaLabel: "Organization guardrails policy",
-        minimap: { enabled: false },
-        fontSize: 14,
-        lineNumbers: "on",
         glyphMargin: true,
-        scrollBeyondLastLine: false,
-        wordWrap: "on",
-        padding: { top: 16, bottom: 16 },
-        automaticLayout: true,
       }}
     />
   );

@@ -822,6 +822,7 @@ export function ChatPageContent({
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+  const isPolicyConversation = conversation?.origin === "openappa";
   usePageTitle(
     conversation
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
@@ -1902,6 +1903,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
+    !isPolicyConversation &&
     !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
@@ -2398,11 +2400,12 @@ export function ChatPageContent({
   const isBrowserPanelVisible = isBrowserPanelOpen;
   const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;
   const isRightPanelOpen =
-    isArtifactOpen ||
-    isBrowserPanelVisible ||
-    isAppsTabOpen ||
-    isRunsTabOpen ||
-    isReviewPanelVisible;
+    !isPolicyConversation &&
+    (isArtifactOpen ||
+      isBrowserPanelVisible ||
+      isAppsTabOpen ||
+      isRunsTabOpen ||
+      isReviewPanelVisible);
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
@@ -3122,7 +3125,12 @@ export function ChatPageContent({
   // an empty list means "none" only once it has actually loaded. Without it, an
   // organization with hundreds of agents would be told it has none for as long
   // as the roster takes to arrive.
-  if (internalAgents.length === 0 && !isLoadingAgents && !isAgentDeleted) {
+  if (
+    internalAgents.length === 0 &&
+    !isLoadingAgents &&
+    !isAgentDeleted &&
+    !isPolicyConversation
+  ) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -3251,6 +3259,7 @@ export function ChatPageContent({
           canManageShare={canManageShare}
           isShared={isShared}
           canCreateProject={canCreateProjectFromThisChat}
+          isPolicyConversation={isPolicyConversation}
           scheduleTriggerId={scheduledRunTriggerId}
           onShare={() => setIsShareDialogOpen(true)}
           onExportMarkdown={handleExportMarkdown}
@@ -3373,14 +3382,16 @@ export function ChatPageContent({
                           }
                           feedbackDisabled={setChatMessageFeedback.isPending}
                           agentName={
-                            (currentProfileId
-                              ? internalAgents.find(
-                                  (a) => a.id === currentProfileId,
-                                )
-                              : internalAgents.find(
-                                  (a) => a.id === initialAgentId,
-                                )
-                            )?.name
+                            isPolicyConversation
+                              ? "OpenAPPA Configuration Agent"
+                              : (currentProfileId
+                                  ? internalAgents.find(
+                                      (a) => a.id === currentProfileId,
+                                    )
+                                  : internalAgents.find(
+                                      (a) => a.id === initialAgentId,
+                                    )
+                                )?.name
                           }
                           selectedModel={conversationModelId ?? initialModel}
                           modelSource={
@@ -3388,7 +3399,11 @@ export function ChatPageContent({
                           }
                           chatErrors={conversation?.chatErrors ?? []}
                           compactions={conversation?.compactions ?? []}
-                          onRegenerateUserMessage={regenerateUserMessage}
+                          onRegenerateUserMessage={
+                            isPolicyConversation
+                              ? undefined
+                              : regenerateUserMessage
+                          }
                           onProviderConnected={handleProviderConnected}
                           onChatErrorRetry={handleChatErrorRetry}
                           error={error}
@@ -3504,6 +3519,25 @@ export function ChatPageContent({
                           <div className="max-w-4xl mx-auto space-y-3">
                             <AgentConnectionNotice agentId={activeAgentId} />
                             <ArchestraPromptInput
+                              minimalMode={isPolicyConversation}
+                              fixedAgentName={
+                                isPolicyConversation
+                                  ? "OpenAPPA Configuration Agent"
+                                  : undefined
+                              }
+                              fixedModelName={
+                                isPolicyConversation
+                                  ? (chatModels.find(
+                                      (model) =>
+                                        model.dbId === conversationModelId,
+                                    )?.displayName ?? "Model unavailable")
+                                  : undefined
+                              }
+                              placeholderOverride={
+                                isPolicyConversation
+                                  ? "Ask about or change your policy…"
+                                  : undefined
+                              }
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
                               notRecommendedForAgents={
@@ -3852,7 +3886,7 @@ export function ChatPageContent({
           {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
               on mobile so its Apps tab never hosts a second, invisible copy of
               the app iframe alongside the inline mobile panel above. */}
-          {!isMobile && (
+          {!isMobile && !isPolicyConversation && (
             <div className="hidden md:flex h-full min-h-0">
               <RightSidePanel
                 isOpen={isRightPanelOpen}

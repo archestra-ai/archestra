@@ -150,7 +150,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       if (event.event === "tool_call") {
         if (fail) throw new Error(failure);
         if (!block || event.tool === "allowed_first")
-          return JSON.stringify({ decision: "allow_call" });
+          return JSON.stringify({
+            decision: "allow_call",
+            ...(event.spawn
+              ? { spawn_binding: `fork:${event.operation_id}` }
+              : {}),
+          });
         denied.add(String(event.operation_id).replace(/^call:/, ""));
         return JSON.stringify({
           decision: "deny_call",
@@ -2334,18 +2339,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }
           return undefined;
         })();
-        return {
-          [Symbol.asyncIterator]() {
-            return {
-              async next() {
-                const next = await stream.next();
-                return next.done
-                  ? { done: true, value: undefined }
-                  : { done: false, value: next.value };
-              },
-            };
-          },
-        };
+        return wrapAsyncIterator(stream);
       };
       return client as never;
     });
@@ -2387,6 +2381,265 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
     expect(response.body).toContain('"name":"get_weather"');
     expect(response.body).not.toContain("get_remedy_plans");
+  });
+
+  test.each([
+    true,
+    false,
+  ])("replaces every call in an all-denied batch with a notice (stream=%s)", async (stream) => {
+    block = true;
+    // Inject a second denied call. Both calls must be evaluated, and each
+    // ruling must reach the client under its original call ID.
+    const extra = {
+      type: "tool_use" as const,
+      id: "toolu_test_time",
+      caller: { type: "direct" as const },
+      name: "get_time",
+      input: { timezone: "UTC" },
+    };
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient(options);
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        const response = await create(params);
+        providerResponses.push(response);
+        if (!(Symbol.asyncIterator in response))
+          return { ...response, content: [extra, ...response.content] };
+        const prefixed = (async function* () {
+          for await (const event of response) {
+            if (!event) continue;
+            if (event.type === "message_start") {
+              yield event;
+              yield {
+                type: "content_block_start" as const,
+                index: 0,
+                content_block: { ...extra, input: {} },
+              };
+              yield {
+                type: "content_block_delta" as const,
+                index: 0,
+                delta: {
+                  type: "input_json_delta" as const,
+                  partial_json: JSON.stringify(extra.input),
+                },
+              };
+              yield { type: "content_block_stop" as const, index: 0 };
+            } else {
+              yield "index" in event
+                ? { ...event, index: event.index + 1 }
+                : event;
+            }
+          }
+          return undefined;
+        })();
+        return wrapAsyncIterator(prefixed);
+      };
+      return client as never;
+    });
+    const body = payload(stream);
+    body.tools.push({ ...body.tools[0], name: "get_time" });
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Two denials require exactly one provider call.
+    expect(providerRequests).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["get_time", "get_weather"]);
+    // No call was admitted, so no call is cancelled.
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expect(response.body).not.toContain('"name":"get_weather"');
+    expect(response.body).not.toContain('"name":"get_time"');
+    const frames = stream
+      ? response.body
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => JSON.parse(line.slice("data: ".length)))
+      : [];
+    const notices = stream
+      ? frames
+          .filter(
+            (event) =>
+              event.type === "content_block_start" &&
+              event.content_block?.type === "tool_use",
+          )
+          .map((event) => {
+            const partial = frames
+              .filter(
+                (delta) =>
+                  delta.delta?.type === "input_json_delta" &&
+                  delta.index === event.index,
+              )
+              .map((delta) => delta.delta.partial_json)
+              .join("");
+            return {
+              id: event.content_block.id as string,
+              name: event.content_block.name as string,
+              input: (partial.length > 0
+                ? JSON.parse(partial)
+                : event.content_block.input) as Record<string, unknown>,
+            };
+          })
+      : ((JSON.parse(response.body).content ?? []) as Record<string, unknown>[])
+          .filter((block) => block.type === "tool_use")
+          .map((block) => ({
+            id: block.id as string,
+            name: block.name as string,
+            input: block.input as Record<string, unknown>,
+          }));
+    // Positions and call IDs remain identical. Only tool names and arguments change.
+    expect(notices.map((notice) => notice.id)).toEqual([
+      "toolu_test_time",
+      "toolu_test_weather",
+    ]);
+    for (const [index, notice] of notices.entries()) {
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+      expect(notice.input.tool).toBe(index === 0 ? "get_time" : "get_weather");
+      expect(notice.input.ruling).toBe(
+        "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+      );
+      expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    }
+    // Notices carry the original tool arguments without changes.
+    expect(notices[0].input.arguments).toBe(JSON.stringify(extra.input));
+    expect(notices[1].input.arguments).toBe(
+      stream
+        ? JSON.stringify({ location: "San Francisco", unit: "fahrenheit" })
+        : JSON.stringify({ location: "SF" }),
+    );
+  });
+  test("returns ruling for unanswered notice on next turn without duplicating admitted result", async () => {
+    // Interrupted batch sequence: The batch contained admitted call A and
+    // denied call B. The client executed call A, left notice B unanswered,
+    // and started a new turn. The provider must receive the ruling for B as B's
+    // result, and exactly one result for call A.
+    block = true;
+    const admitted = {
+      type: "tool_use" as const,
+      id: "allowed-first",
+      caller: { type: "direct" as const },
+      name: "allowed_first",
+      input: { timezone: "UTC" },
+    };
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient(options);
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        const response = await create(params);
+        providerResponses.push(response);
+        if (!(Symbol.asyncIterator in response))
+          return { ...response, content: [admitted, ...response.content] };
+        return response;
+      };
+      return client as never;
+    });
+    const body = payload(false);
+    body.tools.push({ ...body.tools[0], name: "allowed_first" });
+
+    const first = await post(body);
+    expect(first.statusCode, first.body).toBe(200);
+    const received = (
+      (JSON.parse(first.body).content ?? []) as Record<string, unknown>[]
+    ).filter((block) => block.type === "tool_use");
+    const releasedA = received.find((block) => block.name === "allowed_first");
+    const notice = noticeFrom(first.body, false);
+    expect(releasedA).toBeDefined();
+    expect(notice.name).toBe("archestra__get_remedy_plans");
+
+    // The follow-up turn returns results only for the admitted call.
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const client = createAnthropicTestClient({
+        includeToolUse: false,
+        streamStopReason: "end_turn",
+      });
+      const create = client.messages.create;
+      client.messages.create = async (params) => {
+        providerRequests.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+    providerRequests.length = 0;
+    const second = await post(
+      payload(false, [
+        { role: "user", content: "Check the weather and the time" },
+        {
+          role: "assistant",
+          content: [
+            releasedA,
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "allowed-first",
+              content: "RAW TIME OUTPUT",
+            },
+            { type: "text", text: "Never mind the weather." },
+          ],
+        },
+      ]),
+    );
+
+    expect(second.statusCode, second.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+      tools: { name: string }[];
+    };
+    // Request history restores call B to its original name and arguments.
+    expect(sent.messages[1].content).toContainEqual({
+      type: "tool_use",
+      id: "allowed-first",
+      name: "allowed_first",
+      input: { timezone: "UTC" },
+    });
+    expect(sent.messages[1].content).toContainEqual({
+      type: "tool_use",
+      id: notice.id,
+      name: "get_weather",
+      input: { location: "SF" },
+    });
+    expect(JSON.stringify(sent.messages[1])).not.toContain(
+      "archestra__get_remedy_plans",
+    );
+    const results = sent.messages[2].content.filter(
+      (block) => block.type === "tool_result",
+    );
+    // The proxy sends B's ruling once as an error result.
+    expect(results.filter((block) => block.tool_use_id === notice.id)).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: notice.id,
+        content:
+          "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+        is_error: true,
+      },
+    ]);
+    // The proxy sends A's approved result once without creating duplicate entries.
+    expect(
+      results.filter((block) => block.tool_use_id === "allowed-first"),
+    ).toHaveLength(1);
+    expect(
+      results.find((block) => block.tool_use_id === "allowed-first")?.content,
+    ).toBe("APPROVED REPLACEMENT");
+    expect(JSON.stringify(sent.messages[2])).not.toContain("RAW TIME OUTPUT");
+    expect(sent.tools.map((declared) => declared.name)).not.toContain(
+      "archestra__get_remedy_plans",
+    );
   });
 
   for (const stream of [true, false]) {
@@ -3175,6 +3428,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         events.filter((event) => event.event === "child_end"),
       ).toHaveLength(2);
       const carrier = childReturnCarrier(child.body, admitted);
+      const framedReturn = `<task id="oc-return-child" state="completed">\n<summary>UNTRUSTED SUMMARY</summary>\n<task_result>\n${carrier}\n</task_result>\n</task>`;
 
       providerRequests.length = 0;
       const parent = await send({
@@ -3194,12 +3448,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               },
             ],
           },
-          { role: "tool", tool_call_id: spawnCall.id, content: carrier },
+          { role: "tool", tool_call_id: spawnCall.id, content: framedReturn },
         ],
       });
       expect(parent.statusCode, parent.body).toBe(200);
       expect(JSON.stringify(providerRequests)).toContain(admitted);
       expect(JSON.stringify(providerRequests)).not.toContain(rawMarker);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "UNTRUSTED SUMMARY",
+      );
       expect(events).toContainEqual(
         expect.objectContaining({
           event: "tool_result",
@@ -3208,6 +3465,48 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output: admitted,
         }),
       );
+
+      providerRequests.length = 0;
+      const background = await send({
+        id: "oc-return-root",
+        messages: [
+          { role: "user", content: "Delegate the report" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [spawnCall],
+          },
+          {
+            role: "tool",
+            tool_call_id: spawnCall.id,
+            content:
+              '<task id="oc-return-child" state="running">\n<summary>Background task started</summary>\n</task>',
+          },
+          { role: "user", content: framedReturn },
+        ],
+      });
+      expect(background.statusCode, background.body).toBe(200);
+      expect(JSON.stringify(providerRequests)).toContain(admitted);
+      expect(JSON.stringify(providerRequests)).not.toContain(rawMarker);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "UNTRUSTED SUMMARY",
+      );
+
+      providerRequests.length = 0;
+      const unsigned = await send({
+        id: "oc-return-root",
+        messages: [
+          { role: "user", content: "Delegate the report" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [spawnCall],
+          },
+          { role: "user", content: framedReturn.replace(carrier, rawMarker) },
+        ],
+      });
+      expect(unsigned.statusCode, unsigned.body).toBe(409);
+      expect(providerRequests).toHaveLength(0);
     });
 
     test.each([
@@ -3272,6 +3571,61 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(409);
       expect(response.body).toContain("withheld raw child transcript access");
       expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+    });
+
+    test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {
+      const originalDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "tool_call" && event.spawn) {
+          events.push(event);
+          return JSON.stringify({ decision: "allow_call" });
+        }
+        return originalDispatch?.(raw);
+      });
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        streamingToolUse: {
+          name: "Agent",
+          input: {
+            description: "Investigate",
+            prompt: spawnPrompt,
+            subagent_type: "general-purpose",
+          },
+        },
+      };
+      const request = payload(true, [{ role: "user", content: "Investigate" }]);
+      request.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.0 (external, cli)",
+          "x-claude-code-session-id": "unprepared-spawn-parent",
+        },
+        payload: request,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("context_control");
+      expect(noticeFrom(response.body, true).name).toBe(
+        "archestra__get_remedy_plans",
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ event: "tool_call", spawn: true }),
+          expect.objectContaining({ event: "cancel_call" }),
+        ]),
+      );
+      expect(response.body).not.toContain("delegated trajectory");
     });
 
     test("a Claude Code spawn carries its lineage to the child and grandchild, never to the provider", async () => {
@@ -3349,8 +3703,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: call.id,
-              content:
-                "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+              content: [
+                {
+                  type: "text",
+                  text: "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+                },
+              ],
             },
           ],
         },
@@ -3371,6 +3729,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         { role: "user", content: String(call.input.prompt) },
       ]);
       expect(child.statusCode, child.body).toBe(200);
+      expect(child.body).toContain("started subagent");
       expect(events).toContainEqual(boundAs(`${session}:a1`));
       expect(JSON.stringify(providerRequests)).not.toContain(
         "delegated trajectory",
@@ -3492,6 +3851,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         JSON.stringify(events),
       ).toBe(true);
       expect(child.body).toContain(admitted);
+      expect(child.body).toContain("finished subagent");
       expect(child.body).not.toContain(rawMarker);
       expect(child.body).not.toContain("protected session");
       if (!stream) expect(child.body).not.toContain("appact2-");
@@ -3557,8 +3917,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: call.id,
-              content:
-                "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+              content: [
+                {
+                  type: "text",
+                  text: "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+                },
+              ],
             },
           ],
         },
@@ -4344,6 +4708,164 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
     });
 
+    test.each([
+      true,
+      false,
+    ])("cancels admitted sibling calls when an invalid child spawn aborts the batch (stream=%s)", async (stream) => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
+      const spawn = {
+        description: "Investigate",
+        prompt: spawnPrompt,
+        subagent_type: "general-purpose",
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: { name: "Agent", input: spawn },
+        streamingToolUse: { name: "Agent", input: spawn },
+      };
+      const send = (agentId: string | undefined, messages: unknown[]) => {
+        const body = payload(stream, messages);
+        body.tools.push(
+          {
+            name: "Agent",
+            description: "Launch a subagent",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "get_time",
+            description: "Current time",
+            input_schema: { type: "object", properties: {} },
+          },
+        );
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": session,
+            ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
+          },
+          payload: body,
+        });
+      };
+
+      // The root turn creates the marker for child session binding.
+      const root = await send(undefined, [
+        { role: "user", content: "Fix the build" },
+      ]);
+      expect(root.statusCode, root.body).toBe(200);
+      const marked = noticeFrom(root.body, stream);
+
+      // Child batch: an allowed call and a spawn call with an empty prompt.
+      // Because the spawn cannot carry a marker, the proxy cancels the batch.
+      const sibling = {
+        type: "tool_use" as const,
+        id: "toolu_test_time",
+        caller: { type: "direct" as const },
+        name: "get_time",
+        input: { timezone: "UTC" },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { ...spawn, prompt: "  \n" },
+        },
+        streamingToolUse: {
+          name: "Agent",
+          input: { ...spawn, prompt: "  \n" },
+        },
+      };
+      vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+        const client = createAnthropicTestClient(options);
+        const create = client.messages.create;
+        client.messages.create = async (params) => {
+          providerRequests.push(structuredClone(params));
+          const response = await create(params);
+          providerResponses.push(response);
+          if (!(Symbol.asyncIterator in response))
+            return { ...response, content: [sibling, ...response.content] };
+          const prefixed = (async function* () {
+            for await (const event of response) {
+              if (!event) continue;
+              if (event.type === "message_start") {
+                yield event;
+                yield {
+                  type: "content_block_start" as const,
+                  index: 0,
+                  content_block: { ...sibling, input: {} },
+                };
+                yield {
+                  type: "content_block_delta" as const,
+                  index: 0,
+                  delta: {
+                    type: "input_json_delta" as const,
+                    partial_json: JSON.stringify(sibling.input),
+                  },
+                };
+                yield { type: "content_block_stop" as const, index: 0 };
+              } else {
+                yield "index" in event
+                  ? { ...event, index: event.index + 1 }
+                  : event;
+              }
+            }
+            return undefined;
+          })();
+          return wrapAsyncIterator(prefixed);
+        };
+        return client as never;
+      });
+      events.length = 0;
+      providerRequests.length = 0;
+
+      const nested = await send("a1", [
+        { role: "user", content: String(marked.input.prompt) },
+      ]);
+
+      if (stream) {
+        // The refusal arrives as a stream error before any tool_use block.
+        expect(nested.statusCode, nested.body).toBe(200);
+        expect(nested.body).not.toContain('"type":"tool_use"');
+        const errorFrame = nested.body
+          .split("\n")
+          .find(
+            (line) =>
+              line.startsWith("data: ") && line.includes('"type":"error"'),
+          );
+        expect(errorFrame).toBeDefined();
+        expect(errorFrame).toContain(
+          "cannot safely start a nested child because its delegation marker could not be attached",
+        );
+      } else {
+        expect(nested.statusCode, nested.body).toBe(400);
+        expect(nested.body).toContain(
+          "cannot safely start a nested child because its delegation marker could not be attached",
+        );
+      }
+      // Both calls were evaluated before the batch stopped.
+      expect(
+        events
+          .filter((event) => event.event === "tool_call")
+          .map((event) => event.tool),
+      ).toEqual(["get_time", "Agent"]);
+      // The proxy cancels both admitted calls in the runtime.
+      expect(
+        events
+          .filter((event) => event.event === "cancel_call")
+          .map((event) => event.tool_call_id)
+          .sort(),
+      ).toEqual(["toolu_test_time", "toolu_test_weather"]);
+      // The client receives neither call.
+      expect(providerRequests).toHaveLength(1);
+      expect(nested.body).not.toContain('"name":"get_time"');
+    });
+
     test("preserves a streaming child refusal after the start proof is in history", async () => {
       config.openappa.offerSigningSecret = "stream-refusal-proof-test";
       const unregisterRefusalPolicy = registerLlmProxyPlugin({
@@ -4634,7 +5156,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           .onConflictDoNothing();
       }
       if (event.event === "tool_call")
-        return JSON.stringify({ decision: "allow_call" });
+        return JSON.stringify({
+          decision: "allow_call",
+          ...(event.spawn ? { spawn_binding: "prepared-fork" } : {}),
+        });
       if (event.event === "tool_result")
         return JSON.stringify({
           decision: "replace_output",
@@ -4770,6 +5295,88 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     authorization: "Bearer test-key",
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
+  });
+
+  test("prepares an OpenCode task fork through the Responses API", async () => {
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_task",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-4.1",
+              output: [
+                {
+                  type: "function_call",
+                  id: "fc_task",
+                  call_id: "call_task",
+                  name: "task",
+                  arguments: JSON.stringify({
+                    description: "Calculate",
+                    prompt: "Determine 17 plus 25",
+                    subagent_type: "general",
+                  }),
+                  status: "completed",
+                },
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+
+    const send = (sessionId: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        remoteAddress: "127.0.0.1",
+        headers: { ...openCodeHeaders(), "x-session-id": sessionId },
+        payload: {
+          model: "gpt-4.1",
+          stream: false,
+          input: [{ role: "user", content: "Delegate the calculation" }],
+          tools: [
+            {
+              type: "function",
+              name: "task",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      });
+    const response = await send(OPENCODE_SESSION);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "task",
+        spawn: true,
+      }),
+    );
+
+    const defaultDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const decision = await defaultDispatch?.(raw);
+      if (JSON.parse(raw).event === "tool_call" && JSON.parse(raw).spawn)
+        return JSON.stringify({ decision: "allow_call" });
+      return decision;
+    });
+    events.length = 0;
+    const unprepared = await send(OPENCODE_FORK_SESSION);
+    expect(unprepared.statusCode, unprepared.body).toBe(200);
+    expect(unprepared.body).toContain("context_control");
+    expect(unprepared.json().output[0].name).toBe(
+      "archestra__get_remedy_plans",
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "cancel_call",
+        tool_call_id: "call_task",
+      }),
+    );
   });
 
   test("injects the APPA pair when a Codex session omits it", async () => {
@@ -5736,6 +6343,529 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
   });
 });
+
+/**
+ * Evaluates parallel tool calls on OpenAI Chat Completions and Responses APIs.
+ *
+ * Each call in a batch is evaluated independently. Allowed calls pass through
+ * unchanged. Denied calls return as notices with their original call IDs.
+ */
+describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
+  const CHAT_SESSION = "ses_01J8ZQ3V0R1Y8M0P4K0W3M7P9B";
+  const RESPONSES_SESSION = "d12f967d-6fe1-4f92-a62f-0f6a2092fd2e";
+  const RESPONSES_THREAD = "01a0859b-3029-78f3-a730-0edef60872cc";
+
+  let app: FastifyInstance;
+  let agent: Agent;
+  let userId: string;
+  let events: Array<Record<string, unknown>>;
+  let providerBodies: unknown[];
+  let denyTools: Set<string>;
+  let unregisterAppaPlugin: () => void;
+
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+    config.llmProxy.plugins = parseLlmProxyPlugins(
+      undefined,
+      config.openappa.enabled,
+    );
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+      "postgresql://test:test@localhost/test?schema=public",
+    );
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) =>
+      reply.status(error instanceof ApiError ? error.statusCode : 500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type:
+            error instanceof ApiError
+              ? error.type
+              : "api_internal_server_error",
+        },
+      }),
+    );
+    await app.register(openAiProxyRoutes);
+    agent = await makeAgent({ name: "Native proxy batch matrix" });
+    userId = (await makeUser()).id;
+    await makeMember(userId, agent.organizationId);
+    events = [];
+    providerBodies = [];
+    denyTools = new Set();
+    native.initializeOpenappa.mockResolvedValue(undefined);
+    // Returns a ruling for each evaluated tool call.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "session_start") {
+        const runtimeSessionId = String(event.session_id);
+        await db
+          .insert(database.schema.openappaSessionsTable)
+          .values({
+            actor: openappaActor(runtimeSessionId),
+            root: openappaActor(runtimeSessionId),
+            organizationId: String(event.organization_id),
+            callerId:
+              typeof event.caller_id === "string" ? event.caller_id : null,
+            sessionId: runtimeSessionId,
+            forkedFrom:
+              typeof event.fork_of === "string" ? event.fork_of : null,
+            startDecision: { decision: "ack" },
+          })
+          .onConflictDoNothing();
+      }
+      if (event.event === "tool_call")
+        return JSON.stringify(
+          denyTools.has(String(event.tool))
+            ? {
+                decision: "deny_call",
+                feedback: `[appa] NATIVE REFUSAL of ${String(event.tool)}`,
+              }
+            : { decision: "allow_call" },
+        );
+      if (event.event === "tool_result")
+        return JSON.stringify({
+          decision: "replace_output",
+          approved_output: "APPROVED REPLACEMENT",
+          output_source: "tool",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => chatBatchClient() as never,
+    );
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () => responsesBatchClient() as never,
+    );
+    for (const modelId of ["gpt-4.1", "gpt-5.5"]) {
+      await ModelModel.upsert({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    }
+  });
+
+  afterEach(async () => {
+    unregisterAppaPlugin();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    await app.close();
+  });
+
+  /** The batch every provider turn answers with: one reader, one deleter. */
+  const batchCalls = [
+    { id: "call_read", name: "read_file", arguments: '{"path":"a.txt"}' },
+    { id: "call_delete", name: "delete_file", arguments: '{"path":"b.txt"}' },
+  ];
+
+  const chatBatchClient = () => ({
+    chat: {
+      completions: {
+        create: async (params: { stream?: boolean }) => {
+          providerBodies.push(structuredClone(params));
+          if (!params.stream)
+            return {
+              id: "chatcmpl_batch",
+              object: "chat.completion",
+              created: 1,
+              model: "gpt-4.1",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    refusal: null,
+                    tool_calls: batchCalls.map((call) => ({
+                      id: call.id,
+                      type: "function",
+                      function: {
+                        name: call.name,
+                        arguments: call.arguments,
+                      },
+                    })),
+                  },
+                  finish_reason: "tool_calls",
+                  logprobs: null,
+                },
+              ],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+              },
+            };
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const [index, call] of batchCalls.entries()) {
+                yield {
+                  id: "chatcmpl_batch",
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: "gpt-4.1",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        ...(index === 0 ? { role: "assistant" } : {}),
+                        tool_calls: [
+                          {
+                            index,
+                            id: call.id,
+                            type: "function",
+                            function: { name: call.name, arguments: "" },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                yield {
+                  id: "chatcmpl_batch",
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: "gpt-4.1",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          { index, function: { arguments: call.arguments } },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+              }
+              yield {
+                id: "chatcmpl_batch",
+                object: "chat.completion.chunk",
+                created: 1,
+                model: "gpt-4.1",
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+                usage: {
+                  prompt_tokens: 10,
+                  completion_tokens: 5,
+                  total_tokens: 15,
+                },
+              };
+            },
+          };
+        },
+      },
+    },
+  });
+
+  const responsesBatchClient = () => ({
+    responses: {
+      create: async (params: { stream?: boolean }) => {
+        providerBodies.push(structuredClone(params));
+        const completed = {
+          id: "resp_batch",
+          object: "response",
+          created_at: 1,
+          status: "completed",
+          model: "gpt-5.5",
+          output: batchCalls.map((call) => ({
+            type: "function_call",
+            id: `fc_${call.id}`,
+            call_id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+            status: "completed",
+          })),
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        };
+        if (!params.stream) return completed;
+        return {
+          async *[Symbol.asyncIterator]() {
+            for (const [index, call] of batchCalls.entries()) {
+              const item = {
+                type: "function_call",
+                id: `fc_${call.id}`,
+                call_id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+                status: "completed",
+              };
+              yield {
+                type: "response.output_item.added",
+                output_index: index,
+                sequence_number: index * 3 + 1,
+                item: { ...item, arguments: "", status: "in_progress" },
+              };
+              yield {
+                type: "response.function_call_arguments.delta",
+                item_id: item.id,
+                output_index: index,
+                sequence_number: index * 3 + 2,
+                delta: call.arguments,
+              };
+              yield {
+                type: "response.output_item.done",
+                output_index: index,
+                sequence_number: index * 3 + 3,
+                item,
+              };
+            }
+            yield {
+              type: "response.completed",
+              sequence_number: batchCalls.length * 3 + 1,
+              response: completed,
+            };
+          },
+        };
+      },
+    },
+  });
+
+  const appaPair = () =>
+    ["archestra__execute_remedy_plan", "archestra__get_remedy_plans"].map(
+      (name) => ({
+        type: "function",
+        function: { name, parameters: { type: "object", properties: {} } },
+      }),
+    );
+
+  const chatPayload = (stream: boolean) => ({
+    model: "gpt-4.1",
+    stream,
+    messages: [{ role: "user", content: "Read a.txt, then delete b.txt" }],
+    tools: [
+      ...batchCalls.map((call) => ({
+        type: "function",
+        function: {
+          name: call.name,
+          parameters: { type: "object", properties: {} },
+        },
+      })),
+      ...appaPair(),
+    ],
+  });
+
+  const chatHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "opencode/1.18.29",
+    "x-session-id": CHAT_SESSION,
+  });
+
+  const responsesPayload = (stream: boolean) => ({
+    model: "gpt-5.5",
+    stream,
+    input: [{ role: "user", content: "Read a.txt, then delete b.txt" }],
+    client_metadata: {
+      session_id: RESPONSES_SESSION,
+      thread_id: RESPONSES_THREAD,
+    },
+    tools: [
+      ...batchCalls.map((call) => ({
+        type: "function",
+        name: call.name,
+        parameters: { type: "object", properties: {} },
+      })),
+      ...appaPair().map((tool) => ({ type: "function", ...tool.function })),
+    ],
+  });
+
+  const responsesHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
+    originator: "codex_cli_rs",
+  });
+
+  /** The calls the client received, in wire order: id, name, raw arguments. */
+  const chatCallsFrom = (body: string, stream: boolean) => {
+    if (!stream)
+      return (
+        (JSON.parse(body).choices[0].message.tool_calls ?? []) as {
+          id: string;
+          function: { name: string; arguments: string };
+        }[]
+      ).map((call) => ({
+        id: call.id,
+        name: call.function.name,
+        arguments: call.function.arguments,
+      }));
+    const frames = body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)));
+    const byIndex = new Map<
+      number,
+      { id: string; name: string; arguments: string }
+    >();
+    for (const frame of frames)
+      for (const call of frame.choices?.[0]?.delta?.tool_calls ?? []) {
+        const entry = byIndex.get(call.index) ?? {
+          id: "",
+          name: "",
+          arguments: "",
+        };
+        if (call.id) entry.id = call.id;
+        if (call.function?.name) entry.name = call.function.name;
+        entry.arguments += call.function?.arguments ?? "";
+        byIndex.set(call.index, entry);
+      }
+    return [...byIndex.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, entry]) => entry);
+  };
+
+  const responsesCallsFrom = (body: string, stream: boolean) => {
+    const output = (
+      stream
+        ? body
+            .split("\n")
+            .filter(
+              (line) => line.startsWith("data: ") && line !== "data: [DONE]",
+            )
+            .map((line) => JSON.parse(line.slice("data: ".length)))
+            .findLast((event) => event.type === "response.completed").response
+            .output
+        : JSON.parse(body).output
+    ) as Record<string, unknown>[];
+    return output
+      .filter((item) => item.type === "function_call")
+      .map((item) => ({
+        id: item.call_id as string,
+        name: item.name as string,
+        arguments: item.arguments as string,
+      }));
+  };
+
+  type MatrixMode = "all-allow" | "mixed" | "multi-deny";
+  const deniedIn = (mode: MatrixMode) =>
+    mode === "all-allow"
+      ? []
+      : mode === "mixed"
+        ? ["delete_file"]
+        : ["read_file", "delete_file"];
+
+  /** Expected client calls for the given test mode. */
+  const expectMatrix = (
+    calls: { id: string; name: string; arguments: string }[],
+    mode: MatrixMode,
+  ) => {
+    expect(calls).toHaveLength(2);
+    for (const [index, expected] of batchCalls.entries()) {
+      const received = calls[index];
+      // Preserves the original call ID for every ruling.
+      expect(received.id).toBe(expected.id);
+      if (deniedIn(mode).includes(expected.name)) {
+        // Denied calls return as notice calls with original arguments and ruling.
+        expect(received.name).toBe("archestra__get_remedy_plans");
+        const notice = JSON.parse(received.arguments) as Record<
+          string,
+          unknown
+        >;
+        expect(notice.tool).toBe(expected.name);
+        expect(notice.ruling).toBe(`[appa] NATIVE REFUSAL of ${expected.name}`);
+        expect(notice.arguments).toBe(expected.arguments);
+        expect(notice.notice).toEqual({ v: 1, call_id: expected.id });
+      } else {
+        // Allowed calls reach the client unchanged.
+        expect(received.name).toBe(expected.name);
+        expect(received.arguments).toBe(expected.arguments);
+      }
+    }
+  };
+
+  test.each([
+    { stream: true, mode: "all-allow" },
+    { stream: false, mode: "all-allow" },
+    { stream: true, mode: "mixed" },
+    { stream: false, mode: "mixed" },
+    { stream: true, mode: "multi-deny" },
+    { stream: false, mode: "multi-deny" },
+  ] as const)("answers a Chat Completions batch call by call (stream=$stream, mode=$mode)", async ({
+    stream,
+    mode,
+  }) => {
+    denyTools = new Set(deniedIn(mode));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: chatHeaders(),
+      payload: chatPayload(stream) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Each batch uses exactly one provider request.
+    expect(providerBodies).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["read_file", "delete_file"]);
+    // Admitted calls are not cancelled.
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expectMatrix(chatCallsFrom(response.body, stream), mode);
+  });
+
+  test.each([
+    { stream: true, mode: "all-allow" },
+    { stream: false, mode: "all-allow" },
+    { stream: true, mode: "mixed" },
+    { stream: false, mode: "mixed" },
+    { stream: true, mode: "multi-deny" },
+    { stream: false, mode: "multi-deny" },
+  ] as const)("answers a Responses batch call by call (stream=$stream, mode=$mode)", async ({
+    stream,
+    mode,
+  }) => {
+    denyTools = new Set(deniedIn(mode));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: responsesHeaders(),
+      payload: responsesPayload(stream) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Each batch uses exactly one provider request.
+    expect(providerBodies).toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["read_file", "delete_file"]);
+    // Admitted calls are not cancelled.
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
+    expectMatrix(responsesCallsFrom(response.body, stream), mode);
+  });
+});
+
+function wrapAsyncIterator<T>(stream: AsyncGenerator<T, undefined, unknown>) {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          const next = await stream.next();
+          return next.done
+            ? { done: true, value: undefined }
+            : { done: false, value: next.value };
+        },
+      };
+    },
+  };
+}
 
 /** The response the interaction log recorded for the profile's latest turn. */
 async function latestLoggedResponse(profileId: string): Promise<string> {

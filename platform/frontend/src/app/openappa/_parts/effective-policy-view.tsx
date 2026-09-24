@@ -9,7 +9,8 @@ import {
   useEffectivePolicy,
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
-import { BATTERY_STATUS_BADGES } from "./policy-decorations";
+import { BATTERY_STATUS } from "./battery-status";
+import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
 /**
  * The composed document the runtime actually enforces: the organization's text
@@ -70,8 +71,7 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
                   <span className="font-medium">{battery.name}</span>
                   <span>
                     {" "}
-                    ({BATTERY_STATUS_BADGES[battery.status].label.toLowerCase()}
-                    )
+                    ({BATTERY_STATUS[battery.status].label.toLowerCase()})
                   </span>
                 </span>
               ))}
@@ -94,15 +94,9 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
         language="ini"
         value={content}
         options={{
+          ...POLICY_EDITOR_OPTIONS,
           readOnly: true,
           ariaLabel: "Effective guardrails policy",
-          minimap: { enabled: false },
-          fontSize: 14,
-          lineNumbers: "on",
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          padding: { top: 16, bottom: 16 },
-          automaticLayout: true,
         }}
       />
       <div className="border-t px-4 py-3 text-xs text-muted-foreground">

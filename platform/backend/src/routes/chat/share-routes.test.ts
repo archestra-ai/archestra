@@ -5,6 +5,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -58,6 +59,41 @@ describe("shared chats", () => {
     subject: { type: "organization", id: "*" },
     actions: ["read"],
   };
+
+  test("refuses to share or fork a policy conversation", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId);
+    const agent = await makeAgent({ organizationId });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      origin: "openappa",
+    });
+    const key = {
+      userId: currentUser.id,
+      organizationId,
+      resource: "conversation" as const,
+      scope: conversation.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await expect(
+      ResourcePermissions.updatePolicy({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [...(policy?.grants ?? []), everyone],
+      }),
+    ).rejects.toThrow("Policy conversations cannot be shared");
+
+    const fork = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+    expect(fork.statusCode).toBe(400);
+  });
 
   test("a chat shared with named people stays hidden from everyone else", async ({
     makeAgent,

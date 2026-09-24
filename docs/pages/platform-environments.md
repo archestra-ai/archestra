@@ -54,12 +54,6 @@ A new environment is open to the whole organization. To lock one down, remove th
 
 The Default environment is always open to anyone who can create the resource.
 
-### Upgrading From Restricted Environments
-
-Earlier versions had a **Restricted** switch on each environment, and one per-resource permission to deploy into any restricted one. Both are retired.
-
-On upgrade, every open environment gets a grant to the whole organization, so nobody loses access. Everyone who could deploy to restricted environments keeps that ability on every existing one. If you wrote a custom role that held the permission for only some kinds of resource, it gains the rest. A Default environment that was restricted becomes open.
-
 ## Trusted image registries
 
 An environment can list the image registries it trusts. If an MCP server's image is not from a trusted registry, it is not deployed until an admin approves it. With no list set, any image is allowed.

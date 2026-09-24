@@ -376,19 +376,11 @@ Public marketplace link management remains organization-wide. Creating, listing,
 
 A recipient receives the union of its applicable grants: direct user or service-account grants, team grants, grants to its effective roles, and organization-wide grants. Team grants follow the team hierarchy described below. Grants to roles follow role composition.
 
+A team grant reaches every member of the team, whatever their membership role. To reach everyone, add the **Everyone in the organization** recipient. A `read` grant at `*` on chats reaches chats other members start inside projects you can open — never a private chat. Revoking a grant removes the access it gave, though another applicable grant can still provide it.
+
 The Permissions editor shows direct permissions and access inherited from organization-wide policies. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
 
-### Conversion Of Existing Sharing
-
-The conversion runs at the first start after the upgrade. It turns existing sharing into resource grants. Each resource is converted once, so a change you make in the permissions editor is not replaced at the next start. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
-
-Organization-wide sharing becomes a grant to each role that holds that resource's read permission. Access after the conversion is therefore the same as access before it. A member whose role withholds the read permission did not see the resource, and does not see it afterwards. To reach everyone, add the **Everyone in the organization** recipient yourself.
-
-Resource-level `:admin` permissions become `*` grants with their associated actions. `project:read-all` becomes a `read` grant at `*` on chats. That grant reaches chats other members started inside projects you can open, never a private chat. The conversion removes the retired `:admin`, `:team-admin`, `:deploy-to-restricted`, `project:read-all`, and `project:share-org` actions from roles. A role that still stores one of them gains nothing from it. Team membership does not add permissions beyond those explicitly assigned to the team. Existing team-relative access is converted to explicit permissions for each person and resource it applies to at upgrade time. This preserves their current actions without giving those actions to other team members or to future resources. Team membership administration remains separate from resource permissions.
-
-Existing explicit grants, including service-account grants, survive migration. Migrated policies replace legacy sharing checks. Revoking a grant cannot restore access through an old ownership or visibility setting. Other applicable grants can still provide access.
-
-Creation with `initialGrants` also records the creator's full access explicitly. An empty array creates a creator-only direct policy. Inherited grants still apply. Resources outside this conversion retain the rules described under **Scoped Resources** below.
+Creation with `initialGrants` also records the creator's full access explicitly. An empty array creates a creator-only direct policy. Inherited grants still apply. Some resources follow other rules, described under **Scoped Resources** below.
 
 ### Delegation And Concurrent Edits
 
@@ -421,7 +413,6 @@ Use the service account's ID, not an API-key ID. The recipient must belong to th
 
 Agents, MCP gateways, registry entries, apps, skills, and models use the grants described above.
 Each grant pairs actions with a resource scope. Creation uses the resource's create permission.
-Legacy visibility fields do not authorize access after migration.
 
 ### Team Roles
 
@@ -468,8 +459,6 @@ The creator of a client gets full access, and the built-in admin roles hold full
 Share a client by adding a grant for a user, team, role, or the organization.
 **Can edit** allows renaming, reconfiguring, and rotating the secret. **Full access** also allows deletion and permission management.
 Grants govern management only. A client's tokens reach exactly what its own configuration allows.
-
-The conversion turns existing clients into grants. A personal client gives its creator full access. A team client gives each selected team **Can view**. An organization client gives **Can view** to every role that could read it. Built-in editors and custom roles with team administration keep full access to the team clients they could manage.
 
 ### Visibility-Scoped Credentials
 

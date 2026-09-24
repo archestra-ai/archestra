@@ -461,7 +461,8 @@ test("Verify tool calling using different static credentials", async ({
   await verifyToolCallResultViaApi({
     request,
     expectedResult: "Engineering-team-credential",
-    tokenToUse: "org-token",
+    // The gateway belongs to the engineering team, so its token reaches it.
+    tokenToUse: "engineering-team",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     profileId: teamGateway.id,
   });

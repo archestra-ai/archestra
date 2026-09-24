@@ -825,8 +825,10 @@ export async function createTeamMcpGatewayViaApi({
       agentType: "mcp_gateway",
       initialGrants: [
         {
+          // The team edits its gateway: team members assign tools to it.
+          // Membership adds nothing beyond the team's grant.
           subject: { type: "team", id: team.id },
-          actions: ["read", "use"],
+          actions: ["read", "use", "update"],
         },
       ],
     },

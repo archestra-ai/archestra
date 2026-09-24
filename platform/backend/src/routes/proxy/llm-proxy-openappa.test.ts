@@ -4591,16 +4591,39 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       });
       // The retained crossing the parent side verifies completions against;
       // the same record authenticates the child's own echoed return.
+      let crossingScenario: "normal" | "exact" | "ambiguous" = "normal";
       native.loadChildReturns.mockImplementation(
         async (_orgId: string, parentSessionId: string) =>
           parentSessionId === `user:${userId}|return-root`
             ? [
-                {
-                  childSessionId: `user:${userId}|return-root:return-child`,
-                  spawnCallId: "call_spawn_return",
-                  childNativeId: "return-child",
-                  value: admitted,
-                },
+                ...(crossingScenario === "normal"
+                  ? []
+                  : [
+                      {
+                        childSessionId: `user:${userId}|return-root:sibling`,
+                        spawnCallId: "call_sibling",
+                        value: admitted,
+                      },
+                    ]),
+                ...(crossingScenario === "ambiguous"
+                  ? [
+                      {
+                        childSessionId: `user:${userId}|return-root:other-sibling`,
+                        spawnCallId: "call_other_sibling",
+                        value: admitted,
+                      },
+                    ]
+                  : []),
+                ...(crossingScenario === "ambiguous"
+                  ? []
+                  : [
+                      {
+                        childSessionId: `user:${userId}|return-root:return-child`,
+                        spawnCallId: "call_spawn_return",
+                        childNativeId: "return-child",
+                        value: admitted,
+                      },
+                    ]),
               ]
             : [],
       );
@@ -4709,6 +4732,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const waitOutput = JSON.stringify({
         status: { "return-child": { completed: carrier } },
       });
+      crossingScenario = "exact";
       const parent = await send({
         thread: "return-root",
         input: [
@@ -4745,6 +4769,31 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output: admitted,
         }),
       );
+
+      // Two historical crossings with identical bytes but no native child ID
+      // cannot be assigned to this completion by guessing from array order.
+      crossingScenario = "ambiguous";
+      providerRequests.length = 0;
+      const ambiguous = await send({
+        thread: "return-root",
+        input: [
+          {
+            type: "function_call",
+            call_id: "call_wait_ambiguous",
+            name: "wait_agent",
+            namespace: "multi_agent_v1",
+            arguments: JSON.stringify({ ids: ["return-child"] }),
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_wait_ambiguous",
+            output: waitOutput,
+          },
+        ],
+      });
+      expect(ambiguous.statusCode, ambiguous.body).toBe(409);
+      expect(providerRequests).toHaveLength(0);
+      crossingScenario = "normal";
 
       // A crossed return for one child cannot authorize an unsigned sibling
       // or be replayed under a different child id in the same wait envelope.

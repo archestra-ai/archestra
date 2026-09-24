@@ -9,6 +9,7 @@
     "./access-control": "./access-control.ts",
     "./archestra-mcp-server": "./archestra-mcp-server.ts",
     "./api-error": "./api-error.ts",
+    "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",
     "./chat": "./chat.ts",
     "./citation-quotes": "./citation-quotes.ts",
@@ -22,7 +23,8 @@
     "./roles": "./roles.ts",
     "./sso-template-helpers": "./sso-template-helpers.ts",
     "./system-prompt-template": "./system-prompt-template.ts",
-    "./test-mcp-server": "./test-mcp-server.ts"
+    "./test-mcp-server": "./test-mcp-server.ts",
+    "./websocket": "./websocket.ts"
   },
   "scripts": {
     "lint": "biome check",

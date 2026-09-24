@@ -1,4 +1,4 @@
-import { AnthropicErrorTypes } from "@archestra/shared";
+import { AnthropicErrorTypes } from "@archestra/shared/chat-error";
 import { describe, expect, test } from "vitest";
 import { isAnthropicBillingBlock } from "./anthropic-billing-error";
 

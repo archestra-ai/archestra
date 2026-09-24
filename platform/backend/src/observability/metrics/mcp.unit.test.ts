@@ -38,7 +38,7 @@ vi.mock("prom-client", () => {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { MCP_DEPLOYMENT_STATES } from "@archestra/shared";
+import { MCP_DEPLOYMENT_STATES } from "@archestra/shared/websocket";
 // SPDX-SnippetEnd
 import {
   initializeMcpMetrics,

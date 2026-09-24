@@ -1,4 +1,4 @@
-import { MCP_DEPLOYMENT_STATES } from "@archestra/shared";
+import { MCP_DEPLOYMENT_STATES } from "@archestra/shared/websocket";
 import { describe, expect, test } from "vitest";
 import {
   applyDeploymentObservation,

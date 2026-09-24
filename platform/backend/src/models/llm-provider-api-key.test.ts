@@ -1177,7 +1177,8 @@ describe("LlmProviderApiKeyModel", () => {
       };
       await ResourcePermissionPolicyModel.replace({
         ...key,
-        revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+        revision:
+          (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
         grants: [],
       });
       const shared = await LlmProviderApiKeyModel.create(

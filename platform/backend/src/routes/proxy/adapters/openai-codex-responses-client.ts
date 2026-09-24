@@ -253,6 +253,10 @@ function createOpenAiCodexPassthroughFetch(params: {
       headers.set("x-openai-internal-codex-residency", credential.residency);
     }
     if (credential.originator) headers.set("originator", credential.originator);
+    const version =
+      credential.version ??
+      credential.userAgent?.match(/\bcodex[\w-]*\/(\d+\.\d+\.\d+)/i)?.[1];
+    if (version) headers.set("version", version);
     if (credential.sessionId) headers.set("session-id", credential.sessionId);
     if (credential.userAgent) headers.set("User-Agent", credential.userAgent);
 

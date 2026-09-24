@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
@@ -12,7 +16,6 @@ import { openappaDeclarations } from "@/openappa/declarations";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-helpers.routes";
 

@@ -352,6 +352,8 @@ export default defineConfig({
       name: projectNames.openappa,
       testDir: "./tests",
       testMatch: testPatterns.openappa,
+      // These tests replace the deployment policy and restore it afterward.
+      workers: 1,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

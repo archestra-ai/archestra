@@ -4,7 +4,8 @@ import db, { schema } from "@/database";
 import { AgentPinModel } from "@/models";
 import AgentUserModel from "@/models/agent-user";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { makeAgentCard } from "../a2a-remote-agent/a2a-remote-agent.test-helpers";
 import agentCatalogRoutes from "./agent-catalog.routes";
 

@@ -8,7 +8,10 @@ import {
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import routes from "./openappa-external-consults.routes";

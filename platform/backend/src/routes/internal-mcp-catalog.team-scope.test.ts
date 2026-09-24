@@ -4,9 +4,9 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 

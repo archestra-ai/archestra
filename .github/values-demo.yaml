@@ -21,6 +21,10 @@ archestra:
     ARCHESTRA_AUTH_COOKIE_DOMAIN: "demo.archestra.dev"
     # Staging's parent-domain cookies are also sent to this host; isolate names.
     ARCHESTRA_AUTH_COOKIE_PREFIX: "archestra-demo"
+    # Demo users sign in with email/password and join by invitation, so
+    # re-enable what values-staging-demo-shared.yaml turns off for staging.
+    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "false"
+    ARCHESTRA_AUTH_DISABLE_INVITATIONS: "false"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "gemini"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "gemini-2.5-flash"
 

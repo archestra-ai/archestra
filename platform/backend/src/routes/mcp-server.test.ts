@@ -7,12 +7,12 @@ import db, { schema } from "@/database";
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 // SPDX-SnippetEnd
 import { McpServerModel, PlaywrightRuntimeModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   afterEach,
   beforeEach,

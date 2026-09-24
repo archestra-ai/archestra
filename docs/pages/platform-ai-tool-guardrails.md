@@ -50,7 +50,9 @@ Review the effective policy after a change. It reports batteries that could not 
 
 Rules can name one exact tool. A `*` rule covers tools without a more specific rule. Partial names such as `server__*` are invalid. To govern a whole MCP server, attach a battery that covers its tools.
 
-OpenAPPA evaluates tool calls before they run. A refused call returns a reason and available remedies to the agent. Calls that require human approval remain blocked until the required approval is given.
+OpenAPPA evaluates client-run tool calls before they run. A refused call returns a reason and available remedies to the agent. Calls that require human approval remain blocked until the required approval is given.
+
+Provider-hosted tools run inside the model provider. OpenAPPA accepts known hosted declarations but cannot check each call before it runs. OpenAI Responses web search is an exception: the proxy checks its result before the client receives it. Azure Responses hosted web search is refused because its result cannot be checked. Unknown tool types and client-run tools the proxy cannot gate are also refused. Other hosted tool results are not governed as client-run calls. A policy rule cannot refuse all hosted tools with a signed offer to use a local tool instead.
 
 For policy fields and examples, see the OpenAPPA [policy configuration reference](https://www.openappa.com/contracts).
 

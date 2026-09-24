@@ -2,10 +2,13 @@ import { and, eq, sql } from "drizzle-orm";
 import { vi } from "vitest";
 import { authPlugin } from "@/auth/fastify-plugin";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel, AuditLogModel } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import agentRoutes from "./agent";
 import appRoutes from "./app/app.routes";

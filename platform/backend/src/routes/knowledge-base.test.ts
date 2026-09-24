@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import config from "@/config";
 import db from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   buildContainerToken,
@@ -27,8 +29,6 @@ import {
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { ConnectorConfig, User } from "@/types";
 

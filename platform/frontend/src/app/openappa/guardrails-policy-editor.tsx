@@ -427,7 +427,8 @@ function AnnotatedEditor({
     return () => collection.clear();
   }, [editor, decorations]);
   useEffect(() => {
-    if (editor) focusPolicyLine(editor, focusLine);
+    if (!editor) return;
+    return focusPolicyLine(editor, focusLine);
   }, [editor, focusLine]);
   return (
     <Editor

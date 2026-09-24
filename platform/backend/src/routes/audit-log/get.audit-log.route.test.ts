@@ -16,9 +16,9 @@
 
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import AuditLogModel from "@/models/audit-log";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type AuditLog, type User } from "@/types";
 

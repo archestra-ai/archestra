@@ -5,7 +5,8 @@ import {
 } from "@archestra/shared";
 import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import { MANIFEST, manifestNamed } from "./skill.test-helpers";
 

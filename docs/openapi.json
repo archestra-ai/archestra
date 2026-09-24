@@ -12626,6 +12626,7 @@
                       ]
                     },
                     "tool_calls": {
+                      "nullable": true,
                       "type": "array",
                       "items": {
                         "anyOf": [
@@ -33632,6 +33633,7 @@
                       "additionalProperties": false
                     },
                     "tool_calls": {
+                      "nullable": true,
                       "type": "array",
                       "items": {
                         "anyOf": [

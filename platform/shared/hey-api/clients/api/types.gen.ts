@@ -3997,9 +3997,6 @@ export type VllmChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
-            /**
-             * A tool call in the assistant message
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -4020,7 +4017,7 @@ export type VllmChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | null;
             reasoning?: string | null;
             reasoning_content?: string | null;
         };
@@ -10309,9 +10306,6 @@ export type VllmChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
-            /**
-             * A tool call in the assistant message
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10332,7 +10326,7 @@ export type VllmChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | null;
             reasoning?: string | null;
             reasoning_content?: string | null;
         };

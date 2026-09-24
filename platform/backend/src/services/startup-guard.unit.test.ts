@@ -111,7 +111,14 @@ async function makeGuardHome(params: {
   await mkdir(path.dirname(settingsFile), { recursive: true });
   await mkdir(bin, { recursive: true });
 
-  await writeFile(guardFile, params.script, "utf8");
+  // Keep the real shell flow and frame count while shortening visual waits.
+  // Separate source assertions below pin the production pacing values.
+  const testScript = params.script
+    .replace("FRAME_SLEEP=0.25", "FRAME_SLEEP=0.025")
+    .replace("RECONFIG_WAIT=1.5", "RECONFIG_WAIT=0.05")
+    .replace("-t 6 key", "-t 0.05 key")
+    .replace("sleep 1.2\n", "sleep 0.05\n");
+  await writeFile(guardFile, testScript, "utf8");
   await chmod(guardFile, 0o755);
   if (params.skipFileContent !== undefined) {
     await writeFile(skipFile, params.skipFileContent, "utf8");

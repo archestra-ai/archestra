@@ -71,7 +71,7 @@ async function expectValidBash(script: string): Promise<void> {
 }
 
 // Behavior common to every non-Claude client: the shared engine is already
-// pinned by startup-guard.test.ts against the Claude descriptor, so here we
+// pinned by startup-guard.unit.test.ts against the Claude descriptor, so here we
 // only assert each descriptor injects the right client-specific strings and
 // that the result is still valid bash.
 describe.each([

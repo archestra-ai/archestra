@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
@@ -28,6 +29,10 @@ describe("Claude Code image entrypoint", () => {
   ])("handles API failure %s (%s) in %s mode", async (error, code, mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "claude-stop-failure-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-claude-code",
+      );
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       await mkdir(bin);
@@ -53,7 +58,7 @@ trap 'exit 0' TERM
 while :; do sleep 0.1; done
 `,
       );
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [entrypoint], {
         cwd: root,
         timeout: 15000,
         env: {
@@ -184,6 +189,10 @@ Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.
   ] as const)("configures and starts %s run in the native TUI", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-claude-code-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-claude-code",
+      );
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       const workspace = path.join(root, "workspace");
@@ -220,7 +229,7 @@ fi
 `,
       );
 
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [entrypoint], {
         cwd: workspace,
         env: {
           ...process.env,

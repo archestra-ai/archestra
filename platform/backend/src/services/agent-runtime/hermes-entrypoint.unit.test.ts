@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
@@ -27,6 +28,10 @@ describe("Hermes image entrypoint", () => {
   ] as const)("configures and starts %s run in the native TUI", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-hermes-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-hermes",
+      );
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       const stateDir =
@@ -142,7 +147,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         );
       }
 
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [entrypoint], {
         cwd: workspace,
         env,
       });

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 import { agentRuntimeFailureReason } from "./failure-reason";
 
 const execFileAsync = promisify(execFile);
@@ -56,6 +57,7 @@ describe("Codex image entrypoint", () => {
   ] as const)("configures and starts %s run in the native TUI", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(root, "archestra-codex");
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       const stateDir =
@@ -121,7 +123,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
       };
 
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [entrypoint], {
         cwd: workspace,
         env,
       });
@@ -348,6 +350,7 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
   ])("surfaces terminal native errors in %s mode without replaying old or child errors", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "codex-failure-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(root, "archestra-codex");
       const runtime = path.join(root, "runtime");
       const bin = path.join(root, "bin");
       await mkdir(runtime);
@@ -395,7 +398,7 @@ if os.environ["ARCHESTRA_AGENT_RUNTIME_MODE"] == "one_shot":
         path.join(bin, "attention"),
         '#!/bin/sh\nprintf "%s\\n" "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"\n',
       );
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [entrypoint], {
         cwd: root,
         timeout: 15000,
         env: {

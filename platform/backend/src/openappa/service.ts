@@ -68,7 +68,10 @@ const NativeOfferSchema = z
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
     z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
-    z.object({ decision: z.literal("allow_call") }),
+    z.object({
+      decision: z.literal("allow_call"),
+      spawn_binding: z.string().min(1).optional(),
+    }),
     z.object({ decision: z.literal("pass_control") }),
     z.object({
       decision: z.literal("deny_call"),
@@ -637,6 +640,7 @@ export async function evaluateToolCalls(
       }
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
+      const spawn = options.isSpawn?.(call.name, call.namespace) === true;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -653,9 +657,23 @@ export async function evaluateToolCalls(
           tool,
           JSON.parse(target.toolCallArgs),
         ),
-        spawn: options.isSpawn?.(call.name, call.namespace) === true,
+        spawn,
       };
       const decision = await dispatch(session, event);
+      if (
+        spawn &&
+        (decision.decision === "pass_control" ||
+          (decision.decision === "allow_call" && !decision.spawn_binding))
+      ) {
+        await dispatch(session, {
+          event: "cancel_call",
+          tool_call_id: call.id,
+        });
+        throw new ApiError(
+          409,
+          "OpenAPPA cannot open a child session: enable [policy.deployment] context_control = true and choose a return contract before spawning",
+        );
+      }
       if (
         decision.decision === "allow_call" ||
         decision.decision === "pass_control"

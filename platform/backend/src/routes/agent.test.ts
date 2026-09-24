@@ -951,7 +951,7 @@ describe("agent routes", () => {
       expect(response.json().builtInAgentConfig).toBeNull();
     });
 
-    test("ignores an attempt to clear all teams on a team-scoped agent", async ({
+    test("refuses an attempt to clear all teams on a team-scoped agent", async ({
       makeAgent,
       makeTeam,
     }) => {
@@ -964,15 +964,15 @@ describe("agent routes", () => {
         authorId: user.id,
       });
 
-      // `teams` left the update body, so the retired field is dropped and the
-      // agent keeps the team it had.
+      // `teams` is a retired field, so the update is refused and the agent
+      // keeps the team it had.
       const response = await app.inject({
         method: "PUT",
         url: `/api/agents/${created.id}`,
         payload: { teams: [] },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
       expect(
         (await AgentModel.findById(created.id, user.id, true))?.teams.map(
           (entry) => entry.id,
@@ -980,7 +980,7 @@ describe("agent routes", () => {
       ).toEqual([team.id]);
     });
 
-    test("ignores a retired scope switch on an update", async ({
+    test("refuses a retired scope switch on an update", async ({
       makeAgent,
     }) => {
       const created = await makeAgent({
@@ -996,7 +996,7 @@ describe("agent routes", () => {
         payload: { scope: "team", teams: [] },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
       expect(
         (await AgentModel.findById(created.id, user.id, true))?.scope,
       ).toBe("personal");
@@ -1046,7 +1046,6 @@ describe("agent routes", () => {
         payload: {
           description: "Updated description",
           labels: [],
-          teams: [],
         },
       });
 
@@ -2084,13 +2083,14 @@ describe("agent routes", () => {
     const memberUser = await makeUser();
     await makeMember(memberUser.id, organizationId, { role: "member" });
     const hiddenOwner = await makeUser();
-    await makeTeam(organizationId, hiddenOwner.id);
+    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
     const kb = await makeKnowledgeBase(organizationId);
     const hiddenConnector = await makeKnowledgeBaseConnector(
       kb.id,
       organizationId,
       {
         name: "Hidden Connector",
+        access: { teams: [hiddenTeam.id] },
       },
     );
 
@@ -2144,12 +2144,12 @@ describe("agent routes", () => {
     const memberUser = await makeUser();
     await makeMember(memberUser.id, organizationId, { role: "member" });
     const hiddenOwner = await makeUser();
-    await makeTeam(organizationId, hiddenOwner.id);
+    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
     const kb = await makeKnowledgeBase(organizationId);
     const hiddenConnector = await makeKnowledgeBaseConnector(
       kb.id,
       organizationId,
-      {},
+      { access: { teams: [hiddenTeam.id] } },
     );
     const agent = await makeAgent({
       organizationId,

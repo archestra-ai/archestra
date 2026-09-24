@@ -58384,6 +58384,15 @@
                         "prompt"
                       ]
                     }
+                  },
+                  "scope": {
+                    "not": {}
+                  },
+                  "teams": {
+                    "not": {}
+                  },
+                  "users": {
+                    "not": {}
                   }
                 }
               }
@@ -62021,6 +62030,15 @@
                         "actions"
                       ]
                     }
+                  },
+                  "scope": {
+                    "not": {}
+                  },
+                  "teams": {
+                    "not": {}
+                  },
+                  "users": {
+                    "not": {}
                   }
                 }
               }
@@ -286764,6 +286782,9 @@
                         ]
                       }
                     }
+                  },
+                  "teamIds": {
+                    "not": {}
                   },
                   "labels": {
                     "type": "array",

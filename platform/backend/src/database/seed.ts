@@ -292,10 +292,10 @@ export async function syncBuiltInSkillsForOrganization(
         publishToOrganization: true,
         files: shipped.files,
       });
-      // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
-      // index, so a null means a pre-existing non-built-in skill already
-      // holds this name. Surface it instead of reporting a phantom seed — that
-      // org has no built-in copy and thus no reset path until the clash clears.
+      // Skill names are unique per author, and a built-in has none, so a
+      // member's skill of the same name no longer blocks it. createWithFiles
+      // still returns null on a conflict, so report that instead of a phantom
+      // seed.
       if (!created) {
         logger.warn(
           {
@@ -303,7 +303,7 @@ export async function syncBuiltInSkillsForOrganization(
             organizationId: organization.id,
             name: builtInSkill.name,
           },
-          "Skipped seeding built-in skill: a skill with this name already exists",
+          "Skipped seeding built-in skill: the insert conflicted",
         );
         continue;
       }

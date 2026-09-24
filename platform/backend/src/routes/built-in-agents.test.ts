@@ -8,6 +8,7 @@ import {
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, EnvironmentModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -152,7 +153,7 @@ describe("built-in agents routes", () => {
     expect(deleteResponse.statusCode).toBe(403);
   });
 
-  test("the advisor rejects scope, team, and environment changes but accepts prompt edits", async ({
+  test("the advisor rejects environment changes and retired sharing fields, and accepts prompt edits", async ({
     makeTeam,
   }) => {
     const advisor = await AgentModel.create({
@@ -169,15 +170,29 @@ describe("built-in agents routes", () => {
     });
     const team = await makeTeam(organizationId, user.id);
 
-    // One org-wide advisor serves every environment's agents through
-    // delegation, so narrowing it to a team or environment is rejected
-    // outright rather than silently dropped.
+    // Who reaches an agent is its grants, not the update body: the retired
+    // scope and team fields are refused, and the advisor's audience stays as
+    // it was.
+    const policyKey = {
+      organizationId,
+      resource: "agent" as const,
+      scope: advisor.id,
+    };
+    const grantsBefore = (await ResourcePermissionPolicyModel.find(policyKey))
+      ?.grants;
     const scopeResponse = await app.inject({
       method: "PUT",
       url: `/api/agents/${advisor.id}`,
       payload: { scope: "team", teams: [team.id] },
     });
     expect(scopeResponse.statusCode).toBe(400);
+    expect(
+      (await ResourcePermissionPolicyModel.find(policyKey))?.grants,
+    ).toEqual(grantsBefore);
+
+    // One org-wide advisor serves every environment's agents through
+    // delegation, so narrowing it to an environment is rejected outright
+    // rather than silently dropped.
 
     const environment = await EnvironmentModel.create({
       organizationId,
@@ -189,15 +204,6 @@ describe("built-in agents routes", () => {
       payload: { environmentId: environment.id },
     });
     expect(envResponse.statusCode).toBe(400);
-
-    // A no-op that restates org scope with an empty team list is allowed —
-    // the dialog may resend it alongside a real edit.
-    const noopScopeResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { scope: "org", teams: [] },
-    });
-    expect(noopScopeResponse.statusCode).toBe(200);
 
     const promptResponse = await app.inject({
       method: "PUT",

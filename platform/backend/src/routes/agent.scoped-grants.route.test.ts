@@ -174,7 +174,7 @@ describe("agent object grants", () => {
     const edited = await app.inject({
       method: "PUT",
       url: `/api/agents/${agent.id}`,
-      payload: { name: "Scoped editor update", scope: "org" },
+      payload: { name: "Scoped editor update" },
     });
     expect(edited.statusCode, edited.body).toBe(200);
     const listed = await app.inject({ method: "GET", url: "/api/agents" });
@@ -195,13 +195,31 @@ describe("agent object grants", () => {
         }),
       ]),
     );
+    // Sharing is no longer reachable from the update body: the retired field
+    // is refused and the recipient gains nothing.
+    const agentKey = {
+      organizationId,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const grantsBefore = (await ResourcePermissionPolicyModel.find(agentKey))
+      ?.grants;
     const shared = await app.inject({
       method: "PUT",
       url: `/api/agents/${agent.id}`,
       payload: { users: [recipient.id] },
     });
     expect(shared.statusCode, shared.body).toBe(400);
-    expect((await AgentModel.findById(agent.id))?.users).toEqual([]);
+    expect(
+      (await ResourcePermissionPolicyModel.find(agentKey))?.grants,
+    ).toEqual(grantsBefore);
+    expect(
+      await AgentTeamModel.userHasAgentAccess({
+        userId: recipient.id,
+        agentId: agent.id,
+        isAgentAdmin: false,
+      }),
+    ).toBe(false);
     expect(
       (await app.inject({ method: "DELETE", url: `/api/agents/${agent.id}` }))
         .statusCode,

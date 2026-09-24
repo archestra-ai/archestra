@@ -93,6 +93,7 @@ import {
   ImportAgentResponseSchema,
   PaginatedAgentActivationSkillsResponseSchema,
   PatchAgentActivationSkillPolicySchema,
+  RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -1815,7 +1816,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateAgentSchemaBase.partial(),
+        // Who can reach an agent changes through its permissions, so the
+        // retired sharing fields are refused rather than dropped.
+        body: UpdateAgentSchemaBase.partial().extend({
+          scope: RetiredSharingUpdateFieldSchema,
+          teams: RetiredSharingUpdateFieldSchema,
+          users: RetiredSharingUpdateFieldSchema,
+        }),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },

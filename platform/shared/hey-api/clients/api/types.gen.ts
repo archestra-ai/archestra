@@ -16523,6 +16523,9 @@ export type UpdateAgentData = {
             summaryTitle: string;
             prompt: string;
         }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     };
     path: {
         id: string;
@@ -17251,6 +17254,9 @@ export type CloneAgentData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     } | null;
     path: {
         id: string;
@@ -73338,6 +73344,7 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
+        teamIds?: unknown;
         labels?: Array<{
             key: string;
             value: string;

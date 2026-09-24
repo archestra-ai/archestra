@@ -9,6 +9,7 @@ describe("connection guide", () => {
     const guide = await response.text();
 
     expect(response.headers.get("content-type")).toContain("text/markdown");
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(guide).toContain(
       "https://example.com/connection?clientId=claude-code",
     );

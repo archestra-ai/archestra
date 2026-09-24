@@ -16,7 +16,12 @@ The installer changes the local Claude Code configuration. Do not download or ru
 
 Never ask the user to paste passwords, session cookies, or tokens into this conversation.
 `,
-      { headers: { "Content-Type": "text/markdown; charset=utf-8" } },
+      {
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      },
     );
   }
   return new Response(

@@ -22,7 +22,7 @@ export const ScopedResourceSchema = z.enum([
   // decide who can see and manage the registration, not what it reaches.
   "mcpOauthClient",
   "llmOauthClient",
-  // Deploying into a restricted environment is `use` on that environment.
+  // Deploying into an environment is `use` on that environment.
   "environment",
   // A service account carries no audience of its own — the organization owns
   // every one of them — but it is still an object somebody has to be allowed

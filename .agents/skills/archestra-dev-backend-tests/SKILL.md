@@ -13,6 +13,8 @@ Use `*.unit.test.ts` only for tests whose runtime import graph is database-free.
 
 Use ordinary `*.test.ts` for tests that need real database behavior, fixtures, or route integration. They opt into the PGlite setup and migrated snapshot. Never rename a database-backed test to `*.unit.test.ts` merely to make it run faster.
 
+For values or types from `@archestra/shared`, import a narrow exported subpath (for example `@archestra/shared/consts`) in database-free tests. Its root barrel re-exports a large graph, including generated clients. Biome rejects the root import in `*.unit.test.ts`; when a subpath is missing, add a focused export to `shared/package.json` rather than importing the root. When converting an ordinary test to a database-free test, inspect imports of the code under test as well: a light test file can still load an expensive graph through the module it exercises.
+
 Within each group, `backend/vitest.config.ts` splits files by module mocking at config-load time:
 
 - **`clean` / `unit`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
@@ -105,5 +107,5 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
 
 ## Performance etiquette
 
-- The suite's budget is module-import cost. Heavy new top-level imports in widely-imported modules cost every worker; test-only helpers belong under `src/test/`.
-- Local full-suite runs cap workers at half the cores (config) so the machine stays usable, further bounded by a ~5 GB-per-fork memory cap; CI uses all cores under the same memory cap and runs 8 shards via `vitest run --shard=k/8` behind the `Backend Unit Tests` gate job.
+- The suite's budget is module-import cost. Heavy new top-level imports in widely-imported modules cost every worker; test-only helpers belong under `src/test/`. Prefer focused imports over broad `@/models`, `@/types`, and `@archestra/shared` barrels when the leaf module is available. Use `import type` for types so they do not add a runtime edge.
+- Local full-suite runs use at most a quarter of available cores and four workers, further bounded by memory; CI uses available cores under its memory cap and runs 8 shards via `vitest run --shard=k/8` behind the `Backend Unit Tests` gate job.

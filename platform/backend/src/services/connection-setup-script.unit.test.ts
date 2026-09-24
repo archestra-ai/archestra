@@ -14,14 +14,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  EXTERNAL_AGENT_ID_HEADER,
+  STARTUP_GUARD_INSTALL,
+} from "@archestra/shared/consts";
+import {
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
-  DEFAULT_MODELS,
-  EXTERNAL_AGENT_ID_HEADER,
   OPENCODE_CLIENT_ID,
-  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
-  STARTUP_GUARD_INSTALL,
-} from "@archestra/shared";
+} from "@archestra/shared/interactions/client";
+import { DEFAULT_MODELS } from "@archestra/shared/model-constants";
+import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {

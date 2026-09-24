@@ -1,4 +1,4 @@
-import { META_HEADER, RUN_ID_HEADER } from "@archestra/shared";
+import { META_HEADER, RUN_ID_HEADER } from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import { getRunId } from "./run-id";
 

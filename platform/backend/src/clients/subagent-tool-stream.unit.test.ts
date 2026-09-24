@@ -1,4 +1,4 @@
-import { SUBAGENT_TOOL_CALL_PART_TYPE } from "@archestra/shared";
+import { SUBAGENT_TOOL_CALL_PART_TYPE } from "@archestra/shared/chat";
 import { convertToModelMessages, type UIMessage } from "ai";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatMessagePart } from "@/types";

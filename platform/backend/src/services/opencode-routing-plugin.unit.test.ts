@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import { describe, expect, test, vi } from "vitest";
 import { renderOpenCodeRoutingPlugin } from "@/services/opencode-routing-plugin";
 

@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared";
+import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
 import { expect, test } from "vitest";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { renderSetupScript } from "./connection-setup-script";

@@ -14,10 +14,12 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared/consts";
+import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
-  VIRTUAL_KEY_HEADER,
-} from "@archestra/shared";
+} from "@archestra/shared/opencode-provider-routes";
 import { describe, expect, test } from "vitest";
 import {
   buildStartupGuardInstallSection,

@@ -1,7 +1,7 @@
 import type {
   ContextWindowBreakdown,
   ContextWindowSegment,
-} from "@archestra/shared";
+} from "@archestra/shared/chat";
 import { describe, expect, it } from "vitest";
 import {
   assertWithinContextWindow,

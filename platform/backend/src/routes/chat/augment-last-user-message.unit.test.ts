@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@archestra/shared";
+import type { ChatMessage } from "@archestra/shared/chat";
 import { describe, expect, it } from "vitest";
 import { spliceText } from "./augment-last-user-message";
 

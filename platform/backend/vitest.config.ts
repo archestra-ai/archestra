@@ -91,14 +91,13 @@ const testFiles = partitionTestFiles();
 export default defineConfig({
   plugins: [rawPythonPlugin()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@archestra/shared/access-control": path.resolve(
-        __dirname,
-        "../shared/access-control.ts",
-      ),
-      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      {
+        find: /^@archestra\/shared$/,
+        replacement: path.resolve(__dirname, "../shared/index.ts"),
+      },
+    ],
   },
   test: {
     ...vitestLogPolicy,

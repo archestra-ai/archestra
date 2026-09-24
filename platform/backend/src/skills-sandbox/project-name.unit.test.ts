@@ -1,4 +1,4 @@
-import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
+import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import { validateProjectName } from "./project-name";
 

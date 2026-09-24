@@ -3,7 +3,7 @@ import {
   CODEX_CLIENT_ID,
   CURSOR_CLIENT_ID,
   OPENCODE_CLIENT_ID,
-} from "@archestra/shared";
+} from "@archestra/shared/interactions/client";
 import { describe, expect, test } from "vitest";
 import {
   detectClaudeClientId,

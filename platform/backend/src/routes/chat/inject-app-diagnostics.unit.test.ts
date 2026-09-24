@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@archestra/shared";
+import type { ChatMessage } from "@archestra/shared/chat";
 import { describe, expect, test } from "vitest";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 

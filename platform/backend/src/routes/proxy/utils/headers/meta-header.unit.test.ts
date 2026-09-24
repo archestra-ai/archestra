@@ -2,7 +2,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   META_HEADER,
   RUN_ID_HEADER,
-} from "@archestra/shared";
+} from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 

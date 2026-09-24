@@ -9,9 +9,17 @@
     "./access-control": "./access-control.ts",
     "./api-error": "./api-error.ts",
     "./consts": "./consts.ts",
+    "./chat": "./chat.ts",
+    "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",
+    "./interactions/session-source": "./interactions/session-source.ts",
+    "./model-constants": "./model-constants.ts",
+    "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
+    "./sso-template-helpers": "./sso-template-helpers.ts",
+    "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts"
   },
   "scripts": {

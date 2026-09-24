@@ -17,7 +17,7 @@ import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   STARTUP_GUARD_FORMAT_VERSION,
   STARTUP_GUARD_INSTALL,
-} from "@archestra/shared";
+} from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import type { SetupScriptContext } from "@/services/connection-setup-script";
 import {

@@ -1,10 +1,12 @@
+import { SESSION_ID_HEADER } from "@archestra/shared/consts";
+import {
+  CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
-  CODEX_CLIENT_ID,
-  OPENCODE_CLIENT_ID,
-  SESSION_ID_HEADER,
-} from "@archestra/shared";
+} from "@archestra/shared/interactions/session-source";
 import { describe, expect, test } from "vitest";
 import { extractSessionInfo } from "./session-id";
 

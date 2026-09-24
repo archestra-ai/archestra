@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@archestra/shared";
+import type { ChatMessage } from "@archestra/shared/chat";
 import { describe, expect, test } from "vitest";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 

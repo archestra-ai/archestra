@@ -1,4 +1,4 @@
-import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared";
+import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared/chat";
 import type { UIMessageChunk } from "ai";
 import { describe, expect, test } from "vitest";
 import type { DualLlmProgressEvent } from "@/guardrails/dual-llm-progress-bus";

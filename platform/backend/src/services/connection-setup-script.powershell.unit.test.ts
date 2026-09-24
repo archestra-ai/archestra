@@ -14,7 +14,7 @@ import { promisify } from "node:util";
 import {
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   STARTUP_GUARD_INSTALL,
-} from "@archestra/shared";
+} from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import {
   renderSetupScript,

@@ -2,7 +2,7 @@ import {
   buildChunkRef,
   type CitedQuote,
   extractCitedQuotes,
-} from "@archestra/shared";
+} from "@archestra/shared/citation-quotes";
 import { describe, expect, it } from "vitest";
 import {
   type KbChunkForQuoteCheck,

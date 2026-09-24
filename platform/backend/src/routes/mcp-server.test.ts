@@ -1170,18 +1170,7 @@ describe("mcp server inspect route", () => {
       header_x_api_key: "header-value",
     });
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus !== "pending") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
   });
 
   test("local reinstall ignores unknown keys and installer overrides for catalog static headers", async ({
@@ -1261,18 +1250,7 @@ describe("mcp server inspect route", () => {
     });
     expect(storedSecret?.secret).not.toHaveProperty("unknown_key");
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus !== "pending") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
   });
 
   test("rejects reinstall of another user's personal connection by an editor", async ({
@@ -1368,11 +1346,8 @@ describe("mcp server inspect route", () => {
     });
 
     // Drain the route's setImmediate-deferred reinstall so background
-    // work doesn't leak into the next test in the file. The local-
-    // reinstall test above uses 200ms total, but the remote path runs
-    // autoReinstallServer with a tool-fetch that takes longer when
-    // mocks aren't pre-primed — give it 2s so we don't leak a
-    // "pending" install whose async error fires inside the next test.
+    // work cannot leak into the next test in the file, where its async
+    // write could fire after the test database is gone.
     await drainPendingReinstall(mcpServer.id);
   });
 

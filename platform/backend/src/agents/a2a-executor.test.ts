@@ -1174,7 +1174,7 @@ describe("executeA2AMessage skill catalog", () => {
 
     expect(mockListAccessibleCatalogSkills).toHaveBeenCalledWith({
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       agentId: agent.id,
     });
     expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({

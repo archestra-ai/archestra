@@ -17,7 +17,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    const organization = await makeOrganization({ legacyPermissions: true });
+    const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: "admin" });
@@ -210,7 +210,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json().name).toBe("renamed-by-admin");
     expect(response.json().authorId).toBe(target.id);
   });

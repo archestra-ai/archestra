@@ -4,7 +4,6 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AppModel,
-  AppVersionModel,
   ConversationModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -22,6 +21,10 @@ import {
   mustExist,
   test,
 } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 describe("POST /api/apps", () => {
@@ -170,9 +173,9 @@ describe("POST /api/apps", () => {
     expect(orgApp.statusCode).toBe(200);
   });
 
-  test("ignores a stray uiCsp body key (apps carry no author CSP)", async () => {
-    // uiCsp is not an authoring field: the body schema strips it and the serve
-    // path pins the platform CSP.
+  test("refuses a stray uiCsp body key (apps carry no author CSP)", async () => {
+    // uiCsp is not an authoring field: the strict body schema refuses it, and
+    // the serve path pins the platform CSP.
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -182,13 +185,7 @@ describe("POST /api/apps", () => {
         uiCsp: { connectDomains: ["https://evil.example.com"] },
       },
     });
-    expect(response.statusCode).toBe(200);
-    const created = response.json() as { id: string; latestVersion: number };
-    const head = await AppVersionModel.findByAppAndVersion(
-      created.id,
-      created.latestVersion,
-    );
-    expect(head).not.toBeNull();
+    expect(response.statusCode).toBe(400);
   });
 
   test("refuses the retired scope and teamIds fields (400)", async () => {
@@ -336,9 +333,11 @@ describe("POST /api/apps", () => {
   });
 
   test("an admin may bind to a restricted environment", async () => {
-    const restricted = await EnvironmentModel.create({
+    // An admin's full access at `*` reaches an environment with no
+    // organization or role grant of its own.
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
+      data: { name: "restricted-prod" },
     });
     const response = await app.inject({
       method: "POST",
@@ -349,13 +348,13 @@ describe("POST /api/apps", () => {
     expect(response.json().environmentId).toBe(restricted.id);
   });
 
-  test("a member without deploy-to-restricted cannot bind to a restricted environment (403)", async ({
+  test("a member without a use grant cannot bind to a restricted environment (403)", async ({
     makeUser,
     makeMember,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
+      data: { name: "restricted-prod" },
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
@@ -378,23 +377,22 @@ describe("POST /api/apps", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("a custom role holding app:deploy-to-restricted may bind to a restricted environment", async ({
+  test("a member granted use on a restricted environment may bind to it", async ({
     makeUser,
     makeMember,
-    makeCustomRole,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
+      data: { name: "restricted-prod" },
     });
-    // The role holds the app-specific deploy permission and nothing else
-    // environment-related — pinning that the per-resource action alone
-    // unlocks the restricted bind for apps.
-    const role = await makeCustomRole(organizationId, {
-      permission: { app: ["read", "create", "deploy-to-restricted"] },
-    });
+    // A `use` grant on the one environment is what unlocks the bind.
     const deployer = await makeUser();
-    await makeMember(deployer.id, organizationId, { role: role.role });
+    await makeMember(deployer.id, organizationId, { role: "member" });
+    await grantEnvironmentUse({
+      organizationId,
+      environmentId: restricted.id,
+      userId: deployer.id,
+    });
     user = deployer;
 
     const response = await app.inject({
@@ -552,9 +550,9 @@ describe("POST /api/apps — the environment of the agent that builds it", () =>
     makeMember,
     makeAgent,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-launch",
+      data: { name: "restricted-launch" },
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });

@@ -14,19 +14,20 @@ test("provider read grants permit discovery but never model invocation; use gran
   makeSecret,
 }) => {
   const org = await makeOrganization();
-  const owner = await makeUser();
+  const bystander = await makeUser();
   const reader = await makeUser();
   const outsider = await makeUser();
-  for (const user of [owner, reader, outsider])
+  for (const user of [bystander, reader, outsider])
     await makeMember(user.id, org.id);
   const secret = await makeSecret({
     secret: { apiKey: "synthetic-provider-token" },
   });
+  // An organization key: a personal key (one with a user) belongs to its
+  // owner alone, so grants to anyone else never reach it.
   const key = await LlmProviderApiKeyModel.create(
     {
       organizationId: org.id,
-      userId: owner.id,
-      scope: "personal",
+      scope: "org",
       name: "Shared provider",
       provider: "anthropic",
       secretId: secret.id,
@@ -92,7 +93,9 @@ test("provider read grants permit discovery but never model invocation; use gran
     await LlmProviderApiKeyModel.getVisibleKeys(org.id, reader.id, [], false),
   ).toEqual([]);
   expect(await current()).toBeNull();
-  expect(await LlmProviderApiKeyModel.canUseKey(key, owner.id, [])).toBe(false);
+  expect(await LlmProviderApiKeyModel.canUseKey(key, bystander.id, [])).toBe(
+    false,
+  );
 });
 
 test("provider grants never bypass organization membership, even for a named recipient or legacy organization visibility", async ({

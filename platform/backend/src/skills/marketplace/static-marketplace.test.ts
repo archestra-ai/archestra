@@ -240,7 +240,7 @@ describe("loadMarketplaceSkills", () => {
     expect(skills.map((s) => s.name).sort()).toEqual(["org-wide", "theirs"]);
   });
 
-  test("global update does not expose private skills without read grants", async ({
+  test("read grants, not the admin flag, decide which private skills show", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -248,6 +248,21 @@ describe("loadMarketplaceSkills", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
+    await seedSkill({ organizationId: org.id, name: "shared", access: "org" });
+    await seedSkill({ organizationId: org.id, name: "private" });
+    const load = () =>
+      loadMarketplaceSkills({
+        organizationId: org.id,
+        userId: user.id,
+        isSkillAdmin: true,
+      });
+
+    // The flag alone opens nothing: without a grant the private skill stays
+    // hidden.
+    expect((await load()).map((skill) => skill.name)).toEqual(["shared"]);
+
+    // An update grant at `*` is stored as the Edit preset, which carries read,
+    // so every skill now shows.
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId: org.id,
       resource: "skill",
@@ -264,14 +279,10 @@ describe("loadMarketplaceSkills", () => {
         { subject: { type: "user", id: user.id }, actions: ["update"] },
       ],
     });
-    await seedSkill({ organizationId: org.id, name: "shared", access: "org" });
-    await seedSkill({ organizationId: org.id, name: "private" });
-    const skills = await loadMarketplaceSkills({
-      organizationId: org.id,
-      userId: user.id,
-      isSkillAdmin: true,
-    });
-    expect(skills.map((skill) => skill.name)).toEqual(["shared"]);
+    expect((await load()).map((skill) => skill.name).sort()).toEqual([
+      "private",
+      "shared",
+    ]);
   });
 
   test("soft-deleted skills drop out of the marketplace", async ({

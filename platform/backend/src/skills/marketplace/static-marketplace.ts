@@ -32,7 +32,10 @@ import type { MaterializeSkillInput } from "./layout";
 export interface MarketplaceViewer {
   organizationId: string;
   userId: string | null;
-  /** Holds `skill:admin`, so scope restrictions do not apply to them. */
+  /**
+   * Holds update on every skill. The loader does not read it: grants alone
+   * decide which skills the viewer sees.
+   */
   isSkillAdmin: boolean;
 }
 

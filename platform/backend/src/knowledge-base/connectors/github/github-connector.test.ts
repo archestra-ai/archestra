@@ -80,7 +80,8 @@ describe("GithubConnector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedOctokitOptions.length = 0;
-    connector = new GithubConnector();
+    // The sync tests cover pagination and output, not wall-clock throttling.
+    connector = new GithubConnector(0);
     // Default: repos.get returns main as default branch
     mockReposGet.mockResolvedValue({
       data: { default_branch: "main" },

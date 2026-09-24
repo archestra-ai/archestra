@@ -18,6 +18,7 @@ import {
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
+  loadChildReturns,
   loadOfferReview,
   processProxyResults,
   sessionFromHeaders,
@@ -40,6 +41,7 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
@@ -83,6 +85,7 @@ beforeEach(async ({ makeOrganization }) => {
     "postgresql://test:test@localhost/test",
   );
   native.loadOfferReview.mockReset();
+  native.loadChildReturns.mockReset();
   native.executeRemedyByOffer.mockReset();
   native.executeRemedyByOffer.mockResolvedValue(
     JSON.stringify({
@@ -149,6 +152,36 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([{ kind: "allow" }]);
+  });
+
+  test("retains signed child lineage on the first evaluated tool call", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    await evaluateToolCalls(
+      {
+        ...session,
+        session_id: "conversation:child",
+        parent_id: "conversation",
+      },
+      [{ id: "search", name: "WebSearch", arguments: { query: "example" } }],
+      {
+        canonicalize: (name) => name,
+        lineage: { spawnCallId: "spawn-1", childNativeId: "child" },
+      },
+    );
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:search",
+        spawn_call_id: "spawn-1",
+        child_native_id: "child",
+      }),
+    );
   });
 
   test("reports through the authenticated native session after policy checking", async () => {
@@ -920,6 +953,47 @@ describe("APPA feature boundary", () => {
         operation_id: "child_end:turn:echo",
         output: "SUMMARY(24 characters): safe",
       },
+    ]);
+  });
+
+  test("carries spawn correlation on both ChildEnd dispatches for the durable record", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        String(event.operation_id).endsWith(":echo")
+          ? { decision: "ack" }
+          : { decision: "child_return", value: "SUMMARY(24 characters): safe" },
+      );
+    });
+    const child = {
+      ...session,
+      session_id: "conversation:child",
+      parent_id: session.session_id,
+    };
+
+    await endChild({
+      session: child,
+      operationId: "child_end:turn",
+      output: "REPORT-RAW-KOALA-0831",
+      spawnCallId: "spawn-call",
+      childNativeId: "a1",
+    });
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "child_end",
+        operation_id: "child_end:turn",
+        spawn_call_id: "spawn-call",
+        child_native_id: "a1",
+      }),
+      expect.objectContaining({
+        event: "child_end",
+        operation_id: "child_end:turn:echo",
+        spawn_call_id: "spawn-call",
+        child_native_id: "a1",
+      }),
     ]);
   });
 
@@ -2006,6 +2080,55 @@ describe("remedy by offer", () => {
     expect(input.precheck_refusal).toMatch(
       /^\[appa\] Not submitted for approval: this call to archestra__todo_write could not run even if approved\.\n.*todos\[0\]\.id/,
     );
+  });
+
+  test("loads retained child returns for a parent session", async () => {
+    native.loadChildReturns.mockResolvedValueOnce([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        spawnCallId: "spawn-call",
+        childNativeId: "a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+      {
+        childSessionId: "user:alice|conversation:a2",
+        value: "raw release",
+      },
+    ]);
+
+    const records = await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+    });
+
+    expect(native.loadChildReturns).toHaveBeenCalledWith(
+      organizationId,
+      "user:alice|conversation",
+    );
+    expect(records).toEqual([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        spawnCallId: "spawn-call",
+        childNativeId: "a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+      {
+        childSessionId: "user:alice|conversation:a2",
+        value: "raw release",
+      },
+    ]);
+  });
+
+  test("fails closed with 503 when the child returns cannot be loaded", async () => {
+    native.loadChildReturns.mockRejectedValueOnce(
+      new Error("host SQL requires a leased connection"),
+    );
+    await expect(
+      loadChildReturns({
+        organizationId,
+        parentSessionId: "user:alice|conversation",
+      }),
+    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
   });
 
   test("fails closed with 503 when the offer review cannot be loaded", async () => {

@@ -138,7 +138,7 @@ export type AppaClientAdapter = {
   isChildHandbackTool?(name: string): boolean;
   /** Payload carried by a native child handback call. */
   childHandbackValue?(args: unknown): string | undefined;
-  /** Rewrites a native handback so the parent receives admitted bytes and a receipt. */
+  /** Rewrites a native handback so the parent receives admitted bytes and a marker. */
   rewriteChildHandback?(
     args: unknown,
     admitted: string,

@@ -9,8 +9,7 @@ import { describe, expect, test } from "@/test";
 import { openappaActor } from "./actor";
 import {
   collectAndStripChildReturns,
-  mintChildReturnReceipt,
-  verifyChildReturnReceipt,
+  mintChildReturnMarker,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { mintDelegationMarker } from "./delegation";
@@ -353,8 +352,8 @@ describe("child trajectory receipt text carriers", () => {
       ...scope,
       spawnerNativeId: "s1",
     });
-    const returned = mintChildReturnReceipt({ ...scope, value: admitted });
-    if (!trajectory || !returned) throw new Error("expected signed carriers");
+    const returned = mintChildReturnMarker({ ...scope, value: admitted });
+    if (!trajectory || !returned) throw new Error("expected minted carriers");
     const response = { content: [{ type: "text", text: admitted }] };
     expect(
       appendChildTrajectoryReceiptToResponse({
@@ -389,15 +388,14 @@ describe("child trajectory receipt text carriers", () => {
 
       expect(trajectoryReceipts).toEqual([]);
       expect(JSON.stringify(body)).not.toContain("appact2-");
-      expect(childReturns.receipts).toHaveLength(1);
-      expect(
-        verifyChildReturnReceipt({
-          receipt: childReturns.receipts[0],
-          organizationId: scope.organizationId,
-          callerId: scope.callerId,
-          parentId: scope.parentId,
+      expect(JSON.stringify(body)).not.toContain("finished subagent");
+      expect(childReturns.completions).toEqual([
+        expect.objectContaining({
+          childNativeId: scope.childNativeId,
+          spawnCallId: scope.spawnCallId,
+          value: admitted,
         }),
-      ).toMatchObject({ childId: scope.childId, value: admitted });
+      ]);
     }
   });
 
@@ -416,8 +414,8 @@ describe("child trajectory receipt text carriers", () => {
       ...scope,
       spawnerNativeId: "s1",
     });
-    const returned = mintChildReturnReceipt({ ...scope, value: admitted });
-    if (!trajectory || !returned) throw new Error("expected signed carriers");
+    const returned = mintChildReturnMarker({ ...scope, value: admitted });
+    if (!trajectory || !returned) throw new Error("expected minted carriers");
     const completeResponse = `${trajectory}\n\n${admitted}\n\n${returned}`;
     // The child-return collector recognizes a standalone notification in
     // assistant-authored history as well, so a proof inside it stays that
@@ -436,16 +434,15 @@ describe("child trajectory receipt text carriers", () => {
 
       expect(trajectoryReceipts).toEqual([]);
       expect(JSON.stringify(body)).not.toContain("appact2-");
-      expect(childReturns.receipts).toHaveLength(1);
-      expect(childReturns.receipts[0].assistantOrigin).toBe(true);
-      expect(
-        verifyChildReturnReceipt({
-          receipt: childReturns.receipts[0],
-          organizationId: scope.organizationId,
-          callerId: scope.callerId,
-          parentId: scope.childId,
+      expect(JSON.stringify(body)).not.toContain("finished subagent");
+      expect(childReturns.completions).toEqual([
+        expect.objectContaining({
+          assistantOrigin: true,
+          childNativeId: scope.childNativeId,
+          spawnCallId: scope.spawnCallId,
+          value: admitted,
         }),
-      ).toMatchObject({ childId: scope.childId, value: admitted });
+      ]);
     }
   });
 

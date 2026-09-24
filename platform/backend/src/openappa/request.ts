@@ -82,7 +82,7 @@ export type AppaPreparedRequest = {
     /** Unverified markers from user turns, in wire order. */
     markers: AppaDelegationMarker[];
   };
-  /** Signed child-return carriers collected before provider dispatch. */
+  /** Child-return completions collected before provider dispatch. */
   childReturns?: CollectedChildReturns;
   /** Unverified self-contained trajectory proofs; child binding verifies them. */
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];

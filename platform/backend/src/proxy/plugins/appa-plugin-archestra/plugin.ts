@@ -11,11 +11,12 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { clientSessionId } from "@/openappa/actor";
 import {
-  childReturnReceiptsConfigured,
-  mintChildReturnReceipt,
-  verifyChildReturnReceipt,
+  type AppaChildReturnCompletion,
+  childReturnMarkersConfigured,
+  mintChildReturnMarker,
 } from "@/openappa/child-return";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { delegationEnabled, mintDelegationMarker } from "@/openappa/delegation";
@@ -34,12 +35,14 @@ import {
 } from "@/openappa/offer-claims";
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
+  type AppaChildReturnRecord,
   approveSpawnReturn,
   cancelCalls,
   endChild,
   endTurn,
   evaluateHostedToolCalls,
   evaluateToolCalls,
+  loadChildReturns,
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
@@ -371,7 +374,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     const session = this.governedSession(binding);
-    await notePrompt(session, binding.request.promptOperationId);
+    await notePrompt(
+      session,
+      binding.request.promptOperationId,
+      binding.child?.lineage,
+    );
   }
 
   async onPrepareToolCalls(
@@ -577,6 +584,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       {
         ...this.resolution(binding),
         control: tools.control,
+        lineage: binding.child?.lineage,
       },
     );
     const held = calls.flatMap((call, index) => {
@@ -683,6 +691,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           },
           isSpawn: (name, namespace) =>
             binding.adapter?.isSpawnTool(name, namespace) === true,
+          lineage: binding.child?.lineage,
           supportsDelegation: binding.adapter !== undefined && !binding.chat,
           ...(binding.request.tools
             ? {
@@ -873,16 +882,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     // Check correlation data and the signing key before ChildEnd.
     // If the runtime admits a value, the value crosses the boundary.
-    // Fail before dispatch if the receipt cannot be created.
+    // Fail before dispatch if the marker cannot be created.
     const childNativeId = binding.child?.lineage?.childNativeId;
-    const spawnCallId = binding.child?.lineage?.spawnCallId;
+    const spawnCallId = await resolveSpawnCallId(binding);
     if (!spawnCallId) {
       throw new ApiError(
         503,
         "OpenAPPA cannot correlate the child return to its parent",
       );
     }
-    if (!childReturnReceiptsConfigured()) {
+    if (!childReturnMarkersConfigured()) {
       throw new ApiError(503, "OpenAPPA could not protect the child return");
     }
 
@@ -893,13 +902,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         "child_end:",
       ),
       output: context.responseText,
+      spawnCallId,
+      ...(childNativeId ? { childNativeId } : {}),
     });
     const admitted =
       outcome.decision === "release" ? context.responseText : outcome.content;
     if (!outcome.crossed) {
       return { decision: "replace", responseText: admitted };
     }
-    const receipt = mintChildReturnReceipt({
+    const marker = mintChildReturnMarker({
       organizationId: binding.session.organization_id,
       callerId: binding.session.caller_id,
       parentId: binding.session.parent_id,
@@ -909,12 +920,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       value: admitted,
       ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
     });
-    if (!receipt) {
+    if (!marker) {
       throw new ApiError(503, "OpenAPPA could not protect the child return");
     }
     return {
       decision: "replace",
-      responseText: `${admitted}\n\n${receipt}`,
+      responseText: `${admitted}\n\n${marker}`,
     };
   }
 
@@ -1093,77 +1104,122 @@ async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
 }): Promise<Record<string, string>> {
-  const collected = params.binding.request.childReturns;
-  const receipts = collected?.receipts ?? [];
-  const envelopeIdOf = (id: string) => parseTrajectoryStamp(id)?.callId ?? id;
-  const arrivingEnvelopes = new Set(
-    receipts.flatMap((receipt) =>
-      !receipt.assistantOrigin && receipt.envelopeId !== undefined
-        ? [envelopeIdOf(receipt.envelopeId)]
-        : [],
-    ),
-  );
-  // One wait result can contain several children. Every completed leaf requires
-  // its own receipt. Validating one substring does not authorize sibling returns.
-  if (collected?.completions.some((completion) => !completion.receipt)) {
-    throw new ApiError(409, "OpenAPPA withheld an unverified child completion");
-  }
+  const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
+  const envelopeIdOf = (id: string) => parseTrajectoryStamp(id)?.callId ?? id;
   const completionResults = params.results.filter(
     (result) =>
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
       adapter?.isChildCompletionResult?.(result) === true,
   );
-  if (
-    completionResults.some(
-      (result) => !arrivingEnvelopes.has(envelopeIdOf(result.id)),
-    )
-  ) {
-    throw new ApiError(
-      409,
-      "OpenAPPA withheld an unverified child completion from the parent",
-    );
+  if (completions.length === 0 && completionResults.length === 0) {
+    return {};
   }
-  // Authenticates every receipt before recording runtime results.
-  // An assistant role does not bypass verification.
-  const arrived = new Map<
-    string,
-    NonNullable<Awaited<ReturnType<typeof verifyChildReturnReceipt>>> & {
-      spawnCallId: string;
-    }
-  >();
-  const byEnvelope = new Map<
-    string,
-    Array<NonNullable<Awaited<ReturnType<typeof verifyChildReturnReceipt>>>>
-  >();
+  // Display markers carry no authority. Assistant quotes are stripped from
+  // the request but never treated as parent-bound completions.
+  // The durable authority: the child returns this family crossed, retained by
+  // the runtime at ChildEnd. Nothing the client carries proves a return.
+  const available = (
+    await loadChildReturns({
+      organizationId: params.binding.session.organization_id,
+      parentSessionId: params.binding.session.session_id,
+    })
+  ).map((record) => ({
+    ...record,
+    ...(record.spawnCallId
+      ? { spawnCallId: envelopeIdOf(record.spawnCallId) }
+      : {}),
+  }));
   const directSpawnResults = new Set(
     params.results
       .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
       .map((result) => envelopeIdOf(result.id)),
   );
-  for (const receipt of receipts) {
-    const verified = verifyChildReturnReceipt({
-      receipt,
-      organizationId: params.binding.session.organization_id,
-      callerId: params.binding.session.caller_id,
-      parentId: params.binding.session.session_id,
-    });
-    if (!verified) {
+  // One wait result can contain several children. Every completed leaf
+  // consumes its own crossing. One genuine return cannot authorize siblings.
+  const matched: Array<{
+    completion: AppaChildReturnCompletion;
+    record: AppaChildReturnRecord;
+  }> = [];
+  for (const completion of completions) {
+    // Display-only echoes never consume a child's crossing.
+    if (completion.assistantOrigin) continue;
+    const expectedSpawn = completion.spawnCallId
+      ? envelopeIdOf(completion.spawnCallId)
+      : completion.envelopeId &&
+          directSpawnResults.has(envelopeIdOf(completion.envelopeId))
+        ? envelopeIdOf(completion.envelopeId)
+        : undefined;
+    const candidates = available.flatMap((record, index) =>
+      record.value === completion.value ? [{ record, index }] : [],
+    );
+    const exact = candidates.filter(
+      ({ record }) =>
+        (expectedSpawn === undefined || record.spawnCallId === expectedSpawn) &&
+        (completion.childNativeId === undefined ||
+          record.childNativeId === completion.childNativeId),
+    );
+    const eligible = exact.length
+      ? exact
+      : candidates.filter(
+          ({ record }) =>
+            (expectedSpawn === undefined || record.spawnCallId === undefined) &&
+            (completion.childNativeId === undefined ||
+              record.childNativeId === undefined),
+        );
+    const first = eligible[0]?.record;
+    if (
+      !first &&
+      expectedSpawn !== undefined &&
+      candidates.some(
+        ({ record }) =>
+          record.spawnCallId !== undefined &&
+          record.spawnCallId !== expectedSpawn,
+      )
+    ) {
       throw new ApiError(
         400,
-        "OpenAPPA rejected a forged child-return receipt",
+        "OpenAPPA rejected a child return for another spawn call",
       );
     }
-    if (verified.assistantOrigin) continue;
-    if (!verified.spawnCallId) {
+    if (
+      !first ||
+      eligible.some(
+        ({ record }) =>
+          record.childSessionId !== first.childSessionId ||
+          record.spawnCallId !== first.spawnCallId ||
+          record.childNativeId !== first.childNativeId,
+      )
+    ) {
+      throw new ApiError(
+        409,
+        "OpenAPPA withheld an unverified child completion",
+      );
+    }
+    const hit = eligible[0].index;
+    const [record] = available.splice(hit, 1);
+    matched.push({ completion, record });
+  }
+  const arrived: Array<AppaChildReturnRecord & { spawnCallId: string }> = [];
+  const byEnvelope = new Map<string, AppaChildReturnRecord[]>();
+  for (const { completion, record } of matched) {
+    const spawnCallId =
+      record.spawnCallId ??
+      (completion.spawnCallId
+        ? envelopeIdOf(completion.spawnCallId)
+        : undefined) ??
+      (completion.envelopeId &&
+      directSpawnResults.has(envelopeIdOf(completion.envelopeId))
+        ? envelopeIdOf(completion.envelopeId)
+        : undefined);
+    if (!spawnCallId) {
       throw new ApiError(
         409,
         "OpenAPPA cannot bind the child completion to its spawn call",
       );
     }
-    if (receipt.envelopeId) {
-      const envelopeId = envelopeIdOf(receipt.envelopeId);
-      const spawnCallId = envelopeIdOf(verified.spawnCallId);
+    if (completion.envelopeId) {
+      const envelopeId = envelopeIdOf(completion.envelopeId);
       if (directSpawnResults.has(envelopeId) && envelopeId !== spawnCallId) {
         throw new ApiError(
           400,
@@ -1171,24 +1227,37 @@ async function approveChildReturnCarriers(params: {
         );
       }
       const envelope = byEnvelope.get(envelopeId) ?? [];
-      envelope.push(verified);
+      envelope.push(record);
       byEnvelope.set(envelopeId, envelope);
     }
-    arrived.set(verified.token, {
-      ...verified,
-      spawnCallId: verified.spawnCallId,
+    arrived.push({
+      ...record,
+      spawnCallId,
     });
   }
-  for (const receipt of arrived.values()) {
+  if (
+    completionResults.some(
+      (result) => (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0,
+    )
+  ) {
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld an unverified child completion from the parent",
+    );
+  }
+  // Records every verified crossing with the runtime. The runtime re-checks
+  // each value against the return its fork bound, so a client-named spawn
+  // call cannot stand for a child it never opened.
+  for (const record of arrived) {
     await approveSpawnReturn({
       session: params.binding.session,
-      toolCallId: receipt.spawnCallId,
-      childId: receipt.childId,
-      value: receipt.value,
+      toolCallId: record.spawnCallId,
+      childId: record.childSessionId,
+      value: record.value,
     });
   }
-  // Strips unverified text and metadata beside valid receipts.
-  // Reconstructs result content solely from authenticated values.
+  // Strips unverified text and metadata beside valid returns.
+  // Reconstructs result content solely from crossed values.
   const updates: Record<string, string> = Object.create(null);
   for (const result of completionResults) {
     const envelopeId = envelopeIdOf(result.id);
@@ -1205,10 +1274,12 @@ async function approveChildReturnCarriers(params: {
         ? verified[0].value
         : JSON.stringify({
             status: Object.fromEntries(
-              verified.map((receipt) => [
-                receipt.childNativeId,
-                { completed: receipt.value },
-              ]),
+              matched
+                .filter(({ record }) => verified.includes(record))
+                .map(({ completion, record }) => [
+                  completion.childNativeId ?? record.childNativeId,
+                  { completed: record.value },
+                ]),
             ),
           });
   }
@@ -1226,7 +1297,7 @@ async function admitChildHandback(params: {
     throw new ApiError(400, "OpenAPPA child handback carried no return value");
   }
   const childNativeId = binding.child?.lineage?.childNativeId;
-  const spawnCallId = binding.child?.lineage?.spawnCallId;
+  const spawnCallId = await resolveSpawnCallId(binding);
   if (!binding.session.parent_id || !spawnCallId) {
     throw new ApiError(
       503,
@@ -1236,7 +1307,7 @@ async function admitChildHandback(params: {
   if (!binding.request.turnEndOperationId) {
     throw new ApiError(503, "OpenAPPA could not safely end the child turn");
   }
-  if (!childReturnReceiptsConfigured()) {
+  if (!childReturnMarkersConfigured()) {
     throw new ApiError(503, "OpenAPPA could not protect the child return");
   }
   const outcome = await endChild({
@@ -1246,13 +1317,15 @@ async function admitChildHandback(params: {
       "child_end:",
     ),
     output: raw,
+    spawnCallId,
+    ...(childNativeId ? { childNativeId } : {}),
   });
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
     throw new ApiError(409, admitted || "OpenAPPA withheld the child return");
   }
-  const receipt = mintChildReturnReceipt({
+  const marker = mintChildReturnMarker({
     organizationId: binding.session.organization_id,
     callerId: binding.session.caller_id,
     parentId: binding.session.parent_id,
@@ -1262,10 +1335,10 @@ async function admitChildHandback(params: {
     value: admitted,
     ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
   });
-  if (!receipt) {
+  if (!marker) {
     throw new ApiError(503, "OpenAPPA could not protect the child return");
   }
-  const returnText = `${admitted}\n\n${receipt}`;
+  const returnText = `${admitted}\n\n${marker}`;
   const rewritten = adapter?.rewriteChildHandback?.(call.arguments, returnText);
   return {
     call: {
@@ -1274,6 +1347,28 @@ async function admitChildHandback(params: {
     },
     returnText,
   };
+}
+
+/**
+ * The spawn call a child return answers. Lineage carries it from the child's
+ * first request. A later request may lose that marker, so the child's first
+ * retained prompt recovers its signed spawn binding without guessing from
+ * unrelated parent calls.
+ */
+async function resolveSpawnCallId(
+  binding: AppaPluginBinding,
+): Promise<string | undefined> {
+  const lineage = binding.child?.lineage;
+  if (lineage?.spawnCallId) return lineage.spawnCallId;
+  if (!binding.session.parent_id) return undefined;
+  return (
+    (await OpenAppaSpawnCorrelationModel.soleOpenSpawn({
+      organizationId: binding.session.organization_id,
+      callerId: binding.session.caller_id,
+      parentSessionId: binding.session.parent_id,
+      childSessionId: binding.session.session_id,
+    })) ?? undefined
+  );
 }
 
 function isCompactionOnlyResponse(value: unknown): boolean {

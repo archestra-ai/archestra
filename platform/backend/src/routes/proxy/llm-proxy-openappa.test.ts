@@ -43,6 +43,19 @@ import openAiProxyRoutes from "./routes/openai";
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
+  loadChildReturns: vi.fn(
+    async (
+      _organizationId: string,
+      _parentSessionId: string,
+    ): Promise<
+      Array<{
+        childSessionId: string;
+        spawnCallId?: string;
+        childNativeId?: string;
+        value: string;
+      }>
+    > => [],
+  ),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
   parseOpenappaDeclarations: vi.fn(async () => ({
@@ -307,12 +320,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const childTag = match?.[1] ? `${match[1]} ` : "";
     const code = match?.[2];
     expect(code, body).toBeDefined();
-    const proof = body.match(
-      /\[appa\] child return appar-[A-Za-z0-9_-]+\.[0-9a-f]{64}\./,
-    )?.[0];
-    expect(proof, body).toBeDefined();
     const marker = `▄█▄▄▄█▄\n██▄█▄██  finished subagent ${childTag}${code}`;
-    return `${value}\n\n${marker}\n${proof}`;
+    return `${value}\n\n${marker}`;
   };
 
   test.each([
@@ -3415,6 +3424,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         if (!defaultDispatch) throw new Error("missing native mock");
         return defaultDispatch(raw);
       });
+      // The retained crossing the parent side verifies completions against.
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|oc-return-root`
+            ? [
+                {
+                  childSessionId: `user:${userId}|oc-return-root:oc-return-child`,
+                  spawnCallId: spawnCall.id,
+                  childNativeId: "oc-return-child",
+                  value: admitted,
+                },
+              ]
+            : [],
+      );
       const send = (params: {
         id: string;
         parent?: string;
@@ -3474,6 +3497,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(child.body).toContain("finished subagent");
       expect(child.body).toContain(admitted);
       expect(child.body).not.toContain(rawMarker);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "prompt",
+          spawn_call_id: "call_task_return",
+          child_native_id: "oc-return-child",
+        }),
+      );
       expect(
         events.filter((event) => event.event === "child_end"),
       ).toHaveLength(2);
@@ -3876,6 +3906,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]);
       expect(root.statusCode, root.body).toBe(200);
       const call = noticeFrom(root.body, stream);
+      // The retained crossing the parent side verifies completions against;
+      // the same record authenticates the child's own echoed return.
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|${session}`
+            ? [
+                {
+                  childSessionId: `user:${userId}|${session}:a1`,
+                  spawnCallId: call.id,
+                  childNativeId: "a1",
+                  value: admitted,
+                },
+              ]
+            : [],
+      );
 
       events.length = 0;
       providerRequests.length = 0;
@@ -4101,7 +4146,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).toContain(admitted);
       expect(JSON.stringify(providerRequests)).not.toContain(rawMarker);
       expect(JSON.stringify(providerRequests)).not.toContain(
-        "[appa] child return",
+        "finished subagent",
       );
 
       providerRequests.length = 0;
@@ -4512,6 +4557,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const defaultDispatch = native.dispatchHook.getMockImplementation();
       native.dispatchHook.mockImplementation(async (raw: string) => {
         const event = JSON.parse(raw);
+        if (
+          event.event === "prompt" &&
+          String(event.session_id).endsWith(":return-child")
+        ) {
+          events.push(event);
+        }
         if (event.event === "child_end") {
           events.push(event);
           return JSON.stringify(
@@ -4538,6 +4589,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         if (!defaultDispatch) throw new Error("missing native mock");
         return defaultDispatch(raw);
       });
+      // The retained crossing the parent side verifies completions against;
+      // the same record authenticates the child's own echoed return.
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|return-root`
+            ? [
+                {
+                  childSessionId: `user:${userId}|return-root:return-child`,
+                  spawnCallId: "call_spawn_return",
+                  childNativeId: "return-child",
+                  value: admitted,
+                },
+              ]
+            : [],
+      );
       const tools = [
         {
           type: "namespace",
@@ -4627,6 +4693,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(child.body).toContain("finished subagent");
       expect(child.body).toContain(admitted);
       expect(child.body).not.toContain(rawMarker);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "prompt",
+          spawn_call_id: "call_spawn_return",
+          child_native_id: "return-child",
+        }),
+      );
       expect(
         events.filter((event) => event.event === "child_end"),
       ).toHaveLength(2);
@@ -4673,7 +4746,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         }),
       );
 
-      // A valid receipt for one result cannot authorize an unsigned sibling
+      // A crossed return for one child cannot authorize an unsigned sibling
       // or be replayed under a different child id in the same wait envelope.
       for (const siblingOutput of [rawMarker, carrier]) {
         providerRequests.length = 0;
@@ -4716,8 +4789,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           { role: "user", content: "Continue" },
         ],
       });
-      expect(tamperedEcho.statusCode, tamperedEcho.body).toBe(400);
-      expect(providerRequests).toHaveLength(0);
+      expect(tamperedEcho.statusCode, tamperedEcho.body).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "finished subagent",
+      );
     });
 
     test("refuses a nested Claude spawn that cannot carry a marker", async () => {
@@ -5052,7 +5128,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(refused.statusCode, refused.body).toBe(200);
         expect(refused.body).toContain("OpenAPPA");
         expect(refused.body).not.toContain("Let me check.");
-        expect(refused.body).toContain("appar-");
+        expect(refused.body).toContain("finished subagent");
         const ended = events.filter((event) => event.event === "child_end");
         expect(ended).toHaveLength(2);
         expect(ended[0].output).toContain("OpenAPPA");

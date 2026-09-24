@@ -228,6 +228,13 @@ struct Input {
     /// Fully scoped child trajectory on a parent-side SpawnResult.
     #[serde(default)]
     spawned_id: Option<String>,
+    /// Spawn call a ChildEnd answers, retained with the operation so the
+    /// parent side can bind a returned value to its fork without a carrier.
+    #[serde(default)]
+    spawn_call_id: Option<String>,
+    /// Client-native child identity a ChildEnd answers, retained likewise.
+    #[serde(default)]
+    child_native_id: Option<String>,
     #[serde(default)]
     outcome: Option<ExecutionOutcome>,
     #[serde(skip_deserializing, default)]
@@ -957,6 +964,8 @@ pub async fn execute_remedy_by_offer(
         spawn: false,
         output: None,
         spawned_id: None,
+        spawn_call_id: None,
+        child_native_id: None,
         outcome: None,
         owner_root: Some(owner.root),
         spelling: owner.spelling,
@@ -1049,6 +1058,81 @@ pub async fn load_offer_review(
         tool,
         arguments,
     }))
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct ChildReturnRecord {
+    /// Fully scoped session id of the child whose return crossed.
+    pub child_session_id: String,
+    /// The spawn call the return answers, when the child named it at ChildEnd.
+    pub spawn_call_id: Option<String>,
+    /// The client-native child identity, when the child named one.
+    pub child_native_id: Option<String>,
+    /// The exact bytes the runtime admitted across the child boundary.
+    pub value: String,
+}
+
+/// Loads the child returns a parent's family durably crossed, from the
+/// retained ChildEnd operations in PostgreSQL. This is the authority the
+/// parent side verifies an arriving completion against; nothing the client
+/// carries proves a return.
+#[napi(js_name = "loadChildReturns")]
+pub async fn load_child_returns(
+    organization_id: String,
+    parent_session_id: String,
+) -> napi::Result<Vec<ChildReturnRecord>> {
+    // Mirror load_offer_review: clone state, drop the mutex, then lease a
+    // connection before host SQL so lookups never contend with dispatches.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    pg.with_client(move |client| {
+        // session_id is the leading PK column of openappa_operations, and
+        // organization_id is an additional tenancy guard. Each crossing has
+        // one base ChildEnd: a staged return carries decision.value and a
+        // released one carries input.output. The echo repeats those bytes but
+        // is not another crossing. An earlier crossing stays beside a later
+        // one, even for the same spawn call, so a completion already delivered
+        // to the parent still verifies. A bare end that crossed nothing has
+        // no value and is skipped — it must never fail the whole lookup.
+        // Blocked ends are not crossings and never qualify either.
+        let rows = client.query(
+            "SELECT o.session_id AS child_session_id, \
+              COALESCE(o.input->'semantic'->>'spawn_call_id', o.input->>'spawn_call_id') AS spawn_call_id, \
+              COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
+              COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') AS value \
+              FROM openappa_operations o \
+              WHERE o.organization_id=$1 AND o.status='complete' \
+              AND EXISTS (SELECT 1 FROM openappa_sessions s \
+                WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
+              AND o.operation_id NOT LIKE '%:echo' \
+              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+              AND o.decision->>'decision' IN ('ack', 'child_return') \
+              AND COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
+              ORDER BY o.session_id, o.created_at DESC",
+            &[&organization_id, &parent_session_id],
+        )?;
+        let mut records = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let value: Option<String> = row.get("value");
+            records.push(ChildReturnRecord {
+                child_session_id: row.get("child_session_id"),
+                spawn_call_id: row.get("spawn_call_id"),
+                child_native_id: row.get("child_native_id"),
+                value: value.ok_or_else(|| {
+                    PostgresError("OpenAPPA retained a child return without a value".into())
+                })?,
+            });
+        }
+        Ok(records)
+    })
+    .map_err(error)
 }
 
 struct SessionLock {
@@ -1495,7 +1579,7 @@ impl State {
                 return Ok(decision);
             }
         }
-        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "spawn_call_id": input.spawn_call_id, "child_native_id": input.child_native_id });
         let context = (input.event == HookEventKind::ToolCall).then(|| {
             json!({
                 "tool": input.tool,

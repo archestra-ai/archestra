@@ -6,7 +6,13 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
-import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import { OPENAI_CODEX_MODELS } from "@/services/openai-codex-credentials";
+import {
+  ApiError,
+  constructResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
@@ -22,6 +28,12 @@ import {
   RESPONSES_COMPACT_SUFFIX,
   RESPONSES_SUFFIX,
 } from "../common";
+import {
+  isJwtLike,
+  resolveAgent,
+  validatePassthroughVirtualKey,
+  virtualKeyRateLimiter,
+} from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   extractBearerToken,
@@ -287,6 +299,45 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     request: FastifyRequest,
     agentId: string | undefined,
   ) {
+    const headers = request.raw.headers;
+    const bearer = extractBearerToken(headers.authorization);
+    if (headers.originator === "codex_cli_rs" && bearer && isJwtLike(bearer)) {
+      if (typeof headers["chatgpt-account-id"] !== "string") {
+        throw new ApiError(400, "Codex ChatGPT login requires an account ID.");
+      }
+      const passthroughToken = headers["x-archestra-virtual-key"];
+      if (typeof passthroughToken !== "string") {
+        throw new ApiError(
+          401,
+          "Codex ChatGPT login requires an Archestra passthrough virtual key.",
+        );
+      }
+      await virtualKeyRateLimiter.check({
+        ip: request.ip,
+        credential: passthroughToken,
+      });
+      try {
+        await validatePassthroughVirtualKey({
+          tokenValue: passthroughToken,
+          agent: await resolveAgent(agentId),
+        });
+        await virtualKeyRateLimiter.recordSuccess({
+          credential: passthroughToken,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 401) {
+          await virtualKeyRateLimiter.recordFailure({
+            ip: request.ip,
+            credential: passthroughToken,
+          });
+        }
+        throw error;
+      }
+      return toOpenAiModelsList(
+        OPENAI_CODEX_MODELS.map((model) => ({ ...model, provider: "openai" })),
+        "openai",
+      );
+    }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
       provider: "openai",

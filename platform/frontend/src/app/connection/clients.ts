@@ -452,28 +452,12 @@ claude`,
     proxy: {
       kind: "custom",
       supportedProviders: ["openai"],
-      build: ({ url, proxyName }) => ({
+      build: ({ appName }) => ({
         kind: "steps",
         steps: [
           {
-            title: "Sign in to Codex with an API key",
-            body: "Codex must be logged in with an OpenAI API key — ChatGPT-account login isn't supported through the proxy. The key is read from stdin.",
-            language: "bash",
-            code: `printenv OPENAI_API_KEY | codex login --with-api-key`,
-          },
-          {
-            title: "Add the provider to ~/.codex/config.toml",
-            language: "toml",
-            code: `[model_providers.${proxyName}]
-name = "${proxyName}"
-base_url = "${url}"
-wire_api = "responses"
-requires_openai_auth = true`,
-          },
-          {
-            title: "Run Codex through it",
-            language: "bash",
-            code: `codex -c model_provider=${proxyName}`,
+            title: `Run the ${appName} setup command`,
+            body: "The setup selects the proxy and adds your personal access header. Codex can use its existing ChatGPT login or an OpenAI API-key login.",
           },
         ],
       }),

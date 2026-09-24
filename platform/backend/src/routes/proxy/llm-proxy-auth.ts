@@ -43,6 +43,12 @@ import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackRequest } from "@/utils/network";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
+export function isJwtLike(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  return parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
+}
+
 // =========================================================================
 // Agent Resolution
 // =========================================================================
@@ -1084,12 +1090,6 @@ async function resolveOAuthProviderApiKey(params: {
 
 function hasLlmProxyScope(scopes: string[] | null | undefined): boolean {
   return scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE) ?? false;
-}
-
-function isJwtLike(token: string): boolean {
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  return parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
 }
 
 /**

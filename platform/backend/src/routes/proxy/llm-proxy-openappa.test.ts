@@ -3451,6 +3451,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         messages: [{ role: "user", content: markedPrompt }],
       });
       expect(child.statusCode, child.body).toBe(200);
+      expect(child.body).toContain("started subagent");
+      expect(child.body).toContain("finished subagent");
       expect(child.body).toContain(admitted);
       expect(child.body).not.toContain(rawMarker);
       expect(
@@ -4602,6 +4604,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         input: [{ role: "user", content: markedPrompt }],
       });
       expect(child.statusCode, child.body).toBe(200);
+      expect(child.body).toContain("started subagent");
+      expect(child.body).toContain("finished subagent");
       expect(child.body).toContain(admitted);
       expect(child.body).not.toContain(rawMarker);
       expect(
@@ -5339,6 +5343,55 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     authorization: "Bearer test-key",
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
+  });
+
+  test("marks a fresh Codex root when its native session arrives in client metadata", async () => {
+    config.openappa.offerSigningSecret =
+      "test-context-secret-with-32-characters";
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async (params: unknown) => {
+              providerBodies.push(params);
+              return {
+                id: "resp_codex_root",
+                object: "response",
+                created_at: 1,
+                status: "completed",
+                model: "gpt-5.5",
+                output: [
+                  {
+                    type: "message",
+                    id: "msg_codex_root",
+                    role: "assistant",
+                    status: "completed",
+                    content: [
+                      { type: "output_text", text: "Ready", annotations: [] },
+                    ],
+                  },
+                ],
+                usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+              };
+            },
+          },
+        }) as never,
+    );
+    const session = "48e172bf-5c59-4413-968f-128019a06cf5";
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: {
+        ...codexPayload({ session_id: session, thread_id: session }),
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain("protected session");
+    expect(JSON.stringify(providerBodies)).not.toContain("protected session");
   });
 
   test("prepares an OpenCode task fork through the Responses API", async () => {

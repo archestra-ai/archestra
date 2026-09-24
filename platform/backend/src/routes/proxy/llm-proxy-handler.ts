@@ -173,6 +173,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
   attemptJwksAuth,
+  isJwtLike,
   resolveAgent,
   validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
@@ -352,25 +353,44 @@ function resolveOpenAiCodexPassthrough(params: {
   headers: Record<string, string | string[] | undefined>;
 }): OpenAiCodexPassthrough | undefined {
   const { provider, headers } = params;
+  const accountId = readSingleHeader(headers, "chatgpt-account-id");
+  const originator = readSingleHeader(headers, "originator");
+  const authorization = readSingleHeader(headers, "authorization");
+  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
+  if (
+    provider.provider === "openai" &&
+    provider.interactionType === "openai:responses" &&
+    originator === "codex_cli_rs" &&
+    accessToken &&
+    isJwtLike(accessToken) &&
+    accountId === undefined
+  ) {
+    throw new ApiError(400, "Codex ChatGPT login requires an account ID.");
+  }
   if (
     provider.provider !== "openai" ||
     provider.interactionType !== "openai:responses" ||
-    readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !== "true"
+    (readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !==
+      "true" &&
+      !(
+        originator === "codex_cli_rs" &&
+        accountId !== undefined &&
+        accessToken &&
+        isJwtLike(accessToken)
+      ))
   ) {
     return undefined;
   }
 
-  const authorization = readSingleHeader(headers, "authorization");
-  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
-  const accountId = readSingleHeader(headers, "chatgpt-account-id");
   if (
     !accessToken ||
     accessToken.length > 16_384 ||
+    hasArchestraTokenPrefix(accessToken) ||
     !isBoundedHeaderValue(accountId, 256)
   ) {
     throw new ApiError(
       400,
-      "OpenCode OAuth bridge requests require a bearer token and ChatGPT account ID.",
+      "Codex subscription requests require a bearer token and ChatGPT account ID.",
     );
   }
 
@@ -396,7 +416,7 @@ function optionalBoundedHeader(
   const value = readSingleHeader(headers, name);
   if (value === undefined) return undefined;
   if (!isBoundedHeaderValue(value, maxLength)) {
-    throw new ApiError(400, `Invalid OpenCode OAuth bridge ${name} header.`);
+    throw new ApiError(400, `Invalid Codex subscription ${name} header.`);
   }
   return value;
 }
@@ -848,7 +868,27 @@ export async function handleLLMProxy<
     }
   }
 
-  // OpenCode owns refresh and rotation for this access token. Keep the bridge
+  // A ChatGPT bearer needs platform-side user and proxy-access checks before
+  // it may be sent to the subscription endpoint, not api.openai.com.
+  if (
+    !authOverride &&
+    !passthroughVirtualKeyId &&
+    provider.provider === "openai" &&
+    provider.interactionType === "openai:responses" &&
+    readSingleHeader(request.raw.headers, "originator") === "codex_cli_rs" &&
+    isJwtLike(
+      readSingleHeader(request.raw.headers, "authorization")?.match(
+        /^Bearer\s+([^\s]+)$/i,
+      )?.[1] ?? "",
+    )
+  ) {
+    throw new ApiError(
+      401,
+      "Codex ChatGPT login requires an Archestra passthrough virtual key.",
+    );
+  }
+
+  // The client owns refresh and rotation for this access token. Keep the
   // credential in request-local client options; never resolve or persist it as
   // an Archestra-managed provider credential.
   const openAiCodexPassthrough = passthroughVirtualKeyId
@@ -888,11 +928,9 @@ export async function handleLLMProxy<
     perKeyChatApiKeyId = authOverride.chatApiKeyId;
     wasVirtualKeyResolved = authOverride.authenticated;
   } else {
-    const jwksResult = await attemptJwksAuth(
-      request,
-      resolvedAgent,
-      providerName,
-    );
+    const jwksResult = openAiCodexPassthrough
+      ? null
+      : await attemptJwksAuth(request, resolvedAgent, providerName);
     if (jwksResult) {
       wasJwksAuthenticated = true;
       authMethod = "jwks";

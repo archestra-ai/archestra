@@ -367,17 +367,34 @@ function codexWindowsVerifyTableGone(
 
 function codexWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const marker = `archestra:${ctx.proxy?.proxyName ?? ""}`;
+  const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `function Disconnect-ArchProxy {
   $path = Join-Path ${codexHomePs()} 'config.toml'
   if (Test-Path $path) {
     $start = ${psq(`# >>> ${marker} >>>`)}
     $end = ${psq(`# <<< ${marker} <<<`)}
+    $selected = ${psq(selectedProvider)}
+    $previous = ''
+    $backup = $path + '.archestra-backup'
+    if (Test-Path $backup) {
+      foreach ($original in (Get-Content -Path $backup)) {
+        if ($original -match '^\\[') { break }
+        if ($original -match '^\\s*model_provider\\s*=') { $previous = $original; break }
+      }
+    }
     $kept = New-Object System.Collections.Generic.List[string]
     $skip = $false
+    $inTable = $false
     foreach ($ln in (Get-Content -Path $path)) {
       if ($ln -eq $start) { $skip = $true; continue }
       if ($ln -eq $end) { $skip = $false; continue }
-      if (-not $skip) { $kept.Add($ln) }
+      if ($skip) { continue }
+      if ($ln -match '^\\[') { $inTable = $true }
+      if (-not $inTable -and $ln -eq $selected) {
+        if ($previous -and $previous -ne $selected) { $kept.Add($previous) }
+        continue
+      }
+      $kept.Add($ln)
     }
     Set-Content -Path $path -Value $kept -Encoding utf8
   }
@@ -412,8 +429,8 @@ function Invoke-ArchCodexLogoutIfOurs {
  * Both halves are required, and dropping only the first is worse than dropping
  * neither. Connect writes the pair as `base_url` inside that block plus an
  * `arch_…` key in Codex's own credential store (`codex login --with-api-key`).
- * The block is inert until the user opts in with `codex -c model_provider=…`;
- * the credential is global. Removing only the block therefore leaves every
+ * Connect selects the block as Codex's default provider; the credential is
+ * global. Removing only the block therefore leaves every
  * plain `codex` run sending an Archestra virtual key to api.openai.com, which
  * answers `401 Incorrect API key provided: arch_…` — Codex ends up more broken
  * than before it was ever connected, and the key leaks to a third party.
@@ -425,13 +442,28 @@ function Invoke-ArchCodexLogoutIfOurs {
  */
 function codexProxyDisconnect(ctx: StartupGuardContext): string {
   const marker = `archestra:${ctx.proxy?.proxyName ?? ""}`;
+  const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `disconnect_proxy() {
   CONFIG=${codexConfigShellPath()}
   if [ -f "$CONFIG" ]; then
-    awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
+    PREVIOUS_PROVIDER=''
+    if [ -f "$CONFIG.archestra-backup" ]; then
+      PREVIOUS_PROVIDER=$(awk '
+        /^\\[/ {exit}
+        /^[[:space:]]*model_provider[[:space:]]*=/ {print; exit}
+      ' "$CONFIG.archestra-backup")
+    fi
+    awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v selected=${sh(selectedProvider)} -v previous="$PREVIOUS_PROVIDER" '
       $0 == start {skip=1; next}
       $0 == end {skip=0; next}
-      !skip {print}
+      !skip {
+        if ($0 ~ /^\\[/) in_table=1
+        if (!in_table && $0 == selected) {
+          if (previous != "" && previous != selected) print previous
+          next
+        }
+        print
+      }
     ' "$CONFIG" > "$CONFIG.archestra-tmp" 2>/dev/null && mv "$CONFIG.archestra-tmp" "$CONFIG"
   fi
   codex_logout_if_ours

@@ -67,6 +67,7 @@
               "options": {
                 "paths": {
                   "@/test": "Database-free unit tests should import test APIs directly from vitest.",
+                  "@/config": "Database-free unit tests must not import the application config, which requires a database URL at runtime.",
                   "@/server": "Database-free unit tests must not load the server entry point.",
                   "@/models": "Database-free unit tests must not load models.",
                   "@/database": "Database-free unit tests must not load the database."

@@ -1,6 +1,6 @@
 /** Keep the database-free test project free of runtime database imports. */
 const forbiddenRuntimeModules =
-  "^src/(database/|models/|server\\.ts$|test/(index|fixtures|setup|global-setup|route-test-app)\\.ts$)";
+  "^src/(config\\.ts$|database/|models/|server\\.ts$|test/(index|fixtures|setup|global-setup|route-test-app)\\.ts$)";
 
 export default {
   forbidden: [

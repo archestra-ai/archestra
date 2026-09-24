@@ -9,7 +9,7 @@ Run commands from `platform/` unless specifically instructed otherwise. Run a si
 
 ## Test projects and database opt-in
 
-Use `*.unit.test.ts` only for tests whose runtime import graph is database-free. These files run without PGlite setup or the migrated database snapshot. Import assertions and lifecycle functions directly from `vitest`; do not import `@/test`, database fixtures, models, or the server entry point. Keep the code under test free of those runtime imports too. `pnpm --dir backend check:test-imports` checks this transitive boundary with dependency-cruiser. Type-only imports are fine because they do not load code at runtime.
+Use `*.unit.test.ts` only for tests whose runtime import graph is database-free. These files run without PGlite setup or the migrated database snapshot. Import assertions and lifecycle functions directly from `vitest`; do not import `@/test`, application config, database fixtures, models, or the server entry point. Keep the code under test free of those runtime imports too. `pnpm --dir backend check:test-imports` checks this transitive boundary with dependency-cruiser. Type-only imports from permitted modules are fine because they do not load code at runtime; Biome still rejects direct imports from forbidden paths. If moving an existing test to this project reveals a config import, leave it database-backed until the pure logic is separated from config access.
 
 Use ordinary `*.test.ts` for tests that need real database behavior, fixtures, or route integration. They opt into the PGlite setup and migrated snapshot. Never rename a database-backed test to `*.unit.test.ts` merely to make it run faster.
 

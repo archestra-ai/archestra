@@ -179,6 +179,9 @@ export default defineConfig({
           name: "unit",
           include: testFiles.unit,
           isolate: false,
+          // An accidental runtime config/database import must fail even on CI,
+          // where a database URL is available to the database-backed projects.
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
         },
       },
       {
@@ -187,6 +190,7 @@ export default defineConfig({
           name: "unit-mocked",
           include: testFiles.unitMocked,
           isolate: true,
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
         },
       },
       {

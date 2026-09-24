@@ -15,6 +15,7 @@ import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { getDeploymentFavicon } from "@/lib/favicon.server";
+import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -266,6 +267,7 @@ export default async function RootLayout({
                     <WithAuthCheck>
                       <WebsocketInitializer />
                       <RumTracker />
+                      <ListReturnUrlTracker />
                       <AppShell>
                         <WithPagePermissions>{children}</WithPagePermissions>
                       </AppShell>

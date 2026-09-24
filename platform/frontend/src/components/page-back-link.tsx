@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { MouseEventHandler, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
 
 /** Shared back control for every PageLayout detail and wizard header. */
 export function PageBackLink({
@@ -17,6 +18,7 @@ export function PageBackLink({
   onClick?: MouseEventHandler<HTMLAnchorElement>;
   children: ReactNode;
 }) {
+  const resolvedHref = useListReturnHref(href);
   return (
     <Button
       variant="ghost"
@@ -25,7 +27,7 @@ export function PageBackLink({
       asChild
     >
       <Link
-        href={href}
+        href={resolvedHref}
         onClick={(event) => {
           onClick?.(event);
           if (

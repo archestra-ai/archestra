@@ -2,7 +2,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { makeAgent } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
-test("keeps a long run owner and sharing scope inside the phone viewport", async ({
+test("keeps a long run owner and the access details inside the phone viewport", async ({
   page,
   mswControl,
   request,
@@ -83,11 +83,13 @@ test("keeps a long run owner and sharing scope inside the phone viewport", async
   });
   await page.goto(`/agents/${agent.id}?section=runs`);
   const owner = page.getByText(`Started by ${ownerName}`, { exact: true });
-  const sharing = page.getByLabel("Team: Release reviewers", { exact: true });
+  // Access comes from the run's permission policy, explained behind this
+  // button, rather than from a sharing label.
+  const access = page.getByRole("button", { name: "Who can access this run?" });
   await expect(owner).toBeVisible();
-  await expect(sharing).toBeVisible();
+  await expect(access).toBeVisible();
   await owner.scrollIntoViewIfNeeded();
-  for (const element of [owner, sharing]) {
+  for (const element of [owner, access]) {
     const bounds = await element.boundingBox();
     expect(bounds).not.toBeNull();
     if (!bounds) throw new Error("Run metadata is not rendered");

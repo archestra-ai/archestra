@@ -2652,8 +2652,22 @@ describe("get_app_diagnostics", () => {
 
   test("returns no_render_observed promptly when the app has never rendered", async () => {
     const appId = await createApp();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     const startedAt = Date.now();
-    const result = await getDiagnostics(appId);
+    const pending = getDiagnostics(appId);
+    let settled = false;
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    const result = await pending;
     const elapsed = Date.now() - startedAt;
     expect(result.isError).toBe(false);
     expect(structured(result).status).toBe("no_render_observed");
@@ -2711,6 +2725,7 @@ describe("get_app_diagnostics", () => {
         return row;
       });
     try {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const pending = getDiagnostics(appId);
       await firstRead;
       await AppRenderDiagnosticsModel.record({
@@ -2721,7 +2736,7 @@ describe("get_app_diagnostics", () => {
         entries: [],
       });
       // land the head render after the original 3s never-rendered deadline
-      await new Promise((resolve) => setTimeout(resolve, 3_500));
+      await vi.advanceTimersByTimeAsync(3_500);
       await AppRenderDiagnosticsModel.record({
         appId,
         // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
@@ -2729,6 +2744,7 @@ describe("get_app_diagnostics", () => {
         version: 2,
         entries: [],
       });
+      await vi.advanceTimersByTimeAsync(500);
       const result = await pending;
       expect(structured(result).status).toBe("clean");
       expect(structured(result).version).toBe(2);
@@ -3608,14 +3624,29 @@ describe("validate_app", () => {
       { name: "Prompt App" },
       context,
     );
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     const startedAt = Date.now();
-    // real settle wait (no abort): the never-rendered short window applies to
-    // validate_app's live path just like get_app_diagnostics
-    const result = await executeArchestraTool(
+    // No abort: the never-rendered short window applies to validate_app's
+    // live path just like get_app_diagnostics. Advance a fake clock to keep
+    // the polling deadline observable without spending three wall seconds.
+    const pending = executeArchestraTool(
       getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
       { appId: structured(created).id as string },
       context,
     );
+    let settled = false;
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    const result = await pending;
     const elapsed = Date.now() - startedAt;
     expect(structured(result).ok).toBe(true);
     expect(structured(result).live.status).toBe("no_render_observed");

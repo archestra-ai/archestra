@@ -79,6 +79,8 @@ export const CoverageToolSchema = z.object({
   name: z.string(),
   /** `<prefix>__<name>`, as a root rule spells it. */
   fullName: z.string(),
+  /** The MCP `readOnlyHint` annotation; null when the server gave none. */
+  readOnly: z.boolean().nullable(),
   kind: CoverageKindSchema,
   /** Built-in default fallback, user fallback, root rule, or battery rule. */
   policySource: z.enum(["built_in", "fallback", "root", "battery"]),
@@ -130,6 +132,8 @@ export type CoverageToolsQuery = z.infer<typeof CoverageToolsQuerySchema>;
 export const CoverageEntitiesQuerySchema = PaginationQuerySchema.extend({
   search: SearchSchema,
   type: CoverageEntitySchema.shape.type.optional(),
+  /** Only the targets that reach this tool: the agents and gateways that can call it, and its server. */
+  toolId: z.uuid().optional(),
 });
 export type CoverageEntitiesQuery = z.infer<typeof CoverageEntitiesQuerySchema>;
 

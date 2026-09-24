@@ -86703,6 +86703,7 @@ export type GetOpenappaCoverageEntitiesData = {
         offset?: number;
         search?: string;
         type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        toolId?: string;
     };
     url: '/api/openappa/coverage/entities';
 };
@@ -86896,6 +86897,7 @@ export type GetOpenappaCoverageToolsResponses = {
             prefix: string;
             name: string;
             fullName: string;
+            readOnly: boolean | null;
             kind: 'read' | 'write' | 'approval' | 'neutral' | 'unlisted';
             policySource: 'built_in' | 'fallback' | 'root' | 'battery';
             rule: {

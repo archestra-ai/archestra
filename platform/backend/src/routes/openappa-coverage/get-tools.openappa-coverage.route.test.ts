@@ -19,6 +19,7 @@ describe("GET /api/openappa/coverage/tools", () => {
     return response.json() as {
       data: Array<{
         fullName: string;
+        readOnly: boolean | null;
         catalogId: string;
         catalogIcon: string | null;
         policySource: string;
@@ -133,6 +134,32 @@ describe("GET /api/openappa/coverage/tools", () => {
     expect((await tools(`?entityId=${agent.id}`)).data).toEqual([
       expect.objectContaining({ fullName: "private__lookup" }),
     ]);
+  });
+
+  test("reports the server's read-only hint, and null without one", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Hints",
+    });
+    const hinted = (name: string, meta: Record<string, unknown> | undefined) =>
+      makeTool({ catalogId: catalog.id, name: `hints__${name}`, meta });
+    await hinted("read", { annotations: { readOnlyHint: true } });
+    await hinted("write", { annotations: { readOnlyHint: false } });
+    await hinted("odd", { annotations: { readOnlyHint: "maybe" } });
+    await hinted("bare", undefined);
+
+    const { data } = await tools(`?catalogId=${catalog.id}`);
+    expect(
+      Object.fromEntries(data.map((row) => [row.fullName, row.readOnly])),
+    ).toEqual({
+      hints__bare: null,
+      hints__odd: null,
+      hints__read: true,
+      hints__write: false,
+    });
   });
 
   test("lists unlisted tools first, then those not enforced, and pages them", async ({

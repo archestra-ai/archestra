@@ -313,6 +313,23 @@ export function McpCatalogForm({
   }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
+  const { isSubmitted } = form.formState;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing auth method changes which retained fields are validated
+  useEffect(() => {
+    // Recompute errors against the active auth method after a failed submit.
+    // Keep validation errors on shared fields and restore errors if the user
+    // returns to an invalid draft.
+    if (isSubmitted) {
+      void form.trigger([
+        "oauthConfig",
+        "authHeaderName",
+        "enterpriseManagedConfig",
+        "additionalHeaders",
+        "localConfig.transportType",
+      ]);
+    }
+  }, [authMethod, form, isSubmitted]);
+
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");

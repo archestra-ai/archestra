@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.67](https://github.com/archestra-ai/archestra/compare/platform-v1.3.66...platform-v1.3.67) (2026-09-24)
+
+
+### Bug Fixes
+
+* **backend:** preserve Claude requests on cold replay (backport release/1.3) ([#8194](https://github.com/archestra-ai/archestra/issues/8194)) ([aad933b](https://github.com/archestra-ai/archestra/commit/aad933bcf1aa7f495e2278ceece751a137534a5e))
+* **mcp:** require patched expat in base image (backport release/1.3) ([#8166](https://github.com/archestra-ai/archestra/issues/8166)) ([74216cd](https://github.com/archestra-ai/archestra/commit/74216cd95842d171811f2527b5066d1cbc96faf0))
+* **proxy:** repair trailing model turns in Gemini OpenAI translation (backport release/1.3) ([#8134](https://github.com/archestra-ai/archestra/issues/8134)) ([afb39fb](https://github.com/archestra-ai/archestra/commit/afb39fb10be4941a88c6ea7d5691e158df14b2f8))
+
 ## [1.3.66](https://github.com/archestra-ai/archestra/compare/platform-v1.3.65...platform-v1.3.66) (2026-09-21)
 
 

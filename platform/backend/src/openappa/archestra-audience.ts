@@ -3,6 +3,9 @@ import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
 import type { HelperConsultOutcome } from "./helper-bridge";
 
+/** The bundled battery, and the audience source it declares, that the platform answers. */
+export const ARCHESTRA_BATTERY = "archestra";
+
 /**
  * The bundled `archestra` battery's audience source, answered by the platform
  * itself: the battery ships a helper that reads Archestra's membership over
@@ -16,9 +19,7 @@ export const archestraAudience = {
     packageHash: string | null;
     externalName: string;
   }): boolean {
-    return (
-      servesBattery(params) && params.externalName === ARCHESTRA_AUDIENCE_NAME
-    );
+    return servesBattery(params) && params.externalName === ARCHESTRA_BATTERY;
   },
 
   /** Whether the host answers every helper of this battery, so it binds no credential. */
@@ -62,7 +63,6 @@ export const archestraAudience = {
 
 // ===
 
-const ARCHESTRA_AUDIENCE_NAME = "archestra";
 const SERVED_TEMPLATES = ["members", "team/<team>", "user/<user>"];
 const MEMBER_PREFIX = "archestra:";
 const MAX_MEMBERS = 5000;
@@ -70,7 +70,7 @@ const MAX_MEMBERS = 5000;
 const ConsultSchema = z.object({
   version: z.literal(1),
   kind: z.literal("audience"),
-  name: z.literal(ARCHESTRA_AUDIENCE_NAME),
+  name: z.literal(ARCHESTRA_BATTERY),
   declaration: z.object({ templates: z.array(z.string()) }),
   artifact: z.union([
     z.object({ selector: z.string() }).strict(),
@@ -93,8 +93,7 @@ function servesBattery(params: {
 }): boolean {
   // Only the bundled package: an uploaded one may reuse the name.
   return (
-    params.batteryName === ARCHESTRA_AUDIENCE_NAME &&
-    params.packageHash === null
+    params.batteryName === ARCHESTRA_BATTERY && params.packageHash === null
   );
 }
 
@@ -179,8 +178,10 @@ async function principal(
 }
 
 function parseSelector(selector: string): Selector | null {
-  const [head, name, ...rest] = selector.split("/");
-  if (rest.length > 0) return null;
+  // A team name may itself contain `/`: only the first one separates.
+  const slash = selector.indexOf("/");
+  const head = slash === -1 ? selector : selector.slice(0, slash);
+  const name = slash === -1 ? undefined : selector.slice(slash + 1);
   switch (head) {
     case "members":
       return name === undefined ? { kind: "members" } : null;

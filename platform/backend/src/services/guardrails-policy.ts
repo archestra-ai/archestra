@@ -4,6 +4,7 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import {
   addedGrants,
   bundledEntry,
@@ -246,5 +247,3 @@ annotator = "noop"
 url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
 `;
 }
-
-const ARCHESTRA_BATTERY = "archestra";

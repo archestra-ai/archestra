@@ -370,7 +370,7 @@ describe("battery helper bridge", () => {
     const admin = await UserModel.getEmailById(userId);
     const parent = await makeTeam(organizationId, userId, { name: "eng" });
     const child = await makeTeam(organizationId, userId, {
-      name: "platform",
+      name: "platform/api",
       parentId: parent.id,
     });
     await makeTeamMember(parent.id, alice.id);
@@ -410,6 +410,7 @@ describe("battery helper bridge", () => {
       "bob@example.com",
     ]);
     expect(await members(`team/${child.id}`)).toEqual(["bob@example.com"]);
+    expect(await members("team/platform/api")).toEqual(["bob@example.com"]);
     expect(await members(`user/${bob.id}`)).toEqual(["bob@example.com"]);
     expect(await members("user/alice@example.com")).toEqual([
       "alice@example.com",

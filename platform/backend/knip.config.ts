@@ -14,6 +14,8 @@ const config: KnipConfig = {
     "scripts/migrate-with-lock.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
+    // Loaded by `vitest run --config` for the opt-in session storage benchmark.
+    "vitest.benchmark.config.ts",
   ],
   // Browser-side static assets read at runtime via readFileSync (server.ts) —
   // not part of the backend module graph.

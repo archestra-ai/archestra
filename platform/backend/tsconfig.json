@@ -24,7 +24,10 @@
   },
   "include": [
     "src/**/*.ts",
-    "*.config.ts"
+    "*.config.ts",
+    // The opt-in storage benchmark lives outside src/ but imports backend
+    // modules, so it is type-checked here.
+    "../benchmarks/session-storage.test.ts"
   ],
   "exclude": [
     "node_modules"

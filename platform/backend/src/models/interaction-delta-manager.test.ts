@@ -211,20 +211,25 @@ describe("InteractionDeltaManager", () => {
     const r1 = await createClaude(msgs1, { sessionId });
     const r2 = await createClaude(msgs2, { sessionId });
 
-    // Despite the breakpoint rewriting message[0], r2 resolves r1 as its parent
-    // and stores only the 2-message suffix — not the whole conversation.
+    // Despite the breakpoint rewriting message[0], r2 still resolves r1 as its
+    // parent (parent CHOICE uses the normalized hash). But the stored prefix
+    // must be exact: message[0] changed bytes, so the delta starts at 0 and
+    // carries all 3 messages — borrowing message[0] from r1 would resurrect a
+    // cache breakpoint that request 2 never sent.
     expect(r2.parentId).toBe(r1.id);
     expect(r2.threadId).toBe(r1.threadId);
-    expect(r2.requestSharedPrefix).toBe(1);
+    expect(r2.requestSharedPrefix).toBe(0);
     expect(reconstructedMessages((await rawRow(r2.id)).request)).toHaveLength(
-      2,
+      3,
     );
 
     // Reconstruction returns each request's persisted bytes verbatim.
     const full2 = await InteractionModel.findById(r2.id);
     expect(reconstructedMessages(full2?.request)).toEqual(msgs2);
 
-    // Same result with cold caches (DB candidate scan must match too).
+    // Same parent resolution with cold caches (DB candidate scan must match
+    // too). r3 reverts message[2] to a bare string, so the exact prefix stops
+    // before it even though the normalized parent hash matches.
     InteractionDeltaManager.reset();
     const msgs3 = [
       ...msgs2.slice(0, 2),
@@ -234,7 +239,88 @@ describe("InteractionDeltaManager", () => {
     ];
     const r3 = await createClaude(msgs3, { sessionId });
     expect(r3.parentId).toBe(r2.id);
-    expect(r3.requestSharedPrefix).toBe(3);
+    expect(r3.requestSharedPrefix).toBe(2);
+
+    // Cold reads (pure DB fold) return each request's own bytes: r1 keeps its
+    // breakpoint form, r2/r3 get the bare-string forms they actually sent.
+    InteractionDeltaManager.reset();
+    const cold1 = await InteractionModel.findById(r1.id);
+    expect(reconstructedMessages(cold1?.request)).toEqual(msgs1);
+    const cold2 = await InteractionModel.findById(r2.id);
+    expect(reconstructedMessages(cold2?.request)).toEqual(msgs2);
+    const cold3 = await InteractionModel.findById(r3.id);
+    expect(reconstructedMessages(cold3?.request)).toEqual(msgs3);
+  });
+
+  test("cold reads preserve an arbitrary earlier-message edit when the parent's last message is unchanged", async () => {
+    const sessionId = "sess-edited-history";
+    const m0 = userMsg("opening question with enough text");
+    const m1 = assistantMsg("a0");
+    const m2 = userMsg("original question");
+    const m3 = assistantMsg("a1");
+    const m4 = userMsg("u2");
+    await createClaude([m0], { sessionId });
+    await createClaude([m0, m1, m2], { sessionId });
+    // r3's last message (index 4) stays byte-identical in r4, so the parent's
+    // last-message hash still matches and r3 is still chosen as r4's parent...
+    const r3 = await createClaude([m0, m1, m2, m3, m4], { sessionId });
+
+    // ...even though the client edited message[2] (e.g. history truncation or
+    // a tool-result rewrite). The stored prefix must stop at the edit, not at
+    // the parent's tip — otherwise the fold silently keeps the pre-edit bytes.
+    const edited2 = userMsg("original question (rewritten by the client)");
+    const msgs4 = [m0, m1, edited2, m3, m4, assistantMsg("a2"), userMsg("u3")];
+    const r4 = await createClaude(msgs4, { sessionId });
+
+    expect(r4.parentId).toBe(r3.id);
+    expect(r4.requestSharedPrefix).toBe(2);
+    expect(reconstructedMessages((await rawRow(r4.id)).request)).toHaveLength(
+      5,
+    );
+
+    // Warm read (populated by commitTip) and cold read (pure DB fold) both
+    // return the edited conversation exactly as sent.
+    const warm4 = await InteractionModel.findById(r4.id);
+    expect(reconstructedMessages(warm4?.request)).toEqual(msgs4);
+    InteractionDeltaManager.reset();
+    const cold4 = await InteractionModel.findById(r4.id);
+    expect(reconstructedMessages(cold4?.request)).toEqual(msgs4);
+  });
+
+  test("cold reads preserve exact processedRequest bytes when its cache breakpoint moves", async () => {
+    const sessionId = "sess-processed-breakpoint";
+    const m0 = userMsg("p0 with enough text");
+    // The request messages carry no breakpoint; only the processed copy does.
+    // Turn 1's processed message is the breakpoint (block form); turn 2
+    // reverts it to a bare string and moves the breakpoint to the new tail.
+    await createClaude([m0], {
+      sessionId,
+      processedMessages: [breakpointUserMsg("p0 with enough text")],
+    });
+    const reqMsgs2 = [m0, assistantMsg("a0"), userMsg("p1")];
+    const procMsgs2 = [
+      userMsg("p0 with enough text"),
+      assistantMsg("a0"),
+      breakpointUserMsg("p1"),
+    ];
+    const r2 = await createClaude(reqMsgs2, {
+      sessionId,
+      processedMessages: procMsgs2,
+    });
+
+    // Request prefix is exact at 1, but the processed message[0] changed form,
+    // so the stored processed prefix must be 0 even though the normalized
+    // processed hashes match.
+    expect(r2.requestSharedPrefix).toBe(1);
+    expect(r2.processedRequestSharedPrefix).toBe(0);
+
+    InteractionDeltaManager.reset();
+    const full = await InteractionModel.findById(r2.id);
+    expect(
+      reconstructedMessages(
+        (full as { processedRequest: unknown }).processedRequest,
+      ),
+    ).toEqual(procMsgs2);
   });
 
   test("case 2: sub-agent thread is isolated from the main thread", async () => {
@@ -904,6 +990,210 @@ describe("InteractionDeltaManager", () => {
     expect(fullProc.tools).toEqual(TOOLS_A);
     expect(fullProc.system).toBe(SYSTEM_A);
     expect(reconstructedMessages(fullProc)).toEqual(procMsgs2);
+  });
+
+  test("requests without tools/system stay without them on warm and cold reads", async () => {
+    const sessionId = "sess-env-absent";
+    const noEnv = { tools: null, system: null };
+    const m0 = userMsg("turn 0 with enough text");
+    const msgs2 = [m0, assistantMsg("a0"), userMsg("turn 1")];
+    const r1 = await createClaude([m0], { sessionId, envelope: noEnv });
+    const r2 = await createClaude(msgs2, { sessionId, envelope: noEnv });
+
+    expect(r2.parentId).toBe(r1.id);
+
+    const assertAbsent = async () => {
+      for (const id of [r1.id, r2.id]) {
+        const full = await fullRequest(id);
+        // Inheritance must never materialize a field the request never had.
+        expect("tools" in full).toBe(false);
+        expect("system" in full).toBe(false);
+      }
+      expect(reconstructedMessages(await fullRequest(r2.id))).toEqual(msgs2);
+    };
+
+    await assertAbsent();
+    InteractionDeltaManager.reset();
+    await assertAbsent();
+  });
+
+  test("dropping tools/system mid-session starts a lossless new head instead of re-inheriting them", async () => {
+    const sessionId = "sess-env-removed";
+    const env = { tools: TOOLS_A, system: SYSTEM_A };
+    const m0 = userMsg("turn 0 with enough text");
+    const msgs2 = [m0, assistantMsg("a0"), userMsg("turn 1")];
+    const r1 = await createClaude([m0], { sessionId, envelope: env });
+
+    // Claude CLI resume with different settings: tools/system legitimately
+    // disappear. Delta-encoding against r1 would re-inherit them on cold
+    // reads, so the row must become a full new head instead.
+    const r2 = await createClaude(msgs2, {
+      sessionId,
+      envelope: { tools: null, system: null },
+    });
+    expect(r2.parentId).toBeNull();
+    expect(r2.requestSharedPrefix).toBe(0);
+    expect(reconstructedMessages((await rawRow(r2.id)).request)).toHaveLength(
+      3,
+    );
+
+    // The thread keeps growing: the next request chains to the new head.
+    const msgs3 = [...msgs2, assistantMsg("a1"), userMsg("turn 2")];
+    const r3 = await createClaude(msgs3, {
+      sessionId,
+      envelope: { tools: null, system: null },
+    });
+    expect(r3.parentId).toBe(r2.id);
+    expect(r3.requestSharedPrefix).toBe(3);
+
+    const assertReads = async () => {
+      // r1's own row still reads back with its envelope intact.
+      const full1 = await fullRequest(r1.id);
+      expect(full1.tools).toEqual(TOOLS_A);
+      expect(full1.system).toBe(SYSTEM_A);
+      // The dropped fields stay dropped — never re-inherited from r1.
+      for (const id of [r2.id, r3.id]) {
+        const full = await fullRequest(id);
+        expect("tools" in full).toBe(false);
+        expect("system" in full).toBe(false);
+      }
+      expect(reconstructedMessages(await fullRequest(r3.id))).toEqual(msgs3);
+    };
+
+    await assertReads();
+    InteractionDeltaManager.reset();
+    await assertReads();
+  });
+
+  test("a processedRequest that drops tools/system also forces a lossless new head", async () => {
+    const sessionId = "sess-env-removed-processed";
+    const env = { tools: TOOLS_A, system: SYSTEM_A };
+    const m0 = userMsg("turn 0 with enough text");
+    // Request envelope keeps tools/system on every turn; only the processed
+    // copy loses them (e.g. the policy pipeline strips the tool schemas).
+    await createClaude([m0], {
+      sessionId,
+      envelope: env,
+      processedMessages: [m0],
+      processedEnvelope: env,
+    });
+    const msgs2 = [m0, assistantMsg("a0"), userMsg("turn 1")];
+    const r2 = await createClaude(msgs2, {
+      sessionId,
+      envelope: env,
+      processedMessages: msgs2,
+      processedEnvelope: { tools: null, system: null },
+    });
+
+    // Even though the request envelope is unchanged, the processedRequest drop
+    // makes the row undelta-able: it becomes a full head.
+    expect(r2.parentId).toBeNull();
+    expect(r2.processedRequestSharedPrefix).toBe(0);
+
+    InteractionDeltaManager.reset();
+    const full2 = await InteractionModel.findById(r2.id);
+    const fullReq = (full2 as { request: Record<string, unknown> }).request;
+    expect(fullReq.tools).toEqual(TOOLS_A);
+    const fullProc = (full2 as { processedRequest: Record<string, unknown> })
+      .processedRequest;
+    expect("tools" in fullProc).toBe(false);
+    expect("system" in fullProc).toBe(false);
+    expect(reconstructedMessages(fullProc)).toEqual(msgs2);
+  });
+
+  test("dropping tools/system on a COLD write (parent reconstructed from the DB) still starts a full head", async () => {
+    const sessionId = "sess-env-removed-cold-write";
+    const env = { tools: TOOLS_A, system: SYSTEM_A };
+    const m0 = userMsg("turn 0 with enough text");
+    const msgs2 = [m0, assistantMsg("a0"), userMsg("turn 1")];
+    const r1 = await createClaude([m0], { sessionId, envelope: env });
+    // r2 inherits tools/system — its stored row has no envelope fields, so the
+    // drop detection for r3 must reconstruct r2's envelope from the DB fold.
+    const r2 = await createClaude(msgs2, { sessionId, envelope: env });
+    expect("tools" in (await rawRequest(r2.id))).toBe(false);
+
+    // Cold pod: no tip cache, no reconstruct cache. r3's parent resolution
+    // scans DB candidates and rebuilds r2's full envelope via the chain fold.
+    InteractionDeltaManager.reset();
+
+    const msgs3 = [...msgs2, assistantMsg("a1"), userMsg("turn 2")];
+    const r3 = await createClaude(msgs3, {
+      sessionId,
+      envelope: { tools: null, system: null },
+    });
+    expect(r3.parentId).toBeNull();
+    expect(r3.requestSharedPrefix).toBe(0);
+
+    // The thread resumes chaining from the new head.
+    const msgs4 = [...msgs3, assistantMsg("a2"), userMsg("turn 3")];
+    const r4 = await createClaude(msgs4, {
+      sessionId,
+      envelope: { tools: null, system: null },
+    });
+    expect(r4.parentId).toBe(r3.id);
+
+    const assertReads = async () => {
+      for (const id of [r1.id, r2.id]) {
+        const full = await fullRequest(id);
+        expect(full.tools).toEqual(TOOLS_A);
+        expect(full.system).toBe(SYSTEM_A);
+      }
+      for (const id of [r3.id, r4.id]) {
+        const full = await fullRequest(id);
+        expect("tools" in full).toBe(false);
+        expect("system" in full).toBe(false);
+      }
+      expect(reconstructedMessages(await fullRequest(r4.id))).toEqual(msgs4);
+    };
+
+    await assertReads();
+    InteractionDeltaManager.reset();
+    await assertReads();
+  });
+
+  test("dropping processedRequest tools/system on a COLD write starts a full head", async () => {
+    const sessionId = "sess-env-removed-cold-write-processed";
+    const env = { tools: TOOLS_A, system: SYSTEM_A };
+    const m0 = userMsg("turn 0 with enough text");
+    const msgs2 = [m0, assistantMsg("a0"), userMsg("turn 1")];
+    await createClaude([m0], {
+      sessionId,
+      envelope: env,
+      processedMessages: [m0],
+      processedEnvelope: env,
+    });
+    const r2 = await createClaude(msgs2, {
+      sessionId,
+      envelope: env,
+      processedMessages: msgs2,
+      processedEnvelope: env,
+    });
+    expect(
+      "tools" in
+        ((await rawRow(r2.id)).processedRequest as Record<string, unknown>),
+    ).toBe(false);
+
+    InteractionDeltaManager.reset();
+
+    const msgs3 = [...msgs2, assistantMsg("a1"), userMsg("turn 2")];
+    const r3 = await createClaude(msgs3, {
+      sessionId,
+      envelope: env,
+      processedMessages: msgs3,
+      processedEnvelope: { tools: null, system: null },
+    });
+    expect(r3.parentId).toBeNull();
+    expect(r3.processedRequestSharedPrefix).toBe(0);
+
+    InteractionDeltaManager.reset();
+    const full3 = await InteractionModel.findById(r3.id);
+    const fullReq = (full3 as { request: Record<string, unknown> }).request;
+    expect(fullReq.tools).toEqual(TOOLS_A);
+    const fullProc = (full3 as { processedRequest: Record<string, unknown> })
+      .processedRequest;
+    expect("tools" in fullProc).toBe(false);
+    expect("system" in fullProc).toBe(false);
+    expect(reconstructedMessages(fullProc)).toEqual(msgs3);
   });
 
   test("inherits tools/system across a long chain with a mid-chain change (warm and cold)", async () => {

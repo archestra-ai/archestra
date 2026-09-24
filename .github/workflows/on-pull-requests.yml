@@ -742,27 +742,14 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
-  # Backend unit tests, sharded across parallel runners. Vitest's --shard
-  # slices the file list deterministically (SHA1 of each path), so the
-  # eight jobs partition the suite exactly once. Splitting this out of the
-  # lint job takes the suite off the workflow's critical path. The previous
-  # four-shard shape reached 5m15s on the current suite (PR #7574); an isolated
-  # same-host benchmark reduced a representative shard from 484s (265 files)
-  # to 304s (133 files) at eight-way width. Keep the 16-vCPU runner: the old
-  # 16-shard fan-out on free 4-vCPU runners paid module-import overhead without
-  # enough per-shard parallelism and took 6-9 minutes.
+  # Run the complete suite on one larger runner to avoid repeating checkout,
+  # dependency setup, Rust builds, and test schema creation eight times.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
+    name: Backend Unit Tests (single runner)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
-    # the pre-migration July runs on these same runners). The private
-    # mirror's task-env PRs run on the same Blacksmith installation now, so
-    # the old 2-vCPU private ubuntu-latest sizing no longer applies. Beyond
-    # this, something is hung.
-    timeout-minutes: 15
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 20
     permissions:
       contents: read
     defaults:
@@ -771,12 +758,6 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-    strategy:
-      # A failing shard must not cancel its siblings; we want the full
-      # failure picture in one pass.
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -799,10 +780,8 @@ jobs:
       # The NAPI package builds are deliberately uncacheable in turbo
       # (turbo.json sets cache:false on them — the .node artifacts are
       # platform-specific and the remote cache is shared with dev machines),
-      # so every shard really compiles the three Rust crates: measured at
-      # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. All eight shards restore
-      # the same entry (shared-key); only shard 1 saves. Fresh PR branches
+      # so this job compiles the three Rust crates. A warm cargo target
+      # dir turns that into an incremental no-op. Fresh PR branches
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
@@ -810,18 +789,17 @@ jobs:
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
-          save-if: ${{ matrix.shard == 1 }}
+          save-if: true
 
       # Vitest uses its results cache to schedule historically slow files
-      # first. Persist one cache per shard so fresh runners keep that balancing
-      # data without mixing partial result sets across the matrix.
+      # first. Persist timing data for the complete suite.
       - name: Cache Vitest timing data
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/backend/node_modules/.vite/vitest
-          key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
+          key: backend-vitest-${{ runner.os }}-node24-full-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
           restore-keys: |
-            backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
+            backend-vitest-${{ runner.os }}-node24-full-
 
       # Node's compile cache persists V8 bytecode for the large module graph
       # that every Vitest fork imports. A same-host 2,616-test shard improved
@@ -832,9 +810,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/node-compile-cache
-          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-full-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
           restore-keys: |
-            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-full-
 
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running
@@ -851,36 +829,34 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 8)
+      - name: Run backend unit tests
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
-          SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/8"
+        run: pnpm exec vitest run
 
-  # Stable-named gate over the shard matrix so branch protection / merge queue
-  # can require a single check ("Backend Unit Tests") regardless of shard count.
+  # Keep the stable gate name used by branch protection and merge queue.
   backend-unit-tests-gate:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
-    # always() so the gate still runs (and turns red) when a shard fails,
+    # always() so the gate still runs (and turns red) when the suite fails,
     # ANDed with the bot-pr-guard (see comment above
-    # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
+    # platform-lint-and-unit-tests): when the suite skips on a bot PR, the
     # gate must skip too — with plain always() it would run and fail on the
-    # shards' "skipped" result.
+    # suite's "skipped" result.
     if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
-      - name: Check shard results
+      - name: Check backend unit test result
         env:
-          SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
+          TEST_RESULT: ${{ needs.backend-unit-tests.result }}
         run: |
-          if [ "$SHARDS_RESULT" != "success" ]; then
-            echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::Backend unit tests failed (result: $TEST_RESULT)."
             exit 1
           fi
-          echo "✅ All backend unit test shards passed."
+          echo "✅ Backend unit tests passed."
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)

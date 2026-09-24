@@ -102,7 +102,7 @@ describe("Resource creation with service-account authentication", () => {
   test.each([
     {
       url: "/api/knowledge-directories",
-      payload: { name: "Shared notes", visibility: "org-wide" },
+      payload: { name: "Shared notes" },
     },
     {
       url: "/api/apps",

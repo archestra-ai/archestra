@@ -257142,18 +257142,10 @@
                     }
                   },
                   "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "private",
-                      "org-wide",
-                      "team-scoped"
-                    ]
+                    "not": {}
                   },
                   "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
+                    "not": {}
                   }
                 }
               }

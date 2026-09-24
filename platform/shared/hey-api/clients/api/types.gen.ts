@@ -65910,8 +65910,8 @@ export type UpdateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
-        visibility?: 'private' | 'org-wide' | 'team-scoped';
-        teamIds?: Array<string>;
+        visibility?: unknown;
+        teamIds?: unknown;
     };
     path: {
         id: string;

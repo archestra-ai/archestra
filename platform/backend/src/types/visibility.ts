@@ -14,3 +14,15 @@ export const RetiredSharingFieldSchema = z
       "This field is retired. Set who can reach the object with initialGrants.",
   })
   .optional();
+
+/**
+ * An update-body field that once changed who could reach the object. Access
+ * changes through the object's permissions now, so the field is refused with
+ * a 400 rather than stored where nothing reads it.
+ */
+export const RetiredSharingUpdateFieldSchema = z
+  .never({
+    error:
+      "This field is retired. Change who can reach the object in its permissions.",
+  })
+  .optional();

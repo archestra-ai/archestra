@@ -19,10 +19,8 @@ import { RuntimeCredentialDefinitionModel } from "@/models";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
-  validateKnowledgeBaseAccess,
 } from "@/services/knowledge-base-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 
 // 0 = follow the documents sync schedule (no interval-scheduled passes);
 // anything else must clear the interval floor.
@@ -126,6 +124,7 @@ import {
   DeleteObjectResponseSchema,
   KnowledgeSourceVisibilitySchema,
   LabelWithDetailsSchema,
+  RetiredSharingUpdateFieldSchema,
   SelectConnectorRunDetailSchema,
   SelectConnectorRunListSchema,
   SelectKbDocumentSchema,
@@ -582,29 +581,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
+          visibility: RetiredSharingUpdateFieldSchema,
+          teamIds: RetiredSharingUpdateFieldSchema,
         }),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      const current = await findKnowledgeBaseOrThrow({
+      await findKnowledgeBaseOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
-      const visibility = body.visibility ?? current.visibility;
-      const teamIds = body.teamIds ?? current.teamIds;
-      await validateKnowledgeBaseAccess({
-        organizationId,
-        visibility,
-        teamIds,
-        current,
-      });
-      const { labels, ...columns } = body;
-      columns.teamIds =
-        visibility === "team-scoped" ? [...new Set(teamIds)] : [];
+      const { labels, visibility: _v, teamIds: _t, ...columns } = body;
       const updated = await KnowledgeBaseModel.update(id, columns);
       if (!updated) {
         throw new ApiError(404, "Knowledge base not found");

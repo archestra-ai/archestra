@@ -57,10 +57,7 @@ import {
 } from "@/models";
 import * as metrics from "@/observability/metrics";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
-import {
-  canAccessKnowledgeBase,
-  validateKnowledgeBaseAccess,
-} from "@/services/knowledge-base-access";
+import { canAccessKnowledgeBase } from "@/services/knowledge-base-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AclEntry,
@@ -75,7 +72,6 @@ import {
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 import { archestraMcpBranding } from "./branding";
 import { dynamicAccessContext } from "./dynamic-tools";
 import {
@@ -112,8 +108,6 @@ const KnowledgeBaseCreateToolArgsSchema = z
 
 const KnowledgeBaseUpdateToolArgsSchema = z
   .object({
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
     id: UuidIdSchema.describe("Knowledge base ID."),
     name: UpdateKnowledgeBaseSchema.shape.name
       .optional()
@@ -966,8 +960,6 @@ async function handleUpdateKnowledgeBase(params: {
     }
 
     const updates: Record<string, unknown> = {};
-    if (args.visibility !== undefined) updates.visibility = args.visibility;
-    if (args.teamIds !== undefined) updates.teamIds = args.teamIds;
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (Object.keys(updates).length === 0) {
@@ -985,15 +977,6 @@ async function handleUpdateKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.id);
     }
-    const visibility = args.visibility ?? existing.visibility;
-    const teamIds = args.teamIds ?? existing.teamIds;
-    await validateKnowledgeBaseAccess({
-      organizationId: context.organizationId,
-      visibility,
-      teamIds,
-      current: existing,
-    });
-    updates.teamIds = visibility === "team-scoped" ? [...new Set(teamIds)] : [];
     const kb = await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
       return knowledgeBaseNotFound(args.id);

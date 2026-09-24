@@ -998,6 +998,26 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
+    test("update_knowledge_base refuses the retired visibility and teamIds arguments", async ({
+      makeKnowledgeBase,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const result = await executeArchestraTool(
+        t("update_knowledge_base"),
+        {
+          id: kb.id,
+          visibility: "team-scoped",
+          teamIds: [crypto.randomUUID()],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Validation error in archestra__update_knowledge_base",
+      );
+    });
+
     test("update_knowledge_base returns error when no fields provided", async () => {
       const result = await executeArchestraTool(
         t("update_knowledge_base"),

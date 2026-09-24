@@ -374,6 +374,7 @@ test("Verify tool calling using different static credentials", async ({
   const sharedGateway = await createSharedTestGatewayViaApi({
     cookieHeaders,
     gatewayName: makeRandomString(10, "shared-gw"),
+    withOrganizationUse: true,
   });
   // Create a team-scoped MCP gateway for editor (editor can't see org-scoped gateways)
   const teamGateway = await createTeamMcpGatewayViaApi({

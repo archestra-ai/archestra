@@ -229,6 +229,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     const sharedGateway = await createSharedTestGatewayViaApi({
       cookieHeaders,
       gatewayName: makeRandomString(10, "shared-gw"),
+      withOrganizationUse: true,
     });
 
     // Pin the default-team service account created by the API install above.
@@ -332,6 +333,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     const sharedGateway = await createSharedTestGatewayViaApi({
       cookieHeaders,
       gatewayName: makeRandomString(10, "shared-gw"),
+      withOrganizationUse: true,
     });
 
     await assignCatalogCredentialToGateway({

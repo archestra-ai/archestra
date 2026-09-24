@@ -15,6 +15,7 @@ import {
   getE2eRequestUrl,
   MARKETING_TEAM_NAME,
   MCP_GATEWAY_URL_SUFFIX,
+  ORGANIZATION_USE_GRANT,
   UI_BASE_URL,
 } from "../consts";
 import { goToPage } from "../fixtures";
@@ -710,9 +711,16 @@ function stripStaticCredentialDescription(text: string): string {
 export async function createSharedTestGatewayViaApi({
   cookieHeaders,
   gatewayName,
+  withOrganizationUse = false,
 }: {
   cookieHeaders: string;
   gatewayName: string;
+  /**
+   * Also grant the whole organization use, so the organization token reaches
+   * the gateway. Team tokens reach organization grants too, so leave this off
+   * when a spec expects another team's token to be refused.
+   */
+  withOrganizationUse?: boolean;
 }): Promise<{ id: string; name: string }> {
   const teamsResponse = await archestraApiSdk.getTeams({
     headers: { Cookie: cookieHeaders },
@@ -760,6 +768,14 @@ export async function createSharedTestGatewayViaApi({
           subject: { type: "team", id: engineeringTeam.id },
           actions: ["read", "use"],
         },
+        ...(withOrganizationUse
+          ? [
+              {
+                ...ORGANIZATION_USE_GRANT,
+                actions: [...ORGANIZATION_USE_GRANT.actions],
+              },
+            ]
+          : []),
       ],
     },
   });

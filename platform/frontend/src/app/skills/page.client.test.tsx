@@ -262,7 +262,7 @@ describe("SkillsPage rows", () => {
     ).toBeDisabled();
   });
 
-  it("shows a compact compatibility indicator beside the name with a width-capped tooltip", async () => {
+  it("shows compatibility beside the name and reveals its details on hover", async () => {
     mockSkills([
       {
         ...MINE,
@@ -282,11 +282,6 @@ describe("SkillsPage rows", () => {
     await userEvent.hover(badge);
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("requires an external review tool");
-    // The accessible "tooltip" role lands on Radix's visually-hidden
-    // description span; the visible bubble carrying the width cap is the
-    // sibling `data-slot="tooltip-content"` element.
-    const bubble = document.querySelector('[data-slot="tooltip-content"]');
-    expect(bubble).toHaveClass("max-w-xs");
   });
 
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {

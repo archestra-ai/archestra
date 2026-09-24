@@ -68,8 +68,8 @@ describe("deep-link defaults", () => {
     });
 
     expect(
-      screen.getByRole("radio", { name: /Agents & MCP gateways/ }),
-    ).toBeChecked();
+      screen.getByRole("combobox", { name: "What will this client access?" }),
+    ).toHaveTextContent("Agents & MCP gateways");
     // The pre-selected agent shows as a chip in the allowed-resources field.
     expect(screen.getByText("Marketing Agent")).toBeInTheDocument();
   });
@@ -101,7 +101,7 @@ describe("deep-link defaults", () => {
     renderDialog({ fixedClientType: "llm", defaultClientType: "mcp" });
 
     expect(
-      screen.queryByRole("radio", { name: /Agents & MCP gateways/ }),
+      screen.queryByRole("combobox", { name: "What will this client access?" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Provider Keys")).toBeInTheDocument();
   });
@@ -139,8 +139,8 @@ describe("deep-link defaults", () => {
     renderDialog();
 
     expect(
-      screen.getByRole("radio", { name: /Agents & MCP gateways/ }),
-    ).toBeChecked();
+      screen.getByRole("combobox", { name: "What will this client access?" }),
+    ).toHaveTextContent("Agents & MCP gateways");
     expect(screen.queryByText("Marketing Agent")).not.toBeInTheDocument();
     // No allowed resource selected → submit stays disabled even with a name.
     expect(

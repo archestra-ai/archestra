@@ -27,7 +27,13 @@ import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type OAuthClientType = "mcp" | "llm";
 
@@ -173,7 +179,8 @@ export function CreateOAuthClientDialog({
           />
         </div>
         {!fixedClientType && (
-          <RadioCardField
+          <SelectField
+            id="oauth-client-type"
             label="What will this client access?"
             options={CLIENT_TYPE_OPTIONS}
             value={clientType}
@@ -186,7 +193,8 @@ export function CreateOAuthClientDialog({
           />
         )}
 
-        <RadioCardField
+        <SelectField
+          id="oauth-client-grant-type"
           label="Grant type"
           options={isMcp ? MCP_GRANT_TYPE_OPTIONS : LLM_GRANT_TYPE_OPTIONS}
           value={grantType}
@@ -265,7 +273,7 @@ export function CreateOAuthClientDialog({
 type GrantType =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number]["grantType"];
 
-type RadioCardOption = {
+type SelectFieldOption = {
   value: string;
   label: string;
   description: string;
@@ -286,7 +294,7 @@ function describeClientType(fixedClientType?: OAuthClientType) {
   return "Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth.";
 }
 
-const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
+const CLIENT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "mcp",
     label: "Agents & MCP gateways",
@@ -301,7 +309,7 @@ const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-const MCP_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
+const MCP_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "client_credentials",
     label: "Application (client credentials)",
@@ -316,7 +324,7 @@ const MCP_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-const LLM_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
+const LLM_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "client_credentials",
     label: "Application (client credentials)",
@@ -331,41 +339,38 @@ const LLM_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-function RadioCardField({
+function SelectField({
+  id,
   label,
   options,
   value,
   onChange,
 }: {
+  id: string;
   label: string;
-  options: RadioCardOption[];
+  options: SelectFieldOption[];
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
-      <RadioGroup value={value} onValueChange={onChange} className="gap-2">
-        {options.map((option) => (
-          <Label
-            key={option.value}
-            htmlFor={`radio-card-${option.value}`}
-            className="flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal has-[:checked]:border-primary"
-          >
-            <RadioGroupItem
-              id={`radio-card-${option.value}`}
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem
+              key={option.value}
               value={option.value}
-              className="mt-0.5"
-            />
-            <div className="space-y-1">
-              <div className="font-medium">{option.label}</div>
-              <p className="text-sm text-muted-foreground">
-                {option.description}
-              </p>
-            </div>
-          </Label>
-        ))}
-      </RadioGroup>
+              description={option.description}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

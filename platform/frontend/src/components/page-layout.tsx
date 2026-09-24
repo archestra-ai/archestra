@@ -192,21 +192,33 @@ export function PageLayout({
           className="border-b border-border bg-background md:sticky md:top-0 md:z-20"
         >
           <div
-            className={cn("mx-auto", minWidth, maxWidth, "px-6 pt-6 md:px-6")}
+            className={cn(
+              "mx-auto px-6",
+              minWidth,
+              maxWidth,
+              maxWidthKey === "wizard" ? "pt-4 sm:pt-6" : "pt-6",
+            )}
           >
-            {backLink && <div className="mb-2">{backLink}</div>}
-            {/* Below sm the action buttons drop under the title/description
-              instead of squeezing them into a sliver beside the buttons. */}
+            {/* On wizard-width detail pages, phone actions share the back-link
+                row. The title can then
+                use the full width, and the actions do not create a spare row
+                between the title and tabs. */}
             <div
               className={cn(
-                "mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
-                maxWidthKey === "wizard" &&
-                  "min-h-[5.75rem] sm:min-h-[3.75rem]",
+                "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 sm:gap-x-6",
+                maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
+                maxWidthKey === "wizard" && "sm:min-h-[3.75rem]",
               )}
             >
+              {backLink && (
+                <div className="col-start-1 row-start-1 min-w-0">
+                  {backLink}
+                </div>
+              )}
               <div
                 className={cn(
-                  "min-w-0 sm:flex-1",
+                  "col-span-2 min-w-0 sm:col-span-1",
+                  backLink ? "row-start-2" : "row-start-1",
                   maxWidthKey === "wizard" &&
                     "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
                 )}
@@ -228,8 +240,10 @@ export function PageLayout({
                 <div
                   className={cn(
                     "flex min-w-0 items-center gap-2",
+                    // 40px even without an icon, so a plain text title and
+                    // the actions share one centre line.
                     maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
+                      ? "min-h-10 flex-nowrap overflow-hidden"
                       : "flex-wrap",
                     description && maxWidthKey !== "wizard" && "mb-2",
                   )}
@@ -260,8 +274,18 @@ export function PageLayout({
               {actionButton && (
                 <div
                   className={cn(
-                    "shrink-0",
+                    "col-start-2 justify-self-end",
+                    maxWidthKey === "wizard" && backLink
+                      ? "row-start-1 sm:row-start-2"
+                      : backLink
+                        ? "row-start-3 sm:row-start-2"
+                        : "row-start-2 sm:row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
+                    // The left block is the 40px title row plus a description
+                    // pinned under it. Centre the actions on the title row,
+                    // not on the whole block, so both sides line up.
+                    maxWidthKey === "wizard" &&
+                      "sm:flex sm:h-10 sm:items-center",
                   )}
                 >
                   {actionButton}
@@ -387,7 +411,11 @@ export function PageLayout({
                 </div>
               </>
             )}
-            {!tabs.length && <div className="mb-6" />}
+            {!tabs.length && (
+              <div
+                className={maxWidthKey === "wizard" ? "mb-2 sm:mb-6" : "mb-6"}
+              />
+            )}
           </div>
         </div>
         <div

@@ -1762,6 +1762,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInclude]: { toolPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { toolPolicy: ["read"] },
@@ -1771,6 +1772,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
+  // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
+  [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -2112,6 +2115,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/credentials": { credential: ["read"] },
+  "/settings/openappa": { toolPolicy: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

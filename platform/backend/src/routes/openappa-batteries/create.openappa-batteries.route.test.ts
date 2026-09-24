@@ -8,6 +8,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { helperUrlBase } from "@/openappa/declarations";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import {
   deleteRuntimeCredentialConnection,
@@ -528,17 +529,174 @@ describe("guardrails batteries", () => {
       name: "notion__prod__search",
       rawName: "prod__search",
     });
-    // The runtime refuses such a target outright, so nothing is bound for it.
+    // The runtime refuses such a target outright, so the attach is refused
+    // rather than left as an include governing nothing.
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
       payload: { batteryName: "notion", catalogId: catalog.id },
     });
-    expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({
-      status: "server_missing",
-      servers: [],
+    expect(created.statusCode).toBe(409);
+    expect(await declarations()).toMatchObject({ batteries: [] });
+  });
+
+  test("a catalog with no synced tools takes no battery", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Fresh GitHub",
     });
+    const before = (await guardrailsPolicyService.get(organizationId)).content;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode).toBe(409);
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      before,
+    );
+    expect(await declarations()).toMatchObject({ batteries: [] });
+  });
+
+  test("a row that outlived its catalog's tools is not detached but removed with its include", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const [row] = await installRows();
+    if (!row) throw new Error("the github battery derived no row");
+    // The tools go without a recompose: the row stays, its prefix does not.
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalog.id));
+    const before = (await guardrailsPolicyService.get(organizationId)).content;
+    for (const request of [
+      {
+        method: "DELETE" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: false },
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/openappa/battery-installs/${row.id}`,
+        payload: { enabled: true },
+      },
+    ]) {
+      const refused = await app.inject(request);
+      expect(refused.statusCode, refused.body).toBe(409);
+    }
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      before,
+    );
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/github",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).not.toContain("github_prod");
+    expect(await installRows()).toEqual([]);
+  });
+
+  test("removing an include drops the entry and the alias no catalog answers to", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/acme",
+      payload: { files: sharedNamespacePackage("acme", "list") },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    // An alias written by hand to a server nothing carries: the entry composes
+    // as server_missing and derives no row, so no install can remove it.
+    const declared = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: `include = ["batteries/acme@sha256-${uploaded.json().contentHash}/appa.toml"]\n\n[server_aliases]\nacme = ["acme_gone"]\n\n${declared.content}`,
+      expectedRevision: declared.revision,
+    });
+    expect(await declarations()).toMatchObject({
+      batteries: [
+        {
+          name: "acme",
+          status: "server_missing",
+          servers: [{ target: "acme_gone", catalogId: null }],
+        },
+      ],
+    });
+    expect(await installRows()).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/acme",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await declarations()).toMatchObject({
+      batteries: [],
+      unusedAliases: [],
+    });
+    const content = (await guardrailsPolicyService.get(organizationId)).content;
+    expect(content).not.toContain("batteries/acme@");
+    expect(content).not.toContain("acme_gone");
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/openappa/battery-includes/acme",
+        })
+      ).statusCode,
+    ).toBe(404);
+    const records = (
+      await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId))
+    ).filter((record) => record.action === "guardrailsPolicy.updated");
+    expect(records.map((record) => record.outcome).sort()).toEqual([
+      "failure",
+      "success",
+    ]);
+    expect(records.map((record) => record.resourceId)).toEqual([
+      organizationId,
+      organizationId,
+    ]);
   });
 
   test("one prefix two catalogs carry leaves the battery in a naming conflict", async ({
@@ -569,8 +727,14 @@ describe("guardrails batteries", () => {
 
   test("the root revision moving recomposes the effective policy on the next read", async ({
     makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github__get_me",
+      rawName: "get_me",
+    });
     expect(
       (
         await app.inject({
@@ -814,6 +978,283 @@ describe("guardrails batteries", () => {
     } finally {
       await managerApp.close();
     }
+  });
+
+  test("a battery made of annotators alone is installed organization-wide and serves its helper once its credential is bound and a rule routes to it", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub Prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/openappa/batteries",
+    });
+    expect(
+      listed.json().find((battery: { name: string }) => battery.name === "jev"),
+    ).toMatchObject({
+      namespaces: [],
+      annotators: ["jev.tool-call"],
+      credentials: ["APPA_PROVIDER_JEV_API_KEY"],
+    });
+
+    // Each kind of battery refuses the other kind's request.
+    for (const payload of [
+      { batteryName: "jev", catalogId: catalog.id },
+      { batteryName: "github" },
+    ]) {
+      const refused = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload,
+      });
+      expect(refused.statusCode, refused.body).toBe(400);
+    }
+    expect(await declarations()).toMatchObject({ batteries: [] });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "jev" },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json()).toMatchObject({
+      name: "jev",
+      entry: "batteries/jev/appa.toml",
+      status: "missing_credentials",
+      servers: [],
+    });
+    const [row] = await installRows();
+    expect(row).toMatchObject({
+      batteryName: "jev",
+      catalogId: null,
+      status: "missing_credentials",
+    });
+
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: adminId,
+      definition: {
+        key: "jev-key",
+        name: "Jev key",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+      value: "jev_test",
+    });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${row.id}`,
+      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    // The initial root routes every tool to `noop`, so nothing consults jev yet.
+    expect(updated.json()).toMatchObject({
+      status: "unrouted",
+      servers: [],
+    });
+    // Its helper is composed all the same, served under the one row.
+    const unrouted = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(unrouted?.lastError).toBeNull();
+    expect(unrouted?.content).toContain(helperUrlBase(row.id));
+
+    const latest = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: latest.content.replace(
+        'name = "*"\nannotator = "noop"',
+        'name = "*"\nannotator = "jev.tool-call"',
+      ),
+      expectedRevision: latest.revision,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+    const active = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(active?.lastError).toBeNull();
+    expect(active?.content).toContain(helperUrlBase(row.id));
+    expect(await installRows()).toEqual([
+      expect.objectContaining({
+        id: row.id,
+        catalogId: null,
+        status: "active",
+      }),
+    ]);
+
+    // A catalog going away takes none of the organization's rows with it.
+    await db
+      .delete(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    await openappaBatteriesService.recompile(organizationId);
+    expect((await installRows()).map((install) => install.id)).toEqual([
+      row.id,
+    ]);
+
+    // A rule naming jev's annotator keeps the battery in: the text without
+    // the include would route to an annotator nothing registers.
+    const routed = await app.inject({
+      method: "DELETE",
+      url: `/api/openappa/battery-installs/${row.id}`,
+    });
+    expect(routed.statusCode, routed.body).toBe(400);
+    const routing = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: routing.content.replace(
+        'annotator = "jev.tool-call"',
+        'annotator = "noop"',
+      ),
+      expectedRevision: routing.revision,
+    });
+
+    const detached = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${row.id}`,
+      payload: { enabled: false },
+    });
+    expect(detached.statusCode, detached.body).toBe(409);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/openappa/battery-installs/${row.id}`,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(await declarations()).toMatchObject({ batteries: [] });
+    expect(await installRows()).toEqual([]);
+
+    const records = (
+      await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId))
+    ).filter(
+      (record) =>
+        record.action.startsWith("openappaBatteryInstall") &&
+        record.httpStatus === 200,
+    );
+    // Every write the organization-wide row answered names it.
+    expect(
+      records.map((record) => [record.action, record.resourceId]).sort(),
+    ).toEqual([
+      ["openappaBatteryInstall.created", row.id],
+      ["openappaBatteryInstall.deleted", row.id],
+      ["openappaBatteryInstall.updated", row.id],
+    ]);
+  });
+
+  test("an organization-wide battery missing its credential still composes, so a rule routing to it keeps the policy open", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: "/api/openappa/battery-packages/acme",
+      payload: { files: sharedNamespacePackage("acme", "list") },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    for (const payload of [
+      {
+        batteryName: "acme",
+        catalogId: catalog.id,
+        packageHash: uploaded.json().contentHash,
+      },
+      { batteryName: "jev" },
+    ]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload,
+      });
+      expect(created.statusCode, created.body).toBe(200);
+    }
+    const latest = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: latest.content.replace(
+        'name = "*"\nannotator = "noop"',
+        'name = "*"\nannotator = "jev.tool-call"',
+      ),
+      expectedRevision: latest.revision,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+
+    const jevRow = (await installRows()).find(
+      (install) => install.batteryName === "jev",
+    );
+    if (!jevRow) throw new Error("jev derived no row");
+    // The helper is bound though it has no credential: it answers nothing,
+    // which refuses the calls routed to it rather than the whole policy.
+    const composed = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(composed?.lastError).toBeNull();
+    expect(composed?.content).toContain(helperUrlBase(jevRow.id));
+    expect(await declarations()).toMatchObject({
+      lastError: null,
+      batteries: expect.arrayContaining([
+        expect.objectContaining({ name: "acme", status: "active" }),
+        expect.objectContaining({
+          name: "jev",
+          status: "missing_credentials",
+          composed: true,
+        }),
+      ]),
+    });
+
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: adminId,
+      definition: {
+        key: "jev-key",
+        name: "Jev key",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "jev-key",
+      value: "jev_test",
+    });
+    const bound = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/battery-installs/${jevRow.id}`,
+      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
+    });
+    expect(bound.statusCode, bound.body).toBe(200);
+    expect(bound.json()).toMatchObject({ status: "active", composed: true });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
+    ).toBeNull();
   });
 
   test("a member without organization management cannot install", async ({

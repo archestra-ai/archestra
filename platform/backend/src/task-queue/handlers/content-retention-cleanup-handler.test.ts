@@ -56,8 +56,31 @@ async function seedMcpToolCall(createdAt: Date): Promise<void> {
   });
 }
 
+async function seedExternalConsult(params: {
+  organizationId: string;
+  createdAt: Date;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  await db.insert(schema.openappaExternalConsultsTable).values({
+    id,
+    organizationId: params.organizationId,
+    createdAt: params.createdAt,
+    startedAt: params.createdAt,
+    durationMs: 1,
+    role: "annotator",
+    externalName: "scan",
+    backend: "url",
+    request: {},
+    outcome: "answered",
+    root: "root",
+    trajectory: "root",
+  });
+  return id;
+}
+
 async function countRows(
   table:
+    | typeof schema.openappaExternalConsultsTable
     | typeof schema.interactionsTable
     | typeof schema.mcpToolCallsTable
     | typeof schema.conversationsTable
@@ -149,6 +172,28 @@ describe("handleContentRetentionCleanup", () => {
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.id, head));
     expect(survivingHead).toBeDefined();
+  });
+
+  test("expires external consults under the LLM logs window", async ({
+    makeOrganization,
+  }) => {
+    const { id: organizationId } = await makeOrganization();
+    await seedExternalConsult({ organizationId, createdAt: daysAgo(31) });
+    const fresh = await seedExternalConsult({
+      organizationId,
+      createdAt: daysAgo(29),
+    });
+
+    config.retention.mcpLogsDays = 30;
+    await handleContentRetentionCleanup();
+    expect(await countRows(schema.openappaExternalConsultsTable)).toBe(2);
+
+    config.retention.llmLogsDays = 30;
+    await handleContentRetentionCleanup();
+    const remaining = await db
+      .select({ id: schema.openappaExternalConsultsTable.id })
+      .from(schema.openappaExternalConsultsTable);
+    expect(remaining).toEqual([{ id: fresh }]);
   });
 
   test("deletes expired mcp tool calls but keeps rows within the window", async () => {

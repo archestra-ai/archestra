@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  AGENT_CATALOG_IMAGE_REGISTRY,
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   BM25_B_DEFAULT,
   BM25_B_MAX,
@@ -22,7 +23,8 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
-  getDefaultAgentRuntimeImage,
+  getAgentCatalogImages,
+  getAgentCatalogImageTag,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   MAX_CHUNK_SIZE_TOKENS,
@@ -30,6 +32,7 @@ import {
   MCP_ORCHESTRATOR_DEFAULTS,
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
+  parsePublicHostSchemes,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -1308,40 +1311,35 @@ export const getAppAssetBaseOrigin = (): string => {
   return new URL("http://localhost:3000").origin;
 };
 
-export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
-  const hosts = new Set<string>();
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> =>
+  new Set(getMCPGatewayOauthPublicHostSchemes().keys());
 
-  const addHostFromUrl = (raw: string) => {
-    try {
-      hosts.add(new URL(raw).host.toLowerCase());
-    } catch {
-      // ignore malformed values
-    }
-  };
+/**
+ * Map every configured public host to the scheme it was configured with.
+ *
+ * An operator names the platform's public origins in ARCHESTRA_FRONTEND_URL and
+ * ARCHESTRA_API_BASE_URL. When one of those is https, that host is reachable
+ * over https by definition, so OAuth metadata for it must never be advertised
+ * over http — even when the proxy in front strips X-Forwarded-Proto (a layer-4
+ * route cannot set that header at all). The scheme recorded here is the
+ * operator's own declaration, never caller-supplied input.
+ */
+export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> =>
+  parsePublicHostSchemes([
+    frontendBaseUrl,
 
-  addHostFromUrl(frontendBaseUrl);
+    // In local development the Next.js dev server always serves on
+    // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
+    // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
+    // client connecting to the local origin can still complete the gateway
+    // OAuth handshake without extra config. Never enabled in production, where
+    // the allowlist must stay restricted to the configured public hosts.
+    ...(isDevelopment
+      ? ["http://localhost:3000", "http://127.0.0.1:3000"]
+      : []),
 
-  // In local development the Next.js dev server always serves on
-  // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
-  // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
-  // client connecting to the local origin can still complete the gateway OAuth
-  // handshake without extra config. Never enabled in production, where the
-  // allowlist must stay restricted to the configured public hosts.
-  if (isDevelopment) {
-    addHostFromUrl("http://localhost:3000");
-    addHostFromUrl("http://127.0.0.1:3000");
-  }
-
-  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
-  if (externalUrls) {
-    for (const url of externalUrls.split(",")) {
-      const trimmed = url.trim();
-      if (trimmed) addHostFromUrl(trimmed);
-    }
-  }
-
-  return hosts;
-};
+    process.env.ARCHESTRA_API_BASE_URL,
+  ]);
 
 /**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
@@ -2430,10 +2428,19 @@ const config = {
      */
     allowPrivileged:
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
-    /** Built-in agent loop used when an Agent enables a dedicated runtime. */
-    defaultImage:
-      process.env.ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE?.trim() ||
-      getDefaultAgentRuntimeImage(appVersion),
+    /**
+     * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
+     * them can move the registry and pin the tag; the tag otherwise follows
+     * the platform version.
+     */
+    catalogImages: getAgentCatalogImages({
+      registry:
+        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+        AGENT_CATALOG_IMAGE_REGISTRY,
+      tag:
+        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
+        getAgentCatalogImageTag(appVersion),
+    }),
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,

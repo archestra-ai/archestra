@@ -15,6 +15,7 @@ export const BATTERY_STATUS_BADGES: Record<
   missing_credentials: { label: "Needs a credential", variant: "destructive" },
   naming_conflict: { label: "Tool name conflict", variant: "destructive" },
   server_missing: { label: "No server bound", variant: "outline" },
+  unrouted: { label: "Not used by any rule", variant: "outline" },
   refused: { label: "Not enforced", variant: "destructive" },
   unavailable: { label: "Package missing", variant: "destructive" },
 };

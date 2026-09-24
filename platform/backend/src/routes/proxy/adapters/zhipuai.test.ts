@@ -4,6 +4,15 @@ import { zhipuaiAdapterFactory } from "./zhipuai";
 
 type StreamChunk = Zhipuai.Types.ChatCompletionChunk;
 
+function deltaOf(sseData: string | Uint8Array): Record<string, unknown> {
+  const text =
+    typeof sseData === "string" ? sseData : new TextDecoder().decode(sseData);
+  const json = JSON.parse(text.replace(/^data: /, "").trim()) as {
+    choices: Array<{ delta: Record<string, unknown> }>;
+  };
+  return json.choices[0].delta;
+}
+
 function textChunk(text: string): StreamChunk {
   return {
     id: "chatcmpl-test",
@@ -60,6 +69,55 @@ describe("ZhipuaiStreamAdapter policy refusal", () => {
     expect(message.content).toBe("the answer");
   });
 
+  test("streams mixed text and reasoning while buffering only its tool call", () => {
+    const adapter = zhipuaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-mixed",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "glm-4",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            content: "I will delegate this.",
+            reasoning_content: "This needs a specialist.",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "delegate", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as StreamChunk);
+
+    if (result.sseData === null) throw new Error("expected streamable content");
+    expect(deltaOf(result.sseData)).toEqual({
+      role: "assistant",
+      content: "I will delegate this.",
+      reasoning_content: "This needs a specialist.",
+    });
+    expect(result.isToolCallChunk).toBe(true);
+
+    expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
+      role: "assistant",
+      tool_calls: expect.any(Array),
+    });
+
+    const message = adapter.toProviderResponse().choices[0].message as {
+      content: string | null;
+      reasoning_content?: string;
+    };
+    expect(message.content).toBe("I will delegate this.");
+    expect(message.reasoning_content).toBe("This needs a specialist.");
+  });
+
   test("leaves an unrefused turn untouched", () => {
     const adapter = zhipuaiAdapterFactory.createStreamAdapter();
     adapter.processChunk(textChunk("all good"));
@@ -67,5 +125,42 @@ describe("ZhipuaiStreamAdapter policy refusal", () => {
     const response = adapter.toProviderResponse();
 
     expect(response.choices[0].message.content).toBe("all good");
+  });
+});
+
+describe("ZhipuaiResponseAdapter", () => {
+  // The governed-response replace path refuses to send a response it cannot
+  // safely rewrite; without withReplacedText an admitted final answer 503'd.
+  test("withReplacedText replaces the assistant message and drops tool calls", () => {
+    const adapter = zhipuaiAdapterFactory.createResponseAdapter({
+      id: "chatcmpl-test",
+      object: "chat.completion",
+      created: 1,
+      model: "glm-4",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "RAW",
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function" as const,
+                function: { name: "read_file", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    } as unknown as Zhipuai.Types.ChatCompletionsResponse);
+
+    const replaced = adapter.withReplacedText?.("ADMITTED");
+
+    expect(replaced?.choices[0].message.content).toBe("ADMITTED");
+    expect(replaced?.choices[0].message.tool_calls).toBeUndefined();
+    expect(replaced?.choices[0].finish_reason).toBe("stop");
   });
 });

@@ -53,7 +53,7 @@ import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
-const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
+export const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   openai: "https://api.openai.com/v1/",
   anthropic: "https://api.anthropic.com/v1/",
   gemini: "https://generativelanguage.googleapis.com/",

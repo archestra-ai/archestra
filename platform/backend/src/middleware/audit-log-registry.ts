@@ -809,6 +809,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaBatteryInstallModel.findByIdForAudit(id, orgId),
   },
+  // Removing an include is an edit of the policy text, recorded as one.
+  "/api/openappa/battery-includes/:name": {
+    resourceType: "guardrailsPolicy",
+    action: "guardrailsPolicy.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) => GuardrailsPolicyModel.findByIdForAudit(id, orgId),
+  },
   // Uploads are named, deletes are by the bytes: a name has as many stored
   // versions as it has been uploaded, and only the hash says which one.
   "/api/openappa/battery-packages/:name": {

@@ -27,6 +27,20 @@ const validEmbeddingResponse = {
   usage: { prompt_tokens: 1, total_tokens: 1 },
 };
 
+const validCompactedResponse = {
+  id: "resp_compact_test",
+  object: "response.compaction",
+  created_at: 1720000000,
+  output: [
+    {
+      id: "cmp_1",
+      type: "compaction",
+      encrypted_content: "cipher-text",
+    },
+  ],
+  usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+};
+
 const MALFORMED_SENTINEL = { error: "Malformed stored interaction response" };
 
 describe("normalizeInteractionResponse", () => {
@@ -80,6 +94,15 @@ describe("normalizeInteractionResponse", () => {
       response,
     );
   });
+
+  test("returns a stored responses/compact response unchanged", () => {
+    // The compact endpoint logs its native response (object
+    // "response.compaction") under the openai:responses interaction type, so
+    // the read arm must accept it instead of coercing it to the sentinel.
+    expect(
+      normalizeInteractionResponse("openai:responses", validCompactedResponse),
+    ).toBe(validCompactedResponse);
+  });
 });
 
 describe("interaction response schemas accept the persisted error shape", () => {
@@ -97,5 +120,11 @@ describe("interaction response schemas accept the persisted error shape", () => 
     expect(InteractionResponseSchema.safeParse({ error: "boom" }).success).toBe(
       true,
     );
+  });
+
+  test("InteractionResponseSchema accepts a compacted response on the write path", () => {
+    expect(
+      InteractionResponseSchema.safeParse(validCompactedResponse).success,
+    ).toBe(true);
   });
 });

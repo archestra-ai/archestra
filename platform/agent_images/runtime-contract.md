@@ -10,7 +10,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Workspace files | `python3` must be on `PATH` for reading, writing and transferring workspace files. Archestra sends the helper program with each request, so the image needs no copy of it. Images without `python3` run normally; only file access is refused, with a message that says so. |
 | Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
 | Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
-| Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
+| Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
@@ -147,7 +147,28 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Agent-scoped MCP endpoint and the initiating user's bearer token. |
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Turn-boundary steering channel. |
 | `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the run exits. |
+| `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` | `1` when Guardrails v2 (OpenAPPA) governed the deployment at launch. A client must then declare every tool inline: OpenAPPA refuses a session that hides tools behind a provider-side tool search or a code-mode program. The Codex image turns off tool search, code mode, and hosted web search. |
 
-Send `X-Archestra-Run-Id` and `X-Archestra-Session-Id`, both set to `ARCHESTRA_AGENT_RUNTIME_TASK_ID`, on every LLM proxy and MCP gateway request. This groups model interactions and tool calls with the run in logs and traces. The maintained catalog images configure these headers automatically.
+Send these headers on every LLM proxy and MCP gateway request. The maintained catalog images configure them automatically.
+
+| Header | Value | Purpose |
+| --- | --- | --- |
+| `X-Archestra-Run-Id` | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Groups one turn's model interactions and tool calls in logs and traces. |
+| `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
+| `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
+| `X-Appa-Parent-ID` | The parent's `X-Appa-Session-ID` | Optional. Marks a subagent session as a child of that session. |
+
+The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
+
+Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
+
+Guardrails failures:
+
+| Response | Meaning | Client action |
+| --- | --- | --- |
+| HTTP 500, `x-should-retry: false` | The organization's guardrails policy is invalid. The message ends with a trace reference. | Do not retry. An administrator must fix the policy. |
+| HTTP 503, `Retry-After: 5` | The policy runtime or its database is unavailable. | Retry after the delay. |
+
+A blocked tool call is not an HTTP error. The proxy and gateway report it inside the normal response.
 
 Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. Custom images receive a standard virtual key: send `ARCHESTRA_VIRTUAL_KEY` as the provider API key to `ARCHESTRA_LLM_PROXY_URL`. The maintained Claude Code subscription mode receives a personal passthrough key instead. Its wrapper sends that key in `X-Archestra-Virtual-Key`, its OAuth bearer token in `Authorization`, and model requests to the proxy URL. The passthrough key authenticates the run's user while the bearer token authenticates to Anthropic.

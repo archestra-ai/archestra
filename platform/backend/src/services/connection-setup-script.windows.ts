@@ -643,6 +643,37 @@ if (-not $marketplaceAdded) {
     exit 1
   }
 }
+}
+${claudeMarketplaceAutoUpdate(marketplaceName)}`;
+}
+
+/**
+ * PowerShell twin of the bash renderer's `claudeMarketplaceAutoUpdate`:
+ * Claude Code keeps a third-party marketplace's plugins at the installed
+ * revision unless the marketplace declares `autoUpdate`, which is off by
+ * default. Set it on our declaration unless the user already chose a value.
+ */
+function claudeMarketplaceAutoUpdate(marketplaceName: string): string {
+  return `$archAutoUpdateState = 'unavailable'
+try {
+  $archAutoConfigDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+  $archAutoSettingsPath = Join-Path $archAutoConfigDir 'settings.json'
+  $archAutoSettings = Get-Content -Raw -Path $archAutoSettingsPath | ConvertFrom-Json
+  $archAutoEntry = $archAutoSettings.extraKnownMarketplaces.PSObject.Properties[${psq(marketplaceName)}]
+  if ($archAutoEntry -and $archAutoEntry.Value) {
+    if ($archAutoEntry.Value.PSObject.Properties['autoUpdate']) {
+      $archAutoUpdateState = 'kept'
+    } else {
+      $archAutoEntry.Value | Add-Member -NotePropertyName 'autoUpdate' -NotePropertyValue $true
+      [IO.File]::WriteAllText($archAutoSettingsPath, ($archAutoSettings | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
+      $archAutoUpdateState = 'enabled'
+    }
+  }
+} catch { $archAutoUpdateState = 'unavailable' }
+if ($archAutoUpdateState -eq 'enabled') {
+  Ok ${psq(`Enabled auto-update for the "${marketplaceName}" marketplace.`)}
+} elseif ($archAutoUpdateState -ne 'kept') {
+  Warn ${psq(`Could not enable auto-update for the "${marketplaceName}" marketplace. Enable it in /plugin > Marketplaces so Claude Code picks up new skill versions.`)}
 }`;
 }
 

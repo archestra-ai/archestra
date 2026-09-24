@@ -16,8 +16,13 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import {
+  expandCommandExecutionPolicyRules,
+  normalizeCommandExecutionArguments,
+} from "@/openappa/command-normalization";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
+import { openappaFailure } from "@/openappa/failure";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -98,7 +103,10 @@ const NativeDecisionSchema = z
       value: z.string(),
       ...ResultDecisionFields,
     }),
-    z.object({ decision: z.literal("context") }),
+    z.object({
+      decision: z.literal("context"),
+      text: z.string().optional(),
+    }),
     z.object({ decision: z.literal("refuse"), detail: z.string() }),
     z.object({
       decision: z.literal("mcp_result"),
@@ -154,6 +162,13 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
 };
+type ChildEndOutcome =
+  | { decision: "release"; crossed: true }
+  | {
+      decision: "replace";
+      content: string;
+      crossed: boolean;
+    };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaYellEnabled(): boolean {
@@ -285,30 +300,26 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
-/** The organization's effective policy content, or the refusal every dispatch shares. */
+/**
+ * The organization's effective policy content, or the refusal every dispatch shares.
+ *
+ * The deployment switch is not read here. Each entry point reads it once at its
+ * request boundary, so a turn that began governed finishes under its policy even
+ * when the switch turns off mid-request.
+ */
 async function effectivePolicy(organizationId: string): Promise<string> {
   try {
-    if (!(await isGuardrailsV2Active()))
-      throw new Error("Guardrails v2 is disabled");
-    return (await openappaBatteriesService.getEffectivePolicy(organizationId))
-      .content;
+    const rawContent = (
+      await openappaBatteriesService.getEffectivePolicy(organizationId)
+    ).content;
+    return expandCommandExecutionPolicyRules(rawContent);
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
-}
-
-/** Do not forward internal diagnostics or credentials to clients. */
-function unsafeToProceed(error: unknown): ApiError {
-  const failure = new ApiError(
-    503,
-    "OpenAPPA could not safely complete this operation",
-  );
-  failure.cause = error;
-  return failure;
 }
 
 export function chatOpenAppaSession(
@@ -377,18 +388,22 @@ export function sessionFromHeaders(params: {
   };
 }
 
-async function startSession(session: OpenAppaSession, policyContent?: string) {
+async function startSession(
+  session: OpenAppaSession,
+  policyContent?: string,
+): Promise<void> {
   const decision = await dispatch(
     session,
     { event: "session_start" },
     policyContent,
   );
   if (decision.decision === "context") {
-    // The initial Chat adapter has no child-return lifecycle yet. Refuse
-    // rather than silently discard a child's required return contract.
+    // The runtime returns start context (the child return contract) before inference.
+    // The proxy cannot send this contract to the model.
+    // Refuses the session instead of running without the return contract.
     throw new ApiError(
       409,
-      "This child requires an OpenAPPA return contract; its adapter must deliver it before inference",
+      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
     );
   }
   if (decision.decision !== "ack")
@@ -488,6 +503,10 @@ export async function processProxyResults(params: {
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
   trustedChat?: boolean;
+  /** How a client-side spawn launch ended. */
+  classifySpawnResult?: (
+    result: CommonToolResult,
+  ) => "pending" | "failed" | undefined;
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policyContent = await effectivePolicy(params.session.organization_id);
@@ -498,12 +517,14 @@ export async function processProxyResults(params: {
       continue;
     // The runtime released no question call, so it would withhold the answer.
     if (params.isUserQuestion?.(result) === true) continue;
+    const spawn = params.classifySpawnResult?.(result);
+    if (spawn === "pending") continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
       error?.type === "cancelled"
         ? "unknown"
-        : result.isError
+        : spawn === "failed" || result.isError
           ? "failure"
           : "success";
     const approved = await approveToolResult({
@@ -548,11 +569,17 @@ export async function evaluateToolCalls(
   }>,
   options: {
     canonicalize: ToolNameCanonicalizer;
-    isUserQuestion?: (name: string) => boolean;
+    isUserQuestion?: (name: string, namespace?: string) => boolean;
     /** Compat only: recognize a `run_tool` wrapper behind any client label. */
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    /** This session's notice tool declaration, as the client spells it. */
+    notice?: DeclaredToolSpelling;
+    /** True for a call that names a child trajectory (Task, spawn_agent, task). */
+    isSpawn?: (name: string, namespace?: string) => boolean;
+    /** Whether this client can carry child-return declarations. */
+    supportsDelegation?: boolean;
   },
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
@@ -592,16 +619,24 @@ export async function evaluateToolCalls(
         return { kind: "control" as const };
       }
       if (
-        options.isUserQuestion?.(call.name) ??
-        isPlatformUserQuestion(call.name, options.canonicalize)
+        options.notice &&
+        call.name === options.notice.name &&
+        call.namespace === options.notice.namespace
+      ) {
+        return { kind: "allow" as const };
+      }
+      const shortName = archestraMcpBranding.getToolShortName(
+        target.toolCallName,
+      );
+      if (
+        options.isUserQuestion?.(call.name, call.namespace) ??
+        (call.namespace === undefined &&
+          isPlatformUserQuestion(call.name, options.canonicalize))
       ) {
         return { kind: "allow" as const };
       }
       // The target is already canonical, so it is read, not re-canonicalized.
-      const tool =
-        archestraMcpBranding.getToolShortName(target.toolCallName) === "yell"
-          ? "yell"
-          : target.toolCallName;
+      const tool = shortName === "yell" ? "yell" : target.toolCallName;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -610,10 +645,15 @@ export async function evaluateToolCalls(
         options.canonicalize(call.name, call.namespace) === tool
           ? { spelling: call.name }
           : {}),
-        presentation: nativePresentation(options.control?.name),
-        arguments: JSON.parse(target.toolCallArgs),
-        // Delegation evaluates through the parent policy until child adapters exist.
-        spawn: false,
+        presentation: nativePresentation(
+          options.control?.name,
+          options.supportsDelegation,
+        ),
+        arguments: normalizeCommandExecutionArguments(
+          tool,
+          JSON.parse(target.toolCallArgs),
+        ),
+        spawn: options.isSpawn?.(call.name, call.namespace) === true,
       };
       const decision = await dispatch(session, event);
       if (
@@ -776,6 +816,112 @@ export async function endTurn(
   await dispatch(session, { event: "turn_end", operation_id: operationId });
 }
 
+/**
+ * Controls the return boundary where child trajectory output enters the parent session.
+ * The runtime stages a ChildReturn until the harness echoes approved bytes through ChildEnd.
+ * An Ack on the echo confirms the bytes crossed the trust boundary.
+ */
+export async function endChild(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  output: string;
+}): Promise<ChildEndOutcome> {
+  if (!params.session.parent_id) {
+    throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
+  }
+
+  const decision = await dispatch(params.session, {
+    event: "child_end",
+    operation_id: params.operationId,
+    ...(params.output.length > 0 ? { output: params.output } : {}),
+  });
+
+  if (decision.decision === "ack") {
+    return { decision: "release", crossed: true };
+  }
+  if (decision.decision === "block") {
+    return {
+      decision: "replace",
+      content: decisionMessage(decision),
+      crossed: false,
+    };
+  }
+  if (decision.decision === "refuse") {
+    throw openappaFailure(new Error("OpenAPPA refused the child return"));
+  }
+  if (decision.decision !== "child_return") {
+    throw openappaFailure(
+      new Error(`Unexpected ChildEnd decision: ${decision.decision}`),
+    );
+  }
+
+  const echo = await dispatch(params.session, {
+    event: "child_end",
+    operation_id: `${params.operationId}:echo`,
+    // Keep an explicitly empty canonical value distinct from a void first end.
+    output: decision.value,
+  });
+  if (echo.decision !== "ack") {
+    throw openappaFailure(
+      new Error(
+        `OpenAPPA did not admit the canonical child return: ${echo.decision}`,
+      ),
+    );
+  }
+
+  return {
+    decision: "replace",
+    content: decision.value,
+    crossed: true,
+  };
+}
+
+/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+export async function approveSpawnReturn(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  childId: string;
+  value: string;
+}): Promise<void> {
+  const decision = await dispatch(params.session, {
+    event: "tool_result",
+    tool_call_id: params.toolCallId,
+    spawned_id: params.childId,
+    output: params.value,
+    outcome: "success",
+  });
+  if (decision.decision === "block") {
+    const msg = decisionMessage(decision);
+    if (msg.includes("no open dispatch")) {
+      logger.info(
+        { toolCallId: params.toolCallId, childId: params.childId },
+        "OpenAPPA spawn dispatch already closed; child return verified via signed return receipt",
+      );
+      return;
+    }
+    throw new ApiError(409, msg);
+  }
+  if (decision.decision === "refuse") {
+    throw openappaFailure(new Error("OpenAPPA refused the child spawn result"));
+  }
+  if (
+    decision.decision !== "ack" &&
+    decision.decision !== "replace_output" &&
+    decision.decision !== "deliver_value" &&
+    decision.decision !== "child_return"
+  ) {
+    throw openappaFailure(
+      new Error(`Unexpected SpawnResult decision: ${decision.decision}`),
+    );
+  }
+  const approved = extractApprovedOutput(decision, params.value);
+  if (approved !== params.value) {
+    throw openappaFailure(
+      new Error("OpenAPPA changed an already crossed child return"),
+    );
+  }
+}
+
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
@@ -920,19 +1066,22 @@ export async function loadOfferReview(params: {
       { err: error, offerId: params.offerId },
       "Failed to load OpenAPPA offer review",
     );
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
-function nativePresentation(controlToolName?: string): {
+function nativePresentation(
+  controlToolName?: string,
+  supportsDelegation = false,
+): {
   control_tool: string;
-  supports_delegation: false;
+  supports_delegation: boolean;
 } {
   return {
     control_tool:
       controlToolName ??
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
-    supports_delegation: false,
+    supports_delegation: supportsDelegation,
   };
 }
 

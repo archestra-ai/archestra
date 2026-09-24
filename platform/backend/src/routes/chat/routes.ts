@@ -111,6 +111,7 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -932,6 +933,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               buildChatContext({
                 conversationId,
                 agentId,
+                conversationOrigin: conversation.origin,
                 // The conversation came from findById, which selects the agent's
                 // prompt (only list reads omit it) — pin the optional field to
                 // the concrete `string | null` contract the builder declares.
@@ -2830,16 +2832,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           projectId: true,
           lockedChat: true,
           thinkingEffort: true,
+          origin: true,
         })
           .required({ agentId: true })
           .partial({
+            agentId: true,
             title: true,
             modelId: true,
             chatApiKeyId: true,
             projectId: true,
             lockedChat: true,
             thinkingEffort: true,
-          }),
+            origin: true,
+          })
+          .extend({ origin: z.literal("openappa").optional() }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
@@ -2853,10 +2859,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           projectId,
           lockedChat,
           thinkingEffort,
+          origin,
         },
         user,
         organizationId,
       } = request;
+      if (origin === "openappa" && !openappaEnabled()) {
+        throw new ApiError(400, "OpenAPPA is unavailable");
+      }
       // Locked chats stay out of projects: a project lists its chats to
       // everyone it is shared with, so a locked one would sit in a shared
       // space advertising a conversation none of them can open.
@@ -2888,13 +2898,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate that the agent exists and the user has access to it. Only the
       // LLM-selection fields are read below, so skip findById's full hydration.
-      const agent = await AgentModel.findLlmSelectionFieldsById(
-        agentId,
-        user.id,
-        isAgentAdmin,
-      );
+      const policyAgent =
+        origin === "openappa"
+          ? await AgentModel.getBuiltInAgent(
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              organizationId,
+            )
+          : null;
+      const resolvedAgentId = origin === "openappa" ? policyAgent?.id : agentId;
+      const agent =
+        policyAgent ??
+        (resolvedAgentId
+          ? await AgentModel.findLlmSelectionFieldsById(
+              resolvedAgentId,
+              user.id,
+              isAgentAdmin,
+            )
+          : null);
 
-      if (!agent) {
+      if (!agent || !resolvedAgentId) {
         throw new ApiError(404, "Agent not found");
       }
 
@@ -2918,7 +2940,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       logger.info(
         {
-          agentId,
+          agentId: resolvedAgentId,
           organizationId,
           explicitModelId: modelId,
           resolvedModelId: llmSelection.modelId,
@@ -2955,11 +2977,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : { title }),
           userId: user.id,
           organizationId,
-          agentId,
+          agentId: resolvedAgentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
           thinkingEffort,
+          origin: origin === "openappa" ? origin : undefined,
         }),
       );
     },

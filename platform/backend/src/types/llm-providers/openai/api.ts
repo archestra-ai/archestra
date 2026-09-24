@@ -181,6 +181,14 @@ export const ResponsesRequestSchema = z
     "https://developers.openai.com/api/reference/resources/responses/methods/create",
   );
 
+export const ResponsesCompactRequestSchema = z.object({
+  model: z.string(),
+  input: z.union([z.string(), z.array(ResponsesInputItemSchema)]).optional(),
+  instructions: z.string().nullable().optional(),
+  previous_response_id: z.string().nullable().optional(),
+  prompt_cache_key: z.string().nullable().optional(),
+});
+
 export const ResponsesUsageSchema = z
   .object({
     input_tokens: z.number(),
@@ -241,19 +249,19 @@ const ResponsesFunctionCallSchema = z
     "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
   );
 
+const ResponsesOutputItemSchema = z.union([
+  ResponsesOutputMessageSchema,
+  ResponsesFunctionCallSchema,
+  z.object({ type: z.string() }).passthrough(),
+]);
+
 export const ResponsesResponseSchema = z
   .object({
     id: z.string(),
     object: z.literal("response"),
     created_at: z.number(),
     model: z.string(),
-    output: z.array(
-      z.union([
-        ResponsesOutputMessageSchema,
-        ResponsesFunctionCallSchema,
-        z.object({ type: z.string() }).passthrough(),
-      ]),
-    ),
+    output: z.array(ResponsesOutputItemSchema),
     status: z.string(),
     usage: ResponsesUsageSchema.optional(),
   })
@@ -261,6 +269,16 @@ export const ResponsesResponseSchema = z
   .describe(
     "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
   );
+
+export const ResponsesCompactedResponseSchema = z
+  .object({
+    id: z.string(),
+    object: z.literal("response.compaction"),
+    created_at: z.number(),
+    output: z.array(ResponsesOutputItemSchema),
+    usage: ResponsesUsageSchema,
+  })
+  .passthrough();
 
 // ===== Embeddings API =====
 

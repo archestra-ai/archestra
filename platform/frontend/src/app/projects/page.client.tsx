@@ -8,7 +8,7 @@ import {
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -171,6 +171,17 @@ function ProjectsList() {
   // Only consulted on the active slice; the trash has its own empty state.
   const hasActiveFilter = hasActiveScopeFilters || !!search || !!labelsFilter;
 
+  const showNoApiKeySetup =
+    !isApiKeyLoading && !isApiKeyLoadError && !hasAnyApiKey;
+
+  // Same as /chat: the add-key prompt stands alone, centered in the viewport,
+  // so hide the app shell's version footer while it shows.
+  useEffect(() => {
+    if (!showNoApiKeySetup) return;
+    document.body.classList.add("hide-version");
+    return () => document.body.classList.remove("hide-version");
+  }, [showNoApiKeySetup]);
+
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
   // the user has no keys configured. `isLoadError` is scoped to the first-fetch
@@ -189,15 +200,10 @@ function ProjectsList() {
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
-  if (!isApiKeyLoading && !hasAnyApiKey) {
+  // Rendered bare (no page header), centered like the chat screen's prompt.
+  if (showNoApiKeySetup) {
     return (
-      <PageLayout
-        title="Projects"
-        description={PROJECTS_DESCRIPTION}
-        actionButton={<ResourceListActions resource="project" />}
-      >
-        <NoApiKeySetup description="Connect an LLM provider to start a project" />
-      </PageLayout>
+      <NoApiKeySetup description="Connect an LLM provider to start a project" />
     );
   }
 

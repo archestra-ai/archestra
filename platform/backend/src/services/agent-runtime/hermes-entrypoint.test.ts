@@ -119,6 +119,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
         ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
+        ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-hermes-12345678",
         ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
           "Follow the configured Agent instructions.",
@@ -154,6 +155,16 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(config.mcp_servers.archestra.headers.Authorization).toBe(
         "Bearer test-token",
       );
+      // Hermes reports no native session, so without this header every run of
+      // the user on this Agent would share one OpenAPPA fallback root.
+      for (const headers of [
+        config.model.default_headers,
+        config.mcp_servers.archestra.headers,
+      ])
+        expect(headers).toMatchObject({
+          "X-Archestra-Session-Id": "agent-run-hermes-12345678",
+          "X-Appa-Session-ID": "agent-run-hermes-12345678",
+        });
       expect(config.hooks).toEqual({
         on_session_start: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
         post_llm_call: [{ command: `${runtime}/hermes-runtime-hook.sh` }],

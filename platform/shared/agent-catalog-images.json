@@ -1,5 +1,4 @@
 {
-  "archestra": "agent-archestra",
   "claude-code": "agent-claude-code",
   "codex": "agent-codex",
   "opencode": "agent-opencode",

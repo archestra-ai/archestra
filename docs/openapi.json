@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.17"
+    "version": "1.4.0-rc.20"
   },
   "components": {
     "schemas": {
@@ -47855,6 +47855,21 @@
                                           "name": {
                                             "type": "string",
                                             "enum": [
+                                              "openappa-configuration-agent"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "enum": [
                                               "policy-configuration-subagent"
                                             ]
                                           },
@@ -49521,6 +49536,21 @@
                                   "name": {
                                     "type": "string",
                                     "enum": [
+                                      "openappa-configuration-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
                                       "policy-configuration-subagent"
                                     ]
                                   },
@@ -50582,6 +50612,20 @@
                           "name": {
                             "type": "string",
                             "enum": [
+                              "openappa-configuration-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
                               "policy-configuration-subagent"
                             ]
                           },
@@ -51445,6 +51489,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -53172,6 +53231,21 @@
                               "name": {
                                 "type": "string",
                                 "enum": [
+                                  "openappa-configuration-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
                                   "policy-configuration-subagent"
                                 ]
                               },
@@ -54518,6 +54592,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -55945,6 +56034,21 @@
                                 "name": {
                                   "type": "string",
                                   "enum": [
+                                    "openappa-configuration-agent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
                                     "policy-configuration-subagent"
                                   ]
                                 },
@@ -57049,6 +57153,21 @@
                             "name": {
                               "type": "string",
                               "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
                                 "policy-configuration-subagent"
                               ]
                             },
@@ -58056,6 +58175,20 @@
                           "name": {
                             "type": "string",
                             "enum": [
+                              "openappa-configuration-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
                               "policy-configuration-subagent"
                             ]
                           },
@@ -58600,6 +58733,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -61002,6 +61150,21 @@
                             "name": {
                               "type": "string",
                               "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
                                 "policy-configuration-subagent"
                               ]
                             },
@@ -62207,6 +62370,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -69779,6 +69957,21 @@
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "openappa-configuration-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -126512,7 +126705,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -127221,11 +127415,14 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "openappa"
+                    ]
                   }
-                },
-                "required": [
-                  "agentId"
-                ]
+                }
               }
             }
           }
@@ -127366,7 +127563,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -128131,7 +128329,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -128907,7 +129106,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -129738,7 +129938,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -132290,7 +132491,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -133353,7 +133555,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -134482,7 +134685,8 @@
                           "enum": [
                             "user",
                             "schedule_trigger",
-                            "app_open"
+                            "app_open",
+                            "openappa"
                           ]
                         },
                         "titleIsPlaceholder": {
@@ -135281,7 +135485,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -136086,7 +136291,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -145680,8 +145886,11 @@
                         "agentRuntime": {
                           "type": "boolean"
                         },
-                        "agentRuntimeBaseImage": {
-                          "type": "string"
+                        "agentRuntimeCatalogImages": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "agentRuntimeBackend": {
                           "nullable": true,
@@ -145695,9 +145904,6 @@
                             },
                             "available": {
                               "type": "boolean"
-                            },
-                            "defaultImage": {
-                              "type": "string"
                             },
                             "defaultTtlHours": {
                               "type": "number"
@@ -145732,7 +145938,6 @@
                           "required": [
                             "name",
                             "available",
-                            "defaultImage",
                             "defaultTtlHours",
                             "defaultIdleTimeoutMinutes",
                             "allowPrivileged",
@@ -145922,7 +146127,7 @@
                         "mcpServerAlertingEnabled",
                         "sandbox",
                         "agentRuntime",
-                        "agentRuntimeBaseImage",
+                        "agentRuntimeCatalogImages",
                         "agentRuntimeBackend",
                         "plugins",
                         "sandboxArtifactBytesLimit",
@@ -170156,190 +170361,372 @@
                               "response": {
                                 "anyOf": [
                                   {
-                                    "type": "object",
-                                    "properties": {
-                                      "id": {
-                                        "type": "string"
-                                      },
-                                      "object": {
-                                        "type": "string",
-                                        "enum": [
-                                          "response"
-                                        ]
-                                      },
-                                      "created_at": {
-                                        "type": "number"
-                                      },
-                                      "model": {
-                                        "type": "string"
-                                      },
-                                      "output": {
-                                        "type": "array",
-                                        "items": {
-                                          "anyOf": [
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "message"
-                                                  ]
-                                                },
-                                                "role": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "assistant"
-                                                  ]
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                },
-                                                "content": {
-                                                  "type": "array",
-                                                  "items": {
-                                                    "anyOf": [
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "output_text"
-                                                            ]
-                                                          },
-                                                          "text": {
-                                                            "type": "string"
-                                                          }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "text"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                      },
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "refusal"
-                                                            ]
-                                                          },
-                                                          "refusal": {
-                                                            "type": "string"
-                                                          }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "refusal"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
-                                                      }
-                                                    ]
-                                                  }
-                                                }
-                                              },
-                                              "required": [
-                                                "id",
-                                                "type",
-                                                "role",
-                                                "status",
-                                                "content"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "function_call"
-                                                  ]
-                                                },
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "call_id": {
-                                                  "type": "string"
-                                                },
-                                                "name": {
-                                                  "type": "string"
-                                                },
-                                                "arguments": {
-                                                  "type": "string"
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "type",
-                                                "call_id",
-                                                "name",
-                                                "arguments"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "type": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "type"
-                                              ],
-                                              "additionalProperties": {}
-                                            }
-                                          ]
-                                        }
-                                      },
-                                      "status": {
-                                        "type": "string"
-                                      },
-                                      "usage": {
+                                    "anyOf": [
+                                      {
                                         "type": "object",
                                         "properties": {
-                                          "input_tokens": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response"
+                                            ]
+                                          },
+                                          "created_at": {
                                             "type": "number"
                                           },
-                                          "output_tokens": {
-                                            "type": "number"
+                                          "model": {
+                                            "type": "string"
                                           },
-                                          "total_tokens": {
-                                            "type": "number"
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "message"
+                                                      ]
+                                                    },
+                                                    "role": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "assistant"
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "content": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "output_text"
+                                                                ]
+                                                              },
+                                                              "text": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                          },
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "refusal"
+                                                                ]
+                                                              },
+                                                              "refusal": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "refusal"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "type",
+                                                    "role",
+                                                    "status",
+                                                    "content"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "function_call"
+                                                      ]
+                                                    },
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "call_id": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "call_id",
+                                                    "name",
+                                                    "arguments"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "additionalProperties": {}
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "status": {
+                                            "type": "string"
+                                          },
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
+                                              },
+                                              "output_tokens": {
+                                                "type": "number"
+                                              },
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                           }
                                         },
                                         "required": [
-                                          "input_tokens",
-                                          "output_tokens",
-                                          "total_tokens"
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "model",
+                                          "output",
+                                          "status"
                                         ],
                                         "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response.compaction"
+                                            ]
+                                          },
+                                          "created_at": {
+                                            "type": "number"
+                                          },
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "message"
+                                                      ]
+                                                    },
+                                                    "role": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "assistant"
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "content": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "output_text"
+                                                                ]
+                                                              },
+                                                              "text": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                          },
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "refusal"
+                                                                ]
+                                                              },
+                                                              "refusal": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "refusal"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "type",
+                                                    "role",
+                                                    "status",
+                                                    "content"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "function_call"
+                                                      ]
+                                                    },
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "call_id": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "call_id",
+                                                    "name",
+                                                    "arguments"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "additionalProperties": {}
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
+                                              },
+                                              "output_tokens": {
+                                                "type": "number"
+                                              },
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "output",
+                                          "usage"
+                                        ],
+                                        "additionalProperties": {}
                                       }
-                                    },
-                                    "required": [
-                                      "id",
-                                      "object",
-                                      "created_at",
-                                      "model",
-                                      "output",
-                                      "status"
-                                    ],
-                                    "additionalProperties": {},
-                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                    ]
                                   },
                                   {
                                     "type": "object",
@@ -185488,6 +185875,17 @@
                                     "$ref": "#/components/schemas/InteractionVirtualKey"
                                   }
                                 ]
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -186108,6 +186506,17 @@
                                     "$ref": "#/components/schemas/InteractionVirtualKey"
                                   }
                                 ]
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -186728,6 +187137,17 @@
                                     "$ref": "#/components/schemas/InteractionVirtualKey"
                                   }
                                 ]
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -205838,190 +206258,372 @@
                         "response": {
                           "anyOf": [
                             {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "object": {
-                                  "type": "string",
-                                  "enum": [
-                                    "response"
-                                  ]
-                                },
-                                "created_at": {
-                                  "type": "number"
-                                },
-                                "model": {
-                                  "type": "string"
-                                },
-                                "output": {
-                                  "type": "array",
-                                  "items": {
-                                    "anyOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "message"
-                                            ]
-                                          },
-                                          "role": {
-                                            "type": "string",
-                                            "enum": [
-                                              "assistant"
-                                            ]
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          },
-                                          "content": {
-                                            "type": "array",
-                                            "items": {
-                                              "anyOf": [
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "output_text"
-                                                      ]
-                                                    },
-                                                    "text": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "text"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                },
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "refusal"
-                                                      ]
-                                                    },
-                                                    "refusal": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "refusal"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
-                                                }
-                                              ]
-                                            }
-                                          }
-                                        },
-                                        "required": [
-                                          "id",
-                                          "type",
-                                          "role",
-                                          "status",
-                                          "content"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "function_call"
-                                            ]
-                                          },
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "call_id": {
-                                            "type": "string"
-                                          },
-                                          "name": {
-                                            "type": "string"
-                                          },
-                                          "arguments": {
-                                            "type": "string"
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "type",
-                                          "call_id",
-                                          "name",
-                                          "arguments"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "type": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "type"
-                                        ],
-                                        "additionalProperties": {}
-                                      }
-                                    ]
-                                  }
-                                },
-                                "status": {
-                                  "type": "string"
-                                },
-                                "usage": {
+                              "anyOf": [
+                                {
                                   "type": "object",
                                   "properties": {
-                                    "input_tokens": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response"
+                                      ]
+                                    },
+                                    "created_at": {
                                       "type": "number"
                                     },
-                                    "output_tokens": {
-                                      "type": "number"
+                                    "model": {
+                                      "type": "string"
                                     },
-                                    "total_tokens": {
-                                      "type": "number"
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "message"
+                                                ]
+                                              },
+                                              "role": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "assistant"
+                                                ]
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              },
+                                              "content": {
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "output_text"
+                                                          ]
+                                                        },
+                                                        "text": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                    },
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "refusal"
+                                                          ]
+                                                        },
+                                                        "refusal": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "refusal"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "type",
+                                              "role",
+                                              "status",
+                                              "content"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "function_call"
+                                                ]
+                                              },
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "call_id": {
+                                                "type": "string"
+                                              },
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "arguments": {
+                                                "type": "string"
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "call_id",
+                                              "name",
+                                              "arguments"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "status": {
+                                      "type": "string"
+                                    },
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
+                                        },
+                                        "output_tokens": {
+                                          "type": "number"
+                                        },
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                     }
                                   },
                                   "required": [
-                                    "input_tokens",
-                                    "output_tokens",
-                                    "total_tokens"
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "model",
+                                    "output",
+                                    "status"
                                   ],
                                   "additionalProperties": {},
-                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response.compaction"
+                                      ]
+                                    },
+                                    "created_at": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "message"
+                                                ]
+                                              },
+                                              "role": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "assistant"
+                                                ]
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              },
+                                              "content": {
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "output_text"
+                                                          ]
+                                                        },
+                                                        "text": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                                    },
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "refusal"
+                                                          ]
+                                                        },
+                                                        "refusal": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "refusal"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "type",
+                                              "role",
+                                              "status",
+                                              "content"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "function_call"
+                                                ]
+                                              },
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "call_id": {
+                                                "type": "string"
+                                              },
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "arguments": {
+                                                "type": "string"
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "call_id",
+                                              "name",
+                                              "arguments"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
+                                        },
+                                        "output_tokens": {
+                                          "type": "number"
+                                        },
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "output",
+                                    "usage"
+                                  ],
+                                  "additionalProperties": {}
                                 }
-                              },
-                              "required": [
-                                "id",
-                                "object",
-                                "created_at",
-                                "model",
-                                "output",
-                                "status"
-                              ],
-                              "additionalProperties": {},
-                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                              ]
                             },
                             {
                               "type": "object",
@@ -221170,6 +221772,17 @@
                               "$ref": "#/components/schemas/InteractionVirtualKey"
                             }
                           ]
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -221790,6 +222403,17 @@
                               "$ref": "#/components/schemas/InteractionVirtualKey"
                             }
                           ]
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -222410,6 +223034,17 @@
                               "$ref": "#/components/schemas/InteractionVirtualKey"
                             }
                           ]
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -323437,6 +324072,1004 @@
         }
       }
     },
+    "/v1/openai/responses/compact": {
+      "post": {
+        "operationId": "openAiResponsesCompactWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Compact an OpenAI response (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response.compaction"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "output",
+                    "usage"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/{agentId}/responses/compact": {
+      "post": {
+        "operationId": "openAiResponsesCompactWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Compact an OpenAI response for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response.compaction"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "output",
+                    "usage"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/openai/chat/completions": {
       "post": {
         "operationId": "openAiChatCompletionsWithDefaultAgent",
@@ -325265,6 +326898,19 @@
                           "type": "string"
                         }
                       },
+                      "annotators": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "catalogs",
+                          "organization"
+                        ]
+                      },
                       "helpers": {
                         "type": "array",
                         "items": {
@@ -325298,6 +326944,7 @@
                               "type": "string"
                             },
                             "catalogId": {
+                              "nullable": true,
                               "type": "string",
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -325312,6 +326959,7 @@
                                 "missing_credentials",
                                 "naming_conflict",
                                 "server_missing",
+                                "unrouted",
                                 "refused",
                                 "active"
                               ]
@@ -325364,6 +327012,8 @@
                       "source",
                       "contentHash",
                       "namespaces",
+                      "annotators",
+                      "scope",
                       "helpers",
                       "credentials",
                       "setup",
@@ -325656,9 +327306,20 @@
                               "missing_credentials",
                               "naming_conflict",
                               "server_missing",
+                              "unrouted",
                               "refused",
                               "active"
                             ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "catalogs",
+                              "organization"
+                            ]
+                          },
+                          "composed": {
+                            "type": "boolean"
                           },
                           "line": {
                             "type": "number"
@@ -325723,6 +327384,8 @@
                           "source",
                           "packageHash",
                           "status",
+                          "scope",
+                          "composed",
                           "line",
                           "servers",
                           "credentials",
@@ -326369,103 +328032,123 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "battery": {
-                        "type": "string"
-                      },
-                      "evidence": {
-                        "type": "string",
-                        "enum": [
-                          "host",
-                          "image",
-                          "name"
-                        ]
-                      },
-                      "install": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "attach": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "unsynced",
+                        "conflicting"
+                      ]
+                    },
+                    "matches": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "organizationId": {
+                          "battery": {
                             "type": "string"
                           },
-                          "batteryName": {
-                            "type": "string"
-                          },
-                          "catalogId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "enabled": {
-                            "type": "boolean"
-                          },
-                          "status": {
+                          "evidence": {
                             "type": "string",
                             "enum": [
-                              "unavailable",
-                              "missing_credentials",
-                              "naming_conflict",
-                              "server_missing",
-                              "refused",
-                              "active"
+                              "host",
+                              "image",
+                              "name"
                             ]
                           },
-                          "packageHash": {
+                          "install": {
                             "nullable": true,
-                            "type": "string"
-                          },
-                          "lastError": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "credentialBindings": {
                             "type": "object",
-                            "additionalProperties": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "organizationId": {
+                                "type": "string"
+                              },
+                              "batteryName": {
+                                "type": "string"
+                              },
+                              "catalogId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "unavailable",
+                                  "missing_credentials",
+                                  "naming_conflict",
+                                  "server_missing",
+                                  "unrouted",
+                                  "refused",
+                                  "active"
+                                ]
+                              },
+                              "packageHash": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "lastError": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "credentialBindings": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                }
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "organizationId",
+                              "batteryName",
+                              "catalogId",
+                              "enabled",
+                              "status",
+                              "packageHash",
+                              "lastError",
+                              "credentialBindings",
+                              "createdAt",
+                              "updatedAt"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
-                          "id",
-                          "organizationId",
-                          "batteryName",
-                          "catalogId",
-                          "enabled",
-                          "status",
-                          "packageHash",
-                          "lastError",
-                          "credentialBindings",
-                          "createdAt",
-                          "updatedAt"
+                          "battery",
+                          "evidence",
+                          "install"
                         ],
                         "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "battery",
-                      "evidence",
-                      "install"
-                    ],
-                    "additionalProperties": false
-                  }
+                    }
+                  },
+                  "required": [
+                    "attach",
+                    "matches"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -326739,8 +328422,7 @@
                   }
                 },
                 "required": [
-                  "batteryName",
-                  "catalogId"
+                  "batteryName"
                 ],
                 "additionalProperties": false
               }
@@ -326779,9 +328461,20 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
                       ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
+                      ]
+                    },
+                    "composed": {
+                      "type": "boolean"
                     },
                     "line": {
                       "type": "number"
@@ -326846,6 +328539,8 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",
@@ -327168,9 +328863,20 @@
                         "missing_credentials",
                         "naming_conflict",
                         "server_missing",
+                        "unrouted",
                         "refused",
                         "active"
                       ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "catalogs",
+                        "organization"
+                      ]
+                    },
+                    "composed": {
+                      "type": "boolean"
                     },
                     "line": {
                       "type": "number"
@@ -327235,6 +328941,8 @@
                     "source",
                     "packageHash",
                     "status",
+                    "scope",
+                    "composed",
                     "line",
                     "servers",
                     "credentials",
@@ -327760,6 +329468,286 @@
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
       }
     },
+    "/api/openappa/battery-includes/{name}": {
+      "delete": {
+        "operationId": "deleteOpenappaBatteryInclude",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
     "/api/openappa/battery-packages/{name}": {
       "put": {
         "operationId": "uploadOpenappaBatteryPackage",
@@ -327845,6 +329833,12 @@
                         "type": "string"
                       }
                     },
+                    "annotators": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "helpers": {
                       "type": "array",
                       "items": {
@@ -327868,6 +329862,7 @@
                     "contentHash",
                     "entry",
                     "namespaces",
+                    "annotators",
                     "helpers",
                     "credentials",
                     "setup"
@@ -328391,6 +330386,558 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
+    "/api/openappa/external-consults": {
+      "get": {
+        "operationId": "getOpenappaExternalConsults",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "externalName",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "authority",
+                "sanitizer",
+                "annotator",
+                "audience_source",
+                "input"
+              ]
+            },
+            "in": "query",
+            "name": "role",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "answered",
+                "unregistered",
+                "unreachable",
+                "dismissed",
+                "non_success",
+                "timeout",
+                "transport",
+                "malformed",
+                "oversized",
+                "unsupported_version",
+                "module_error",
+                "module_panicked"
+              ]
+            },
+            "in": "query",
+            "name": "outcome",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "description": "Recorded on or after this time (ISO 8601)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "description": "Recorded on or before this time (ISO 8601)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "root",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "json",
+              "type": "string",
+              "enum": [
+                "json",
+                "jsonl"
+              ]
+            },
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "description": "`jsonl` streams up to 10000 rows as application/x-ndjson, one consult per line, ignoring `limit`"
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "callerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "durationMs": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "authority",
+                              "sanitizer",
+                              "annotator",
+                              "audience_source",
+                              "input"
+                            ]
+                          },
+                          "externalName": {
+                            "type": "string"
+                          },
+                          "backend": {
+                            "type": "string",
+                            "enum": [
+                              "url",
+                              "command",
+                              "module",
+                              "llm",
+                              "claude_code",
+                              "hitl"
+                            ]
+                          },
+                          "request": {},
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "answered",
+                              "unregistered",
+                              "unreachable",
+                              "dismissed",
+                              "non_success",
+                              "timeout",
+                              "transport",
+                              "malformed",
+                              "oversized",
+                              "unsupported_version",
+                              "module_error",
+                              "module_panicked"
+                            ]
+                          },
+                          "answer": {
+                            "nullable": true
+                          },
+                          "rawResponse": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "base64",
+                            "pattern": "^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$"
+                          },
+                          "httpStatus": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "diagnostics": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "base64",
+                            "pattern": "^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$"
+                          },
+                          "diagnosticsTruncated": {
+                            "type": "boolean"
+                          },
+                          "root": {
+                            "type": "string"
+                          },
+                          "trajectory": {
+                            "type": "string"
+                          },
+                          "callId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "offerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "callDigest": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "sessionId",
+                          "callerId",
+                          "createdAt",
+                          "startedAt",
+                          "durationMs",
+                          "role",
+                          "externalName",
+                          "backend",
+                          "request",
+                          "outcome",
+                          "answer",
+                          "rawResponse",
+                          "httpStatus",
+                          "diagnostics",
+                          "diagnosticsTruncated",
+                          "root",
+                          "trajectory",
+                          "callId",
+                          "offerId",
+                          "callDigest"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "log:read"
+          ]
+        }
       }
     },
     "/api/openappa/github-sync": {
@@ -365738,7 +368285,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "openappa"
                         ]
                       },
                       "lastMessageAt": {
@@ -374680,7 +377228,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "openappa"
                       ]
                     },
                     "titleIsPlaceholder": {

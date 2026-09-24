@@ -178,7 +178,7 @@ async function planFor(params: {
   });
   const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [],
-    catalogIds: [...new Set(rows.map((row) => row.catalogId))],
+    catalogIds: [...new Set(rows.flatMap((row) => row.catalogId ?? []))],
   });
   const includes: PolicyEditInput[] = [];
   const batteries: string[] = [];
@@ -223,6 +223,8 @@ async function planFor(params: {
       if (Object.keys(row.credentialBindings).length > 0)
         drop({ organizationId, row, reason: "not_helper_owner", log });
     for (const row of batteryRows) {
+      // An organization-wide row stands for the include alone.
+      if (row.catalogId === null) continue;
       const carried = prefixes.byCatalog.get(row.catalogId);
       if (!carried || carried.size === 0) {
         if (log)

@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.4.0-rc.20](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.19...platform-v1.4.0-rc.20) (2026-09-23)
+
+
+### Bug Fixes
+
+* **frontend:** center the projects add-key prompt like /chat ([#8139](https://github.com/archestra-ai/archestra/issues/8139)) ([96965bf](https://github.com/archestra-ai/archestra/commit/96965bf831ec793ae037a4512b69f3f534c2e21e))
+* **openappa:** explain refused policies and keep the switch off while one is saved ([#8127](https://github.com/archestra-ai/archestra/issues/8127)) ([0431a8b](https://github.com/archestra-ai/archestra/commit/0431a8bdc6a0d151f7af53199621667c4be7554a))
+* **openappa:** read the Guardrails v2 switch once per request ([#8130](https://github.com/archestra-ai/archestra/issues/8130)) ([fe37ffc](https://github.com/archestra-ai/archestra/commit/fe37ffcd9f5c8a251c64b07c6b3229bd13e39f37))
+* **proxy:** repair trailing model turns in Gemini OpenAI translation ([#8133](https://github.com/archestra-ai/archestra/issues/8133)) ([a98acc3](https://github.com/archestra-ai/archestra/commit/a98acc30e011f00f0c821f2d8e1033c81ad54b05))
+* surface the real cause when the installer cannot reach a deployment ([#8137](https://github.com/archestra-ai/archestra/issues/8137)) ([199838c](https://github.com/archestra-ai/archestra/commit/199838c78a346b3892c42a2c5682d7dd2bbac86a))
+
+
+### Miscellaneous Chores
+
+* **agent-runtime:** remove the built-in Archestra runtime image ([#8125](https://github.com/archestra-ai/archestra/issues/8125)) ([ccb68a6](https://github.com/archestra-ai/archestra/commit/ccb68a6cebb9805dcc246c5e136d2bacd730f8e2))
+
+## [1.4.0-rc.19](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.18...platform-v1.4.0-rc.19) (2026-09-22)
+
+
+### Bug Fixes
+
+* **frontend:** scope agent Environment copy to its own runtime state ([#8121](https://github.com/archestra-ai/archestra/issues/8121)) ([2268b53](https://github.com/archestra-ai/archestra/commit/2268b536b4e96a619feb252cccaeacdfe6e3ada9))
+* keep the configured https scheme in the connection documents ([#8122](https://github.com/archestra-ai/archestra/issues/8122)) ([cece1e9](https://github.com/archestra-ai/archestra/commit/cece1e976170035d312da10c6e92dc9002c83811))
+* **openappa:** refuse attaches the alias cannot target and rework the Batteries panel ([#8123](https://github.com/archestra-ai/archestra/issues/8123)) ([3e1d5b7](https://github.com/archestra-ai/archestra/commit/3e1d5b71eb5b812ee9b542cbe040de7bd62916e1))
+
+
+### Documentation
+
+* describe batteries as policy declarations ([#8119](https://github.com/archestra-ai/archestra/issues/8119)) ([42a3000](https://github.com/archestra-ai/archestra/commit/42a3000ac87496c15941e7e986a374944bba6935))
+
+## [1.4.0-rc.18](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.17...platform-v1.4.0-rc.18) (2026-09-22)
+
+
+### Features
+
+* **frontend:** batteries panel, wizard toggle and editor annotations on the policy's declarations ([#8114](https://github.com/archestra-ai/archestra/issues/8114)) ([6b8bc3c](https://github.com/archestra-ai/archestra/commit/6b8bc3cfe25577c0aaaeba6788d9691e53aed6d3))
+* **openappa:** add HITL authorization for chat and proxy clients ([#8028](https://github.com/archestra-ai/archestra/issues/8028)) ([23d2e3f](https://github.com/archestra-ai/archestra/commit/23d2e3f112cdcae3a65a2fe09f7f4653ebc3833b))
+* **openappa:** declare batteries in the organization's policy text ([#8112](https://github.com/archestra-ai/archestra/issues/8112)) ([a3b6d63](https://github.com/archestra-ai/archestra/commit/a3b6d632c026b9c1cd9dc588c283aad0b0830ad2))
+
+
+### Bug Fixes
+
+* explain model provider connection timeouts ([#8105](https://github.com/archestra-ai/archestra/issues/8105)) ([9a90cf6](https://github.com/archestra-ai/archestra/commit/9a90cf601d577d6736951039e18822111375bd71))
+* **frontend:** keep the Instructions hint on one line ([#8116](https://github.com/archestra-ai/archestra/issues/8116)) ([bd093f2](https://github.com/archestra-ai/archestra/commit/bd093f29c93e99ac5116f69e91f65f988ef528b6))
+* keep the configured https scheme in MCP gateway OAuth metadata ([#8117](https://github.com/archestra-ai/archestra/issues/8117)) ([e813fbe](https://github.com/archestra-ai/archestra/commit/e813fbe5452017451da4667821f8d48873213c24))
+* **openappa:** improve first-run and draft safety UX ([#8115](https://github.com/archestra-ai/archestra/issues/8115)) ([02aa870](https://github.com/archestra-ai/archestra/commit/02aa870069f8aa1a48e02074355df68b946c16f9))
+
+
+### Miscellaneous Chores
+
+* use stable latest images for Agent Runtime templates ([#8109](https://github.com/archestra-ai/archestra/issues/8109)) ([5942757](https://github.com/archestra-ai/archestra/commit/59427572ddf17904e5012baa9df789c566a375b6))
+
 ## [1.4.0-rc.17](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.16...platform-v1.4.0-rc.17) (2026-09-21)
 
 

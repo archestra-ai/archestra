@@ -96,6 +96,7 @@ fi
         ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH: "200000",
         ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "32000",
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
+        ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-opencode-12345678",
         ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
           "Follow the configured Agent instructions.",
@@ -124,8 +125,8 @@ fi
               apiKey: "{env:OPENAI_API_KEY}",
               headers: {
                 "X-Archestra-Run-Id": "12345678-abcd-4000-8000-123456789abc",
-                "X-Archestra-Session-Id":
-                  "12345678-abcd-4000-8000-123456789abc",
+                "X-Archestra-Session-Id": "agent-run-opencode-12345678",
+                "X-Appa-Session-ID": "agent-run-opencode-12345678",
               },
             },
             models: {
@@ -144,7 +145,8 @@ fi
             headers: {
               Authorization: "Bearer test-token",
               "X-Archestra-Run-Id": "12345678-abcd-4000-8000-123456789abc",
-              "X-Archestra-Session-Id": "12345678-abcd-4000-8000-123456789abc",
+              "X-Archestra-Session-Id": "agent-run-opencode-12345678",
+              "X-Appa-Session-ID": "agent-run-opencode-12345678",
             },
           },
         },

@@ -98,13 +98,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                * runtime nothing can schedule.
                */
               agentRuntime: z.boolean(),
-              agentRuntimeBaseImage: z.string(),
+              /** Maintained catalog image per template, as this deployment pulls it. */
+              agentRuntimeCatalogImages: z.record(z.string(), z.string()),
               /** Operator-owned defaults and health for the runtime backend. */
               agentRuntimeBackend: z
                 .object({
                   name: z.literal("kubernetes"),
                   available: z.boolean(),
-                  defaultImage: z.string(),
                   defaultTtlHours: z.number(),
                   defaultIdleTimeoutMinutes: z.number(),
                   allowPrivileged: z.boolean(),
@@ -249,12 +249,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
-          agentRuntimeBaseImage: config.agentRuntime.defaultImage,
+          agentRuntimeCatalogImages: config.agentRuntime.catalogImages,
           agentRuntimeBackend: config.agentRuntime.enabled
             ? {
                 name: "kubernetes" as const,
                 available: isAnyAgentRuntimeBackendDriverEnabled(),
-                defaultImage: config.agentRuntime.defaultImage,
                 defaultTtlHours: config.agentRuntime.defaultTtlHours,
                 defaultIdleTimeoutMinutes:
                   config.agentRuntime.defaultIdleTimeoutMinutes,

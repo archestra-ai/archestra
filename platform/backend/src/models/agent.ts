@@ -2073,6 +2073,18 @@ class AgentModel {
 
     if (filters?.scope === "built_in") {
       whereConditions.push(eq(schema.agentsTable.builtIn, true));
+      if (config.openappa.enabled) {
+        whereConditions.push(
+          notInArray(
+            sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+            [
+              BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+              BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+            ],
+          ),
+        );
+      }
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||

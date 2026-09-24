@@ -554,19 +554,6 @@ export function McpServerCard({
     </Button>
   ) : null;
 
-  const settingsButton = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-8 w-8"
-      data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
-      onClick={() => goToItemPage()}
-      aria-label={`Server settings for ${item.name}`}
-    >
-      <Pencil className="h-4 w-4" />
-    </Button>
-  );
-
   // A 4th connection folds into the +N count rather than lengthening the
   // stack: the stack is the widest fixed item in the compact info row, and
   // every extra circle comes straight out of the width the scope badge's name
@@ -1066,15 +1053,24 @@ export function McpServerCard({
           </span>
         }
         actions={
-          <div className="flex items-center gap-1">
-            {canEditCatalog ? settingsButton : null}
-            <ResourceTableRowActions
-              kind="catalog"
-              resource={item}
-              itemName={item.name}
-              actions={[]}
-            />
-          </div>
+          <ResourceTableRowActions
+            kind="catalog"
+            resource={item}
+            itemName={item.name}
+            actions={
+              canEditCatalog
+                ? [
+                    {
+                      icon: <Pencil className="h-4 w-4" />,
+                      label: "Server settings for",
+                      tooltip: "Server settings",
+                      testId: `${E2eTestId.McpServerSettingsButton}-${item.name}`,
+                      onClick: () => goToItemPage(),
+                    },
+                  ]
+                : []
+            }
+          />
         }
         selected={selection?.selected}
         selectionDisabled={selection?.disabled}

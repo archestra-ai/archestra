@@ -24,9 +24,9 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`8dd1272f4e093856a11ddc11d653180397afdc7d`, the merge of
-archestra-ai/OpenAPPA#386 (a hosted root document declares its batteries and
-their credentials), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
+`7468837da348135cc018fc24cc82e3d18318e1e6`, after the merge of
+archestra-ai/OpenAPPA#402 and #401 (the consult recorder and url diagnostics)
+on top of archestra-ai/OpenAPPA#394 (the annotator-only `jev` battery), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
@@ -111,14 +111,14 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy can append this two-line mark to a protected session's first reply and compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can prepend this two-line mark to a protected session's first reply and compaction summaries:
 
 ```
-▄█▄▄▄█▄  protected session XK7-Q2M9
-██▄█▄██
+▄█▄▄▄█▄
+██▄█▄██  protected session XK7-Q2M9
 ```
 
-Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
+Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark shows which protected session wrote the reply. The proxy removes the mark before forwarding requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
 
 Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients never carry the mark. Compaction summaries retain the mark so lineage survives client-side history rewrites.
 
@@ -152,6 +152,7 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_sessions` | Scoped actor/root/parent mapping, start decision, and fork lineage (`forked_from`, `forked_at`) |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
+| `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The

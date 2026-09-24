@@ -183,7 +183,7 @@ interface McpCatalogFormProps {
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   embedded?: boolean;
-  /** Frames only the form body so a shared wizard footer can sit beside it. */
+  /** Uses page spacing with a shared wizard footer outside the form body. */
   wizardPanel?: boolean;
   /**
    * Number of installed servers that would be affected by a cascade
@@ -310,6 +310,23 @@ export function McpCatalogForm({
   }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
+  const { isSubmitted } = form.formState;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing auth method changes which retained fields are validated
+  useEffect(() => {
+    // Recompute errors against the active auth method after a failed submit.
+    // Keep validation errors on shared fields and restore errors if the user
+    // returns to an invalid draft.
+    if (isSubmitted) {
+      void form.trigger([
+        "oauthConfig",
+        "authHeaderName",
+        "enterpriseManagedConfig",
+        "additionalHeaders",
+        "localConfig.transportType",
+      ]);
+    }
+  }, [authMethod, form, isSubmitted]);
+
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
@@ -891,10 +908,10 @@ export function McpCatalogForm({
         <fieldset
           disabled={pendingSubmit !== null || isConfirming}
           inert={pendingSubmit !== null || isConfirming}
-          className={`m-0 flex min-h-0 min-w-0 flex-1 flex-col p-0 transition-opacity ${wizardPanel ? "rounded-lg border" : "border-0"} ${pendingSubmit !== null || isConfirming ? "opacity-60" : ""}`}
+          className={`m-0 flex min-h-0 min-w-0 flex-1 flex-col border-0 p-0 transition-opacity ${pendingSubmit !== null || isConfirming ? "opacity-60" : ""}`}
         >
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
           >
             {notice}
             {instructions ? (

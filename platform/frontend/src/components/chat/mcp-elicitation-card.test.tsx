@@ -48,7 +48,9 @@ describe("McpElicitationCard", () => {
     expect(
       screen.getByRole("button", { name: "Dismiss question" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 of 1", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByText("1 of 1", { exact: false }),
+    ).not.toBeInTheDocument();
 
     const submit = screen.getByRole("button", { name: "Submit" });
     expect(submit).toBeDisabled();

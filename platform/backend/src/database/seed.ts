@@ -4,6 +4,7 @@ import {
   ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
@@ -13,6 +14,7 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   isSubscriptionCredential,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
@@ -35,8 +37,10 @@ import config, {
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentActivationSkillRuleModel,
   AgentExcludedToolModel,
   AgentModel,
+  AgentToolModel,
   AgentVersionModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -52,6 +56,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { seedDefaultPlugins } from "@/plugins/default-plugins";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
@@ -111,6 +116,23 @@ export async function syncBuiltInAgents(): Promise<void> {
     );
 
     const builtInAgents = [
+      ...(config.openappa.enabled
+        ? [
+            {
+              builtInAgentId: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
+              description:
+                "Guides policy configuration using the OpenAPPA skill and policy tools",
+              systemPrompt:
+                BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                  BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+                ],
+              builtInAgentConfig: {
+                name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              } as const,
+            },
+          ]
+        : []),
       {
         builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
@@ -190,6 +212,23 @@ export async function syncBuiltInAgents(): Promise<void> {
         organizationId: organization.id,
         builtInAgent,
       });
+      if (builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
+        const agent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        );
+        if (agent) {
+          const current = await AgentSuggestedPromptModel.getForAgent(agent.id);
+          if (
+            JSON.stringify(current) !==
+            JSON.stringify(OPENAPPA_CONFIG_SUGGESTED_PROMPTS)
+          ) {
+            await AgentSuggestedPromptModel.syncForAgent(agent.id, [
+              ...OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+            ]);
+          }
+        }
+      }
     }
   }
 }
@@ -354,6 +393,75 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     );
   }
   logger.info("Seeded Archestra catalog and tools");
+}
+
+/** @public — startup reconciliation, exported for behavior tests. */
+export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
+  if (!config.openappa.enabled) return;
+
+  const toolShortNames = [
+    "get_guardrails_policy",
+    "validate_guardrails_policy",
+    "preview_guardrails_policy_change",
+    "update_guardrails_policy",
+    "get_guardrails_policy_change_status",
+    "list_mcp_server_deployments",
+    "get_mcp_server_tools",
+    "load_skill",
+  ] as const;
+
+  for (const organization of await getOrganizationsForBuiltInAgentSync()) {
+    archestraMcpBranding.syncFromOrganization(
+      await OrganizationModel.getById(organization.id),
+    );
+    const toolIds = await ToolModel.findBuiltInToolIdsByNames(
+      toolShortNames.map((shortName) =>
+        archestraMcpBranding.getToolName(shortName),
+      ),
+    );
+    const agent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    const guide = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef: builtInSkillSourceRef("appa-guide"),
+    });
+    if (!agent || !guide || guide.deletedAt) continue;
+
+    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
+      agent.id,
+    );
+    if (
+      snapshot?.mode === "manual" &&
+      snapshot.rules.length === 1 &&
+      snapshot.rules[0].disposition === "allow" &&
+      snapshot.rules[0].reference.source === "native" &&
+      snapshot.rules[0].reference.skillId === guide.id
+    ) {
+      continue;
+    }
+    await withDbTransaction(async (tx) => {
+      await AgentModel.lockRowForUpdate(agent.id, tx);
+      await AgentActivationSkillRuleModel.replaceRules({
+        agentId: agent.id,
+        rules: [
+          {
+            disposition: "allow",
+            reference: { source: "native", skillId: guide.id },
+          },
+        ],
+        tx,
+      });
+      await AgentModel.setActivationSkillPolicyState({
+        id: agent.id,
+        mode: "manual",
+        revision: (snapshot?.revision ?? 0) + 1,
+        tx,
+      });
+    });
+  }
 }
 
 /**
@@ -1016,6 +1124,7 @@ export async function seedRequiredStartingData(): Promise<void> {
     logger.warn({ err: error }, "Default plugin seeding failed");
   });
   await seedArchestraCatalogAndTools();
+  await syncOpenAppaConfigAgentCapabilities();
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

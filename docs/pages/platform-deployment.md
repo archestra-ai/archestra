@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.17" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.20" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -838,10 +838,9 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
   - Example: `ARCHESTRA_TRUST_PROXY=35.191.0.0/16,130.211.0.0/22`
-  - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
   - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
   - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
-  - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
+  - This setting does not affect the OAuth public origin. See [MCP Gateway OAuth Public Origin](#mcp-gateway-oauth-public-origin).
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long each HTTP server holds an idle keep-alive connection open before closing it. Applies to the API and the frontend server.
   - Default: `620000` (620 seconds)
@@ -990,9 +989,9 @@ Check **Settings → Agents → Runtime Backend** if the runtime is unavailable.
 <!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
 #### Runtime Image Cache
 
-Archestra automatically prefetches the six popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
+Archestra automatically prefetches the five popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
 
-Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog image versions follow `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
+Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog images follow `ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY` and `ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
 
 The prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Bootstrap image, registry secrets, resources, and priority reuse the MCP image pre-pull settings below. Each image consumes disk on every matching node.
 
@@ -1041,8 +1040,11 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.17` <!-- x-release-please-version -->
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry that the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from. Set it when you mirror these images to a private registry.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
+
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images. Set it to pin a mirrored release.
+  - Default: `latest` on stable releases, otherwise the platform version
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -1660,6 +1662,20 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - An explicit `false` keeps both directions off even when the master beta switch is enabled.
   - See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) and [Skills from MCP servers](/docs/platform-agent-skills#skills-from-mcp-servers).
 
+#### MCP Gateway OAuth Public Origin
+
+An MCP client discovers the gateway's authorization server through OAuth metadata. Archestra builds the URL in that metadata from a public origin. Name every public host you serve the gateway on in `ARCHESTRA_API_BASE_URL` or `ARCHESTRA_FRONTEND_URL`. `ARCHESTRA_API_BASE_URL` accepts a comma-separated list, so add the gateway host there when it differs from the UI host.
+
+Archestra advertises a configured host with the scheme you configured it under. A host you set to `https://` stays `https://` in the metadata, even when the proxy forwards the request over plain http.
+
+A host you name in neither variable falls back to the scheme of the incoming request. Behind a TLS-terminating proxy that scheme is `http`, so the metadata URL becomes `http://`. The client then fails the handshake or times out. Two settings produce this result: a public host missing from both variables, and a proxy route that drops `X-Forwarded-Proto`. A layer-4 route, such as a Gateway API `TLSRoute`, cannot set that header at all. Terminate TLS on an HTTPS listener and use an `HTTPRoute` to get it.
+
+The connection documents at `/connect.md` and `/llms.txt` follow the same rule. They print the URLs a coding client uses to install itself, so a host you configured over `https://` keeps that scheme there too. Configure the host, and these documents stay correct on a route that drops `X-Forwarded-Proto`.
+
+`ARCHESTRA_TRUST_PROXY` does not change the OAuth public origin. The host check runs with it on or off.
+
+The backend logs the origin it resolved for every request, under `getPublicRequestOrigin`. It warns there when it advertises an `http` origin for an unconfigured host.
+
 ### MCP Servers
 
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools and Skills metadata. Every N minutes, each installed server's stored listing is re-synced from the live server — new entries are added, changed metadata is updated, and removed entries are dropped. No restart or reinstall happens. Tool assignments and policies are preserved; Skill content is always read live rather than copied.
@@ -2089,7 +2105,7 @@ The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one
 
 Automatic deletion of content-bearing records after a configurable number of days. All windows are **disabled by default** — records are kept indefinitely until an operator opts in. Startup fails when a window is configured without an active enterprise license, so a deployment relying on retention can never run with it silently disabled. When enabled, a sweep runs once every 24 hours as a background task and deletes in small batches.
 
-- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) before automatic deletion.
+- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) and Guardrails external consult records before automatic deletion.
   - Default: `0` (disabled).
   - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
   - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
@@ -2122,13 +2138,15 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
-- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`, single-use native-question receipts, session receipts, and tool-call ID stamps for Claude Code, Codex, and OpenCode. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. The proxy can append a two-line protected-session mark to the first reply and compaction summaries. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must resolve to the same value.
+- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables the OpenAPPA page, policy chat tools, and read-only policy details.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` and `execute_remedy_plan`. It also signs native-question receipts, session receipts, tool-call ID stamps, and subagent delegation markers. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, and `signature`. This format provides integrity (JWS), not encryption (JWE). The `protected` header specifies `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and execution receipts stay outside the JWS. The proxy can prepend a two-line protected-session mark to the first reply and compaction summaries. It removes the mark before provider dispatch and logging. Most replies have no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must use the same value. Without this secret, a subagent binds to the parent session reported by its client.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
-Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
+Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. They need no extra database tables. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
+
+Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 
 `ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
 

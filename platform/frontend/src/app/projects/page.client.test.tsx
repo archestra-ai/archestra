@@ -595,7 +595,7 @@ describe("ProjectsPageClient", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the add-key prompt when the keys request succeeds with no keys", () => {
+  it("shows the add-key prompt without the page header when the keys request succeeds with no keys", () => {
     mockApiKeyState = {
       hasAnyApiKey: false,
       isLoading: false,
@@ -607,6 +607,11 @@ describe("ProjectsPageClient", () => {
 
     expect(screen.getByTestId("no-api-key-setup")).toBeInTheDocument();
     expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
+    // Matches the new-chat screen: the prompt stands alone, centered, with no
+    // "Projects" header above it.
+    expect(
+      screen.queryByRole("heading", { name: "Projects" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps showing projects when a refetch fails but cached keys remain", () => {

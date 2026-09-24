@@ -14214,6 +14214,8 @@ export type GetAgentCatalogResponses = {
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
                 builtInAgentConfig: {
+                    name: 'openappa-configuration-agent';
+                } | {
                     name: 'policy-configuration-subagent';
                     autoConfigureOnToolDiscovery: boolean;
                 } | {
@@ -14565,6 +14567,8 @@ export type GetAgentsResponses = {
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
+                name: 'openappa-configuration-agent';
+            } | {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
             } | {
@@ -14708,6 +14712,8 @@ export type CreateAgentData = {
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -14983,6 +14989,8 @@ export type CreateAgentResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -15407,6 +15415,8 @@ export type GetAllAgentsResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -15712,6 +15722,8 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -16009,6 +16021,8 @@ export type ImportAgentResponses = {
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
+                name: 'openappa-configuration-agent';
+            } | {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
             } | {
@@ -16319,6 +16333,8 @@ export type GetAgentResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -16452,6 +16468,8 @@ export type UpdateAgentData = {
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -16626,6 +16644,8 @@ export type UpdateAgentResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -17111,6 +17131,8 @@ export type RestoreAgentVersionResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -17350,6 +17372,8 @@ export type CloneAgentResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -19677,6 +19701,8 @@ export type RestoreAgentResponses = {
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
         } | {
@@ -35139,7 +35165,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35215,13 +35241,14 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 
 export type CreateChatConversationData = {
     body: {
-        agentId: string;
+        agentId?: string;
         title?: string | null;
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
         lockedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
+        origin?: 'openappa';
     };
     path?: never;
     query?: never;
@@ -35315,7 +35342,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35476,7 +35503,7 @@ export type GetDeletedChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35724,7 +35751,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35896,7 +35923,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36499,7 +36526,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36751,7 +36778,7 @@ export type RestoreChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37014,7 +37041,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             projectId: string | null;
-            origin: 'user' | 'schedule_trigger' | 'app_open';
+            origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
             titleIsPlaceholder: boolean;
             lockedChat: boolean;
             pinnedAt: string | null;
@@ -37183,7 +37210,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37351,7 +37378,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -40067,11 +40094,12 @@ export type GetConfigResponses = {
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
-            agentRuntimeBaseImage: string;
+            agentRuntimeCatalogImages: {
+                [key: string]: string;
+            };
             agentRuntimeBackend: {
                 name: 'kubernetes';
                 available: boolean;
-                defaultImage: string;
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
@@ -47292,6 +47320,47 @@ export type GetInteractionsResponses = {
                 };
                 [key: string]: unknown;
             } | {
+                id: string;
+                object: 'response.compaction';
+                created_at: number;
+                output: Array<{
+                    id: string;
+                    type: 'message';
+                    role: 'assistant';
+                    status: string;
+                    content: Array<{
+                        type: 'output_text';
+                        text: string;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'refusal';
+                        refusal: string;
+                        [key: string]: unknown;
+                    }>;
+                    [key: string]: unknown;
+                } | {
+                    type: 'function_call';
+                    id?: string;
+                    call_id: string;
+                    name: string;
+                    arguments: string;
+                    status?: string;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                /**
+                 * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+                 */
+                usage: {
+                    input_tokens: number;
+                    output_tokens: number;
+                    total_tokens: number;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
                 error: string;
             } | {
                 __lockedChatSealed: string;
@@ -49834,6 +49903,8 @@ export type GetInteractionsResponses = {
             connectorName?: string | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -49929,6 +50000,8 @@ export type GetInteractionsResponses = {
             connectorName?: string | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -50024,6 +50097,8 @@ export type GetInteractionsResponses = {
             connectorName?: string | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -54478,6 +54553,47 @@ export type GetInteractionResponses = {
             };
             [key: string]: unknown;
         } | {
+            id: string;
+            object: 'response.compaction';
+            created_at: number;
+            output: Array<{
+                id: string;
+                type: 'message';
+                role: 'assistant';
+                status: string;
+                content: Array<{
+                    type: 'output_text';
+                    text: string;
+                    [key: string]: unknown;
+                } | {
+                    type: 'refusal';
+                    refusal: string;
+                    [key: string]: unknown;
+                }>;
+                [key: string]: unknown;
+            } | {
+                type: 'function_call';
+                id?: string;
+                call_id: string;
+                name: string;
+                arguments: string;
+                status?: string;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+             */
+            usage: {
+                input_tokens: number;
+                output_tokens: number;
+                total_tokens: number;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | {
             error: string;
         } | {
             __lockedChatSealed: string;
@@ -57020,6 +57136,8 @@ export type GetInteractionResponses = {
         connectorName?: string | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -57115,6 +57233,8 @@ export type GetInteractionResponses = {
         connectorName?: string | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -57210,6 +57330,8 @@ export type GetInteractionResponses = {
         connectorName?: string | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -83702,6 +83824,290 @@ export type OpenAiResponsesWithAgentResponses = {
 
 export type OpenAiResponsesWithAgentResponse = OpenAiResponsesWithAgentResponses[keyof OpenAiResponsesWithAgentResponses];
 
+export type OpenAiResponsesCompactWithDefaultAgentData = {
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        previous_response_id?: string | null;
+        prompt_cache_key?: string | null;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/responses/compact';
+};
+
+export type OpenAiResponsesCompactWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiResponsesCompactWithDefaultAgentError = OpenAiResponsesCompactWithDefaultAgentErrors[keyof OpenAiResponsesCompactWithDefaultAgentErrors];
+
+export type OpenAiResponsesCompactWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'response.compaction';
+        created_at: number;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiResponsesCompactWithDefaultAgentResponse = OpenAiResponsesCompactWithDefaultAgentResponses[keyof OpenAiResponsesCompactWithDefaultAgentResponses];
+
+export type OpenAiResponsesCompactWithAgentData = {
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        previous_response_id?: string | null;
+        prompt_cache_key?: string | null;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/responses/compact';
+};
+
+export type OpenAiResponsesCompactWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiResponsesCompactWithAgentError = OpenAiResponsesCompactWithAgentErrors[keyof OpenAiResponsesCompactWithAgentErrors];
+
+export type OpenAiResponsesCompactWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'response.compaction';
+        created_at: number;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiResponsesCompactWithAgentResponse = OpenAiResponsesCompactWithAgentResponses[keyof OpenAiResponsesCompactWithAgentResponses];
+
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -84332,6 +84738,8 @@ export type GetOpenappaBatteriesResponses = {
         source: 'bundled' | 'upload';
         contentHash: string | null;
         namespaces: Array<string>;
+        annotators: Array<string>;
+        scope: 'catalogs' | 'organization';
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -84339,9 +84747,9 @@ export type GetOpenappaBatteriesResponses = {
             id: string;
             organizationId: string;
             batteryName: string;
-            catalogId: string;
+            catalogId: string | null;
             enabled: boolean;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
             packageHash: string | null;
             lastError: string | null;
             credentialBindings: {
@@ -84437,7 +84845,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             name: string;
             source: 'bundled' | 'upload';
             packageHash: string | null;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+            scope: 'catalogs' | 'organization';
+            composed: boolean;
             line: number;
             servers: Array<{
                 target: string;
@@ -84636,25 +85046,28 @@ export type GetOpenappaBatteryMatchesResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        battery: string;
-        evidence: 'host' | 'image' | 'name';
-        install: {
-            id: string;
-            organizationId: string;
-            batteryName: string;
-            catalogId: string;
-            enabled: boolean;
-            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
-            packageHash: string | null;
-            lastError: string | null;
-            credentialBindings: {
-                [key: string]: string;
-            };
-            createdAt: string;
-            updatedAt: string;
-        } | null;
-    }>;
+    200: {
+        attach: 'ready' | 'unsynced' | 'conflicting';
+        matches: Array<{
+            battery: string;
+            evidence: 'host' | 'image' | 'name';
+            install: {
+                id: string;
+                organizationId: string;
+                batteryName: string;
+                catalogId: string | null;
+                enabled: boolean;
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                packageHash: string | null;
+                lastError: string | null;
+                credentialBindings: {
+                    [key: string]: string;
+                };
+                createdAt: string;
+                updatedAt: string;
+            } | null;
+        }>;
+    };
 };
 
 export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesResponses[keyof GetOpenappaBatteryMatchesResponses];
@@ -84662,7 +85075,7 @@ export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesRespons
 export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
-        catalogId: string;
+        catalogId?: string;
         packageHash?: string | null;
     };
     path?: never;
@@ -84744,7 +85157,9 @@ export type CreateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -84934,7 +85349,9 @@ export type UpdateOpenappaBatteryInstallResponses = {
         name: string;
         source: 'bundled' | 'upload';
         packageHash: string | null;
-        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'refused' | 'active';
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        scope: 'catalogs' | 'organization';
+        composed: boolean;
         line: number;
         servers: Array<{
             target: string;
@@ -84950,6 +85367,91 @@ export type UpdateOpenappaBatteryInstallResponses = {
 };
 
 export type UpdateOpenappaBatteryInstallResponse = UpdateOpenappaBatteryInstallResponses[keyof UpdateOpenappaBatteryInstallResponses];
+
+export type DeleteOpenappaBatteryIncludeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/openappa/battery-includes/{name}';
+};
+
+export type DeleteOpenappaBatteryIncludeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteOpenappaBatteryIncludeError = DeleteOpenappaBatteryIncludeErrors[keyof DeleteOpenappaBatteryIncludeErrors];
+
+export type DeleteOpenappaBatteryIncludeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: true;
+    };
+};
+
+export type DeleteOpenappaBatteryIncludeResponse = DeleteOpenappaBatteryIncludeResponses[keyof DeleteOpenappaBatteryIncludeResponses];
 
 export type UploadOpenappaBatteryPackageData = {
     body: {
@@ -85040,6 +85542,7 @@ export type UploadOpenappaBatteryPackageResponses = {
         contentHash: string;
         entry: string;
         namespaces: Array<string>;
+        annotators: Array<string>;
         helpers: Array<string>;
         credentials: Array<string>;
         setup: string | null;
@@ -85132,6 +85635,137 @@ export type DeleteOpenappaBatteryPackageResponses = {
 };
 
 export type DeleteOpenappaBatteryPackageResponse = DeleteOpenappaBatteryPackageResponses[keyof DeleteOpenappaBatteryPackageResponses];
+
+export type GetOpenappaExternalConsultsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        externalName?: string;
+        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+        outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+        /**
+         * Recorded on or after this time (ISO 8601)
+         */
+        from?: string;
+        /**
+         * Recorded on or before this time (ISO 8601)
+         */
+        to?: string;
+        root?: string;
+        sessionId?: string;
+        /**
+         * `jsonl` streams up to 10000 rows as application/x-ndjson, one consult per line, ignoring `limit`
+         */
+        format?: 'json' | 'jsonl';
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/openappa/external-consults';
+};
+
+export type GetOpenappaExternalConsultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultsError = GetOpenappaExternalConsultsErrors[keyof GetOpenappaExternalConsultsErrors];
+
+export type GetOpenappaExternalConsultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            sessionId: string | null;
+            callerId: string | null;
+            createdAt: string;
+            startedAt: string;
+            durationMs: number;
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+            externalName: string;
+            backend: 'url' | 'command' | 'module' | 'llm' | 'claude_code' | 'hitl';
+            request: unknown;
+            outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+            answer: unknown;
+            rawResponse: string | null;
+            httpStatus: number | null;
+            diagnostics: string | null;
+            diagnosticsTruncated: boolean;
+            root: string;
+            trajectory: string;
+            callId: string | null;
+            offerId: string | null;
+            callDigest: string | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultsResponse = GetOpenappaExternalConsultsResponses[keyof GetOpenappaExternalConsultsResponses];
 
 export type GetAppaGithubSyncData = {
     body?: never;
@@ -94466,7 +95100,7 @@ export type GetProjectConversationsResponses = {
         title: string | null;
         authorUserId: string;
         authorName: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
@@ -96953,7 +97587,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;

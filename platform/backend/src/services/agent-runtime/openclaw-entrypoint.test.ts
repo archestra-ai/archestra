@@ -145,6 +145,16 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         await readFile(path.join(runtime, "openclaw.json"), "utf8"),
       );
       expect(config.models.providers.archestra.api).toBe(expectedApi);
+      const session =
+        testCase.workspaceId ?? "12345678-abcd-4000-8000-123456789abc";
+      for (const headers of [
+        config.models.providers.archestra.headers,
+        config.mcp.servers.archestra.headers,
+      ])
+        expect(headers).toMatchObject({
+          "X-Archestra-Session-Id": session,
+          "X-Appa-Session-ID": session,
+        });
       expect(config.models.providers.archestra.baseUrl).toBe(expectedBaseUrl);
       expect(config.logging).toEqual({
         level: "error",

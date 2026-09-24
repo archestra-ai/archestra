@@ -1,5 +1,5 @@
 {
-  "id": "0db7b53b-f45b-41b9-9047-02392181ecd6",
+  "id": "7f1c613b-3f8a-4971-8ee3-aa752b616e20",
   "prevId": "04fcabe2-8815-495e-bc12-5f8ec849efbc",
   "version": "7",
   "dialect": "postgresql",
@@ -19825,95 +19825,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.resource_permission_policies": {
-      "name": "resource_permission_policies",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resource": {
-          "name": "resource",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "grants": {
-          "name": "grants",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "legacy_sharing_migrated": {
-          "name": "legacy_sharing_migrated",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "legacy_organization_audience": {
-          "name": "legacy_organization_audience",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "resource_permission_policies_organization_id_organization_id_fk": {
-          "name": "resource_permission_policies_organization_id_organization_id_fk",
-          "tableFrom": "resource_permission_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "resource_permission_policies_organization_id_resource_scope_pk": {
-          "name": "resource_permission_policies_organization_id_resource_scope_pk",
-          "columns": [
-            "organization_id",
-            "resource",
-            "scope"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.credential_connections": {
       "name": "credential_connections",
       "schema": "",
@@ -26925,7 +26836,7 @@
           "name": "catalog_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "enabled": {
           "name": "enabled",
@@ -26976,33 +26887,6 @@
         }
       },
       "indexes": {
-        "openappa_battery_installs_org_catalog_battery_idx": {
-          "name": "openappa_battery_installs_org_catalog_battery_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "catalog_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "battery_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "openappa_battery_installs_catalog_idx": {
           "name": "openappa_battery_installs_catalog_idx",
           "columns": [
@@ -27048,7 +26932,17 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "openappa_battery_installs_org_catalog_battery_uq": {
+          "name": "openappa_battery_installs_org_catalog_battery_uq",
+          "nullsNotDistinct": true,
+          "columns": [
+            "organization_id",
+            "catalog_id",
+            "battery_name"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

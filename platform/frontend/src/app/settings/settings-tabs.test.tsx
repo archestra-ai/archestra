@@ -29,6 +29,13 @@ vi.mock("@archestra/shared", async () => {
 
 let mockSecretsType = "DB";
 let mockAgentRuntimeEnabled = false;
+let mockOpenAppaEnforcementEnabled = false;
+
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({
+    data: { enabled: mockOpenAppaEnforcementEnabled },
+  }),
+}));
 
 vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: vi.fn(() => ({
@@ -58,6 +65,7 @@ beforeEach(() => {
   mockCapabilities = [];
   mockSecretsType = "DB";
   mockAgentRuntimeEnabled = false;
+  mockOpenAppaEnforcementEnabled = false;
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -109,6 +117,18 @@ describe("useSettingsTabs", () => {
       expect(labels).toContain("Appearance");
       expect(labels).toContain("Auth");
     });
+  });
+
+  it("hides legacy Security settings when OpenAPPA enforcement is enabled", async () => {
+    mockOpenAppaEnforcementEnabled = true;
+    mockPermissions = { agentSettings: ["read"] };
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(getTabLabels(result.current)).not.toContain("Security"),
+    );
   });
 
   it("shows LLM tab when user has llmSettings:read permission", async () => {

@@ -1,5 +1,5 @@
-# Curated Agent catalog images. The build context is platform/ so the built-in
-# Archestra loop and every native CLI share one hardened execution base.
+# Curated Agent catalog images. The build context is platform/ so every native
+# CLI shares one hardened execution base.
 FROM node:24-bookworm-slim AS agent-base
 
 RUN apt-get update -qq \
@@ -12,18 +12,6 @@ ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
-
-WORKDIR /opt/archestra
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY patches ./patches
-COPY runtime-agent/package.json ./runtime-agent/package.json
-RUN pnpm install --filter @archestra/runtime-agent --frozen-lockfile \
-      --ignore-scripts
-COPY runtime-agent/tsconfig.json ./runtime-agent/tsconfig.json
-COPY runtime-agent/src ./runtime-agent/src
-RUN pnpm --filter @archestra/runtime-agent build \
- && chmod +x /opt/archestra/runtime-agent/dist/index.js \
- && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent
 
 COPY agent_images/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
@@ -42,16 +30,14 @@ RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py
 
-FROM agent-base AS agent-archestra
-
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.247 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.280 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.247","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.280","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -91,6 +77,9 @@ RUN python3 -m venv /opt/hermes \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=agent_images/patches,target=/tmp/agent-image-patches \
+    /opt/hermes/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \

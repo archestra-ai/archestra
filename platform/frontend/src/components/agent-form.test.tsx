@@ -1,6 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   E2eTestId,
+  getAgentCatalogImages,
   type SupportedProvider,
 } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -27,6 +28,12 @@ import {
   AgentForm as AgentFormWithoutFooter,
 } from "./agent-form";
 import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
+import { defaultAgentRuntime } from "./agent-runtime-fields";
+
+const TEST_CATALOG_IMAGES = getAgentCatalogImages({
+  registry: "example.com",
+  tag: "latest",
+});
 
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -576,30 +583,54 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-runtime-fields", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./agent-runtime-fields")>()),
-  AgentRuntimeFields: ({
-    value,
-    onChange,
-  }: {
-    value: { inferenceProtocol: string } | null;
-    onChange: (value: { inferenceProtocol: string } | null) => void;
-  }) => (
-    <div data-testid="agent-runtime">
-      <button
-        type="button"
-        onClick={() =>
-          value && onChange({ ...value, inferenceProtocol: "openai_responses" })
-        }
-      >
-        Set runtime to OpenAI Responses
-      </button>
-      <button type="button" onClick={() => onChange(null)}>
-        Disable runtime
-      </button>
-    </div>
-  ),
-}));
+vi.mock("./agent-runtime-fields", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./agent-runtime-fields")>();
+  return {
+    ...actual,
+    AgentRuntimeFields: ({
+      value,
+      onChange,
+    }: {
+      value: { inferenceProtocol: string } | null;
+      onChange: (value: object | null) => void;
+    }) => (
+      <div data-testid="agent-runtime">
+        <button
+          type="button"
+          onClick={() => onChange(actual.defaultAgentRuntime())}
+        >
+          Enable runtime
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            value &&
+            onChange({
+              ...value,
+              image: "example.com/custom:v1",
+              command: ["my-agent"],
+            })
+          }
+        >
+          Set runtime image and command
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            value &&
+            onChange({ ...value, inferenceProtocol: "openai_responses" })
+          }
+        >
+          Set runtime to OpenAI Responses
+        </button>
+        <button type="button" onClick={() => onChange(null)}>
+          Disable runtime
+        </button>
+      </div>
+    ),
+  };
+});
 
 vi.mock(
   "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
@@ -3459,6 +3490,35 @@ describe("AgentForm save payload and failure handling", () => {
     expect(savedBody()).toEqual({ runtime: null });
   });
 
+  it("requires an image and a command before saving a runtime newly enabled on an existing agent", async () => {
+    vi.mocked(useFeature).mockImplementation(
+      ((flag: string) =>
+        flag === "agentRuntime") as unknown as typeof useFeature,
+    );
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{ ...baseAgent, runtime: null }}
+        sections={["runtime"]}
+        activeSection="runtime"
+      />,
+    );
+
+    // Enabling a runtime prefills no image and no command.
+    await user.click(screen.getByRole("button", { name: "Enable runtime" }));
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+    await user.click(
+      screen.getByRole("button", { name: "Set runtime image and command" }),
+    );
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody()).toMatchObject({
+      runtime: { image: "example.com/custom:v1", command: ["my-agent"] },
+    });
+  });
+
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
       isSet: true,
@@ -3733,7 +3793,7 @@ describe("AgentForm save payload and failure handling", () => {
     });
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    const codex = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const codex = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "codex",
     );
     const user = userEvent.setup();
@@ -4002,6 +4062,70 @@ describe("AgentForm save payload and failure handling", () => {
     ]);
   });
 
+  it("describes the environment's sandbox and network egress for an agent with no dedicated runtime", async () => {
+    // baseAgent.runtime is null — this agent has no dedicated Agent
+    // Runtime, but it still runs its tools (including bash) through the
+    // sandbox and is subject to its network egress controls, so the
+    // description should mention that regardless.
+    renderAdvanced();
+
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("describes the environment's sandbox and network egress for an agent with a dedicated runtime", async () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          runtime: {
+            ...defaultAgentRuntime(),
+            image: "example.com/runtime:latest",
+          },
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+    // Agent Runtime is not limited to coding agents, so the description
+    // should not single out a "code sandbox".
+    expect(screen.queryByText(/code sandbox/)).not.toBeInTheDocument();
+  });
+
+  it("keeps describing the environment's sandbox as a new agent's own runtime choice changes, not a global or existing-agent setting", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const user = userEvent.setup();
+    render(<AgentForm agentType="agent" submitEnabled={false} />);
+
+    // No runtime picked yet for this to-be-created agent, and the org-wide
+    // agentRuntime feature is enabled — neither changes the description.
+    await screen.findByText("Environment");
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "OpenCode" }));
+
+    expect(
+      screen.getByText(
+        "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("sends the tools step's own fields, and none of the configuration behind it", async () => {
     // The Tools step renders no name, visibility or instruction: those inputs
     // hold whatever this mount was seeded with, so re-sending them would write
@@ -4108,7 +4232,7 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+          ...getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
             (template) => template.id === "codex",
           )?.initialValues,
         }}
@@ -4147,7 +4271,7 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+          ...getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
             (template) => template.id === "codex",
           )?.initialValues,
         }}
@@ -4166,7 +4290,7 @@ describe("AgentForm save payload and failure handling", () => {
   it("preserves the entered identity and instructions while switching runtime and reapplying the Codex subscription gate", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     render(
@@ -4326,7 +4450,7 @@ describe("AgentForm save payload and failure handling", () => {
       label: "OpenAI · GPT-5.6 Luna",
     } as never);
     const user = userEvent.setup();
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     render(
@@ -4386,7 +4510,7 @@ describe("AgentForm save payload and failure handling", () => {
         },
       ],
     });
-    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
     );
     const user = userEvent.setup();
@@ -4417,7 +4541,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
-  it("marks the image row until a required container image is supplied", async () => {
+  it("marks the image row until a container image and command are supplied", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
     render(
@@ -4429,7 +4553,7 @@ describe("AgentForm save payload and failure handling", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Custom image" }));
-    await user.clear(screen.getByLabelText(/Container image/));
+    expect(screen.getByLabelText(/Container image/)).toHaveValue("");
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /^Image/ }));
     expect(screen.queryByLabelText(/Container image/)).not.toBeInTheDocument();
@@ -4443,16 +4567,24 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByLabelText(/Container image/),
       "example.com/custom:v1",
     );
+    // The image alone is not enough: nothing supplies a default command.
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(
+      screen.getByRole("img", {
+        name: "Set a command before creating the agent",
+      }),
+    ).toBeVisible();
+    await user.type(screen.getByLabelText("Command"), "my-agent");
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     expect(
       screen.queryByRole("img", {
-        name: "Set a container image before creating the agent",
+        name: /^Set a (container image|command) before creating the agent$/,
       }),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalled());
     expect(createAgent.mock.calls[0][0]).toMatchObject({
-      runtime: { image: "example.com/custom:v1" },
+      runtime: { image: "example.com/custom:v1", command: ["my-agent"] },
     });
   });
 

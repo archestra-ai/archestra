@@ -101,7 +101,7 @@ Existing local clones and already-installed plugins keep working after a revocat
 
 ## Updates
 
-When a skill or approved plugin payload changes in Archestra, a new commit is appended to the materialized repository with a deterministic SHA. Users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Every emitted plugin gets a real, monotonic SemVer (`0.<revision>.0`), so vendor CLIs recognize the update instead of ignoring a content hash in SemVer build metadata. Connected shell wrappers refresh the marketplace and installed plugins after an interactive session exits, at most once per day.
+When a skill or approved plugin payload changes in Archestra, a new commit is appended to the materialized repository with a deterministic SHA. Users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Every emitted plugin gets a real, monotonic SemVer (`0.<revision>.0`), so vendor CLIs recognize the update instead of ignoring a content hash in SemVer build metadata. Connected shell wrappers refresh the marketplace and installed plugins after an interactive session exits, at most once per day. The Claude Code setup also turns on the marketplace's auto-update, so Claude Code refreshes it at startup — sessions started outside your shell included.
 
 The shared marketplace URL also picks up skills that are added or removed later — the next fetch simply carries the current set. A snapshot link's resource set is fixed until an admin refreshes it.
 

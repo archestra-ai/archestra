@@ -14,6 +14,7 @@
    Streamdown uses standard semantic tokens (bg-sidebar, text-muted-foreground, etc.)
    that resolve to Archestra's CSS variables, so all themes are respected. */
 @source "../../node_modules/streamdown/dist";
+@source "../../node_modules/@streamdown/code/dist";
 
 @custom-variant dark (&:is(.dark *));
 

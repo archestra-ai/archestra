@@ -392,6 +392,7 @@ export function useCreateConversation() {
       lockedChat,
       lockedChatKey,
       thinkingEffort,
+      origin,
     }: WithThinkingEffortSetting<
       NonNullable<archestraApiTypes.CreateChatConversationData["body"]>
     > & {
@@ -415,6 +416,7 @@ export function useCreateConversation() {
               // The generated body type drops `nullable: true` from enum
               // schemas, so null (auto) has to be re-asserted here.
               thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
+              origin,
             },
             headers: lockedChatKey
               ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }

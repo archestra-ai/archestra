@@ -85,7 +85,11 @@ export function resolveRunToolDispatch(params: {
   const targetToolName = isRecord(params.args)
     ? params.args.tool_name
     : undefined;
-  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
+  if (
+    typeof targetToolName !== "string" ||
+    targetToolName.length === 0 ||
+    /\s/.test(targetToolName)
+  ) {
     return { kind: "unresolved" };
   }
 

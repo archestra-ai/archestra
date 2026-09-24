@@ -412,6 +412,17 @@ describe("ChatSidebarSection", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("opens an OpenAPPA configuration session in the policy workspace", () => {
+    mockConversations = [
+      { ...makeConv("policy-session", "Review policy"), origin: "openappa" },
+    ];
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+    fireEvent.click(screen.getByText("Review policy"));
+    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
+      "/openappa/policy-session",
+    );
+  });
+
   it("collapses pinned and date groups independently and restores their chats", () => {
     mockConversations = [
       makeConv("pinned", "Pinned chat", { pinnedAt: new Date().toISOString() }),

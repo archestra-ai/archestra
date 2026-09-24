@@ -338,6 +338,8 @@ function getBuiltInAgentConfigForSave(params: {
   maxRounds: number;
 }) {
   switch (params.builtInAgentName) {
+    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
+      return { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG };
     case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
       return {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -1462,14 +1464,16 @@ export function AgentForm({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents and MCP gateways can be assigned a deployment environment. For
-  // agents it binds the code sandbox runtime; for MCP gateways it is an
-  // attribution label so their usage falls under environment-scoped cost
+  // agents it binds the sandbox (every agent runs its tools, including bash,
+  // through the sandbox and is subject to its network egress controls,
+  // whether or not it has a dedicated Agent Runtime); for MCP gateways it is
+  // an attribution label so their usage falls under environment-scoped cost
   // limits.
   const supportsEnvironment = isInternalAgent || agentType === "mcp_gateway";
   const environmentHelpText =
     agentType === "mcp_gateway"
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
-      : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
+      : "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const showActivationSkills =
     showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
@@ -2219,7 +2223,12 @@ export function AgentForm({
     isClaudeCodeRuntime &&
     !usesClaudeSubscription &&
     (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
-  const needsRuntimeImage = !agent && !!runtime && !runtime.image.trim();
+  // Nothing provides a default command any more, so a new runtime or a new
+  // image names its own. A saved runtime without one keeps its image's command.
+  const needsRuntimeContainer =
+    !!runtime &&
+    (!runtime.image.trim() ||
+      (!runtime.command?.length && runtime.image !== agent?.runtime?.image));
 
   // Moving an agent out of the environment its tools belong to strands them.
   // The tools editor refuses that itself, but the Configuration step does not
@@ -2749,7 +2758,7 @@ export function AgentForm({
     if (
       !requiredSubscriptionSatisfied ||
       needsClaudeProviderKey ||
-      needsRuntimeImage ||
+      needsRuntimeContainer ||
       runtimeModelIncompatibility
     ) {
       toast.error("Complete the runtime setup before saving");
@@ -2787,7 +2796,7 @@ export function AgentForm({
     hasCompleteLlmSelection,
     requiredSubscriptionSatisfied,
     needsClaudeProviderKey,
-    needsRuntimeImage,
+    needsRuntimeContainer,
     runtimeModelIncompatibility,
     llmApiKeyId,
     channelAssignmentsDirty,
@@ -2912,7 +2921,7 @@ export function AgentForm({
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
     !needsClaudeProviderKey &&
-    !needsRuntimeImage &&
+    !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave;
@@ -3137,9 +3146,9 @@ export function AgentForm({
               modelSelector={modelControl}
             />
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {providerKeyControl}
-              {modelControl}
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="min-w-0">{providerKeyControl}</div>
+              <div className="min-w-0">{modelControl}</div>
             </div>
           )}
           {runtimeModelIncompatibility &&
@@ -3764,7 +3773,7 @@ export function AgentForm({
                         agent can consult the advisor is one decision, even
                         though the two modes record it differently. */}
                       {advisorAgentId && (
-                        <div className="flex items-center gap-3 border-t pt-4">
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 border-t pt-4 sm:flex sm:items-center">
                           <SettingIcon tone={advisorEnabled ? "on" : "off"}>
                             <AgentIcon
                               icon={
@@ -3812,7 +3821,7 @@ export function AgentForm({
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="shrink-0"
+                                className="col-start-2 row-start-2 w-fit shrink-0 sm:w-auto"
                                 asChild
                               >
                                 {/* New tab: this form holds unsaved edits
@@ -3839,6 +3848,7 @@ export function AgentForm({
                             </TooltipContent>
                           </Tooltip>
                           <Switch
+                            className="col-start-3 row-start-1"
                             id="consult-advisor"
                             checked={advisorEnabled}
                             onCheckedChange={writeAdvisorEnabled}

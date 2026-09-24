@@ -186,6 +186,16 @@ jobs:
                     continue;
                   }
 
+                  // close-external-prs.yml polls on the same cadence and closes PRs from
+                  // forks. Do not ping a maintainer about a PR that is about to close.
+                  // Same check as there: a same-repo head branch means a maintainer. Not
+                  // author_association or the collaborators API, which both misread
+                  // private org members under the Actions token.
+                  if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+                    console.log(`Skipping reviewer request because PR #${pr.number} comes from a fork`);
+                    continue;
+                  }
+
                   if (exemptLogins.includes(pr.user.login) &&
                       !(pr.user.login === 'archestra-ci[bot]' && pr.head.ref.startsWith('backport/'))) {
                     console.log(`Skipping reviewer request because ${pr.user.login} is exempt from review assignment`);

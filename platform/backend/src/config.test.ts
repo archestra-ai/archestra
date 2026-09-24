@@ -1554,35 +1554,47 @@ describe("chat active run config", () => {
   });
 });
 
-describe("Agent Runtime image version", () => {
+describe("Agent Runtime catalog images", () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE", "");
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "");
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", "");
     vi.stubEnv(
       "ARCHESTRA_DATABASE_URL",
       "postgresql://archestra:pass@localhost:5432/archestra",
     );
   });
 
-  test.each([
-    "1.3.52",
-    "1.4.0-beta.2",
-  ])("matches platform version %s instead of the stable latest alias", async (version) => {
-    vi.stubEnv("ARCHESTRA_VERSION", version);
+  test("follows the stable alias on a stable platform release", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.3.52");
     const { default: cfg } = await import("./config");
 
-    expect(cfg.agentRuntime.defaultImage).toBe(
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:${version}`,
+    expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-claude-code:latest",
     );
   });
 
-  test("preserves an explicit image override on a beta platform", async () => {
+  test("matches a prerelease platform version instead of the stable alias", async () => {
     vi.stubEnv("ARCHESTRA_VERSION", "1.4.0-beta.2");
-    const image = `registry.example.com/custom-agent@sha256:${"a".repeat(64)}`;
-    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE", ` ${image} `);
     const { default: cfg } = await import("./config");
 
-    expect(cfg.agentRuntime.defaultImage).toBe(image);
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-codex:1.4.0-beta.2",
+    );
+  });
+
+  test("uses a mirror registry and pinned tag when configured", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.4.0-beta.2");
+    vi.stubEnv(
+      "ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY",
+      " mirror.example:5000/team ",
+    );
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", " v2 ");
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.agentRuntime.catalogImages.hermes).toBe(
+      "mirror.example:5000/team/agent-hermes:v2",
+    );
   });
 });
 

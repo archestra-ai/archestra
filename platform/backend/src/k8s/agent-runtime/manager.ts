@@ -891,7 +891,7 @@ class AgentRuntimeManager {
   /**
    * Deliver a message into a live session.
    *
-   * `pipe` writes to the FIFO the runtime-agent reads, so the message lands at a
+   * `pipe` writes to the FIFO a turn-based client reads, so the message lands at a
    * turn boundary and can never interleave with a tool call in flight.
    * `tmux_keys` types into the session, the only option for a CLI that owns its
    * own input loop.

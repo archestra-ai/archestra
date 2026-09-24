@@ -31,10 +31,19 @@ export const BatteryInstallStatusSchema = z.enum([
   "missing_credentials",
   "naming_conflict",
   "server_missing",
+  "unrouted",
   "refused",
   "active",
 ]);
 export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
+
+/**
+ * What a battery governs: the servers its namespaces' aliases point at, or the
+ * whole organization for a battery made of annotators alone, which a policy rule
+ * routes a tool to by name.
+ */
+export const BatteryScopeSchema = z.enum(["catalogs", "organization"]);
+export type BatteryScope = z.infer<typeof BatteryScopeSchema>;
 
 export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
@@ -46,10 +55,13 @@ export const BatteryInstallSchema = createSelectSchema(
 });
 export type BatteryInstall = z.infer<typeof BatteryInstallSchema>;
 
-/** One derived install as a recompose computes it; ids are the model's to preserve. */
+/**
+ * One derived install as a recompose computes it; ids are the model's to preserve.
+ * A battery made of annotators alone governs no catalog: its one row has none.
+ */
 export const BatteryInstallRowSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  catalogId: z.string().uuid(),
+  catalogId: z.string().uuid().nullable(),
   status: BatteryInstallStatusSchema,
   packageHash: z.string().nullable(),
   lastError: z.string().nullable(),
@@ -95,6 +107,25 @@ export const BatteryMatchSchema = z.object({
 });
 export type BatteryMatch = z.infer<typeof BatteryMatchSchema>;
 
+/**
+ * Whether an attach to a catalog has an alias target: `unsynced` while none of
+ * its tools are synced, `conflicting` when a tool prefix holds `__`, which a
+ * composed alias cannot tell apart. An attach is refused in both.
+ */
+export const AttachReadinessSchema = z.enum([
+  "ready",
+  "unsynced",
+  "conflicting",
+]);
+export type AttachReadiness = z.infer<typeof AttachReadinessSchema>;
+
+/** The batteries a catalog entry stands for, and whether one can be attached. */
+export const BatteryMatchesSchema = z.object({
+  attach: AttachReadinessSchema,
+  matches: z.array(BatteryMatchSchema),
+});
+export type BatteryMatches = z.infer<typeof BatteryMatchesSchema>;
+
 export const BatterySummarySchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -102,6 +133,9 @@ export const BatterySummarySchema = z.object({
   /** The bytes the newest stored package of this name holds; null when bundled. */
   contentHash: z.string().nullable(),
   namespaces: z.array(z.string()),
+  /** The annotators it declares; with no namespace, it governs the organization, not a catalog. */
+  annotators: z.array(z.string()),
+  scope: BatteryScopeSchema,
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
@@ -129,6 +163,10 @@ export const PolicyBatteryViewSchema = z.object({
   source: BatterySourceSchema,
   packageHash: z.string().nullable(),
   status: BatteryInstallStatusSchema,
+  /** `catalogs` too for an entry that resolves to nothing. */
+  scope: BatteryScopeSchema,
+  /** Whether it composes its own policy; otherwise it folds in as the empty stub. */
+  composed: z.boolean(),
   line: z.number(),
   servers: z.array(BatteryServerViewSchema),
   credentials: z.array(BatteryCredentialViewSchema),
@@ -169,6 +207,8 @@ export const UploadedBatteryPackageSchema = z.object({
   contentHash: z.string(),
   entry: z.string(),
   namespaces: z.array(z.string()),
+  /** The annotators it declares; with no namespace, it governs the organization, not a catalog. */
+  annotators: z.array(z.string()),
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
@@ -179,7 +219,8 @@ export type UploadedBatteryPackage = z.infer<
 
 export const CreateBatteryInstallSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  catalogId: z.string().uuid(),
+  /** The catalog to govern; absent for a battery made of annotators alone. */
+  catalogId: z.string().uuid().optional(),
   /** The stored package to include; absent spells the bundled battery. */
   packageHash: z
     .string()

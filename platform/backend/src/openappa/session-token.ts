@@ -2,9 +2,12 @@ import { createHmac } from "node:crypto";
 
 const MARK_TOP = "▄█▄▄▄█▄";
 const MARK_BOTTOM = "██▄█▄██";
+const RECEIPT_CODE = "([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})";
 
-const SESSION_RECEIPT_PATTERN =
-  /▄█▄▄▄█▄ {2}protected session ([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})\n██▄█▄██/g;
+const SESSION_RECEIPT_PATTERN = new RegExp(
+  `${MARK_TOP}\\r?\\n${MARK_BOTTOM} {2}(?:started )?protected session ${RECEIPT_CODE}|${MARK_TOP} {2}(?:started )?protected session ${RECEIPT_CODE}\\r?\\n${MARK_BOTTOM}`,
+  "g",
+);
 
 export function mintReceiptCode(params: {
   secret: string;
@@ -21,11 +24,11 @@ export function mintReceiptCode(params: {
 }
 
 export function formatSessionReceipt(code: string): string {
-  return `\n\n${MARK_TOP}  protected session ${code}\n${MARK_BOTTOM}`;
+  return `${MARK_TOP}\n${MARK_BOTTOM}  protected session ${code}`;
 }
 
 export function appendSessionReceipt(text: string, code: string): string {
-  return `${text}${formatSessionReceipt(code)}`;
+  return `${formatSessionReceipt(code)}\n\n${text}`;
 }
 
 export function stripSessionReceipts(text: string): {
@@ -42,12 +45,13 @@ export function stripSessionReceipts(text: string): {
   if (matches.length === 0) return { text, codes };
   for (let index = matches.length - 1; index >= 0; index--) {
     const match = matches[index];
-    const code = match[1];
+    const code = match[1] ?? match[2];
     if (code) codes.unshift(code);
     const start = match.index ?? 0;
     const end = start + match[0].length;
-    const lead = leadingNewlines(stripped, start);
-    stripped = `${stripped.slice(0, start - lead)}${stripped.slice(end)}`;
+    const lead = adjacentNewlines(stripped, start, -1);
+    const trail = adjacentNewlines(stripped, end, 1);
+    stripped = `${stripped.slice(0, start - lead)}${stripped.slice(end + trail)}`;
   }
   return { text: stripped, codes };
 }
@@ -85,11 +89,20 @@ function encodeCrockford35(value: bigint): string {
   return `${code.slice(0, 3)}-${code.slice(3)}`;
 }
 
-function leadingNewlines(text: string, index: number): number {
-  let count = 0;
-  for (let offset = 1; offset <= 2; offset++) {
-    if (text[index - offset] !== "\n") break;
-    count += 1;
+function adjacentNewlines(
+  text: string,
+  index: number,
+  direction: -1 | 1,
+): number {
+  let at = index;
+  for (let count = 0; count < 2; count++) {
+    if (direction < 0 && text[at - 1] === "\n") {
+      at -= text[at - 2] === "\r" ? 2 : 1;
+    } else if (direction > 0 && text[at] === "\r" && text[at + 1] === "\n") {
+      at += 2;
+    } else if (direction > 0 && text[at] === "\n") {
+      at++;
+    } else break;
   }
-  return count;
+  return Math.abs(at - index);
 }

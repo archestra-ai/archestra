@@ -122,7 +122,7 @@ export function AgentToolBehaviorSettings({
       {/* Inset past the icon column (size-8 + gap-3) so the rule divides the
           two settings rather than cutting across the icons that label them. */}
       <div className="ml-11 border-t border-border" />
-      <div className="flex items-center gap-3 pt-4">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 pt-4 sm:flex sm:items-center">
         <SettingIcon tone={MISSING_CREDENTIAL_TONE[missingCredentialBehavior]}>
           <Unplug className="size-4" />
         </SettingIcon>
@@ -155,7 +155,10 @@ export function AgentToolBehaviorSettings({
         >
           {/* Fixed width: the trigger is `w-fit` by default, so the row would
               reflow by ~33px as the value changes. */}
-          <SelectTrigger id="missing-credential-behavior" className="w-[240px]">
+          <SelectTrigger
+            id="missing-credential-behavior"
+            className="col-start-2 w-full sm:w-[240px]"
+          >
             <SelectValue />
           </SelectTrigger>
           {/* `popper` is what makes `align` bind at all: the default

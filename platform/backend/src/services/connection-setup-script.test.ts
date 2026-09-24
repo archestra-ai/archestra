@@ -202,6 +202,7 @@ async function runClaudeSettingsMerge(params: {
 async function runClaudeMarketplaceRegistration(params?: {
   addFailure?: boolean;
   initialSource?: "matching" | "changed" | "missing";
+  initialAutoUpdate?: boolean;
   runs?: number;
 }): Promise<{
   commands: string[];
@@ -234,6 +235,9 @@ async function runClaudeMarketplaceRegistration(params?: {
                   ).toString("base64")}`,
                 },
               },
+              ...(params?.initialAutoUpdate === undefined
+                ? {}
+                : { autoUpdate: params.initialAutoUpdate }),
             },
           };
     await writeFile(
@@ -892,6 +896,42 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       },
     });
     expect(result.guardExists).toBe(true);
+  });
+
+  test("claude-code: enables marketplace auto-update so shipped skill revisions reach the client", async () => {
+    const added = await runClaudeMarketplaceRegistration({
+      initialSource: "missing",
+    });
+    const existing = await runClaudeMarketplaceRegistration();
+
+    for (const result of [added, existing]) {
+      expect(result.settings).toMatchObject({
+        unrelatedSetting: { keep: true },
+        extraKnownMarketplaces: {
+          [AUTHENTICATED_SKILLS.marketplaceName]: { autoUpdate: true },
+        },
+      });
+      const marketplaces = result.settings.extraKnownMarketplaces as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(marketplaces["other-marketplace"]).not.toHaveProperty(
+        "autoUpdate",
+      );
+    }
+  });
+
+  test("claude-code: keeps a user's explicit marketplace auto-update choice", async () => {
+    const result = await runClaudeMarketplaceRegistration({
+      initialAutoUpdate: false,
+      runs: 2,
+    });
+
+    expect(result.settings).toMatchObject({
+      extraKnownMarketplaces: {
+        [AUTHENTICATED_SKILLS.marketplaceName]: { autoUpdate: false },
+      },
+    });
   });
 
   test("claude-code: replaces only a changed user marketplace source before installing skills", async () => {

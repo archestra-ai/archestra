@@ -58,9 +58,9 @@ provider = "openrouter"
 model = "minimax/minimax-m3"
 
 [[lane]]
-name = "gpt-56-luna"
+name = "gpt-6-luna"
 provider = "openrouter"
-model = "openai/gpt-5.6-luna"
+model = "openai/gpt-6-luna"
 
 [[lane]]
 name = "claude-haiku-45"
@@ -68,9 +68,9 @@ provider = "openrouter"
 model = "anthropic/claude-haiku-4.5"
 
 [[lane]]
-name = "mimo-25"
+name = "mimo-26-flash"
 provider = "openrouter"
-model = "xiaomi/mimo-v2.5"
+model = "xiaomi/mimo-v2.6-flash"
 
 [[lane]]
 name = "qwen36-35b-a3b"
@@ -112,7 +112,7 @@ api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.3-flash"
 
 [[lane]]
-name = "mimo-25-adv-deepseek-flash"
+name = "mimo-26-flash-adv-deepseek-flash"
 provider = "openrouter"
-model = "xiaomi/mimo-v2.5"
+model = "xiaomi/mimo-v2.6-flash"
 advisor = "deepseek-flash-0731"

@@ -1,7 +1,7 @@
 import {
+  AGENT_CATALOG_IMAGE_REGISTRY,
   type AgentCatalogId,
   getAgentCatalogImages,
-  getDefaultAgentRuntimeImage,
 } from "@archestra/shared";
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
@@ -19,14 +19,8 @@ export interface AgentCatalogTemplate {
   initialValues: AgentFormInitialValues;
 }
 
-/**
- * Shared by the catalog card and the runtime pill. `archestra` is absent: its
- * name is composed from the app name.
- */
-export const AGENT_CATALOG_TEMPLATE_NAMES: Record<
-  Exclude<AgentCatalogId, "archestra">,
-  string
-> = {
+/** Shared by the catalog card and the runtime pill. */
+export const AGENT_CATALOG_TEMPLATE_NAMES: Record<AgentCatalogId, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
@@ -34,12 +28,22 @@ export const AGENT_CATALOG_TEMPLATE_NAMES: Record<
   openclaw: "OpenClaw",
 };
 
+/** The maintained image per template, as this deployment pulls it. */
+export function useAgentCatalogImages(): Record<AgentCatalogId, string> {
+  const configured = useFeature("agentRuntimeCatalogImages");
+  return configured
+    ? (configured as Record<AgentCatalogId, string>)
+    : getAgentCatalogImages({
+        registry: AGENT_CATALOG_IMAGE_REGISTRY,
+        tag: "latest",
+      });
+}
+
 export function getAgentCatalogTemplates(
-  archestraImage: string,
+  images: Record<AgentCatalogId, string>,
   // white-label-ok: test/helper fallback only; shipped UI always passes useAppName().
   appName = "Archestra",
 ): readonly AgentCatalogTemplate[] {
-  const images = getAgentCatalogImages(archestraImage);
   return [
     template({
       id: "claude-code",
@@ -114,14 +118,8 @@ export function AgentCatalog({
   onSelect: (template: AgentCatalogTemplate) => void;
   showPopularAgents: boolean;
 }) {
-  const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
-  const templates = getAgentCatalogTemplates(
-    typeof configuredImage === "string"
-      ? configuredImage
-      : getDefaultAgentRuntimeImage("latest"),
-    appName,
-  );
+  const templates = getAgentCatalogTemplates(useAgentCatalogImages(), appName);
   return (
     <div className="space-y-8">
       <div className="space-y-3">
@@ -174,30 +172,37 @@ export function AgentCatalog({
   );
 }
 
+/** The platform's own (white-labeled) logo, for its built-in harness. */
+export function PlatformAgentIcon({
+  appIconLogo,
+  size = 22,
+}: {
+  appIconLogo: string | null;
+  size?: number;
+}) {
+  return appIconLogo ? (
+    <Image
+      src={appIconLogo}
+      alt=""
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+      className="rounded-sm object-contain"
+    />
+  ) : (
+    <Bot className="size-5" />
+  );
+}
+
 export function CatalogAgentIcon({
   id,
-  appIconLogo = null,
   size = 22,
 }: {
   id: AgentCatalogId;
-  appIconLogo?: string | null;
   size?: number;
 }) {
   const box = { width: size, height: size };
   switch (id) {
-    case "archestra":
-      return appIconLogo ? (
-        <Image
-          src={appIconLogo}
-          alt=""
-          width={size}
-          height={size}
-          style={box}
-          className="rounded-sm object-contain"
-        />
-      ) : (
-        <Bot className="size-5" />
-      );
     case "claude-code":
       return <ProviderIcon provider="anthropic" size={size} />;
     case "codex":

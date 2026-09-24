@@ -16,6 +16,10 @@ export interface BatteryPackage {
   name: string
   description: string
   namespaces: Array<string>
+  /** The `[[policy.annotator]]` names the battery declares. */
+  annotators: Array<string>
+  /** The annotators the battery's own `[[policy.tool]]` rules route calls to. */
+  routedAnnotators: Array<string>
   policy: string
   helpers: Array<string>
   credentials: Array<string>
@@ -108,7 +112,7 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
- * which is what Archestra serves.
+ * which is what Archestra serves, or declare annotators alone.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
 
@@ -143,6 +147,8 @@ export interface PolicyDeclarations {
   include: Array<IncludeDeclaration>
   serverAliases: Array<ServerAliasDeclaration>
   credentials: Array<CredentialDeclaration>
+  /** The annotators the root's own `[[policy.tool]]` rules route calls to. */
+  routedAnnotators: Array<string>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.

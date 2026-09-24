@@ -42,7 +42,12 @@ const declarations = {
   managedInGithub: false,
   heldPull: null,
 };
-function battery(name: string, status: string, line: number) {
+function battery(
+  name: string,
+  status: string,
+  line: number,
+  composed = status === "active",
+) {
   return {
     entry: `${name}/policy.toml`,
     name,
@@ -50,6 +55,7 @@ function battery(name: string, status: string, line: number) {
     packageHash: null,
     status,
     line,
+    composed,
     servers: [],
     credentials: [],
     helpers: [],
@@ -361,6 +367,51 @@ test("the effective policy is fetched only once its tab is opened", async () => 
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");
+});
+
+test("the composed view names the batteries that fold in as empty stubs", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          battery("acme", "active", 3),
+          battery("globex", "missing_credentials", 5),
+          battery("initech", "server_missing", 7),
+          // An organization-wide battery composes though no rule routes to it.
+          battery("hooli", "unrouted", 9, true),
+        ],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  const stubs = await screen.findByTestId("effective-policy-stubs");
+  expect(stubs).toHaveTextContent("globex");
+  expect(stubs).toHaveTextContent("initech");
+  expect(stubs).not.toHaveTextContent("acme");
+  expect(stubs).not.toHaveTextContent("hooli");
+});
+
+test("the composed view lists no stub while every battery is active", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [battery("acme", "active", 3)],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  await screen.findByRole("textbox", { name: "Effective guardrails policy" });
+  expect(
+    screen.queryByTestId("effective-policy-stubs"),
+  ).not.toBeInTheDocument();
 });
 
 test("switching to the composed view and back keeps an unsaved draft", async () => {

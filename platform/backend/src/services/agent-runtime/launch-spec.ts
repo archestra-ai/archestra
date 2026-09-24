@@ -5,7 +5,6 @@ import {
   type ResourcePermissionGrant,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
-  SESSION_ID_HEADER,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
@@ -28,6 +27,7 @@ import {
 } from "@/models";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { archestraMarkWithText } from "@/services/archestra-mark";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { modelSyncService } from "@/services/model-sync";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
@@ -273,6 +273,12 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
+    // Clients that hide tools from the wire (Codex's tool search and code
+    // mode) must declare them inline for OpenAPPA to govern the session. A
+    // continuation relaunches the client, so it re-reads the switch.
+    ...((await isGuardrailsV2Active())
+      ? { ARCHESTRA_AGENT_RUNTIME_OPENAPPA: "1" }
+      : {}),
     ...(usesClaudeCodeSubscription
       ? { ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription" }
       : { OPENAI_BASE_URL: modelRouterUrl }),
@@ -297,9 +303,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
-          // Both the Archestra runtime-agent and bring-your-own CLIs read the
-          // provider variables, so the standard virtual key is presented in
-          // each native shape. The upstream provider secret stays server-side.
+          // Maintained and bring-your-own CLIs read the provider variables,
+          // so the standard virtual key is presented in each native shape.
+          // The upstream provider secret stays server-side.
           ANTHROPIC_API_KEY: virtualKeyValue,
           ANTHROPIC_AUTH_TOKEN: virtualKeyValue,
           OPENAI_API_KEY: virtualKeyValue,
@@ -413,6 +419,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH",
   "ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER",
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
+  "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
@@ -429,8 +436,9 @@ function claudeCodeCustomHeaders(params: {
   passthroughKey?: string;
 }): string {
   return [
+    // The image adds the session headers: they name the workspace, which
+    // pod-run assigns after this spec is built.
     `${RUN_ID_HEADER}: ${params.taskId}`,
-    `${SESSION_ID_HEADER}: ${params.taskId}`,
     ...(params.passthroughKey
       ? [`X-Archestra-Virtual-Key: ${params.passthroughKey}`]
       : []),

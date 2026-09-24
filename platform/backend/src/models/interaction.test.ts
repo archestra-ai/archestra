@@ -265,6 +265,41 @@ describe("InteractionModel", () => {
       const parsed = SelectInteractionSchema.safeParse(interaction);
       expect(parsed.success).toBe(true);
     });
+
+    test("round-trips a responses/compact response stored as openai:responses", async () => {
+      // The compact endpoint's native response (object "response.compaction")
+      // is logged under the openai:responses interaction type. Reading it back
+      // must not coerce it to the malformed sentinel.
+      const compactedResponse = {
+        id: "resp_compact_test",
+        object: "response.compaction" as const,
+        created_at: 1720000000,
+        output: [
+          {
+            id: "cmp_1",
+            type: "compaction",
+            encrypted_content: "cipher-text",
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-5.1",
+          input: [{ role: "user", content: "Compact this" }],
+        },
+        response: compactedResponse,
+        type: "openai:responses",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+      expect(found?.response).toEqual(compactedResponse);
+
+      const parsed = SelectInteractionSchema.safeParse(found);
+      expect(parsed.success).toBe(true);
+    });
   });
 
   describe("create - null byte sanitization", () => {
@@ -1993,6 +2028,75 @@ describe("InteractionModel", () => {
         { sessionId },
       );
       expect(sessions.data[0]?.lastInteractionId).toBe(geminiMain.id);
+    });
+
+    test("badges OpenCode title generation as a subagent and the tool-using turn as main", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "opencode-title-vs-main";
+      const openaiResponse = {
+        id: "r",
+        object: "chat.completion" as const,
+        created: Date.now(),
+        model: "k3",
+        choices: [],
+      };
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        type: "vllm:chatCompletions",
+        request: {
+          model: "k3",
+          messages: [
+            { role: "system", content: "You are a title generator." },
+            { role: "user", content: "43" },
+          ],
+        },
+        response: openaiResponse,
+      });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        type: "vllm:chatCompletions",
+        request: {
+          model: "k3",
+          tools: [
+            {
+              type: "function",
+              function: { name: "task", description: "spawn" },
+            },
+            {
+              type: "function",
+              function: { name: "bash", description: "shell" },
+            },
+          ],
+          messages: [
+            { role: "system", content: "You are opencode, a coding agent." },
+            { role: "user", content: "43" },
+          ],
+        },
+        response: openaiResponse,
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+      const types = result.data.map(
+        (row) => (row as unknown as { requestType?: string }).requestType,
+      );
+      expect(types.sort()).toEqual(["main", "subagent"]);
     });
   });
 

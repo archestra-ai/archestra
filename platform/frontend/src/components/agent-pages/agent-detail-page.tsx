@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, E2eTestId, getDocsUrl } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+} from "@archestra/shared";
 import {
   Copy,
   Download,
@@ -30,6 +35,7 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { KebabItem } from "@/components/kebab-item";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -236,14 +242,18 @@ function AgentDetails({
   const defaultEnvironment = useDefaultEnvironment();
   const {
     resource,
-    canModify,
-    canEdit,
+    canModify: canModifyFromAccess,
+    canEdit: canEditFromAccess,
     canTransferOwnership,
     canCreate,
     canDelete,
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
+  const platformManaged =
+    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+  const canModify = canModifyFromAccess && !platformManaged;
+  const canEdit = canEditFromAccess && !platformManaged;
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const actionModel = getAgentActionModel({
     kind,
@@ -458,11 +468,15 @@ function AgentDetails({
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <AgentIcon
-              icon={agent.icon}
-              fallbackType={config.defaultIconType}
-              size={24}
-            />
+            {platformManaged ? (
+              <OpenAppaSolidIcon className="size-6" />
+            ) : (
+              <AgentIcon
+                icon={agent.icon}
+                fallbackType={config.defaultIconType}
+                size={24}
+              />
+            )}
           </div>
           <span className="min-w-0 truncate">{agent.name}</span>
           <AgentBadge

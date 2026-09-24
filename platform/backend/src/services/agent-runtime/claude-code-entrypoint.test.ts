@@ -165,13 +165,14 @@ Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.
         expect(captured.ANTHROPIC_BASE_URL).toBe(
           "http://localhost:9000/example",
         );
-        expect(captured.ANTHROPIC_CUSTOM_HEADERS).toBe(
-          "X-Archestra-Virtual-Key: example-passthrough-token",
-        );
       } else {
         expect(captured).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
         expect(captured.ANTHROPIC_AUTH_TOKEN).toBe("example-proxy-token");
       }
+      // Without a workspace, the task names the session.
+      expect(captured.ANTHROPIC_CUSTOM_HEADERS).toBe(
+        "X-Archestra-Virtual-Key: example-passthrough-token\nX-Archestra-Session-Id: test-task\nX-Appa-Session-ID: test-task",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -230,6 +231,7 @@ fi
           ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
           ARCHESTRA_AGENT_RUNTIME_TASK_ID:
             "12345678-abcd-4000-8000-123456789abc",
+          ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-claude-12345678",
           ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
           ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
             "Follow the configured Agent instructions.",
@@ -247,6 +249,13 @@ fi
       expect(mcpConfig.mcpServers.archestra.headers.Authorization).toBe(
         "Bearer test-token",
       );
+      // The workspace outlives a follow-up's new task, so OpenAPPA keeps one
+      // root for the whole conversation.
+      expect(mcpConfig.mcpServers.archestra.headers).toMatchObject({
+        "X-Archestra-Run-Id": "12345678-abcd-4000-8000-123456789abc",
+        "X-Archestra-Session-Id": "agent-run-claude-12345678",
+        "X-Appa-Session-ID": "agent-run-claude-12345678",
+      });
 
       const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
         .trim()

@@ -155,6 +155,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/credentials", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
+  ...getJson("/api/guardrails-deployment", {
+    enabled: false,
+    featureEnabled: false,
+    active: false,
+  }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {
     ...healthSeed,

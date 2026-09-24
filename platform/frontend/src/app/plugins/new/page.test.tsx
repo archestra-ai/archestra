@@ -557,13 +557,6 @@ describe("NewPluginPage", () => {
     expect(screen.getByRole("button", { name: "Add access" })).toBeVisible();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
-    const contentCard = displayName.closest(".rounded-lg.border");
-    if (!contentCard) throw new Error("Plugin content card not rendered");
-    expect(
-      within(contentCard as HTMLElement).queryByRole("button", {
-        name: /Create plugin/,
-      }),
-    ).not.toBeInTheDocument();
     // An unnamed plugin is not creatable, whatever else is filled in.
     expect(create).toBeDisabled();
 

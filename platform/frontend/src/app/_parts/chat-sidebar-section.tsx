@@ -31,6 +31,7 @@ import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { conversationHref } from "@/lib/chat/conversation-href";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
 import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
@@ -199,7 +201,11 @@ export function ChatSidebarSection({
   const currentConversationId =
     pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
-      : null;
+      : pathname.startsWith("/openappa/") &&
+          pathname !== "/openappa/policy" &&
+          pathname !== "/openappa/batteries"
+        ? (pathname.split("/").at(-1) ?? null)
+        : null;
   const currentRunTaskId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
@@ -240,14 +246,10 @@ export function ChatSidebarSection({
     if (isMobile) {
       setOpenMobile(false);
     }
-    const run = conversations.find(
+    const conversation = conversations.find(
       (conversation) => conversation.id === id,
-    )?.scheduledRun;
-    router.push(
-      run
-        ? `/chat/${id}?scheduleTriggerId=${run.triggerId}&scheduleRunId=${run.id}`
-        : `/chat/${id}`,
     );
+    router.push(conversationHref(conversation ?? { id }));
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -299,7 +301,7 @@ export function ChatSidebarSection({
   const handleDeleteConversation = async (id: string) => {
     // Navigate away before deleting to avoid "conversation not found" flash
     if (currentConversationId === id) {
-      router.push("/chat");
+      router.push(pathname.startsWith("/openappa/") ? "/openappa" : "/chat");
     }
 
     try {
@@ -564,6 +566,18 @@ export function ChatSidebarSection({
                         <LockedChatIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
                       <TooltipContent side="top">Locked chat</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {conv.origin === "openappa" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <OpenAppaIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        OpenAPPA configuration
+                      </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}

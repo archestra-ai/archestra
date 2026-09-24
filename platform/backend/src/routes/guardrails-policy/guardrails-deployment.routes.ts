@@ -2,8 +2,10 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  setGuardrailsDeployment,
+} from "@/services/guardrails-deployment";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const status = z.object({
@@ -46,8 +48,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           403,
           "Organization administration permission is required to manage deployment guardrails",
         );
-      await GuardrailsDeploymentModel.setEnabled(request.body.enabled);
-      return getGuardrailsDeployment();
+      return setGuardrailsDeployment(request.body.enabled);
     },
   );
 };

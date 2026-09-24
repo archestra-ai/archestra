@@ -26,19 +26,28 @@ else
   unset CLAUDE_CODE_OAUTH_TOKEN
 fi
 
+# One conversation, one session: the workspace outlives a follow-up's new task
+# ID, so the proxy logs and OpenAPPA keep every turn together.
+session="${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
+export ANTHROPIC_CUSTOM_HEADERS="${ANTHROPIC_CUSTOM_HEADERS:+${ANTHROPIC_CUSTOM_HEADERS}
+}X-Archestra-Session-Id: ${session}
+X-Appa-Session-ID: ${session}"
+
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+  --arg session "${session}" \
   '{mcpServers:{archestra:{
     type:"http",
     url:$url,
     headers:{
       Authorization:("Bearer " + $token),
       "X-Archestra-Run-Id":$task_id,
-      "X-Archestra-Session-Id":$task_id
+      "X-Archestra-Session-Id":$session,
+      "X-Appa-Session-ID":$session
     }
   }}}' \
   > "${mcp_config}"

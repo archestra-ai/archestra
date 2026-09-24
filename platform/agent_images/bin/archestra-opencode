@@ -243,6 +243,7 @@ jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg api_key '{env:OPENAI_API_KEY}' \
   --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+  --arg session "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg instructions_file "${instructions_file}" \
@@ -265,7 +266,8 @@ jq -n \
         apiKey:$api_key,
         headers:{
           "X-Archestra-Run-Id":$task_id,
-          "X-Archestra-Session-Id":$task_id
+          "X-Archestra-Session-Id":$session,
+          "X-Appa-Session-ID":$session
         }
       },
       models:{($model):{
@@ -282,7 +284,8 @@ jq -n \
       headers:{
         Authorization:("Bearer " + $mcp_token),
         "X-Archestra-Run-Id":$task_id,
-        "X-Archestra-Session-Id":$task_id
+        "X-Archestra-Session-Id":$session,
+        "X-Appa-Session-ID":$session
       }
     }}
   }' > "${config_file}"

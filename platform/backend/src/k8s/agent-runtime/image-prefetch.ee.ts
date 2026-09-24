@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { createHash } from "node:crypto";
-import { getAgentCatalogImages } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import { buildPrepullDaemonSet } from "@/k8s/mcp-server-runtime/image-prepuller.ee";
@@ -72,7 +71,7 @@ class AgentImagePrefetcher {
       const names = new Set<string>();
       // One DaemonSet per image: an unavailable image must not block its peers.
       for (const image of new Set(
-        Object.values(getAgentCatalogImages(config.agentRuntime.defaultImage)),
+        Object.values(config.agentRuntime.catalogImages),
       )) {
         const name = `${release.slice(0, 30).replace(/-$/, "")}-agent-image-${hash(`${release}:${image}`).slice(0, 12)}`;
         names.add(name);
@@ -81,12 +80,13 @@ class AgentImagePrefetcher {
           namespace,
           images: [image],
           // A stable platform upgrade moves the catalog's :latest aliases.
-          // Roll the prefetch pods once per platform image so their node cache
-          // contains the new release before any cold-started Agent needs it.
+          // Roll the prefetch pods once per platform version so their node
+          // cache contains the new release before any cold-started Agent
+          // needs it.
           refreshGenerations: usesFloatingAgentImageTag(image)
             ? {
                 [image]: Number.parseInt(
-                  hash(config.agentRuntime.defaultImage).slice(0, 12),
+                  hash(config.api.version).slice(0, 12),
                   16,
                 ),
               }

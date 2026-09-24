@@ -29,7 +29,7 @@ describe("RuntimeCapableIndicator", () => {
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 
-  it("reads as a plain runtime for a custom image and for the platform loop", () => {
+  it("reads as a plain runtime for a custom image, with or without a command", () => {
     const { rerender } = render(
       <RuntimeCapableIndicator variant="pill" runtime={customRuntime} />,
     );
@@ -38,7 +38,7 @@ describe("RuntimeCapableIndicator", () => {
     rerender(
       <RuntimeCapableIndicator
         variant="pill"
-        runtime={{ image: "agent-archestra:dev", command: null }}
+        runtime={{ image: "ghcr.io/example/toolbox:latest", command: null }}
       />,
     );
     expect(screen.getByText("Runtime")).toBeInTheDocument();

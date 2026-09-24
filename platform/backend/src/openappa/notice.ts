@@ -41,6 +41,13 @@ export const RemedyExecutionSchema = z.object({
   call_id: z.string().min(1).max(512),
   // Display context only for client-decorated tool names.
   tool_name: z.string().min(1).max(512),
+  /** Namespace the control was called in, when the wire has namespaces. */
+  namespace: z
+    .string()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe("Optional MCP namespace of the remedy tool."),
   original_arguments: z
     .string()
     .refine((value) => isRecord(parseJson(value)), "a JSON object"),
@@ -181,6 +188,7 @@ export function readNotice(params: {
 export function readRemedyExecution(params: {
   callId: string;
   toolName: string;
+  namespace?: string;
   arguments: unknown;
 }): ParsedRemedyExecution | null {
   const argumentsValue =
@@ -192,7 +200,8 @@ export function readRemedyExecution(params: {
   if (
     !parsed.success ||
     parsed.data.call_id !== params.callId ||
-    parsed.data.tool_name !== params.toolName
+    parsed.data.tool_name !== params.toolName ||
+    parsed.data.namespace !== params.namespace
   )
     return null;
   const parsedOriginalArguments = parseJson(parsed.data.original_arguments);

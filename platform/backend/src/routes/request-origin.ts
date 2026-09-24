@@ -1,6 +1,9 @@
+import { resolvePublicScheme, servesHttps } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
-
-import { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
+import {
+  getMCPGatewayOauthAllowedPublicHosts,
+  getMCPGatewayOauthPublicHostSchemes,
+} from "@/config";
 import logger from "@/logging";
 
 /**
@@ -25,17 +28,17 @@ export function getPublicRequestOrigin(request: FastifyRequest): string {
 }
 
 function computePublicRequestOrigin(request: FastifyRequest): string {
-  // Get the direct origin from the request firs
+  // Get the direct origin from the request first
   const directProtocol = deriveProtocol(request);
   const directHost = request.headers.host ?? "localhost";
-  const direct = `${directProtocol}://${directHost}`;
 
   // Get the forwarded origin from the request headers
   const forwardedProto = pickFirstForwarded(
     request.headers["x-forwarded-proto"],
   );
   const forwardedHost = pickFirstForwarded(request.headers["x-forwarded-host"]);
-  if (!forwardedProto && !forwardedHost) return direct;
+  if (!forwardedProto && !forwardedHost)
+    return resolveOrigin(directHost, directProtocol);
   const protocol = (forwardedProto ?? directProtocol).replace(/:$/, "");
 
   // Build a candidate host from the forwarded origin
@@ -44,7 +47,7 @@ function computePublicRequestOrigin(request: FastifyRequest): string {
     try {
       candidateHost = new URL(`${protocol}://${forwardedHost}`).host;
     } catch {
-      return direct;
+      return resolveOrigin(directHost, directProtocol);
     }
   } else {
     candidateHost = directHost;
@@ -63,17 +66,63 @@ function computePublicRequestOrigin(request: FastifyRequest): string {
   if (!allowed.has(candidateHost.toLowerCase())) {
     if (forwardedHost) {
       logger.warn(
-        { forwardedHost: candidateHost, allowed: Array.from(allowed) },
+        {
+          forwardedHost: candidateHost,
+          allowed: Array.from(allowed),
+          fix: ALLOWLIST_FIX_HINT,
+        },
         "getPublicRequestOrigin: forwarded host not in allowlist; using direct origin",
       );
     }
-    return direct;
+    return resolveOrigin(directHost, directProtocol);
   }
 
-  return `${protocol}://${candidateHost}`;
+  return resolveOrigin(candidateHost, protocol);
 }
 
 // ===
+
+const ALLOWLIST_FIX_HINT =
+  "name this host in ARCHESTRA_API_BASE_URL (comma-separated list) or ARCHESTRA_FRONTEND_URL";
+
+/**
+ * Apply the scheme the operator configured for this host, then return the origin.
+ *
+ * A host the operator published over https must never be advertised over http:
+ * an OAuth client following an http metadata URL either fails outright or is
+ * downgraded. The backend itself always sees plain http behind a TLS-terminating
+ * proxy, and a layer-4 route (Gateway API TLSRoute, for example) cannot set
+ * X-Forwarded-Proto at all, so the request alone can never prove the scheme.
+ * The configured public URL can, so it wins.
+ *
+ * A host that appears in no configured public URL keeps the scheme observed on
+ * the request and is logged: that combination is a misconfiguration, and an
+ * http OAuth origin is the symptom operators report.
+ */
+function resolveOrigin(host: string, protocol: string): string {
+  const configured = getMCPGatewayOauthPublicHostSchemes();
+  const scheme = resolvePublicScheme({
+    host,
+    observedScheme: protocol,
+    schemes: configured,
+  });
+  if (scheme !== "http") return `${scheme}://${host}`;
+
+  // Only a deployment that published at least one https origin can be serving
+  // this over TLS, so an all-http configuration (local development, plain-http
+  // installs) is left alone rather than warned about on every OAuth challenge.
+  if (!configured.has(host.toLowerCase()) && servesHttps(configured)) {
+    logger.warn(
+      {
+        host,
+        configured: Array.from(configured.keys()),
+        fix: ALLOWLIST_FIX_HINT,
+      },
+      "getPublicRequestOrigin: advertising an http OAuth origin for a host that is not a configured public URL",
+    );
+  }
+  return `http://${host}`;
+}
 
 function pickFirstForwarded(
   value: string | string[] | undefined,

@@ -64,7 +64,10 @@ for (const viewport of [
             .fill("https://example.com/mcp");
         await expect(create).toBeEnabled();
         const createStyle = await footerStyle(create);
-        await expectStickyActions({
+        expect(createStyle.position).toBe(
+          viewport.width < 640 ? "static" : "sticky",
+        );
+        await expectReachableActions({
           page,
           actions: [
             create,
@@ -135,7 +138,7 @@ for (const viewport of [
         });
         await descriptionField.fill("Unsaved draft to discard.");
         await expect(save).toBeEnabled();
-        await expectStickyActions({
+        await expectReachableActions({
           page,
           actions: [
             discard,
@@ -292,7 +295,7 @@ test("keeps idle-hibernation configuration inside narrow registry forms", async 
 });
 // SPDX-SnippetEnd
 
-async function expectStickyActions({
+async function expectReachableActions({
   page,
   actions,
 }: {
@@ -300,6 +303,7 @@ async function expectStickyActions({
   actions: Locator[];
 }) {
   const viewport = page.viewportSize();
+  const mobile = !!viewport && viewport.width < 640;
   const scroll =
     viewport && viewport.width < 768
       ? page.getByRole("main")
@@ -314,8 +318,9 @@ async function expectStickyActions({
       element.scrollTop =
         (element.scrollHeight - element.clientHeight) * fraction;
     }, fraction);
-    for (const action of actions)
-      await expect(action).toBeInViewport({ ratio: 1 });
+    if (!mobile || fraction === 1)
+      for (const action of actions)
+        await expect(action).toBeInViewport({ ratio: 1 });
   }
   expect(
     await scroll.evaluate(
@@ -339,25 +344,26 @@ async function expectStickyActions({
 
 async function footerStyle(button: Locator) {
   return button.evaluate((element) => {
-    let footer = element.parentElement;
-    while (footer && getComputedStyle(footer).position !== "sticky")
-      footer = footer.parentElement;
-    if (!footer) throw new Error("Sticky footer is missing");
+    const footer = element.closest("[data-wizard-footer]");
+    if (!footer) throw new Error("Action footer is missing");
     const style = getComputedStyle(footer);
     return {
       background: style.backgroundColor,
       border: style.border,
       padding: style.padding,
       bottom: style.bottom,
+      position: style.position,
     };
   });
 }
 
 async function clickVisible({ page, button }: { page: Page; button: Locator }) {
   await expect(button).toBeEnabled();
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width < 640) await button.scrollIntoViewIfNeeded();
   await expect(button).toBeInViewport({ ratio: 1 });
   const box = await button.boundingBox();
   if (!box) throw new Error("Action is missing");
-  // A locator click would mask a broken sticky footer by scrolling it into view.
+  // Keep the visibility assertion explicit after mobile scrolling.
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }

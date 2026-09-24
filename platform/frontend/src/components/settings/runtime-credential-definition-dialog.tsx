@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowLeft } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -35,9 +36,19 @@ import {
 export function RuntimeCredentialDefinitionDialog({
   definition,
   onClose,
+  initialKind,
+  initialScope,
+  onCreated,
+  backLabel,
+  size = "small",
 }: {
   definition: RuntimeCredentialDefinition | null;
   onClose: () => void;
+  initialKind?: "secret" | "github_app" | "github_app_user";
+  initialScope?: "personal" | "organization";
+  onCreated?: (id: string) => void;
+  backLabel?: string;
+  size?: "small" | "medium";
 }) {
   const create = useCreateRuntimeCredential();
   const {
@@ -58,7 +69,7 @@ export function RuntimeCredentialDefinitionDialog({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
       name: definition?.name ?? "",
-      kind: definition?.kind ?? "secret",
+      kind: definition?.kind ?? initialKind ?? "secret",
       githubUrl: definition?.githubUrl ?? "https://api.github.com",
       appId: definition?.appId ?? "",
       installationId: definition?.installationId ?? "",
@@ -66,7 +77,9 @@ export function RuntimeCredentialDefinitionDialog({
       githubAppCredentialKey: definition?.githubAppCredentialKey ?? "",
       description: definition?.description ?? "",
       icon: definition?.icon ?? null,
-      scope: definition?.allowOrganization ? "organization" : "personal",
+      scope: definition?.allowOrganization
+        ? "organization"
+        : (initialScope ?? "personal"),
     },
   });
   const pending = create.isPending || update.isPending;
@@ -120,7 +133,12 @@ export function RuntimeCredentialDefinitionDialog({
         allowPersonal: values.scope === "personal",
         allowOrganization: values.scope === "organization",
       },
-      { onSuccess: onClose },
+      {
+        onSuccess: (created) => {
+          if (created?.id && onCreated) onCreated(created.id);
+          else onClose();
+        },
+      },
     );
   };
 
@@ -132,13 +150,14 @@ export function RuntimeCredentialDefinitionDialog({
       }}
       title={definition ? `Edit ${definition.name}` : "Add credential"}
       description="Choose the credential type and who provides its value. Use it across the platform."
-      size="small"
+      size={size}
       onSubmit={form.handleSubmit(save)}
       bodyClassName="space-y-4"
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+            {backLabel && <ArrowLeft className="size-4" />}
+            {backLabel ?? "Cancel"}
           </Button>
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : definition ? "Save changes" : "Add"}

@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  buildElicitationMandateInstruction,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
@@ -11,6 +12,13 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { clientSessionId } from "@/openappa/actor";
+import {
+  childReturnReceiptsConfigured,
+  mintChildReturnReceipt,
+  verifyChildReturnReceipt,
+} from "@/openappa/child-return";
+import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { delegationEnabled, mintDelegationMarker } from "@/openappa/delegation";
 import {
   getHitlAskUserArguments,
   getHitlReview,
@@ -26,7 +34,9 @@ import {
 } from "@/openappa/offer-claims";
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
+  approveSpawnReturn,
   cancelCalls,
+  endChild,
   endTurn,
   evaluateHostedToolCalls,
   evaluateToolCalls,
@@ -34,16 +44,22 @@ import {
   type OpenAppaSession,
   processProxyResults,
 } from "@/openappa/service";
-import { stampToolCallId } from "@/openappa/trajectory-stamp";
+import {
+  parseTrajectoryStamp,
+  stampToolCallId,
+} from "@/openappa/trajectory-stamp";
 import { appaWireFamily } from "@/openappa/wire";
 import type {
   LlmProxyBeforeModelContext,
+  LlmProxyBufferedModelResponseContext,
+  LlmProxyBufferedModelResponseOutcome,
   LlmProxyContextTrust,
   LlmProxyHostedToolCallsContext,
   LlmProxyHostedToolCallsOutcome,
   LlmProxyModelResponseContext,
   LlmProxyPlugin,
   LlmProxyRequestContext,
+  LlmProxyToolCallAnnotation,
   LlmProxyToolCallsContext,
   LlmProxyToolCallsOutcome,
   LlmProxyToolResultsContext,
@@ -52,22 +68,34 @@ import type {
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
+import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import {
+  APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaChildTrajectory,
   type AppaClientAdapter,
   type AppaTrustedContext,
   type AskUserArguments,
 } from "./types";
+import { withCallerScope, withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
+  requestBody: unknown;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
+  /**
+   * Admitted return text when a native handback is the only call in the batch.
+   * A buffered stream replacement prevents the start proof from accompanying
+   * the return.
+   */
+  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
@@ -77,6 +105,15 @@ type AppaPluginBinding = {
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
   nativeHitlRulings: RecordedNativeHitlRuling[];
+  /** The native id this request's children will report as their parent. */
+  spawnerNativeId: string | undefined;
+  /** Server-bound child metadata needed to correlate its terminal return. */
+  child?: AppaChildTrajectory;
+  /**
+   * Unscoped client session id for trajectory stamps. Captured before child
+   * overlay so stamps never encode a minted parent:child id.
+   */
+  stampSessionId: string | undefined;
 };
 
 type NativeQuestionClaim = {
@@ -87,6 +124,8 @@ type RecordedNativeHitlRuling = {
   offerId: string;
   ruling: "approve" | "deny" | "none";
 };
+
+type ToolCall = LlmProxyToolCallsContext["toolCalls"][number];
 
 export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly id = "archestra.appa";
@@ -100,27 +139,51 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
     // Copy trusted context before adapter inspection to isolate plugin state.
+    const chat = trustedContext.chatSource !== undefined;
     const binding: AppaPluginBinding = {
-      session: { ...trustedContext.session },
+      session: trustedContext.session,
       identity: trustedContext.toolIdentity,
       adapter: undefined,
       request: trustedContext.request,
+      requestBody: context.requestBody,
       turnOpen: false,
-      chat: trustedContext.chatSource !== undefined,
+      completedHandbackReturn: undefined,
+      chat,
+      compaction: trustedContext.compaction === true,
       requestHeaders: context.headers,
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
+      spawnerNativeId: undefined,
+      stampSessionId: tracesLineage(trustedContext.session, chat)
+        ? clientSessionId(trustedContext.session.session_id)
+        : undefined,
+    };
+    const matchContext = {
+      headers: context.headers,
+      requestBody: context.requestBody,
+      trustedContext: cloneTrustedContext(trustedContext),
     };
     const adapter = this.clientAdapters.find((candidate) =>
-      candidate.matches({
-        headers: context.headers,
-        requestBody: context.requestBody,
-        trustedContext: cloneTrustedContext(trustedContext),
-      }),
+      candidate.matches(matchContext),
     );
     binding.adapter = adapter;
+    binding.spawnerNativeId = adapter?.nativeConversationId(matchContext);
+    const child = adapter?.bindChildTrajectory(matchContext);
+    if (child) {
+      // A native child is not a client fork: `parent_id` and `fork_of` name
+      // mutually exclusive runtime openings, so the child overlay drops any
+      // fork source the generic history path derived first.
+      const { fork_of: _forkOf, ...session } = binding.session;
+      binding.session = {
+        ...session,
+        session_id: withCallerScope(binding.session, child.sessionId),
+        parent_id: withCallerScope(binding.session, child.parentId),
+      };
+      binding.child = child;
+      issueChildTrajectoryReceipt(context, binding.session, child);
+    }
     this.bindings.set(context.resources, binding);
   }
 
@@ -129,6 +192,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    const childResultUpdates: Record<string, string> = Object.create(null);
+    const results = context.toolResults.map((result) => {
+      const content = binding.adapter?.normalizeChildLaunchResult?.(result);
+      if (content === undefined) return result;
+      childResultUpdates[result.id] = content;
+      return { ...result, content };
+    });
+    Object.assign(
+      childResultUpdates,
+      await approveChildReturnCarriers({
+        binding,
+        results,
+      }),
+    );
     // Requests with results submit them to runtime even if current request declares no tools.
     if (!binding.request.tools && context.toolResults.length === 0) return;
     assertUniqueNativeQuestionResultIds({
@@ -155,9 +232,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results: context.toolResults,
       verifiedNativeQuestionResults,
     });
+    const nonHandbackResults = results
+      .filter((result) => !binding.adapter?.isChildHandbackTool?.(result.name))
+      .map((result) => ({
+        ...result,
+        content: childResultUpdates[result.id] ?? result.content,
+      }));
     const result = await processProxyResults({
-      session: binding.session,
-      results: [...context.toolResults],
+      session: this.governedSession(binding),
+      results: nonHandbackResults,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
       isUserQuestion: (answer) =>
@@ -166,17 +249,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           answer,
           verifiedNativeQuestionResults,
         }),
+      classifySpawnResult: (answer) => {
+        if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
+          return undefined;
+        if (binding.request.restoredNoticeCallIds?.has(answer.id))
+          return "pending";
+        return (
+          binding.adapter.classifySpawnResult?.(answer) ??
+          (answer.isError ? "failed" : "pending")
+        );
+      },
       controlToolName:
         binding.request.tools?.control.name ??
         binding.request.historicalControlToolName,
       trustedChat: binding.chat,
     });
-    const toolResultUpdates = Object.fromEntries(
-      Object.entries(result.toolResultUpdates).map(([id, result]) => [
-        id,
-        result.content,
-      ]),
-    );
+    const toolResultUpdates = {
+      ...childResultUpdates,
+      ...Object.fromEntries(
+        Object.entries(result.toolResultUpdates).map(([id, result]) => [
+          id,
+          result.content,
+        ]),
+      ),
+    };
     if (
       binding.adapter &&
       !binding.chat &&
@@ -205,12 +301,31 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
+    binding?.adapter?.stripCarrierMetadata(context.request);
+    if (binding?.compaction) return;
     if (binding && binding.adapter?.id !== "archestra-chat") {
       appendQuestionContinuation({
         request: context.request,
         interactionType: context.interactionType,
         guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
       });
+      const askUser = binding.request.tools?.askUser;
+      const nativeQuestion =
+        binding.adapter?.nativeQuestion &&
+        declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
+          ? binding.adapter.nativeQuestion.toolName
+          : undefined;
+      const askUserTool = askUser?.name;
+      if (askUserTool || nativeQuestion) {
+        appendQuestionContinuation({
+          request: context.request,
+          interactionType: context.interactionType,
+          guidance: buildElicitationMandateInstruction({
+            askUserToolName: askUserTool,
+            nativeQuestionToolName: nativeQuestion,
+          }),
+        });
+      }
     }
     if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
       const offerIds = binding.pendingHitlReviewOfferIds;
@@ -249,9 +364,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         interactionType: context.interactionType,
       });
     }
-    // Only requests declaring tools open an OpenAPPA turn.
-    if (!binding?.request.tools || !binding.request.promptOperationId) return;
-    await notePrompt(binding.session, binding.request.promptOperationId);
+    if (!binding || (!binding.request.tools && !binding.session.parent_id))
+      return;
+    if (!binding.request.promptOperationId) {
+      // Tool-result requests continue the active turn without a new prompt.
+      return;
+    }
+    const session = this.governedSession(binding);
+    await notePrompt(session, binding.request.promptOperationId);
   }
 
   async onPrepareToolCalls(
@@ -361,7 +481,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let prepared = call;
       let offerIds: string[] = [];
       if (
-        tools.platformToolNames.has(call.name) &&
+        call.name === tools.askUser?.name &&
+        call.namespace === tools.askUser.namespace &&
         archestraMcpBranding.getToolShortName(
           this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
@@ -450,10 +571,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
     const calls = [...context.hostedToolCalls];
-    const decisions = await evaluateHostedToolCalls(binding.session, calls, {
-      ...this.resolution(binding),
-      control: tools.control,
-    });
+    const decisions = await evaluateHostedToolCalls(
+      this.governedSession(binding),
+      calls,
+      {
+        ...this.resolution(binding),
+        control: tools.control,
+      },
+    );
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
       return decision.kind === "hold"
@@ -493,26 +618,142 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
-    const calls = [...context.toolCalls];
-    const decisions = await evaluateToolCalls(binding.session, calls, {
-      ...this.resolution(binding),
-      isUserQuestion: (name) => isUserQuestionCall(binding, name),
-      ...(binding.request.tools
-        ? { control: binding.request.tools.control }
-        : {}),
-    });
+    if (binding.compaction && context.toolCalls.length > 0) {
+      throw new ApiError(
+        503,
+        "OpenAPPA rejected tool calls from a compaction response",
+      );
+    }
+    const calls = context.toolCalls;
+    const session = this.governedSession(binding);
+    const handbackIds = new Set(
+      binding.session.parent_id && binding.adapter?.isChildHandbackTool
+        ? calls
+            .filter((call) => binding.adapter?.isChildHandbackTool?.(call.name))
+            .map((call) => call.id)
+        : [],
+    );
+    // Children named by this trajectory mint under this request's own id: the
+    // minted parent:child id for a child turn, the root id for a parent.
+    const rootId = session.session_id;
+    if (binding.adapter) {
+      for (const call of calls) {
+        // Native transcript files contain unchecked intermediate output, not
+        // the child's admitted return. A correctly prefixed id is not proof
+        // that reading those bytes is safe.
+        if (
+          !binding.adapter.isSpawnTool(call.name, call.namespace) &&
+          binding.adapter.childTranscriptPaths &&
+          referencesChildTranscriptPath({
+            arguments: call.arguments,
+            pathPatterns: binding.adapter.childTranscriptPaths,
+          })
+        ) {
+          throw new ApiError(
+            409,
+            "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+          );
+        }
+        protectNamedChildren({
+          children: binding.adapter.namesChildren({
+            rootId,
+            arguments: call.arguments,
+          }),
+          rootId,
+          spawn: binding.adapter.isSpawnTool(call.name, call.namespace),
+        });
+      }
+    }
+    const rest = calls.filter((call) => !handbackIds.has(call.id));
+    const decisions = rest.length
+      ? await evaluateToolCalls(session, rest, {
+          ...this.resolution(binding),
+          isUserQuestion: (name, namespace) => {
+            const tools = binding.request.tools;
+            if (tools?.platformToolNames?.has(name)) {
+              return namespace === tools.askUser?.namespace;
+            }
+            if (
+              namespace !== undefined &&
+              binding.adapter?.classifyToolName(name, namespace) !== "local"
+            ) {
+              return false;
+            }
+            return isUserQuestionCall(binding, name);
+          },
+          isSpawn: (name, namespace) =>
+            binding.adapter?.isSpawnTool(name, namespace) === true,
+          supportsDelegation: binding.adapter !== undefined && !binding.chat,
+          ...(binding.request.tools
+            ? {
+                control: binding.request.tools.control,
+                notice: binding.request.tools.notice,
+              }
+            : {}),
+        })
+      : [];
+    const decisionById = new Map(
+      rest.map((call, index) => [call.id, decisions[index]]),
+    );
 
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
-    const released: typeof calls = [];
-    for (const [index, call] of calls.entries()) {
-      const decision = decisions[index];
+    const annotated: LlmProxyToolCallAnnotation[] = [];
+    const mint = this.delegationMinter(
+      binding,
+      { ...context, toolCalls: calls },
+      session,
+    );
+    const released: ToolCall[] = [];
+    for (const call of calls) {
+      if (handbackIds.has(call.id)) {
+        const handback = await admitChildHandback({ binding, call });
+        blocked.push({
+          id: call.id,
+          name: call.name,
+          reason: "OpenAPPA replaced the child return with admitted bytes",
+        });
+        released.push(handback.call);
+        if (calls.length === 1) {
+          binding.completedHandbackReturn = handback.returnText;
+        }
+        continue;
+      }
+      const decision = decisionById.get(call.id);
+      if (!decision) continue;
       if (decision.kind === "control") {
         released.push(call);
         continue;
       }
       if (decision.kind === "allow") {
-        released.push(call);
+        // The runtime ruled on the call as the model wrote it; the marker is
+        // platform text added after, for the child the call will start.
+        const delegated =
+          mint && binding.adapter
+            ? withDelegationMarker({ call, adapter: binding.adapter, mint })
+            : undefined;
+        if (
+          binding.session.parent_id &&
+          binding.adapter &&
+          isChildSpawnCall(binding.adapter, call) &&
+          !delegated
+        ) {
+          // An unmarked nested child would fall back to its native parent and
+          // lose the governed lineage. Nothing from this evaluated batch may
+          // run when that happens.
+          await cancelCalls(
+            session,
+            rest.flatMap((each) =>
+              decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+            ),
+          );
+          throw new ApiError(
+            400,
+            "OpenAPPA cannot safely start a nested child because its delegation marker could not be attached",
+          );
+        }
+        released.push(delegated?.call ?? call);
+        if (delegated) annotated.push(delegated.annotation);
         continue;
       }
       // The registry pins `blocked` to the wire batch: the entry names the
@@ -520,11 +761,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
       if (!notice) {
-        // Refuse call and cancel admitted calls if client declares no notice tool.
+        // Refuses the call and cancels admitted calls when the client declares no notice tool.
         await cancelCalls(
-          binding.session,
-          calls.flatMap((each, at) =>
-            decisions[at].kind === "allow" ? [each.id] : [],
+          session,
+          rest.flatMap((each) =>
+            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
           ),
         );
         const contentMessage = `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`;
@@ -556,7 +797,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             result: decision.feedback,
             custom: identity.custom,
             namespace: identity.namespace,
-            offers: signedOffersForDenial(binding.session, {
+            offers: signedOffersForDenial(session, {
               offerIds: decision.offers ?? [],
               tool: identity.name,
               spelling: identity.name,
@@ -570,11 +811,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     const stamp = trajectoryStamper(binding, context);
-    if (blocked.length === 0 && !stamp) return;
+    if (
+      blocked.length === 0 &&
+      annotated.length === 0 &&
+      !stamp &&
+      handbackIds.size === 0
+    )
+      return;
     return {
       decision: "allow",
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
+      ...(annotated.length > 0 ? { annotated } : {}),
     };
   }
 
@@ -582,10 +830,92 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     context: LlmProxyModelResponseContext,
   ): Promise<undefined> {
     const binding = this.bindings.get(context.resources);
+    if (binding?.compaction || isCompactionOnlyResponse(context.response))
+      return;
     if (!binding?.request.tools || binding.turnOpen) return;
+    if (binding.session.parent_id) {
+      return;
+    }
     if (!binding.request.turnEndOperationId) return;
-    await endTurn(binding.session, binding.request.turnEndOperationId);
+    await endTurn(
+      this.governedSession(binding),
+      binding.request.turnEndOperationId,
+    );
     return undefined;
+  }
+
+  buffersModelResponse(context: LlmProxyRequestContext): boolean {
+    const binding = this.bindings.get(context.resources);
+    return Boolean(
+      binding && (binding.compaction || binding.session.parent_id),
+    );
+  }
+
+  async onBufferedModelResponse(
+    context: LlmProxyBufferedModelResponseContext,
+  ): Promise<LlmProxyBufferedModelResponseOutcome | undefined> {
+    const binding = this.bindings.get(context.resources);
+    if (binding && isCompactionOnlyResponse(context.response)) {
+      binding.compaction = true;
+    }
+    if (binding?.compaction) return { decision: "release" };
+    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
+      return {
+        decision: "replace",
+        responseText: binding.completedHandbackReturn,
+      };
+    }
+    if (!binding || binding.turnOpen || !binding.session.parent_id) {
+      return;
+    }
+    if (!binding.request.turnEndOperationId) {
+      throw new ApiError(503, "OpenAPPA could not safely end the child turn");
+    }
+    // Check correlation data and the signing key before ChildEnd.
+    // If the runtime admits a value, the value crosses the boundary.
+    // Fail before dispatch if the receipt cannot be created.
+    const childNativeId = binding.child?.lineage?.childNativeId;
+    const spawnCallId = binding.child?.lineage?.spawnCallId;
+    if (!spawnCallId) {
+      throw new ApiError(
+        503,
+        "OpenAPPA cannot correlate the child return to its parent",
+      );
+    }
+    if (!childReturnReceiptsConfigured()) {
+      throw new ApiError(503, "OpenAPPA could not protect the child return");
+    }
+
+    const outcome = await endChild({
+      session: this.governedSession(binding),
+      operationId: binding.request.turnEndOperationId.replace(
+        /^turn_end:/,
+        "child_end:",
+      ),
+      output: context.responseText,
+    });
+    const admitted =
+      outcome.decision === "release" ? context.responseText : outcome.content;
+    if (!outcome.crossed) {
+      return { decision: "replace", responseText: admitted };
+    }
+    const receipt = mintChildReturnReceipt({
+      organizationId: binding.session.organization_id,
+      callerId: binding.session.caller_id,
+      parentId: binding.session.parent_id,
+      childId: binding.session.session_id,
+      ...(childNativeId ? { childNativeId } : {}),
+      spawnCallId,
+      value: admitted,
+      ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
+    });
+    if (!receipt) {
+      throw new ApiError(503, "OpenAPPA could not protect the child return");
+    }
+    return {
+      decision: "replace",
+      responseText: `${admitted}\n\n${receipt}`,
+    };
   }
 
   async onCleanup(context: LlmProxyRequestContext): Promise<void> {
@@ -593,6 +923,56 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   // === Internal helpers ===
+
+  /**
+   * Returns the governed session for this request.
+   * Child sessions retain `parent_id` so SessionStart opens a branch and inherits labels.
+   */
+  private governedSession(binding: AppaPluginBinding): OpenAppaSession {
+    return binding.session;
+  }
+
+  /**
+   * Mints delegation markers for allowed spawn calls in this batch.
+   * Returns undefined if markers cannot travel safely.
+   * Safety checks include:
+   * - Wire family history cannot be stripped
+   * - Transport cannot re-emit calls
+   * - Client names no conversation for its children to report
+   * - A call in the batch cannot be parsed
+   */
+  private delegationMinter(
+    binding: AppaPluginBinding,
+    context: LlmProxyToolCallsContext,
+    session: OpenAppaSession,
+  ): ((prompt: string, callId: string) => string | undefined) | undefined {
+    const spawnerNativeId = binding.spawnerNativeId;
+    if (
+      !binding.request.delegation ||
+      context.canRewriteToolCalls !== true ||
+      !spawnerNativeId ||
+      !delegationEnabled()
+    )
+      return undefined;
+    const readable = context.toolCalls.every(
+      (call) =>
+        binding.request.customTools.has(call.name) ||
+        argumentRecordOf(call.arguments) !== undefined,
+    );
+    if (!readable) return undefined;
+    // The spawner's current trajectory, as the client knows it: the caller
+    // scope never reaches a client transcript.
+    const parentId = withoutCallerScope(session, session.session_id);
+    return (prompt, callId) =>
+      mintDelegationMarker({
+        organizationId: session.organization_id,
+        callerId: session.caller_id,
+        parentId,
+        spawnerNativeId,
+        prompt,
+        spawnCallId: callId,
+      });
+  }
 
   /**
    * Converts an ask_user call to the client's native question tool when the
@@ -605,8 +985,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     call: LlmProxyToolCallsContext["toolCalls"][number],
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     const native = binding.adapter?.nativeQuestion;
+    const askUser = binding.request.tools?.askUser;
     if (
       !native?.fromAskUser ||
+      call.name !== askUser?.name ||
+      call.namespace !== askUser.namespace ||
       native.isAvailable?.(binding.requestHeaders) === false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
@@ -706,30 +1089,206 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 }
 
-function parseAskUserArguments(
-  raw: string | Record<string, unknown>,
-): AskUserArguments | undefined {
-  let value: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      return undefined;
-    }
+async function approveChildReturnCarriers(params: {
+  binding: AppaPluginBinding;
+  results: LlmProxyToolResultsContext["toolResults"];
+}): Promise<Record<string, string>> {
+  const collected = params.binding.request.childReturns;
+  const receipts = collected?.receipts ?? [];
+  const envelopeIdOf = (id: string) => parseTrajectoryStamp(id)?.callId ?? id;
+  const arrivingEnvelopes = new Set(
+    receipts.flatMap((receipt) =>
+      !receipt.assistantOrigin && receipt.envelopeId !== undefined
+        ? [envelopeIdOf(receipt.envelopeId)]
+        : [],
+    ),
+  );
+  // One wait result can contain several children. Every completed leaf requires
+  // its own receipt. Validating one substring does not authorize sibling returns.
+  if (collected?.completions.some((completion) => !completion.receipt)) {
+    throw new ApiError(409, "OpenAPPA withheld an unverified child completion");
   }
-  const args = value as Partial<AskUserArguments> | null;
+  const adapter = params.binding.adapter;
+  const completionResults = params.results.filter(
+    (result) =>
+      params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
+      adapter?.isChildCompletionResult?.(result) === true,
+  );
   if (
-    typeof args?.question !== "string" ||
-    !Array.isArray(args.options) ||
-    !args.options.every((option) => typeof option?.label === "string")
+    completionResults.some(
+      (result) => !arrivingEnvelopes.has(envelopeIdOf(result.id)),
+    )
   ) {
-    return undefined;
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld an unverified child completion from the parent",
+    );
   }
-  return args as AskUserArguments;
+  // Authenticates every receipt before recording runtime results.
+  // An assistant role does not bypass verification.
+  const arrived = new Map<
+    string,
+    NonNullable<Awaited<ReturnType<typeof verifyChildReturnReceipt>>> & {
+      spawnCallId: string;
+    }
+  >();
+  const byEnvelope = new Map<
+    string,
+    Array<NonNullable<Awaited<ReturnType<typeof verifyChildReturnReceipt>>>>
+  >();
+  const directSpawnResults = new Set(
+    params.results
+      .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
+      .map((result) => envelopeIdOf(result.id)),
+  );
+  for (const receipt of receipts) {
+    const verified = verifyChildReturnReceipt({
+      receipt,
+      organizationId: params.binding.session.organization_id,
+      callerId: params.binding.session.caller_id,
+      parentId: params.binding.session.session_id,
+    });
+    if (!verified) {
+      throw new ApiError(
+        400,
+        "OpenAPPA rejected a forged child-return receipt",
+      );
+    }
+    if (verified.assistantOrigin) continue;
+    if (!verified.spawnCallId) {
+      throw new ApiError(
+        409,
+        "OpenAPPA cannot bind the child completion to its spawn call",
+      );
+    }
+    if (receipt.envelopeId) {
+      const envelopeId = envelopeIdOf(receipt.envelopeId);
+      const spawnCallId = envelopeIdOf(verified.spawnCallId);
+      if (directSpawnResults.has(envelopeId) && envelopeId !== spawnCallId) {
+        throw new ApiError(
+          400,
+          "OpenAPPA rejected a child return for another spawn call",
+        );
+      }
+      const envelope = byEnvelope.get(envelopeId) ?? [];
+      envelope.push(verified);
+      byEnvelope.set(envelopeId, envelope);
+    }
+    arrived.set(verified.token, {
+      ...verified,
+      spawnCallId: verified.spawnCallId,
+    });
+  }
+  for (const receipt of arrived.values()) {
+    await approveSpawnReturn({
+      session: params.binding.session,
+      toolCallId: receipt.spawnCallId,
+      childId: receipt.childId,
+      value: receipt.value,
+    });
+  }
+  // Strips unverified text and metadata beside valid receipts.
+  // Reconstructs result content solely from authenticated values.
+  const updates: Record<string, string> = Object.create(null);
+  for (const result of completionResults) {
+    const envelopeId = envelopeIdOf(result.id);
+    const verified = byEnvelope.get(envelopeId) ?? [];
+    if (verified.length === 0) {
+      throw new ApiError(
+        409,
+        "OpenAPPA withheld an unverified child completion",
+      );
+    }
+    updates[result.id] =
+      verified.length === 1 &&
+      adapter?.isSpawnTool(result.name, result.namespace)
+        ? verified[0].value
+        : JSON.stringify({
+            status: Object.fromEntries(
+              verified.map((receipt) => [
+                receipt.childNativeId,
+                { completed: receipt.value },
+              ]),
+            ),
+          });
+  }
+  return updates;
 }
 
-/** Codex names the namespace of an MCP server's tools `mcp__<server>`. */
-const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
+async function admitChildHandback(params: {
+  binding: AppaPluginBinding;
+  call: ToolCall;
+}): Promise<{ call: ToolCall; returnText: string }> {
+  const { binding, call } = params;
+  const adapter = binding.adapter;
+  const raw = adapter?.childHandbackValue?.(call.arguments);
+  if (!raw) {
+    throw new ApiError(400, "OpenAPPA child handback carried no return value");
+  }
+  const childNativeId = binding.child?.lineage?.childNativeId;
+  const spawnCallId = binding.child?.lineage?.spawnCallId;
+  if (!binding.session.parent_id || !spawnCallId) {
+    throw new ApiError(
+      503,
+      "OpenAPPA cannot correlate the child return to its parent",
+    );
+  }
+  if (!binding.request.turnEndOperationId) {
+    throw new ApiError(503, "OpenAPPA could not safely end the child turn");
+  }
+  if (!childReturnReceiptsConfigured()) {
+    throw new ApiError(503, "OpenAPPA could not protect the child return");
+  }
+  const outcome = await endChild({
+    session: binding.session,
+    operationId: binding.request.turnEndOperationId.replace(
+      /^turn_end:/,
+      "child_end:",
+    ),
+    output: raw,
+  });
+  const admitted =
+    outcome.decision === "release" ? raw : (outcome.content ?? "");
+  if (!outcome.crossed) {
+    throw new ApiError(409, admitted || "OpenAPPA withheld the child return");
+  }
+  const receipt = mintChildReturnReceipt({
+    organizationId: binding.session.organization_id,
+    callerId: binding.session.caller_id,
+    parentId: binding.session.parent_id,
+    childId: binding.session.session_id,
+    ...(childNativeId ? { childNativeId } : {}),
+    spawnCallId,
+    value: admitted,
+    ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
+  });
+  if (!receipt) {
+    throw new ApiError(503, "OpenAPPA could not protect the child return");
+  }
+  const returnText = `${admitted}\n\n${receipt}`;
+  const rewritten = adapter?.rewriteChildHandback?.(call.arguments, returnText);
+  return {
+    call: {
+      ...call,
+      arguments: rewritten === undefined ? returnText : rewritten,
+    },
+    returnText,
+  };
+}
+
+function isCompactionOnlyResponse(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const response = value as Record<string, unknown>;
+  return (
+    response.object === "response.compaction" ||
+    (Array.isArray(response.output) &&
+      response.output.length > 0 &&
+      response.output.every(
+        (item) =>
+          item && typeof item === "object" && item.type === "compaction",
+      ))
+  );
+}
 
 function getTrustedContext(
   resources: ReadonlyMap<PropertyKey, unknown>,
@@ -750,6 +1309,29 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
     ...context,
     session: { ...context.session },
   };
+}
+
+function issueChildTrajectoryReceipt(
+  context: LlmProxyRequestContext,
+  session: OpenAppaSession,
+  child: AppaChildTrajectory,
+): void {
+  const lineage = child.lineage;
+  if (!lineage) return;
+  const footer = mintChildTrajectoryReceipt({
+    organizationId: session.organization_id,
+    callerId: session.caller_id,
+    parentId: child.parentId,
+    childId: child.sessionId,
+    ...(lineage.childNativeId ? { childNativeId: lineage.childNativeId } : {}),
+    spawnerNativeId: lineage.nativeParentId,
+    spawnCallId: lineage.spawnCallId,
+  });
+  if (!footer) return;
+  context.resources.set(APPA_CHILD_TRAJECTORY_RECEIPT, {
+    footer,
+    inHistory: lineage.source === "receipt",
+  });
 }
 
 function signedOffersForDenial(
@@ -807,6 +1389,108 @@ function claimsForOffer(
   return envelopes?.find((envelope) => offerIdFromJws(envelope) === offerId);
 }
 
+/**
+ * Attaches a delegation marker to an allowed spawn call's prompt.
+ * Preserves the call ID, name, namespace, and argument format.
+ */
+function withDelegationMarker(params: {
+  call: ToolCall;
+  adapter: AppaClientAdapter;
+  mint: (prompt: string, callId: string) => string | undefined;
+}): { call: ToolCall; annotation: LlmProxyToolCallAnnotation } | undefined {
+  const { call } = params;
+  if (!params.adapter.isSpawnTool(call.name, call.namespace)) return undefined;
+  const args = argumentRecordOf(call.arguments);
+  const spawn = args && params.adapter.spawnPromptField(call.name, args);
+  if (!args || !spawn) return undefined;
+  const value = args[spawn.field];
+  let appended: string | Record<string, unknown>;
+  let next: unknown;
+  if (spawn.kind === "text") {
+    if (typeof value !== "string" || value.trim().length === 0)
+      return undefined;
+    const marker = params.mint(value, call.id);
+    if (!marker) return undefined;
+    appended = `\n\n${marker}`;
+    next = value + appended;
+  } else {
+    if (!Array.isArray(value) || value.length === 0) return undefined;
+    const marker = params.mint("", call.id);
+    if (!marker) return undefined;
+    appended = { type: "text", text: marker };
+    next = [...value, appended];
+  }
+  const nextArgs = { ...args, [spawn.field]: next };
+  return {
+    call: {
+      ...call,
+      arguments:
+        typeof call.arguments === "string"
+          ? JSON.stringify(nextArgs)
+          : nextArgs,
+    },
+    annotation: {
+      id: call.id,
+      name: call.name,
+      field: spawn.field,
+      appended,
+    },
+  };
+}
+
+/**
+ * Determines whether a tool call spawns a child trajectory.
+ * Tests with sample arguments if actual arguments cannot be parsed.
+ */
+function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
+  if (!adapter.isSpawnTool(call.name, call.namespace)) return false;
+  const args = argumentRecordOf(call.arguments);
+  if (args && adapter.spawnPromptField(call.name, args)) return true;
+  return (
+    adapter.spawnPromptField(call.name, {
+      prompt: "probe",
+      message: "probe",
+      items: [{ type: "text", text: "probe" }],
+    }) !== undefined
+  );
+}
+
+/**
+ * A call's arguments as an object. Empty text is the empty object a call
+ * with no input streams as; anything else must parse to an object.
+ */
+function argumentRecordOf(
+  args: string | Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (typeof args !== "string") return args;
+  if (args.trim().length === 0) return {};
+  try {
+    const parsed: unknown = JSON.parse(args);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function protectNamedChildren(params: {
+  children: string[];
+  rootId: string;
+  spawn: boolean;
+}): void {
+  for (const child of params.children) {
+    if (child === params.rootId || !child.startsWith(`${params.rootId}:`)) {
+      throw new ApiError(
+        400,
+        params.spawn
+          ? "OpenAPPA spawn named a child trajectory that is not bound to this parent"
+          : "OpenAPPA child trajectory is not bound to this parent",
+      );
+    }
+  }
+}
+
 /** Attaches execution metadata frame to remedy calls for receipt validation. */
 function stampControlExecution(
   call: LlmProxyToolCallsContext["toolCalls"][number],
@@ -840,6 +1524,7 @@ function stampControlExecution(
     kind: "appa_remedy",
     call_id: call.id,
     tool_name: call.name,
+    ...(call.namespace ? { namespace: call.namespace } : {}),
     original_arguments:
       Object.keys(clientArguments).length === Object.keys(argumentRecord).length
         ? originalArguments
@@ -861,6 +1546,31 @@ function stampControlExecution(
     }),
   };
 }
+
+function parseAskUserArguments(
+  raw: string | Record<string, unknown>,
+): AskUserArguments | undefined {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const args = value as Partial<AskUserArguments> | null;
+  if (
+    typeof args?.question !== "string" ||
+    !Array.isArray(args.options) ||
+    !args.options.every((option) => typeof option?.label === "string")
+  ) {
+    return undefined;
+  }
+  return args as AskUserArguments;
+}
+
+/** Codex names the namespace of an MCP server's tools `mcp__<server>`. */
+const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
 
 /**
  * Attaches signed offer envelopes from this turn's notices to an ask_user call.
@@ -1035,7 +1745,7 @@ const NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
 function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
-  const namespace = binding.request.tools?.namespaces.get(name);
+  const namespace = binding.request.tools?.namespaces?.get(name);
   if (namespace) {
     const namespaced = `${namespace}__${name}`;
     const canonical = binding.identity.canonicalize(namespaced);
@@ -1064,7 +1774,7 @@ function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
 
 function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
   return (
-    binding.request.tools?.platformToolNames.has(name) === true ||
+    binding.request.tools?.platformToolNames?.has(name) === true ||
     nativeQuestionName(binding, name) !== undefined ||
     isGatewayAskUser(binding, name)
   );
@@ -1076,7 +1786,7 @@ function isUserQuestionResult(params: {
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
 }): boolean {
   if (
-    params.binding.request.tools?.platformToolNames.has(params.answer.name) ===
+    params.binding.request.tools?.platformToolNames?.has(params.answer.name) ===
     true
   )
     return true;
@@ -1222,7 +1932,7 @@ function nativeQuestionName(
 ): string | undefined {
   const native = binding.adapter?.nativeQuestion;
   if (!native || !binding.adapter) return undefined;
-  const namespace = binding.request.tools?.namespaces.get(name);
+  const namespace = binding.request.tools?.namespaces?.get(name);
   const gateway =
     namespace?.startsWith(CODEX_MCP_NAMESPACE_PREFIX) ||
     binding.adapter.classifyToolName(name) === "gateway" ||
@@ -1334,7 +2044,7 @@ async function pendingNativeHitlOfferIds(params: {
     if (result.isError) continue;
     const canonicalResult = params.binding.identity.canonicalize(
       result.name,
-      params.binding.request.tools?.namespaces.get(result.name),
+      params.binding.request.tools?.namespaces?.get(result.name),
     );
     const canonicalControl = params.binding.identity.canonicalize(
       control.name,
@@ -1398,7 +2108,7 @@ function hasRemedyOfferResult(params: {
     if (!control) continue;
     const canonicalResult = params.binding.identity.canonicalize(
       result.name,
-      params.binding.request.tools?.namespaces.get(result.name),
+      params.binding.request.tools?.namespaces?.get(result.name),
     );
     const canonicalControl = params.binding.identity.canonicalize(
       control.name,
@@ -1632,10 +2342,6 @@ function toolInputOf(
 }
 
 /**
- * Returns the gateway namespace declared for the notice tool in Codex.
- * Dispatches notices to this namespace.
- */
-/**
  * Appends trajectory stamps to tool-call IDs for supported wire families.
  * Stamped IDs identify source session lineage in future turns.
  * Skips sessions that lack caller scoping, or models that truncate tool-call IDs.
@@ -1651,25 +2357,24 @@ function trajectoryStamper(
       call: LlmProxyToolCallsContext["toolCalls"][number],
     ) => LlmProxyToolCallsContext["toolCalls"][number])
   | undefined {
-  const { session } = binding;
+  const { session, stampSessionId } = binding;
   const callerId = session.caller_id;
   const secret = config.openappa.offerSigningSecret;
   if (
     !callerId ||
     secret.length === 0 ||
     !appaWireFamily(context.interactionType) ||
-    !tracesLineage(binding) ||
+    !stampSessionId ||
     shortensToolCallIds(context)
   )
     return undefined;
-  const sessionId = clientSessionId(session.session_id);
   return (call) => ({
     ...call,
     wireId: stampToolCallId({
       // Compose transport stamps instead of replacing inner wire identities,
       // such as the signed native-question ID used to claim a HITL answer.
       callId: call.wireId ?? call.id,
-      sessionId,
+      sessionId: stampSessionId,
       organizationId: session.organization_id,
       callerId,
       secret,
@@ -1703,11 +2408,11 @@ const SHORT_TOOL_CALL_ID_MODEL_FAMILIES = [
 ];
 
 /** Returns true if this session is caller-scoped and eligible for lineage tracing. */
-function tracesLineage(binding: AppaPluginBinding): boolean {
-  const callerId = binding.session.caller_id;
+function tracesLineage(session: OpenAppaSession, chat: boolean): boolean {
+  const callerId = session.caller_id;
   return (
-    !binding.chat &&
+    !chat &&
     callerId !== undefined &&
-    binding.session.session_id.startsWith(`${callerId}|`)
+    session.session_id.startsWith(`${callerId}|`)
   );
 }

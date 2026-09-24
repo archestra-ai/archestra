@@ -30,6 +30,7 @@ export const ConversationOriginSchema = z.enum([
   "user",
   "schedule_trigger",
   "app_open",
+  "openappa",
 ]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 

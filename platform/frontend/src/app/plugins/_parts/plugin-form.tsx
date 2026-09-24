@@ -1,12 +1,16 @@
 "use client";
 
-import type { ReactNode, Ref } from "react";
+import type { Ref } from "react";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { GithubAuthConfigFields } from "@/components/github-auth-config-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,10 +80,10 @@ export function PluginForm({
   pluginId?: string;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <SettingsSectionGroup>
       {/* No heading: the page header already names the plugin, and the fields
           — Display name, Description, the payload — say what they are. */}
-      <FormPanel>
+      <SettingsSection>
         <PluginContentFields
           displayName={draft.displayName}
           onDisplayNameChange={(displayName) => onChange({ displayName })}
@@ -99,13 +103,13 @@ export function PluginForm({
           readOnly={readOnly || isGithubPlugin}
           readOnlyReason={isGithubPlugin ? SYNCED_FROM_GITHUB : undefined}
         />
-      </FormPanel>
+      </SettingsSection>
 
       {/* Under the payload it governs, not above it: the fields on this panel
           are the answer to "these are read-only — where do I change them?",
           so they read best straight after the question. */}
       {isGithubPlugin && (
-        <FormPanel
+        <SettingsSection
           title="GitHub source"
           description="Where these files are pulled from, and how they stay up to date."
         >
@@ -114,12 +118,12 @@ export function PluginForm({
             onChange={onChange}
             githubAppConfigs={githubAppConfigs ?? []}
           />
-        </FormPanel>
+        </SettingsSection>
       )}
 
       {/* No heading: the visibility control names the section itself. */}
-      <FormPanel>
-        <fieldset disabled={readOnly} className="contents">
+      <SettingsSection>
+        <fieldset disabled={readOnly} className="space-y-4">
           <ResourceAccessSection
             resource="plugin"
             id={pluginId}
@@ -132,8 +136,8 @@ export function PluginForm({
             onLabelsChange={(labels) => onChange({ labels })}
           />
         </fieldset>
-      </FormPanel>
-    </div>
+      </SettingsSection>
+    </SettingsSectionGroup>
   );
 }
 
@@ -247,35 +251,5 @@ function GithubSourceFields({
         />
       </div>
     </div>
-  );
-}
-
-/** One panel of the form, named only where the fields do not name themselves. */
-function FormPanel({
-  title,
-  description,
-  children,
-}: {
-  title?: string;
-  /** One line saying what the panel governs, under its heading. */
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
-      {title && (
-        // Semibold, not the `section-title` role: that role is `text-sm
-        // font-medium`, which is exactly what `<Label>` renders, so a panel
-        // heading set in it reads as one more field name stacked above the
-        // fields it is supposed to head. Weight is what separates the two.
-        <div className="space-y-1">
-          <h2 className="text-base leading-none font-semibold">{title}</h2>
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
-          )}
-        </div>
-      )}
-      {children}
-    </section>
   );
 }

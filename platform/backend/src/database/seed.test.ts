@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   ADVISOR_AGENT_DESCRIPTION,
   ADVISOR_SYSTEM_PROMPT,
+  ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -10,6 +11,7 @@ import {
   DUAL_LLM_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   POLICY_CONFIG_SYSTEM_PROMPT,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
@@ -19,6 +21,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
+  AgentActivationSkillRuleModel,
   AppModel,
   AppVersionModel,
   OrganizationModel,
@@ -26,6 +29,7 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -42,11 +46,79 @@ import {
   seedDefaultAppsForPristineOrgs,
   syncBuiltInAgents,
   syncBuiltInSkills,
+  syncOpenAppaConfigAgentCapabilities,
 } from "./seed";
 
 const [BASE_SKILL] = getEnabledBuiltInSkills();
 
 describe("syncBuiltInAgents", () => {
+  test("seeds the OpenAPPA configuration agent only while OpenAPPA is available", async ({
+    makeOrganization,
+  }) => {
+    const original = config.openappa.enabled;
+    const organization = await makeOrganization();
+    try {
+      config.openappa.enabled = true;
+      await syncBuiltInAgents();
+      const agent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      );
+      expect(agent?.name).toBe(BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG);
+      expect(agent?.builtInAgentConfig).toEqual({
+        name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      });
+      expect(
+        await AgentSuggestedPromptModel.getForAgent(agent?.id ?? ""),
+      ).toEqual(OPENAPPA_CONFIG_SUGGESTED_PROMPTS);
+    } finally {
+      config.openappa.enabled = original;
+    }
+  });
+
+  test("assigns the OpenAPPA guide and policy tools to its dedicated agent", async ({
+    makeOrganization,
+  }) => {
+    const original = config.openappa.enabled;
+    const organization = await makeOrganization();
+    try {
+      config.openappa.enabled = true;
+      await syncBuiltInAgents();
+      await syncBuiltInSkills();
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await syncOpenAppaConfigAgentCapabilities();
+
+      const agent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      );
+      const guide = await SkillModel.findBuiltIn({
+        organizationId: organization.id,
+        sourceRef: builtInSkillSourceRef("appa-guide"),
+      });
+      const assignedIds = await AgentToolModel.findToolIdsByAgent(
+        agent?.id ?? "",
+      );
+      const loadSkillIds = await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("load_skill"),
+        archestraMcpBranding.getToolName("get_guardrails_policy"),
+      ]);
+      expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
+      expect(
+        await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""),
+      ).toMatchObject({
+        mode: "manual",
+        rules: [
+          {
+            disposition: "allow",
+            reference: { source: "native", skillId: guide?.id },
+          },
+        ],
+      });
+    } finally {
+      config.openappa.enabled = original;
+    }
+  });
   test("creates built-in agents for every organization", async ({
     makeOrganization,
   }) => {

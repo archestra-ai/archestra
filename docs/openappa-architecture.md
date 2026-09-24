@@ -310,7 +310,7 @@ Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload)
 
 Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
 
-Interactive human approval is not connected. Calls requiring human approval stay blocked.
+Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The ruling is recorded under the offer's signed session, including a child session when the gateway call has no session header. Approval in a parent session does not authorize a separate child offer.
 
 ## Persistence and current limits
 

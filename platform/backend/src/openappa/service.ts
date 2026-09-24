@@ -610,6 +610,8 @@ export async function evaluateToolCalls(
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Whether this client can carry child-return declarations. */
     supportsDelegation?: boolean;
+    /** Signed lineage retained with a child call for later turns. */
+    lineage?: { spawnCallId?: string; childNativeId?: string };
   },
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
@@ -685,6 +687,12 @@ export async function evaluateToolCalls(
           JSON.parse(target.toolCallArgs),
         ),
         spawn,
+        ...(options.lineage?.spawnCallId
+          ? { spawn_call_id: options.lineage.spawnCallId }
+          : {}),
+        ...(options.lineage?.childNativeId
+          ? { child_native_id: options.lineage.childNativeId }
+          : {}),
       };
       const decision = await dispatch(session, event);
       if (
@@ -845,8 +853,16 @@ export async function cancelCalls(
 export async function notePrompt(
   session: OpenAppaSession,
   operationId: string,
+  lineage?: { spawnCallId?: string; childNativeId?: string },
 ): Promise<void> {
-  await dispatch(session, { event: "prompt", operation_id: operationId });
+  await dispatch(session, {
+    event: "prompt",
+    operation_id: operationId,
+    ...(lineage?.spawnCallId ? { spawn_call_id: lineage.spawnCallId } : {}),
+    ...(lineage?.childNativeId
+      ? { child_native_id: lineage.childNativeId }
+      : {}),
+  });
 }
 
 /**
@@ -867,11 +883,15 @@ export async function endTurn(
  * Controls the return boundary where child trajectory output enters the parent session.
  * The runtime stages a ChildReturn until the harness echoes approved bytes through ChildEnd.
  * An Ack on the echo confirms the bytes crossed the trust boundary.
+ * The spawn correlation rides the dispatch so the retained operation is the
+ * durable authority the parent later verifies the returned bytes against.
  */
 export async function endChild(params: {
   session: OpenAppaSession;
   operationId: string;
   output: string;
+  spawnCallId?: string;
+  childNativeId?: string;
 }): Promise<ChildEndOutcome> {
   if (!params.session.parent_id) {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
@@ -881,6 +901,8 @@ export async function endChild(params: {
     event: "child_end",
     operation_id: params.operationId,
     ...(params.output.length > 0 ? { output: params.output } : {}),
+    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
   });
 
   if (decision.decision === "ack") {
@@ -907,6 +929,10 @@ export async function endChild(params: {
     operation_id: `${params.operationId}:echo`,
     // Keep an explicitly empty canonical value distinct from a void first end.
     output: decision.value,
+    // The echo is the latest retained ChildEnd, so it must carry the same
+    // correlation metadata for the durable lookup to read back.
+    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
   });
   if (echo.decision !== "ack") {
     throw openappaFailure(
@@ -942,7 +968,7 @@ export async function approveSpawnReturn(params: {
     if (msg.includes("no open dispatch")) {
       logger.info(
         { toolCallId: params.toolCallId, childId: params.childId },
-        "OpenAPPA spawn dispatch already closed; child return verified via signed return receipt",
+        "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
       );
       return;
     }
@@ -1072,6 +1098,49 @@ export async function executeRemedyByOffer(params: {
     result: runtimeToolResult(decision),
     known: decision.offer.status === "known",
   };
+}
+
+export type AppaChildReturnRecord = {
+  /** Fully scoped session id of the child whose return crossed. */
+  childSessionId: string;
+  /** The spawn call the return answers, when the child named it at ChildEnd. */
+  spawnCallId?: string;
+  /** The client-native child identity, when the child named one. */
+  childNativeId?: string;
+  /** The exact bytes the runtime admitted across the child boundary. */
+  value: string;
+};
+
+/**
+ * Loads the child returns a parent's family durably crossed, from the retained
+ * ChildEnd operations in PostgreSQL. This is the authority the parent side
+ * verifies arriving completions against.
+ */
+export async function loadChildReturns(params: {
+  organizationId: string;
+  parentSessionId: string;
+}): Promise<AppaChildReturnRecord[]> {
+  try {
+    if (!(await isGuardrailsV2Active())) return [];
+    const policy = await guardrailsPolicyService.get(params.organizationId);
+    const module = await binding(policy.content);
+    const records = await module.loadChildReturns(
+      params.organizationId,
+      params.parentSessionId,
+    );
+    return records.map((record) => ({
+      childSessionId: record.childSessionId,
+      ...(record.spawnCallId ? { spawnCallId: record.spawnCallId } : {}),
+      ...(record.childNativeId ? { childNativeId: record.childNativeId } : {}),
+      value: record.value,
+    }));
+  } catch (error) {
+    logger.warn(
+      { err: error, parentSessionId: params.parentSessionId },
+      "Failed to load OpenAPPA child returns",
+    );
+    throw openappaFailure(error);
+  }
 }
 
 /**

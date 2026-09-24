@@ -165,8 +165,13 @@ const registry = defineArchestraTools([
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
     async handler({ args, context, toolName }) {
-      const liveOffers = verifiedOfferIds(args.remedy_offers, context);
-      const session = callOpenAppaSession(context);
+      const verifiedOffers = verifiedRemedyOffers(
+        args.remedy_offers,
+        args.remedy_offer_ids,
+        context,
+      );
+      const liveOffers = verifiedOffers?.ids ?? [];
+      const session = verifiedOffers?.session;
       const hitlArgs = session
         ? await getHitlAskUserArguments({
             session,
@@ -313,33 +318,69 @@ function optionKey(index: number) {
 }
 
 /**
- * Extracts verified offer IDs from the signed envelopes stamped on this call.
- * Envelopes that are unsigned, forged, expired, or signed for a different
- * organization, session, or caller are ignored.
+ * Uses the offer's signed child scope to locate the staged review. Gateway
+ * calls may have only the parent's session header, or no session header at all.
  */
-function verifiedOfferIds(
+function verifiedRemedyOffers(
   envelopes: unknown,
+  declaredIds: unknown,
   context: ArchestraContext,
-): string[] {
-  const session = callOpenAppaSession(context);
-  if (!Array.isArray(envelopes) || !session || !context.userId) {
-    return [];
+): { session: OpenAppaSession; ids: string[] } | undefined {
+  if (!Array.isArray(envelopes) || !context.organizationId || !context.userId) {
+    return undefined;
   }
+  const gatewaySession = callOpenAppaSession(context);
   const spender = `user:${context.userId}`;
+  const gatewayId = gatewaySession?.session_id;
+  const normalizedGatewayId =
+    gatewayId && !gatewayId.startsWith(`${spender}|`)
+      ? `${spender}|${gatewayId}`
+      : gatewayId;
   const secret = config.openappa.offerSigningSecret;
   const ids = new Set<string>();
+  let session: OpenAppaSession | undefined;
   for (const envelope of envelopes) {
     const claims = verifyOfferClaims(envelope, secret);
-    if (
-      claims &&
-      claims.organization_id === session.organization_id &&
-      claims.session_id === session.session_id &&
-      offerOwnerIsSpender(claims.caller_id, spender)
-    ) {
-      ids.add(claims.offer_id);
+    if (!claims || claims.organization_id !== context.organizationId) continue;
+    if (!offerOwnerIsSpender(claims.caller_id, spender)) continue;
+    if (gatewayId) {
+      if (
+        claims.session_id !== gatewayId &&
+        claims.parent_id !== gatewayId &&
+        claims.session_id !== normalizedGatewayId &&
+        claims.parent_id !== normalizedGatewayId
+      ) {
+        continue;
+      }
+    } else if (!claims.parent_id || claims.caller_id !== spender) {
+      // Without a gateway session header, only this user's child offers can
+      // supply the missing session scope.
+      continue;
     }
+    const scope: OpenAppaSession = {
+      organization_id: claims.organization_id,
+      session_id: claims.session_id,
+      caller_id: claims.caller_id ?? undefined,
+      parent_id: claims.parent_id ?? undefined,
+    };
+    if (
+      session &&
+      (scope.session_id !== session.session_id ||
+        scope.parent_id !== session.parent_id ||
+        scope.caller_id !== session.caller_id)
+    ) {
+      return undefined;
+    }
+    session = scope;
+    ids.add(claims.offer_id);
   }
-  return [...ids];
+  if (
+    Array.isArray(declaredIds) &&
+    declaredIds.some((id) => typeof id !== "string" || !ids.has(id))
+  ) {
+    return undefined;
+  }
+  return session ? { session, ids: [...ids] } : undefined;
 }
 
 /**

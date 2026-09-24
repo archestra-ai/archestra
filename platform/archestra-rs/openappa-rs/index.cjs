@@ -5,6 +5,7 @@ module.exports.initializeOpenappa = wrapAsync(binding, "initializeOpenappa");
 module.exports.dispatchHook = wrapAsync(binding, "dispatchHook");
 module.exports.executeRemedyByOffer = wrapAsync(binding, "executeRemedyByOffer");
 module.exports.loadOfferReview = wrapAsync(binding, "loadOfferReview");
+module.exports.loadChildReturns = wrapAsync(binding, "loadChildReturns");
 module.exports.validateOpenappaPolicy = wrapAsync(binding, "validateOpenappaPolicy");
 module.exports.composeOpenappaPolicy = wrapAsync(binding, "composeOpenappaPolicy");
 module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDeclarations");

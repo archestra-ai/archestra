@@ -1,22 +1,8 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { TextDecoder } from "node:util";
+import { createHash, createHmac } from "node:crypto";
 import config from "@/config";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
-
-export type AppaChildReturnReceipt = {
-  /** Self-contained authenticated machine token (`appar-...`). */
-  token: string;
-  /** Human-facing compact code. Never used as authority. */
-  displayCode: string;
-  value: string;
-  childNativeId?: string;
-  spawnCallId?: string;
-  envelopeId?: string;
-  /** This exact occurrence came from assistant-authored history. */
-  assistantOrigin: boolean;
-};
 
 export type AppaChildReturnCompletion = {
   value: string;
@@ -24,30 +10,20 @@ export type AppaChildReturnCompletion = {
   spawnCallId?: string;
   envelopeId?: string;
   assistantOrigin: boolean;
-  receipt?: AppaChildReturnReceipt;
 };
 
 export type CollectedChildReturns = {
-  /** Every receipt occurrence. The same token can appear more than once. */
-  receipts: AppaChildReturnReceipt[];
-  /** Every structured completed leaf, including leaves without a receipt. */
+  /** Every structured completed leaf. */
   completions: AppaChildReturnCompletion[];
 };
 
-type VerifiedChildReturnReceipt = {
-  token: string;
-  organizationId: string;
-  callerId?: string;
-  parentId: string;
-  childId: string;
-  childNativeId?: string;
-  spawnCallId?: string;
-  value: string;
-  envelopeId?: string;
-  assistantOrigin: boolean;
-};
-
-export function mintChildReturnReceipt(params: {
+/**
+ * Mints the visual marker that announces a crossed child return. The marker is
+ * display only: the durable ChildEnd the runtime retained is the authority the
+ * parent side verifies the returned bytes against, so nothing the client
+ * carries proves a return.
+ */
+export function mintChildReturnMarker(params: {
   organizationId: string;
   callerId: string | undefined;
   parentId: string;
@@ -57,7 +33,7 @@ export function mintChildReturnReceipt(params: {
   value: string;
   format?: "full" | "inline";
 }): string | undefined {
-  const key = receiptKey();
+  const key = markerKey();
   if (!key) return undefined;
   const valueHash = hashValue(params.value);
   const claims: ChildReturnClaims = [
@@ -72,88 +48,21 @@ export function mintChildReturnReceipt(params: {
   ];
   const payload = encodeClaims(claims);
   const mac = proofMac({ key, payload });
-  const token = `${MACHINE_TOKEN_PREFIX}${payload}.${mac}`;
   const displayCode = encodeCrockford35(first35Bits(Buffer.from(mac, "hex")));
-  return formatReceipt({ token, displayCode, format: params.format });
-}
-
-/** Verifies one self-contained child-return proof without storage or cache. */
-export function verifyChildReturnReceipt(params: {
-  receipt: AppaChildReturnReceipt;
-  organizationId: string;
-  callerId: string | undefined;
-  parentId: string;
-}): VerifiedChildReturnReceipt | null {
-  const key = receiptKey();
-  if (!key) return null;
-  const claims = verifyProof({ token: params.receipt.token, key });
-  if (!claims) return null;
-  const [
-    ,
-    organizationId,
-    callerId,
-    parentId,
-    childId,
-    childNativeId,
-    spawnCallId,
-    valueHash,
-  ] = claims;
-  if (
-    organizationId !== params.organizationId ||
-    callerId !== (params.callerId ?? null)
-  ) {
-    return null;
-  }
-  const roleMatches = params.receipt.assistantOrigin
-    ? childId === params.parentId
-    : parentId === params.parentId;
-  if (!roleMatches) return null;
-  if (
-    params.receipt.childNativeId &&
-    childNativeId &&
-    params.receipt.childNativeId !== childNativeId
-  ) {
-    return null;
-  }
-  if (
-    params.receipt.spawnCallId &&
-    normalizeCallId(params.receipt.spawnCallId) !== normalizeCallId(spawnCallId)
-  ) {
-    return null;
-  }
-  if (!safeEqual(hashValue(params.receipt.value), valueHash)) return null;
-  const correlatedNativeId =
-    childNativeId ??
-    (spawnCallId && params.receipt.spawnCallId
-      ? params.receipt.childNativeId
-      : undefined);
-  return {
-    token: params.receipt.token,
-    organizationId,
-    ...(callerId ? { callerId } : {}),
-    parentId,
-    childId,
-    ...(correlatedNativeId ? { childNativeId: correlatedNativeId } : {}),
-    ...(spawnCallId ? { spawnCallId } : {}),
-    value: params.receipt.value,
-    ...(params.receipt.envelopeId
-      ? { envelopeId: params.receipt.envelopeId }
-      : {}),
-    assistantOrigin: params.receipt.assistantOrigin,
-  };
+  return formatMarker({ displayCode, format: params.format });
 }
 
 /**
- * Extracts and removes child-return carriers before provider dispatch.
- * Records each structured completion leaf separately, including unsigned leaves.
- * This makes sure a signed child return cannot cover an unsigned sibling return.
+ * Extracts and removes child-return markers before provider dispatch.
+ * Records each structured completion leaf separately; every leaf is then
+ * verified against the child returns the runtime durably crossed, so one
+ * genuine return cannot cover a sibling return.
  */
 export function collectAndStripChildReturns(
   body: unknown,
   options: { openCodeBackgroundReturns?: boolean } = {},
 ): CollectedChildReturns {
   const collected: CollectedChildReturns = {
-    receipts: [],
     completions: [],
   };
   const nativeResultCallIds = collectNativeResultCallIds(body);
@@ -210,9 +119,11 @@ export function collectAndStripChildReturns(
       }
       if (rewritten !== value) return rewritten;
       if (!context.nativeResultSite && !context.assistantOrigin) return value;
-      const parsed = stripReceipt(value, context);
-      if (!parsed.receipt) return value;
-      collected.receipts.push(parsed.receipt);
+      const parsed = stripMarker(value, context);
+      if (!parsed.marker) return value;
+      // An assistant-authored marker echoes this session's own return; it is
+      // recorded so the verifier can check it against the retained crossing.
+      recordCompletion(parsed, context, collected);
       return parsed.value;
     }
     if (Array.isArray(value)) {
@@ -312,17 +223,16 @@ export function collectAndStripChildReturns(
 
   walk(body);
   return {
-    receipts: collected.receipts,
     completions: collected.completions,
   };
 }
 
-/** Shows whether this deployment can issue receipts for crossed child returns. */
-export function childReturnReceiptsConfigured(): boolean {
-  return receiptKey() !== undefined;
+/** Shows whether this deployment can mark crossed child returns. */
+export function childReturnMarkersConfigured(): boolean {
+  return markerKey() !== undefined;
 }
 
-// === Receipt parsing ===
+// === Marker parsing ===
 
 type WalkContext = {
   childNativeId?: string;
@@ -335,9 +245,12 @@ type WalkContext = {
   topLevel?: boolean;
 };
 
-type ParsedReceiptValue = {
+type ParsedMarkerValue = {
   value: string;
-  receipt?: AppaChildReturnReceipt;
+  marker?: {
+    displayCode: string;
+    childNativeId?: string;
+  };
 };
 
 type NativeEnvelope = { open: string; close: string };
@@ -359,41 +272,38 @@ const SUBAGENT_NOTIFICATION: NativeEnvelope = {
 const MARK_TOP = "▄█▄▄▄█▄";
 const MARK_BOTTOM = "██▄█▄██";
 const PROOF_VERSION = 1;
-const MACHINE_TOKEN_PREFIX = "appar-";
 const MAX_CLAIMS_BYTES = 16 * 1024;
-const MAX_PROOF_PAYLOAD_CHARS = 24 * 1024;
-const RECEIPT_CODE = "[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}";
-const RECEIPT_PHRASE =
+const MARKER_CODE = "[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}";
+const MARKER_PHRASE =
   "(?:finished subagent|finished protected subagent|protected subagent session|protected subagent return|protected delegated return)";
-const MACHINE_TOKEN = `${MACHINE_TOKEN_PREFIX}[A-Za-z0-9_-]{1,${MAX_PROOF_PAYLOAD_CHARS}}\\.[0-9a-f]{64}`;
 // Inspects indentation only at line starts to keep text scanning linear.
 const MARKER = new RegExp(
-  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM}[\\t ]{1,8})?${RECEIPT_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${RECEIPT_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*\\r?\\n[\\t ]*\\[appa\\][\\t ]+child[\\t ]+return[\\t ]+(${MACHINE_TOKEN})\\.[\\t ]*(?=\\r?\\n|$)`,
+  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM}[\\t ]{1,8})?${MARKER_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${MARKER_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*(?=\\r?\\n|$)`,
   "gm",
 );
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
 
-function stripReceipt(
+function stripMarker(
   value: string,
   context: WalkContext,
   completionCarrier = false,
-): ParsedReceiptValue {
+): ParsedMarkerValue {
   if (Buffer.byteLength(value, "utf8") > MAX_SCAN_BYTES) {
-    if (!hasReceiptMarker(value)) return { value };
+    if (!hasMarker(value)) return { value };
     throw new ApiError(400, "OpenAPPA child-return carrier exceeds its limit");
   }
 
-  // A complete child reply can carry its trajectory proof before the signed return.
-  // That proof is transport metadata. It is not part of the admitted value
-  // and is not lineage evidence for the parent.
+  // A complete child reply can carry its trajectory proof before the return
+  // marker. That proof is transport metadata. It is not part of the admitted
+  // value and is not lineage evidence for the parent.
   const returnValue = stripChildTrajectoryReceipts(value).text;
   const pattern = new RegExp(MARKER.source, "g");
   const matches = [...returnValue.matchAll(pattern)];
   if (matches.length === 0) {
-    if (completionCarrier && hasReceiptMarker(returnValue)) {
+    if (completionCarrier && hasMarker(returnValue)) {
       throw new ApiError(
         400,
-        "OpenAPPA received a malformed child-return receipt",
+        "OpenAPPA received a malformed child-return marker",
       );
     }
     return { value: returnValue };
@@ -404,27 +314,23 @@ function stripReceipt(
 
   const match = matches[0];
   const displayCode = match[2];
-  const token = match[3];
-  if (!displayCode || !token) {
+  if (!displayCode) {
     throw new ApiError(
       400,
-      "OpenAPPA received a malformed child-return receipt",
+      "OpenAPPA received a malformed child-return marker",
     );
   }
   const matchStart = match.index ?? 0;
-  const markerStart = receiptSeparatorStart(returnValue, matchStart);
+  const markerStart = markerSeparatorStart(returnValue, matchStart);
   const markerEnd = matchStart + match[0].length;
   const stripped = `${returnValue.slice(0, markerStart)}${returnValue.slice(markerEnd)}`;
   return {
     value: stripped,
-    receipt: {
-      token,
+    marker: {
       displayCode,
-      value: stripped,
-      childNativeId: match[1] ?? context.childNativeId,
-      ...(context.spawnCallId ? { spawnCallId: context.spawnCallId } : {}),
-      ...(context.envelopeId ? { envelopeId: context.envelopeId } : {}),
-      assistantOrigin: context.assistantOrigin,
+      ...(match[1] || context.childNativeId
+        ? { childNativeId: match[1] ?? context.childNativeId }
+        : {}),
     },
   };
 }
@@ -485,7 +391,7 @@ function replaceTaskNotifications(
         envelopeId: context.envelopeId ?? toolUseId,
       };
       const result = block.slice(resultStart + resultOpen.length, resultEnd);
-      const parsed = stripReceipt(result, taskContext, true);
+      const parsed = stripMarker(result, taskContext, true);
       recordCompletion(parsed, taskContext, collected);
       canonical.push(
         [
@@ -536,7 +442,7 @@ function replaceTaskResults(
           .replace(/^\r?\n/, "")
           .replace(/\r?\n$/, "")
       : value.slice(start + open.length, end);
-    const parsed = stripReceipt(result, taskContext, true);
+    const parsed = stripMarker(result, taskContext, true);
     recordCompletion(parsed, taskContext, collected);
     canonical.push(`${open}${parsed.value}${close}`);
     cursor = end + close.length;
@@ -596,7 +502,7 @@ function replaceSubagentNotifications(
         spawnCallId: toolUseId ?? context.spawnCallId,
         envelopeId: context.envelopeId ?? toolUseId,
       };
-      const parsed = stripReceipt(completed, childContext, true);
+      const parsed = stripMarker(completed, childContext, true);
       recordCompletion(parsed, childContext, collected);
       const admitted: Record<string, unknown> = {};
       if (agentPath) admitted.agent_path = agentPath;
@@ -604,7 +510,7 @@ function replaceSubagentNotifications(
       if (toolUseId) admitted.tool_use_id = toolUseId;
       admitted.status = { completed: parsed.value };
       canonical.push(`${open}\n${JSON.stringify(admitted)}\n${close}`);
-    } else if (hasReceiptMarker(inside)) {
+    } else if (hasMarker(inside)) {
       throw new ApiError(
         400,
         "OpenAPPA received a malformed subagent notification",
@@ -621,7 +527,7 @@ function replaceAgentReport(
   context: WalkContext,
   collected: CollectedChildReturns,
 ): string {
-  if (!hasReceiptMarker(value)) return value;
+  if (!hasMarker(value)) return value;
   const marker = value.includes("The report follows:\r\n")
     ? "The report follows:\r\n"
     : value.includes("The report follows:\n")
@@ -653,7 +559,7 @@ function replaceAgentReport(
     ...context,
     ...(childNativeId ? { childNativeId } : {}),
   };
-  const parsed = stripReceipt(report, childContext, true);
+  const parsed = stripMarker(report, childContext, true);
   recordCompletion(parsed, childContext, collected);
   return parsed.value;
 }
@@ -664,7 +570,7 @@ function canonicalizeStatus(
   collected: CollectedChildReturns,
 ): Record<string, unknown> | undefined {
   if (typeof status.completed === "string") {
-    const parsed = stripReceipt(status.completed, context, true);
+    const parsed = stripMarker(status.completed, context, true);
     recordCompletion(parsed, context, collected);
     return { completed: parsed.value };
   }
@@ -680,7 +586,7 @@ function canonicalizeStatus(
       );
     }
     const childContext = { ...context, childNativeId };
-    const parsed = stripReceipt(child.completed, childContext, true);
+    const parsed = stripMarker(child.completed, childContext, true);
     recordCompletion(parsed, childContext, collected);
     canonical[childNativeId] = { completed: parsed.value };
   }
@@ -688,22 +594,22 @@ function canonicalizeStatus(
 }
 
 function recordCompletion(
-  parsed: ParsedReceiptValue,
+  parsed: ParsedMarkerValue,
   context: WalkContext,
   collected: CollectedChildReturns,
 ): void {
-  if (parsed.receipt) collected.receipts.push(parsed.receipt);
   collected.completions.push({
     value: parsed.value,
-    ...(context.childNativeId ? { childNativeId: context.childNativeId } : {}),
+    ...((parsed.marker?.childNativeId ?? context.childNativeId)
+      ? { childNativeId: parsed.marker?.childNativeId ?? context.childNativeId }
+      : {}),
     ...(context.spawnCallId ? { spawnCallId: context.spawnCallId } : {}),
     ...(context.envelopeId ? { envelopeId: context.envelopeId } : {}),
     assistantOrigin: context.assistantOrigin,
-    ...(parsed.receipt ? { receipt: parsed.receipt } : {}),
   });
 }
 
-function receiptSeparatorStart(value: string, matchStart: number): number {
+function markerSeparatorStart(value: string, matchStart: number): number {
   let start = matchStart;
   while (start > 0 && isHorizontalWhitespace(value[start - 1])) start -= 1;
   for (let count = 0; count < 2; count += 1) {
@@ -714,16 +620,12 @@ function receiptSeparatorStart(value: string, matchStart: number): number {
   return start;
 }
 
-function hasReceiptMarker(value: string): boolean {
-  if (
-    value.includes(MARK_TOP) ||
-    value.includes(MARK_BOTTOM) ||
-    value.includes(`[appa] child return ${MACHINE_TOKEN_PREFIX}`)
-  ) {
+function hasMarker(value: string): boolean {
+  if (value.includes(MARK_TOP) || value.includes(MARK_BOTTOM)) {
     return true;
   }
   const intro = new RegExp(
-    `(?:^|\\r?\\n)[\\t ]*${RECEIPT_PHRASE}(?:[\\t ]|$)`,
+    `(?:^|\\r?\\n)[\\t ]*${MARKER_PHRASE}(?:[\\t ]|$)`,
     "m",
   );
   return intro.test(value);
@@ -743,16 +645,12 @@ function normalizeCallId(value: string | null | undefined): string | undefined {
   return parseTrajectoryStamp(value)?.callId ?? value;
 }
 
-// === Stateless authentication ===
+// === Display code derivation ===
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const KEY_LABEL = "archestra.appa.child-return-proof.key.v1";
 const PROOF_MAC_DOMAIN = "archestra.appa.child-return-proof.mac.v1";
 const HEX_SHA256 = /^[0-9a-f]{64}$/;
-const MACHINE_TOKEN_VALUE = new RegExp(
-  `^${MACHINE_TOKEN_PREFIX}([A-Za-z0-9_-]{1,${MAX_PROOF_PAYLOAD_CHARS}})\\.([0-9a-f]{64})$`,
-);
-const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 
 type ChildReturnClaims = [
   1,
@@ -774,36 +672,6 @@ function encodeClaims(claims: ChildReturnClaims): string {
     throw new ApiError(400, "OpenAPPA child-return claims exceed their limit");
   }
   return encoded.toString("base64url");
-}
-
-function verifyProof(params: {
-  token: string;
-  key: Buffer;
-}): ChildReturnClaims | null {
-  const match = params.token.match(MACHINE_TOKEN_VALUE);
-  const payload = match?.[1];
-  const actualMac = match?.[2];
-  if (!payload || !actualMac) return null;
-  const expectedMac = proofMac({ key: params.key, payload });
-  if (!safeEqual(actualMac, expectedMac)) return null;
-
-  let decoded: Buffer;
-  let parsed: unknown;
-  try {
-    decoded = Buffer.from(payload, "base64url");
-    if (
-      decoded.length === 0 ||
-      decoded.length > MAX_CLAIMS_BYTES ||
-      decoded.toString("base64url") !== payload
-    ) {
-      return null;
-    }
-    parsed = JSON.parse(UTF8_DECODER.decode(decoded));
-  } catch {
-    return null;
-  }
-  if (!isChildReturnClaims(parsed)) return null;
-  return encodeClaims(parsed) === payload ? parsed : null;
 }
 
 function proofMac(params: { key: Buffer; payload: string }): string {
@@ -837,19 +705,16 @@ function isBoundedClaim(value: unknown): value is string {
   );
 }
 
-function formatReceipt(params: {
-  token: string;
+function formatMarker(params: {
   displayCode: string;
   format: "full" | "inline" | undefined;
 }): string {
-  const display =
-    params.format === "inline"
-      ? `finished subagent ${params.displayCode}`
-      : `${MARK_TOP}\n${MARK_BOTTOM}  finished subagent ${params.displayCode}`;
-  return `${display}\n[appa] child return ${params.token}.`;
+  return params.format === "inline"
+    ? `finished subagent ${params.displayCode}`
+    : `${MARK_TOP}\n${MARK_BOTTOM}  finished subagent ${params.displayCode}`;
 }
 
-function receiptKey(): Buffer | undefined {
+function markerKey(): Buffer | undefined {
   const secret = config.openappa.offerSigningSecret;
   return secret.length > 0
     ? createHmac("sha256", secret).update(KEY_LABEL).digest()
@@ -858,15 +723,6 @@ function receiptKey(): Buffer | undefined {
 
 function hashValue(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function safeEqual(actual: string, expected: string): boolean {
-  const actualBytes = Buffer.from(actual, "utf8");
-  const expectedBytes = Buffer.from(expected, "utf8");
-  return (
-    actualBytes.length === expectedBytes.length &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  );
 }
 
 function first35Bits(digest: Buffer): bigint {

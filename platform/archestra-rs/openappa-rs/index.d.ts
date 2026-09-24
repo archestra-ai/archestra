@@ -28,6 +28,17 @@ export interface BatteryPackage {
   files: Array<BatteryFileInput>
 }
 
+export interface ChildReturnRecord {
+  /** Fully scoped session id of the child whose return crossed. */
+  childSessionId: string
+  /** The spawn call the return answers, when the child named it at ChildEnd. */
+  spawnCallId?: string
+  /** The client-native child identity, when the child named one. */
+  childNativeId?: string
+  /** The exact bytes the runtime admitted across the child boundary. */
+  value: string
+}
+
 export interface ComposeBatteryInput {
   /** The include entry this battery answers, as the root document spells it. */
   entry: string
@@ -115,6 +126,14 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
  * which is what Archestra serves, or declare annotators alone.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
+
+/**
+ * Loads the child returns a parent's family durably crossed, from the
+ * retained ChildEnd operations in PostgreSQL. This is the authority the
+ * parent side verifies an arriving completion against; nothing the client
+ * carries proves a return.
+ */
+export declare function loadChildReturns(organizationId: string, parentSessionId: string): Promise<Array<ChildReturnRecord>>
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.

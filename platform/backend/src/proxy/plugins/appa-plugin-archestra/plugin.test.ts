@@ -1,6 +1,8 @@
 import { type MockInstance, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
+import db, { schema } from "@/database";
+import { openappaActor } from "@/openappa/actor";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import {
   collectDelegationMarkers,
@@ -1435,7 +1437,8 @@ describe("rendering runtime text for this client", () => {
       if (outcome?.decision !== "allow") {
         throw new Error("expected the handback batch to be released");
       }
-      expect(JSON.stringify(outcome.toolCalls)).toContain("appar-");
+      expect(JSON.stringify(outcome.toolCalls)).toContain("finished subagent");
+      expect(JSON.stringify(outcome.toolCalls)).not.toContain("[appa]");
       expect(outcome.blocked).toEqual([
         expect.objectContaining({ id: "handback" }),
       ]);
@@ -1452,7 +1455,8 @@ describe("rendering runtime text for this client", () => {
         );
       }
       expect(buffered.responseText).toContain("raw child return");
-      expect(buffered.responseText).toContain("appar-");
+      expect(buffered.responseText).toContain("finished subagent");
+      expect(buffered.responseText).not.toContain("[appa]");
       expect(buffered.responseText).not.toContain("appact2-");
       expect(endChild).toHaveBeenCalledTimes(1);
     } finally {
@@ -1520,7 +1524,10 @@ describe("rendering runtime text for this client", () => {
         throw new Error("expected the handback batch to be released");
       }
       const handback = outcome.toolCalls.find((call) => call.id === "handback");
-      expect(JSON.stringify(handback?.arguments)).toContain("appar-");
+      expect(JSON.stringify(handback?.arguments)).toContain(
+        "finished subagent",
+      );
+      expect(JSON.stringify(handback?.arguments)).not.toContain("[appa]");
 
       const buffered = await plugin.onBufferedModelResponse({
         ...context,
@@ -2734,11 +2741,13 @@ describe("AppaPluginArchestra", () => {
             session_id: "user:user|s1:a1",
             parent_id: "user:user|s1",
           }),
+          spawnCallId: "spawn-call",
         }),
       );
       if (outcome?.decision === "replace") {
         expect(outcome.responseText).toContain("SUMMARY(24 characters): safe");
         expect(outcome.responseText).toContain("finished subagent");
+        expect(outcome.responseText).not.toContain("[appa]");
       } else {
         throw new Error("expected outcome to replace responseText");
       }
@@ -2748,7 +2757,171 @@ describe("AppaPluginArchestra", () => {
     }
   });
 
-  test("fails closed before ChildEnd when the deployment cannot receipt returns", async ({
+  test("recovers the child's recorded spawn when a later request lost its lineage", async ({
+    makeOrganization,
+  }) => {
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+    const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:lost-lineage";
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    // No delegation marker on this later request: the native lineage has no
+    // spawnCallId. Its earlier evaluated call retained the signed binding.
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1:a1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1:a1",
+      parentId: "user:user|s1",
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      operationId: "call:spawn-call",
+      root: openappaActor("user:user|s1"),
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+      decision: { decision: "allow_call" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1:a1",
+      operationId: "call:child-web-search",
+      root: openappaActor("user:user|s1"),
+      status: "complete",
+      input: {
+        semantic: {
+          event: "tool_call",
+          tool: "WebSearch",
+          spawn_call_id: "spawn-call",
+        },
+      },
+      decision: { decision: "deny_call" },
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onBufferedModelResponse({
+        ...context,
+        response: {},
+        responseText: "raw child return",
+      });
+      expect(endChild).toHaveBeenCalledWith(
+        expect.objectContaining({ spawnCallId: "spawn-call" }),
+      );
+      if (outcome?.decision !== "replace") {
+        throw new Error("expected outcome to replace responseText");
+      }
+      expect(outcome.responseText).toContain("finished subagent");
+    } finally {
+      endChild.mockRestore();
+      endTurn.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("fails closed when a child has conflicting recorded spawn bindings", async ({
+    makeOrganization,
+  }) => {
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "release",
+      crossed: true,
+    });
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const organization = await makeOrganization();
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:ambiguous-lineage";
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1:a1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1:a1",
+      parentId: "user:user|s1",
+      startDecision: { decision: "ack" },
+    });
+    for (const callId of ["spawn-one", "spawn-two"]) {
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1",
+        operationId: `call:${callId}`,
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+        decision: { decision: "allow_call" },
+      });
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1:a1",
+        operationId: `call:child-${callId}`,
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: {
+          semantic: {
+            event: "tool_call",
+            tool: "WebSearch",
+            spawn_call_id: callId,
+          },
+        },
+        decision: { decision: "deny_call" },
+      });
+    }
+
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "raw child return",
+        }),
+      ).rejects.toMatchObject({ statusCode: 503 });
+      expect(endChild).not.toHaveBeenCalled();
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("fails closed before ChildEnd when the deployment cannot mark returns", async ({
     makeOrganization,
   }) => {
     const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({

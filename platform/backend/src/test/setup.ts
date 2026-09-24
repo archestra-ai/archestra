@@ -274,23 +274,43 @@ afterAll(async () => {
 });
 
 function trackDatabaseAccess(client: PGlite): void {
-  // Drizzle's PGlite adapter calls query/exec on this same client. Count reads
-  // too: a conservative extra reset is safer than inferring which SQL writes.
-  const sqlClient = client as unknown as {
+  // Patch the prototype rather than shadowing instance methods: tests can spy
+  // on PGlite.prototype.query. Drizzle transactions use a separate client, so
+  // entering any transaction must count as access as well. Count reads too:
+  // an extra reset is safer than inferring which SQL writes.
+  const sqlPrototype = PGlite.prototype as unknown as {
+    [databaseAccessTrackersKey]?: WeakMap<PGlite, () => void>;
     query: (...args: unknown[]) => Promise<unknown>;
     exec: (...args: unknown[]) => Promise<unknown>;
+    transaction: (...args: unknown[]) => Promise<unknown>;
   };
-  const query = sqlClient.query.bind(client);
-  const exec = sqlClient.exec.bind(client);
-  sqlClient.query = (...args) => {
+  if (!sqlPrototype[databaseAccessTrackersKey]) {
+    const trackers = new WeakMap<PGlite, () => void>();
+    const query = sqlPrototype.query;
+    const exec = sqlPrototype.exec;
+    const transaction = sqlPrototype.transaction;
+    sqlPrototype.query = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(query, this, args);
+    };
+    sqlPrototype.exec = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(exec, this, args);
+    };
+    sqlPrototype.transaction = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(transaction, this, args);
+    };
+    sqlPrototype[databaseAccessTrackersKey] = trackers;
+  }
+  sqlPrototype[databaseAccessTrackersKey].set(client, () => {
     databaseTouched = true;
-    return query(...args);
-  };
-  sqlClient.exec = (...args) => {
-    databaseTouched = true;
-    return exec(...args);
-  };
+  });
 }
+
+const databaseAccessTrackersKey = Symbol.for(
+  "archestra.test.pgliteAccessTrackers",
+);
 
 /**
  * Overwrite `live`'s contents with `snapshot`'s, in place (the config module

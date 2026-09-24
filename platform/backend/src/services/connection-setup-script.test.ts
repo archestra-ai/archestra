@@ -22,6 +22,7 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   buildSetupCommand,
@@ -1783,18 +1784,76 @@ ${script.slice(start, end)}
     });
     expect(script).toContain("[model_providers.default_proxy.http_headers]");
     expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    expect(script).toContain("requires_openai_auth = true");
     // Passthrough mode: the user is attributed via the passthrough virtual key,
     // exactly like the Claude Code Anthropic-subscription passthrough.
     expect(script).toContain(
       '"X-Archestra-Virtual-Key" = "arch_passthroughcafe"',
     );
-    // No credential is injected into config.toml — Codex keeps its own login.
+    // Codex keeps either its ChatGPT login or its own API-key login.
     expect(script).toContain(
-      "Codex keeps using your own OpenAI API key login.",
+      "Codex uses your existing ChatGPT or OpenAI API-key login.",
     );
     expect(script).not.toContain(
       `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
     );
+  });
+
+  test("codex passthrough selects the proxy for plain launches and keeps the existing config", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
+    try {
+      const bin = path.join(home, "bin");
+      const codexHome = path.join(home, ".codex");
+      await mkdir(bin);
+      await mkdir(codexHome);
+      await writeFile(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n");
+      await chmod(path.join(bin, "codex"), 0o755);
+      const configPath = path.join(codexHome, "config.toml");
+      const original =
+        'model_provider = "openai"\nmodel = "gpt-5.5"\napproval_policy = "on-request"\n[tools]\nweb_search = true\n';
+      await writeFile(configPath, original);
+      const scriptPath = path.join(home, "setup.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex"),
+          mcp: null,
+          skills: null,
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+        }),
+      );
+      const env = {
+        ...process.env,
+        HOME: home,
+        CODEX_HOME: codexHome,
+        PATH: `${bin}:${process.env.PATH}`,
+        SHELL: "/bin/bash",
+        OPENAI_API_KEY: "sk-test-user-key",
+      };
+      await execFileAsync("bash", [scriptPath], { env });
+      const installed = await readFile(configPath, "utf8");
+      const parsed = parseToml(installed);
+      expect(parsed.model_provider).toBe("default_proxy");
+      expect(parsed.model).toBe("gpt-5.5");
+      expect(parsed.approval_policy).toBe("on-request");
+      expect(parsed.tools).toEqual({ web_search: true });
+      expect(parsed.model_providers).toMatchObject({
+        default_proxy: {
+          requires_openai_auth: true,
+          http_headers: {
+            "X-Archestra-Agent-Id": CODEX_CLIENT_ID,
+            "X-Archestra-Virtual-Key": "arch_passthroughcafe",
+          },
+        },
+      });
+      expect(await readFile(`${configPath}.archestra-backup`, "utf8")).toBe(
+        original,
+      );
+      await execFileAsync("bash", [scriptPath], { env });
+      expect(await readFile(configPath, "utf8")).toBe(installed);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 
   test("copilot-cli: prints export lines instead of exporting into a dead shell", () => {
@@ -2108,10 +2167,12 @@ describe("renderSetupScript (windows)", () => {
     const script = renderSetupScript(fullContext("codex", "windows"));
     expect(script).toContain("# >>> archestra:default_proxy >>>");
     expect(script).toContain("[model_providers.default_proxy]");
+    expect(script).toContain('model_provider = "default_proxy"');
     expect(script).toContain('wire_api = "responses"');
     // Attribution parity: the client-id header is written to config.toml.
     expect(script).toContain("[model_providers.default_proxy.http_headers]");
     expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    expect(script).toContain("-match '^\\s*model_provider\\s*='");
     // virtual key passed via variable + stdin, never argv.
     expect(script).toContain("$ArchVirtualKey | codex login --with-api-key");
     expect(script).not.toContain(

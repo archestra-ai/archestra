@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { isCodexOriginator, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -6,7 +6,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
-import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import {
+  ApiError,
+  constructResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
@@ -22,6 +27,12 @@ import {
   RESPONSES_COMPACT_SUFFIX,
   RESPONSES_SUFFIX,
 } from "../common";
+import {
+  isJwtLike,
+  resolveAgent,
+  validatePassthroughVirtualKey,
+  virtualKeyRateLimiter,
+} from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   extractBearerToken,
@@ -31,6 +42,20 @@ import {
   toOpenAiModelsList,
 } from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
+
+const OpenAiModelsWithCodexSchema = OpenAiModelsListResponseSchema.extend({
+  models: z
+    .array(
+      z.object({ slug: z.string(), display_name: z.string() }).passthrough(),
+    )
+    .optional(),
+});
+
+const CodexModelsSchema = z.object({
+  models: z.array(
+    z.object({ slug: z.string(), display_name: z.string() }).passthrough(),
+  ),
+});
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -287,16 +312,100 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     request: FastifyRequest,
     agentId: string | undefined,
   ) {
+    const headers = request.raw.headers;
+    const bearer = extractBearerToken(headers.authorization);
+    const originator =
+      typeof headers.originator === "string" ? headers.originator : undefined;
+    const isCodex = isCodexOriginator(originator);
+    if (isCodex && originator && bearer && isJwtLike(bearer)) {
+      if (typeof headers["chatgpt-account-id"] !== "string") {
+        throw new ApiError(400, "Codex ChatGPT login requires an account ID.");
+      }
+      const passthroughToken = headers["x-archestra-virtual-key"];
+      if (typeof passthroughToken !== "string") {
+        throw new ApiError(
+          401,
+          "Codex ChatGPT login requires a passthrough virtual key.",
+        );
+      }
+      await virtualKeyRateLimiter.check({
+        ip: request.ip,
+        credential: passthroughToken,
+      });
+      try {
+        await validatePassthroughVirtualKey({
+          tokenValue: passthroughToken,
+          agent: await resolveAgent(agentId),
+        });
+        await virtualKeyRateLimiter.recordSuccess({
+          credential: passthroughToken,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 401) {
+          await virtualKeyRateLimiter.recordFailure({
+            ip: request.ip,
+            credential: passthroughToken,
+          });
+        }
+        throw error;
+      }
+      const url = new URL(`${config.llm.openai.codex.apiBaseUrl}/models`);
+      const clientVersion = new URL(
+        request.url,
+        "http://localhost",
+      ).searchParams.get("client_version");
+      if (clientVersion) {
+        url.searchParams.set("client_version", clientVersion);
+      }
+      const upstream = await fetch(url, {
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          "chatgpt-account-id": headers["chatgpt-account-id"],
+          originator,
+        },
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => {
+        throw new ApiError(502, "Unable to fetch Codex subscription models.");
+      });
+      if (!upstream.ok) {
+        throw new ApiError(
+          upstream.status >= 500 ? 502 : upstream.status,
+          "Unable to fetch Codex subscription models.",
+        );
+      }
+      const result = CodexModelsSchema.safeParse(
+        await upstream.json().catch(() => null),
+      );
+      if (!result.success) {
+        throw new ApiError(502, "Invalid Codex subscription models response.");
+      }
+      const models = result.data.models.map((model) => ({
+        id: model.slug,
+        displayName: model.display_name,
+        provider: "openai" as const,
+      }));
+      return {
+        ...toOpenAiModelsList(models, "openai"),
+        models: result.data.models,
+      };
+    }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
       provider: "openai",
       token: extractBearerToken(request.headers.authorization),
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
-    return toOpenAiModelsList(
-      await fetchOpenAiModels(apiKey, baseUrl, extraHeaders),
-      "openai",
-    );
+    const models = await fetchOpenAiModels(apiKey, baseUrl, extraHeaders);
+    const list = toOpenAiModelsList(models, "openai");
+    return isCodex
+      ? {
+          ...list,
+          models: models.map((model) => ({
+            slug: model.id,
+            display_name: model.displayName,
+          })),
+        }
+      : list;
   }
 
   fastify.get(
@@ -307,7 +416,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List OpenAI models (default agent)",
         tags: ["LLM Proxy"],
         headers: OpenAiModelsHeadersSchema,
-        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+        response: constructResponseSchema(OpenAiModelsWithCodexSchema),
       },
     },
     async (request) => handleListModels(request, undefined),
@@ -322,7 +431,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         params: z.object({ agentId: UuidIdSchema }),
         headers: OpenAiModelsHeadersSchema,
-        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+        response: constructResponseSchema(OpenAiModelsWithCodexSchema),
       },
     },
     async (request) => handleListModels(request, request.params.agentId),

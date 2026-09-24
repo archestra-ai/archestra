@@ -84163,6 +84163,11 @@ export type OpenAiListModelsWithDefaultAgentResponses = {
             created: number;
             owned_by: string;
         }>;
+        models?: Array<{
+            slug: string;
+            display_name: string;
+            [key: string]: unknown;
+        }>;
     };
 };
 
@@ -84256,6 +84261,11 @@ export type OpenAiListModelsWithAgentResponses = {
             object: 'model';
             created: number;
             owned_by: string;
+        }>;
+        models?: Array<{
+            slug: string;
+            display_name: string;
+            [key: string]: unknown;
         }>;
     };
 };

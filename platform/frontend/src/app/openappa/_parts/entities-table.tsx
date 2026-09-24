@@ -13,7 +13,6 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { scopeLabel } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -79,21 +78,7 @@ export function EntitiesTable() {
         cell: ({ row }) => (
           <AgentNameCell
             name={row.original.name}
-            icon={
-              row.original.type === "mcp_server" ? (
-                <McpCatalogIcon
-                  icon={row.original.icon}
-                  catalogId={row.original.id}
-                  size={20}
-                />
-              ) : (
-                <AgentIcon
-                  icon={row.original.icon}
-                  fallbackType={row.original.type}
-                  size={20}
-                />
-              )
-            }
+            icon={<EntityIcon entity={row.original} size={20} />}
           />
         ),
       },
@@ -212,8 +197,17 @@ export function EntitiesTable() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
         size="large"
-        title={selected?.name ?? "Policy target"}
-        description={selected ? entityDescription(selected) : undefined}
+        title={
+          selected ? (
+            <span className="flex items-center gap-2.5">
+              <EntityIcon entity={selected} size={24} />
+              <span className="truncate">{selected.name}</span>
+            </span>
+          ) : (
+            "Policy target"
+          )
+        }
+        description={selected ? <EntitySummary entity={selected} /> : undefined}
       >
         {selected && (
           <ToolTable
@@ -239,23 +233,57 @@ function entityTypeLabel(type: CoverageEntity["type"]): string {
   }
 }
 
-function entityDescription(entity: CoverageEntity): string {
-  const toolCount =
+function EntityIcon({
+  entity,
+  size,
+}: {
+  entity: CoverageEntity;
+  size: number;
+}) {
+  return entity.type === "mcp_server" ? (
+    <McpCatalogIcon icon={entity.icon} catalogId={entity.id} size={size} />
+  ) : (
+    <AgentIcon icon={entity.icon} fallbackType={entity.type} size={size} />
+  );
+}
+
+// Rendered inside the dialog's description paragraph, so it sticks to inline
+// elements.
+function EntitySummary({ entity }: { entity: CoverageEntity }) {
+  const toolLabel =
     entity.type === "mcp_server"
-      ? `${entity.toolCount} synced tools`
+      ? "synced tools"
       : entity.autoMode
-        ? `${entity.toolCount} tools reachable for you`
-        : `${entity.toolCount} assigned tools`;
-  return [
-    entityTypeLabel(entity.type),
-    scopeLabel(entity.scope),
-    toolCount,
-    `${entity.governedCount} with active explicit rules`,
-    `${entity.fallbackCount} may use the catch-all`,
-    entity.builtInCount > 0
-      ? `${entity.builtInCount} built-in ${entity.builtInCount === 1 ? "tool" : "tools"}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+        ? "tools reachable for you"
+        : "assigned tools";
+  const stats = [
+    { value: entity.toolCount, label: toolLabel },
+    { value: entity.governedCount, label: "with explicit rules" },
+    { value: entity.fallbackCount, label: "may use the catch-all" },
+    ...(entity.builtInCount > 0
+      ? [
+          {
+            value: entity.builtInCount,
+            label:
+              entity.builtInCount === 1 ? "built-in tool" : "built-in tools",
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <span className="flex flex-col gap-3">
+      <span>{entityTypeLabel(entity.type)}</span>
+      <span className="flex flex-wrap gap-x-6 gap-y-2">
+        {stats.map((stat) => (
+          <span key={stat.label} className="flex items-baseline gap-1.5">
+            <span className="font-medium text-foreground tabular-nums">
+              {stat.value}
+            </span>
+            <span>{stat.label}</span>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
 }

@@ -78,7 +78,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   /**
-   * Extracts session ID from Claude Code headers.
+   * Extracts the native session ID from Claude Code headers or metadata.
    * Claude Code sends the same session ID across resumes and `/compact` continuations.
    * Forks use replayed trajectory stamps to continue on the parent root.
    */
@@ -86,8 +86,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
     const sessionId = readHeader(context.headers, "x-claude-code-session-id");
-    return sessionId
-      ? { sessionId, provenance: "claude-code-header" }
+    if (sessionId) return { sessionId, provenance: "claude-code-header" };
+    const userId = stringField(
+      asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
+    );
+    const metadataSession = parseClaudeMetadataSessionId(userId);
+    return metadataSession
+      ? { sessionId: metadataSession, provenance: "claude-code-metadata" }
       : undefined;
   }
 

@@ -18,6 +18,7 @@ import {
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
+  isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
   OPENCODE_CLIENT_ID,
@@ -88,6 +89,7 @@ import {
 } from "@/openappa/child-return";
 import {
   type AppaChildTrajectoryReceipt,
+  appendChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
 } from "@/openappa/child-trajectory-receipt";
 import {
@@ -172,6 +174,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
   attemptJwksAuth,
+  isJwtLike,
   resolveAgent,
   validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
@@ -351,25 +354,44 @@ function resolveOpenAiCodexPassthrough(params: {
   headers: Record<string, string | string[] | undefined>;
 }): OpenAiCodexPassthrough | undefined {
   const { provider, headers } = params;
+  const accountId = readSingleHeader(headers, "chatgpt-account-id");
+  const originator = readSingleHeader(headers, "originator");
+  const authorization = readSingleHeader(headers, "authorization");
+  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
+  if (
+    provider.provider === "openai" &&
+    provider.interactionType === "openai:responses" &&
+    isCodexOriginator(originator) &&
+    accessToken &&
+    isJwtLike(accessToken) &&
+    accountId === undefined
+  ) {
+    throw new ApiError(400, "Codex ChatGPT login requires an account ID.");
+  }
   if (
     provider.provider !== "openai" ||
     provider.interactionType !== "openai:responses" ||
-    readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !== "true"
+    (readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !==
+      "true" &&
+      !(
+        isCodexOriginator(originator) &&
+        accountId !== undefined &&
+        accessToken &&
+        isJwtLike(accessToken)
+      ))
   ) {
     return undefined;
   }
 
-  const authorization = readSingleHeader(headers, "authorization");
-  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
-  const accountId = readSingleHeader(headers, "chatgpt-account-id");
   if (
     !accessToken ||
     accessToken.length > 16_384 ||
+    hasArchestraTokenPrefix(accessToken) ||
     !isBoundedHeaderValue(accountId, 256)
   ) {
     throw new ApiError(
       400,
-      "OpenCode OAuth bridge requests require a bearer token and ChatGPT account ID.",
+      "Codex subscription requests require a bearer token and ChatGPT account ID.",
     );
   }
 
@@ -382,6 +404,7 @@ function resolveOpenAiCodexPassthrough(params: {
       64,
     ),
     originator: optionalBoundedHeader(headers, "originator", 128),
+    version: optionalBoundedHeader(headers, "version", 32),
     sessionId: optionalBoundedHeader(headers, "session-id", 256),
     userAgent: optionalBoundedHeader(headers, "user-agent", 1024),
   };
@@ -395,7 +418,7 @@ function optionalBoundedHeader(
   const value = readSingleHeader(headers, name);
   if (value === undefined) return undefined;
   if (!isBoundedHeaderValue(value, maxLength)) {
-    throw new ApiError(400, `Invalid OpenCode OAuth bridge ${name} header.`);
+    throw new ApiError(400, `Invalid Codex subscription ${name} header.`);
   }
   return value;
 }
@@ -847,8 +870,28 @@ export async function handleLLMProxy<
     }
   }
 
-  // OpenCode owns refresh and rotation for this access token. Keep the bridge
-  // credential in request-local client options; never resolve or persist it as
+  // A ChatGPT bearer requires user and proxy-access checks before Archestra
+  // sends it to the subscription endpoint instead of api.openai.com.
+  if (
+    !authOverride &&
+    !passthroughVirtualKeyId &&
+    provider.provider === "openai" &&
+    provider.interactionType === "openai:responses" &&
+    isCodexOriginator(readSingleHeader(request.raw.headers, "originator")) &&
+    isJwtLike(
+      readSingleHeader(request.raw.headers, "authorization")?.match(
+        /^Bearer\s+([^\s]+)$/i,
+      )?.[1] ?? "",
+    )
+  ) {
+    throw new ApiError(
+      401,
+      "Codex ChatGPT login requires a passthrough virtual key.",
+    );
+  }
+
+  // The client owns refresh and rotation for this access token. Keep the
+  // credential in request-local client options. Never resolve or save it as
   // an Archestra-managed provider credential.
   const openAiCodexPassthrough = passthroughVirtualKeyId
     ? resolveOpenAiCodexPassthrough({
@@ -887,11 +930,9 @@ export async function handleLLMProxy<
     perKeyChatApiKeyId = authOverride.chatApiKeyId;
     wasVirtualKeyResolved = authOverride.authenticated;
   } else {
-    const jwksResult = await attemptJwksAuth(
-      request,
-      resolvedAgent,
-      providerName,
-    );
+    const jwksResult = openAiCodexPassthrough
+      ? null
+      : await attemptJwksAuth(request, resolvedAgent, providerName);
     if (jwksResult) {
       wasJwksAuthenticated = true;
       authMethod = "jwks";
@@ -1577,6 +1618,7 @@ export async function handleLLMProxy<
           : {};
         hasNativeClientSession =
           appaIdentity.provenance === "claude-code-header" ||
+          appaIdentity.provenance === "claude-code-metadata" ||
           appaIdentity.provenance === "codex-turn-metadata" ||
           appaIdentity.provenance === "opencode-session-header" ||
           appaIdentity.provenance === "opencode-hosted-header";
@@ -2759,7 +2801,14 @@ async function handleStreaming<
         bufferedModelEvents.length = 0;
         bufferedPolicyEvents.length = 0;
         bufferedPolicyEvents.push(
-          ...streamAdapter.formatCompleteTextSSE(bufferedOutcome.responseText),
+          ...streamAdapter.formatCompleteTextSSE(
+            childTrajectoryReceipt
+              ? appendChildTrajectoryReceipt(
+                  bufferedOutcome.responseText,
+                  childTrajectoryReceipt.footer,
+                )
+              : bufferedOutcome.responseText,
+          ),
         );
         response = streamAdapter.toProviderResponse();
       }
@@ -3420,7 +3469,6 @@ async function handleNonStreaming<
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
         : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
-  let bufferedResponseReplaced = false;
   if (
     pluginRegistry &&
     pluginContext &&
@@ -3439,7 +3487,6 @@ async function handleNonStreaming<
           "LLM provider cannot safely replace a governed child response",
         );
       }
-      bufferedResponseReplaced = true;
       clientResponse = responseAdapter.withReplacedText(
         bufferedOutcome.responseText,
       );
@@ -3571,9 +3618,7 @@ async function handleNonStreaming<
     return reply.send(clientResponse);
   }
   const outboundResponse = structuredClone(clientResponse);
-  const completedProtectedChildReturn =
-    bufferedResponseReplaced || containsChildReturnProof(rewrittenToolCalls);
-  if (childTrajectoryReceipt && !completedProtectedChildReturn) {
+  if (childTrajectoryReceipt) {
     appendChildTrajectoryReceiptToResponse({
       family: childTrajectoryReceipt.family,
       response: outboundResponse,
@@ -3643,16 +3688,6 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
     return true;
   }
   return !sawDataLine;
-}
-
-function containsChildReturnProof(
-  toolCalls: readonly AccumulatedToolCall[] | null,
-): boolean {
-  return Boolean(
-    toolCalls?.some((call) =>
-      String(call.arguments).includes("[appa] child return appar-"),
-    ),
-  );
 }
 
 async function evaluateProxyPluginToolCalls(

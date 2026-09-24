@@ -542,9 +542,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    // Codex keeps its own OpenAI login (no injected key piped into codex)...
+    // Codex keeps its existing ChatGPT or OpenAI API-key login.
     expect(script).toContain(
-      "Codex keeps using your own OpenAI API key login.",
+      "Codex uses your existing ChatGPT or OpenAI API-key login.",
     );
     expect(script).not.toContain(
       `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,

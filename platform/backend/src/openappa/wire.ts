@@ -48,6 +48,7 @@ export type AppaSessionIdentity = {
   provenance?:
     | "appa-header"
     | "claude-code-header"
+    | "claude-code-metadata"
     | "claude-metadata"
     | "opencode-session"
     | "codex-turn-metadata"

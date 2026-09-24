@@ -39,6 +39,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
 - `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
+- `archestra-dev-resource-cleanup` - use for reclaiming unused local worktrees, branches, development processes, and OrbStack resources while preserving the active Tilt setup.
 - `archestra-docs-writer` - use for writing or editing docs pages under `../docs/pages`: new feature docs, page rewrites, tone/copy fixes, and screenshots.
 
 ## Key URLs

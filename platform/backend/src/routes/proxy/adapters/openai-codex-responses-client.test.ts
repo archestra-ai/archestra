@@ -268,6 +268,47 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it("forwards Codex's version even when its custom provider omits that header", async () => {
+    const versions: Array<string | null> = [];
+    const innerFetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        versions.push(new Headers(init?.headers).get("version"));
+        return sseResponse([
+          {
+            type: "response.completed",
+            response: { id: "resp_version", status: "completed", output: [] },
+          },
+        ]);
+      },
+    );
+    for (const { originator, version } of [
+      { originator: "codex_cli_rs", version: undefined },
+      { originator: "codex_exec", version: undefined },
+      { originator: "codex_exec", version: "0.157.2" },
+    ]) {
+      const client = createOpenAiCodexPassthroughResponsesClient({
+        credential: {
+          ...PASSTHROUGH_CREDENTIAL,
+          originator,
+          userAgent: `${originator}/0.156.1`,
+          version,
+        },
+        options: { source: "api" },
+        innerFetch,
+      }) as unknown as CodexResponsesClient;
+      const stream = (await client.responses.create({
+        model: "gpt-5.6-sol",
+        input: "hi",
+        stream: true,
+      })) as AsyncIterable<unknown>;
+      for await (const _event of stream) {
+        // drain
+      }
+    }
+
+    expect(versions).toEqual(["0.156.1", "0.156.1", "0.157.2"]);
+  });
+
   it("forwards native compact requests through request-local OAuth", async () => {
     let capturedUrl: string | undefined;
     let capturedHeaders: Headers | undefined;

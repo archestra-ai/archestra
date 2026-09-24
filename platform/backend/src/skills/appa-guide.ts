@@ -434,7 +434,7 @@ This protection is for native CLI subagents. Loading a skill runs in the current
 
 ### Provider-hosted tools
 
-Provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them, but cannot check each call before it executes. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Other hosted calls and results are not governed through a native client tool rule. Deferred \`tool_search\` declarations are still refused because their client-callable tools are not on the wire.
+Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them, but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted calls and results are not governed through a native client tool rule. Deferred \`tool_search\` declarations, including versioned Anthropic types and \`defer_loading\` tools, are still refused because their client-callable tools are not on the wire.
 
 There is no supported policy switch that refuses all provider-hosted declarations with a signed offer to call a client-side counterpart. A hosted declaration arrives before the provider chooses a call or its arguments, so a policy tool rule cannot provide that substitute. If the operator requires this boundary, identify the client and provider tools and report it as unsupported. Do not add a rule that falsely claims to protect provider-side execution.
 

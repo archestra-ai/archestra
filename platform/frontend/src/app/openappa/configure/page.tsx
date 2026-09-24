@@ -1,7 +1,7 @@
 import {
   type OpenAppaPolicyTargetKind,
+  openAppaTargetChatSubtitle,
   openAppaTargetChatTitle,
-  openAppaTargetInitialPrompt,
   openAppaTargetSuggestedPrompts,
 } from "@archestra/shared";
 import { OpenAppaOverview } from "../_parts/openappa-overview";
@@ -36,7 +36,8 @@ export default async function ConfigureOpenAppaPage({
     return (
       <OpenAppaOverview
         title={openAppaTargetChatTitle(targetName)}
-        initialPrompt={openAppaTargetInitialPrompt(targetType, targetName)}
+        subtitle={openAppaTargetChatSubtitle(targetType, targetName)}
+        policyTarget={{ kind: targetType, name: targetName }}
         suggestedPrompts={openAppaTargetSuggestedPrompts(
           targetType,
           targetName,

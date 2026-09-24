@@ -1,6 +1,9 @@
 "use client";
 
-import { OPENAPPA_CONFIG_SUGGESTED_PROMPTS } from "@archestra/shared";
+import {
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  type OpenAppaPolicyTargetKind,
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -39,13 +42,23 @@ export function PolicyChatStarter({
   conversationId,
   onConversationStart,
   title = "What should the policy do?",
+  subtitle = "Describe a change.",
   suggestedPrompts = OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  policyTarget,
 }: {
   initialPrompt?: string;
   conversationId?: string;
   onConversationStart?: () => void;
   title?: string;
+  subtitle?: string;
   suggestedPrompts?: readonly SuggestedPrompt[];
+  /**
+   * The policy target (agent, MCP gateway, or MCP server) this conversation
+   * is scoped to. Attached as hidden metadata on every outgoing message
+   * instead of an auto-sent first message, so the scope reaches the agent
+   * before the user's first visible turn and persists on every follow-up.
+   */
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; name: string };
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +94,14 @@ export function PolicyChatStarter({
     if (handoff) pendingPrompt.current = handoff.prompt;
   }, [conversationId]);
 
+  const messageMetadata = useCallback(
+    () => ({
+      createdAt: new Date().toISOString(),
+      ...(policyTarget ? { openAppaPolicyTarget: policyTarget } : {}),
+    }),
+    [policyTarget],
+  );
+
   useEffect(() => {
     if (!session || !pendingPrompt.current) return;
     const text = pendingPrompt.current;
@@ -89,10 +110,10 @@ export function PolicyChatStarter({
       session.sendMessage({
         role: "user",
         parts: [{ type: "text", text }],
-        metadata: { createdAt: new Date().toISOString() },
+        metadata: messageMetadata(),
       });
     });
-  }, [session]);
+  }, [session, messageMetadata]);
 
   const sync = useAppaGithubSync();
   const usesGitHub = Boolean(sync.data?.source?.interval);
@@ -106,7 +127,7 @@ export function PolicyChatStarter({
         session.sendMessage({
           role: "user",
           parts: [{ type: "text", text }],
-          metadata: { createdAt: new Date().toISOString() },
+          metadata: messageMetadata(),
         });
         return;
       }
@@ -128,7 +149,7 @@ export function PolicyChatStarter({
         );
       }
     },
-    [session, createConversation, onConversationStart, router],
+    [session, createConversation, onConversationStart, router, messageMetadata],
   );
 
   useEffect(() => {
@@ -235,7 +256,7 @@ export function PolicyChatStarter({
           title={title}
           description={
             <>
-              Describe a change. The agent will show you a diff before it{" "}
+              {subtitle} The agent will show you a diff before it{" "}
               {usesGitHub ? "opens a GitHub pull request" : "saves a revision"}.
             </>
           }

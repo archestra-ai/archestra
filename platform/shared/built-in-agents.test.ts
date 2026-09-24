@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
+  openAppaTargetChatSubtitle,
   openAppaTargetChatTitle,
-  openAppaTargetInitialPrompt,
+  openAppaTargetScopeContext,
   openAppaTargetSuggestedPrompts,
 } from "./built-in-agents";
 
@@ -13,13 +14,23 @@ describe("openAppaTargetChatTitle", () => {
   });
 });
 
-describe("openAppaTargetInitialPrompt", () => {
+describe("openAppaTargetChatSubtitle", () => {
   test.each([
     ["agent", "Research assistant", 'the agent "Research assistant"'],
     ["mcp_gateway", "Prod gateway", 'the MCP gateway "Prod gateway"'],
     ["mcp_server", "GitHub", 'the MCP server "GitHub"'],
-  ] as const)("scopes the prompt to %s %s", (kind, name, phrase) => {
-    expect(openAppaTargetInitialPrompt(kind, name)).toContain(phrase);
+  ] as const)("scopes the subtitle to %s %s", (kind, name, phrase) => {
+    expect(openAppaTargetChatSubtitle(kind, name)).toContain(phrase);
+  });
+});
+
+describe("openAppaTargetScopeContext", () => {
+  test.each([
+    ["agent", "Research assistant", 'the agent "Research assistant"'],
+    ["mcp_gateway", "Prod gateway", 'the MCP gateway "Prod gateway"'],
+    ["mcp_server", "GitHub", 'the MCP server "GitHub"'],
+  ] as const)("scopes the context to %s %s", (kind, name, phrase) => {
+    expect(openAppaTargetScopeContext(kind, name)).toContain(phrase);
   });
 });
 

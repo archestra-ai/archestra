@@ -51,6 +51,13 @@ export async function buildChatContext(params: {
   openedApp: OpenedApp | undefined;
   /** Filenames of the project's shared files, when this chat belongs to a project. */
   projectFileNames: string[] | undefined;
+  /**
+   * Hidden scope reminder for an OpenAPPA policy-target conversation (see
+   * `readOpenAppaPolicyTargetContext`), appended to the policy-chat system
+   * prompt below. Undefined for every other conversation, and ignored unless
+   * `conversationOrigin` is "openappa".
+   */
+  openAppaPolicyTargetContext: string | undefined;
   hookRunCollector: CollectedHookRun[];
   /**
    * Per-turn sink for the KB chunks `query_knowledge_sources` returns, absent
@@ -93,6 +100,7 @@ export async function buildChatContext(params: {
     projectInstructions,
     openedApp,
     projectFileNames,
+    openAppaPolicyTargetContext,
     hookRunCollector,
     kbChunksCollector,
     elicitation,
@@ -177,7 +185,7 @@ export async function buildChatContext(params: {
     canAskUser: true,
   });
   const systemPrompt = isPolicyChat
-    ? `${baseSystemPrompt ?? ""}\n\nThis conversation is dedicated to configuring this deployment's OpenAPPA policy. Your normal agent role does not apply here. Load the built-in appa-guide skill with archestra__load_skill before policy work, then follow its current workflow. Use the built-in OpenAPPA tools to read the current policy and relevant MCP tools, preview proposed changes and explain the diff, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.`
+    ? `${baseSystemPrompt ?? ""}\n\nThis conversation is dedicated to configuring this deployment's OpenAPPA policy. Your normal agent role does not apply here. Load the built-in appa-guide skill with archestra__load_skill before policy work, then follow its current workflow. Use the built-in OpenAPPA tools to read the current policy and relevant MCP tools, preview proposed changes and explain the diff, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.${openAppaPolicyTargetContext ? `\n\n${openAppaPolicyTargetContext}` : ""}`
     : baseSystemPrompt;
 
   return {

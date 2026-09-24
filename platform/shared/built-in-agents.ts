@@ -52,7 +52,7 @@ const OPENAPPA_POLICY_TARGET_KIND_LABELS: Record<
 };
 
 /** How a policy target reads inline in a sentence, e.g. `the agent "Foo"`. */
-function describeOpenAppaPolicyTarget(
+export function describeOpenAppaPolicyTarget(
   kind: OpenAppaPolicyTargetKind,
   name: string,
 ): string {
@@ -64,17 +64,26 @@ export function openAppaTargetChatTitle(name: string): string {
   return `What should the policy do for ${name}?`;
 }
 
+/** Chat landing subtitle for an OpenAPPA conversation scoped to one policy target. */
+export function openAppaTargetChatSubtitle(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+): string {
+  return `Describe a change for ${describeOpenAppaPolicyTarget(kind, name)}.`;
+}
+
 /**
- * Auto-sent as the first message when a policy target's row action opens the
- * configuration agent, so its first turn already knows the scope instead of
- * the user having to state it.
+ * Hidden scope reminder for a policy-target conversation. Attached as message
+ * metadata rather than sent as a message, so it reaches the agent's system
+ * prompt before the user's first visible turn and again on every follow-up,
+ * without ever appearing as a chat message itself.
  */
-export function openAppaTargetInitialPrompt(
+export function openAppaTargetScopeContext(
   kind: OpenAppaPolicyTargetKind,
   name: string,
 ): string {
   const target = describeOpenAppaPolicyTarget(kind, name);
-  return `Focus this conversation on ${target}. Explain what its current OpenAPPA policy rules allow, deny, or require approval for, then help me with any changes — keep them scoped to this target unless I say otherwise.`;
+  return `This conversation is scoped to ${target}. Explain what its current OpenAPPA policy rules allow, deny, or require approval for, and keep any changes scoped to this target unless the user says otherwise.`;
 }
 
 /** {@link OPENAPPA_CONFIG_SUGGESTED_PROMPTS}, reworded to name the policy target. */

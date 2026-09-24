@@ -13,7 +13,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
-  test("matches the active lists: shows unassigned agents and only the caller's personal gateway", async ({
+  test("matches the active lists: shows unassigned agents and every gateway the caller's wildcard grant reads", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -28,7 +28,7 @@ describe("GET /api/openappa/coverage/entities", () => {
       authorId: ctx.user.id,
       accessAllTools: true,
     });
-    await makeAgent({
+    const otherGateway = await makeAgent({
       organizationId: ctx.organizationId,
       name: "My Gateway",
       agentType: "mcp_gateway",
@@ -47,13 +47,15 @@ describe("GET /api/openappa/coverage/entities", () => {
       url: "/api/openappa/coverage/entities?search=My%20Gateway",
     });
     expect(gateways.statusCode).toBe(200);
-    expect(gateways.json().data).toEqual([
-      expect.objectContaining({
-        id: ownGateway.id,
-        name: "My Gateway",
-        access: "personal",
-      }),
-    ]);
+    // The gateway list keeps another member's personal gateway for a caller
+    // whose grant reads every gateway, and the report matches that list.
+    expect(gateways.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: ownGateway.id, scope: "personal" }),
+        expect.objectContaining({ id: otherGateway.id, scope: "personal" }),
+      ]),
+    );
+    expect(gateways.json().data).toHaveLength(2);
 
     const agents = await ctx.app.inject({
       method: "GET",

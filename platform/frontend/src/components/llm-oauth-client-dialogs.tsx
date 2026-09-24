@@ -129,9 +129,6 @@ export function EditOAuthClientDialog({
       }}
     >
       <div hidden={activeSection !== "general"} className="space-y-4">
-        {/* Provenance before the editable fields: who to ask before you
-              change somebody else's credential. */}
-        <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
         <div className="space-y-2">
           <Label htmlFor="edit-oauth-client-name">Name</Label>
           <Input
@@ -141,6 +138,9 @@ export function EditOAuthClientDialog({
             placeholder="support-assistant-prod"
           />
         </div>
+        {/* Provenance before the editable fields: who to ask before you
+              change somebody else's credential. */}
+        <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}

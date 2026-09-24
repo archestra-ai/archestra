@@ -163,6 +163,15 @@ export function CreateOAuthClientDialog({
       }}
     >
       <div hidden={activeSection !== "general"} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="oauth-client-name">Name</Label>
+          <Input
+            id="oauth-client-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="support-assistant-prod"
+          />
+        </div>
         {!fixedClientType && (
           <RadioCardField
             label="What will this client access?"
@@ -176,16 +185,6 @@ export function CreateOAuthClientDialog({
             }}
           />
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="oauth-client-name">Name</Label>
-          <Input
-            id="oauth-client-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="support-assistant-prod"
-          />
-        </div>
 
         <RadioCardField
           label="Grant type"

@@ -234,7 +234,17 @@ function childAgentId(context: AppaMatchContext): string | undefined {
 function childLaunchIdentifier(
   content: unknown,
 ): { label: "agentId" | "taskId"; value: string } | undefined {
-  const text = typeof content === "string" ? content.trim() : undefined;
+  const block =
+    Array.isArray(content) && content.length === 1
+      ? asRecord(content[0])
+      : undefined;
+  const text = (
+    typeof content === "string"
+      ? content
+      : block?.type === "text"
+        ? stringField(block.text)
+        : undefined
+  )?.trim();
   const record =
     asRecord(content) ?? (text ? asRecord(parseJson(text)) : undefined);
   if (record?.status === "async_launched") {

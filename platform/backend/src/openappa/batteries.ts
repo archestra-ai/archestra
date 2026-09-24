@@ -647,7 +647,15 @@ class OpenAppaBatteriesService {
   ): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    if (effective && effective.rootRevision === root.revision) return effective;
+    // Revision zero is shipped policy text and can change without a database revision.
+    if (
+      effective &&
+      effective.rootRevision === root.revision &&
+      effective.installFingerprint.endsWith(
+        root.revision === 0 ? `:${root.contentHash}` : "",
+      )
+    )
+      return effective;
     return this.recompile(organizationId);
   }
 
@@ -708,12 +716,13 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const fingerprint = hash(
-      JSON.stringify({
-        batteries: this.composeInputs({ planned, installs }),
-        credentials: planned.resolution.credentials,
-      }),
-    );
+    const fingerprint =
+      hash(
+        JSON.stringify({
+          batteries: this.composeInputs({ planned, installs }),
+          credentials: planned.resolution.credentials,
+        }),
+      ) + (root.revision === 0 ? `:${root.contentHash}` : "");
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)
@@ -742,12 +751,13 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
-      const installFingerprint = hash(
-        JSON.stringify({
-          batteries: composed,
-          credentials: planned.resolution.credentials,
-        }),
-      );
+      const installFingerprint =
+        hash(
+          JSON.stringify({
+            batteries: composed,
+            credentials: planned.resolution.credentials,
+          }),
+        ) + (root.revision === 0 ? `:${root.contentHash}` : "");
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
         expected &&

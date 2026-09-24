@@ -752,35 +752,43 @@ describe("APPA feature boundary", () => {
   test.each([
     "allow_call",
     "pass_control",
-  ] as const)("refuses a %s spawn without a prepared fork", async (decision) => {
-    native.dispatchHook.mockImplementation(async (raw: string) =>
-      JSON.stringify(
-        JSON.parse(raw).event === "tool_call"
-          ? { decision }
-          : { decision: "ack" },
-      ),
+  ] as const)("does not release a spawn without a fork binding (%s)", async (decision) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify({
+        decision: event.event === "tool_call" ? decision : "ack",
+      });
+    });
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "spawn", name: "spawn_agent", arguments: { message: "Go" } }],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (name) => name === "spawn_agent",
+        supportsDelegation: true,
+      },
     );
 
-    await expect(
-      evaluateToolCalls(
-        session,
-        [{ id: "spawn", name: "spawn_agent", arguments: { message: "Go" } }],
-        {
-          canonicalize: (name) => name,
-          isSpawn: (name) => name === "spawn_agent",
-          supportsDelegation: true,
-        },
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining("context_control = true"),
-    });
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: expect.stringContaining("context_control"),
+      },
+    ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
-    ).toEqual([
-      expect.objectContaining({ event: "tool_call", spawn: true }),
-      expect.objectContaining({ event: "cancel_call", tool_call_id: "spawn" }),
-    ]);
+    ).toEqual(
+      decision === "allow_call"
+        ? [
+            expect.objectContaining({ event: "tool_call", spawn: true }),
+            expect.objectContaining({
+              event: "cancel_call",
+              tool_call_id: "spawn",
+            }),
+          ]
+        : [expect.objectContaining({ event: "tool_call", spawn: true })],
+    );
   });
 
   test("keeps a successful spawn launch pending until the child binds", async () => {

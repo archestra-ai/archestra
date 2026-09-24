@@ -150,6 +150,7 @@ export function verifyChildReturnReceipt(params: {
  */
 export function collectAndStripChildReturns(
   body: unknown,
+  options: { openCodeBackgroundReturns?: boolean } = {},
 ): CollectedChildReturns {
   const collected: CollectedChildReturns = {
     receipts: [],
@@ -235,14 +236,7 @@ export function collectAndStripChildReturns(
       context.nativeResultSite ||
       (toolResultEnvelope === true &&
         envelopeId !== undefined &&
-        nativeResultCallIds.has(normalizeCallId(envelopeId) ?? envelopeId)) ||
-      (record.role === "user" &&
-        (typeof record.content === "string"
-          ? isOpenCodeBackgroundCompletion(record.content)
-          : Array.isArray(record.content) &&
-            record.content.some((part) =>
-              isOpenCodeBackgroundCompletion(asRecord(part)?.text),
-            )));
+        nativeResultCallIds.has(normalizeCallId(envelopeId) ?? envelopeId));
     const childNativeId =
       stringField(record["task-id"]) ??
       taskIdIn(record) ??
@@ -258,7 +252,9 @@ export function collectAndStripChildReturns(
     };
 
     const status =
-      nativeResultSite && !isToolResultEnvelope(record)
+      nativeResultSite &&
+      !context.syntheticUserReturn &&
+      !isToolResultEnvelope(record)
         ? asRecord(record.status)
         : undefined;
     const canonicalStatus = status
@@ -279,7 +275,7 @@ export function collectAndStripChildReturns(
       ) {
         continue;
       }
-      record[key] = walk(entry, {
+      const entryContext: WalkContext = {
         ...nested,
         nativeResultSite:
           nativeResultSite &&
@@ -290,7 +286,26 @@ export function collectAndStripChildReturns(
         // its message objects do not always repeat a role.
         assistantOrigin:
           assistantOrigin || (context.topLevel === true && key === "output"),
-      });
+      };
+      if (
+        key === "content" &&
+        record.role === "user" &&
+        options.openCodeBackgroundReturns
+      ) {
+        const visitPart = (part: unknown) =>
+          walk(part, {
+            ...entryContext,
+            nativeResultSite: isOpenCodeBackgroundCompletion(
+              typeof part === "string" ? part : asRecord(part)?.text,
+            ),
+            syntheticUserReturn: true,
+          });
+        record[key] = Array.isArray(entry)
+          ? entry.map(visitPart)
+          : visitPart(entry);
+      } else {
+        record[key] = walk(entry, entryContext);
+      }
     }
     return value;
   };
@@ -316,6 +331,7 @@ type WalkContext = {
   assistantOrigin: boolean;
   toolResultEnvelope: boolean;
   nativeResultSite: boolean;
+  syntheticUserReturn?: boolean;
   topLevel?: boolean;
 };
 
@@ -513,10 +529,13 @@ function replaceTaskResults(
       childNativeId: taskId ?? context.childNativeId,
     };
     // OpenCode adds one newline on either side of the child's actual text.
-    const result = value
-      .slice(start + open.length, end)
-      .replace(/^\r?\n/, "")
-      .replace(/\r?\n$/, "");
+    const framed = /^<task\b[^>]*>/.test(value.slice(0, start).trim());
+    const result = framed
+      ? value
+          .slice(start + open.length, end)
+          .replace(/^\r?\n/, "")
+          .replace(/\r?\n$/, "")
+      : value.slice(start + open.length, end);
     const parsed = stripReceipt(result, taskContext, true);
     recordCompletion(parsed, taskContext, collected);
     canonical.push(`${open}${parsed.value}${close}`);
@@ -995,7 +1014,7 @@ function isCompleteTaskResultFraming(value: string): boolean {
 function isOpenCodeBackgroundCompletion(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    /^\s*<task\b[^>]*\bstate="completed"[^>]*>/.test(value)
+    /^\s*<task\b[^>]*\bstate\s*=\s*(["'])completed\1[^>]*>/.test(value)
   );
 }
 

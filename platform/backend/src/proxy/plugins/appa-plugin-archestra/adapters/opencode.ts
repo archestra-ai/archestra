@@ -131,7 +131,9 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       !result.isError &&
       !(
         typeof result.content === "string" &&
-        /^\s*<task\b[^>]*\bstate="running"[^>]*>/.test(result.content)
+        /^\s*<task\b[^>]*\bstate\s*=\s*(["'])(?:running|pending|queued)\1[^>]*>/.test(
+          result.content,
+        )
       )
     );
   }

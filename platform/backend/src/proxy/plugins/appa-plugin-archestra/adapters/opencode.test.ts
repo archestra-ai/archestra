@@ -47,6 +47,12 @@ test("a background task launch is not a child completion", () => {
   expect(
     adapter.isChildCompletionResult({
       ...result,
+      content: "<task state = 'pending' id='child'>queued</task>",
+    }),
+  ).toBe(false);
+  expect(
+    adapter.isChildCompletionResult({
+      ...result,
       content:
         '<task id="child" state="completed">\n<task_result>done</task_result>\n</task>',
     }),

@@ -127,6 +127,7 @@ import {
   parseJsonHeader,
 } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import {
+  APPA_CLIENT_ADAPTERS,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
@@ -627,7 +628,15 @@ export async function handleLLMProxy<
       body,
     });
     stripDelegationMarkers({ family: requestWireFamily, body });
-    childReturns = collectAndStripChildReturns(body);
+    childReturns = collectAndStripChildReturns(body, {
+      openCodeBackgroundReturns:
+        APPA_CLIENT_ADAPTERS.find((adapter) =>
+          adapter.matches({
+            headers: headers as Record<string, string | string[] | undefined>,
+            requestBody: body,
+          }),
+        )?.id === "opencode",
+    });
   }
   // Restores original provider call IDs before request processing, logging,
   // or policy evaluation.

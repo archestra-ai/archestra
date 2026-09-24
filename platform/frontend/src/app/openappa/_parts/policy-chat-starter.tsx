@@ -142,14 +142,30 @@ export function PolicyChatStarter({
           prompt: text,
         });
         onConversationStart?.();
-        router.push(`/openappa/${encodeURIComponent(created.id)}`);
+        // The target scope must survive this navigation: `[conversationId]`
+        // remounts `PolicyChatStarter` from scratch, so without it in the
+        // URL both the deferred opening message and every follow-up would
+        // lose their `openAppaPolicyTarget` metadata.
+        const targetQuery = policyTarget
+          ? `?targetType=${encodeURIComponent(policyTarget.kind)}&targetName=${encodeURIComponent(policyTarget.name)}`
+          : "";
+        router.push(
+          `/openappa/${encodeURIComponent(created.id)}${targetQuery}`,
+        );
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "Could not start chat",
         );
       }
     },
-    [session, createConversation, onConversationStart, router, messageMetadata],
+    [
+      session,
+      createConversation,
+      onConversationStart,
+      router,
+      messageMetadata,
+      policyTarget,
+    ],
   );
 
   useEffect(() => {

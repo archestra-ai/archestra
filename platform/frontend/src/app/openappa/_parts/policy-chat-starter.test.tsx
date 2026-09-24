@@ -273,7 +273,9 @@ test("shows a target-scoped title, subtitle, and suggested prompts on the welcom
     }),
   );
   await vi.waitFor(() =>
-    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+    expect(push).toHaveBeenCalledWith(
+      "/openappa/conversation-1?targetType=agent&targetName=Research%20assistant",
+    ),
   );
   view.unmount();
   renderStarter(undefined, "conversation-1");
@@ -315,7 +317,9 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
   );
   fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
   await vi.waitFor(() =>
-    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+    expect(push).toHaveBeenCalledWith(
+      "/openappa/conversation-1?targetType=mcp_server&targetName=GitHub",
+    ),
   );
   view.unmount();
   // The opening message goes through the create → handoff → sendMessage
@@ -332,6 +336,43 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
         }),
       }),
     ),
+  );
+});
+
+test("carries the policy target through the create-and-redirect navigation URL", async () => {
+  renderStarter(undefined, undefined, {
+    policyTarget: { kind: "mcp_server", name: "GitHub" },
+  });
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "What can this server do?" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  // `/openappa/[conversationId]` remounts this component from scratch with no
+  // policyTarget prop of its own, so the target must ride in the URL the
+  // redirect navigates to (resolved back into a prop by the page's own
+  // `resolveOpenAppaPolicyTarget` call) or the scope is silently dropped for
+  // the deferred opening message and every follow-up on that conversation.
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/openappa/conversation-1?targetType=mcp_server&targetName=GitHub",
+    ),
+  );
+});
+
+test("omits the target query params when redirecting an unscoped conversation", async () => {
+  renderStarter();
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "Require approval for outbound messages" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
   );
 });
 

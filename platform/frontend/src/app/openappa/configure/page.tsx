@@ -1,25 +1,10 @@
 import {
-  type OpenAppaPolicyTargetKind,
   openAppaTargetChatSubtitle,
   openAppaTargetChatTitle,
   openAppaTargetSuggestedPrompts,
 } from "@archestra/shared";
 import { OpenAppaOverview } from "../_parts/openappa-overview";
-
-const POLICY_TARGET_KINDS: readonly OpenAppaPolicyTargetKind[] = [
-  "agent",
-  "mcp_gateway",
-  "mcp_server",
-];
-
-function isPolicyTargetKind(
-  value: string | undefined,
-): value is OpenAppaPolicyTargetKind {
-  return (
-    value !== undefined &&
-    (POLICY_TARGET_KINDS as readonly string[]).includes(value)
-  );
-}
+import { resolveOpenAppaPolicyTarget } from "../_parts/resolve-openappa-policy-target";
 
 export default async function ConfigureOpenAppaPage({
   searchParams,
@@ -31,16 +16,20 @@ export default async function ConfigureOpenAppaPage({
   }>;
 }) {
   const { start, targetType, targetName } = await searchParams;
+  const policyTarget = resolveOpenAppaPolicyTarget({ targetType, targetName });
 
-  if (isPolicyTargetKind(targetType) && targetName) {
+  if (policyTarget) {
     return (
       <OpenAppaOverview
-        title={openAppaTargetChatTitle(targetName)}
-        subtitle={openAppaTargetChatSubtitle(targetType, targetName)}
-        policyTarget={{ kind: targetType, name: targetName }}
+        title={openAppaTargetChatTitle(policyTarget.name)}
+        subtitle={openAppaTargetChatSubtitle(
+          policyTarget.kind,
+          policyTarget.name,
+        )}
+        policyTarget={policyTarget}
         suggestedPrompts={openAppaTargetSuggestedPrompts(
-          targetType,
-          targetName,
+          policyTarget.kind,
+          policyTarget.name,
         )}
       />
     );

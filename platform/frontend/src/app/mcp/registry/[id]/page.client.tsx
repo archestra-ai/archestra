@@ -2,7 +2,6 @@
 
 import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
-  ArrowLeft,
   Copy,
   MessageSquare,
   MoreHorizontal,
@@ -28,6 +27,7 @@ import {
   type OverviewFact,
   OverviewSummary,
 } from "@/components/overview-summary";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
 import { Badge } from "@/components/ui/badge";
@@ -163,7 +163,9 @@ export function McpCatalogItemPage({ id }: { id: string }) {
       <PageLayout
         title="MCP Server"
         description=""
-        backLink={<BackToRegistryLink />}
+        backLink={
+          <PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>
+        }
         maxWidth="wizard"
       >
         <ItemPageSkeleton />
@@ -176,7 +178,9 @@ export function McpCatalogItemPage({ id }: { id: string }) {
       <PageLayout
         title="MCP Server"
         description=""
-        backLink={<BackToRegistryLink />}
+        backLink={
+          <PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>
+        }
         maxWidth="wizard"
       >
         <Empty className="border">
@@ -202,22 +206,6 @@ export function McpCatalogItemPage({ id }: { id: string }) {
         router.push("/mcp/registry");
       }}
     />
-  );
-}
-
-function BackToRegistryLink() {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
-      asChild
-    >
-      <Link href="/mcp/registry">
-        <ArrowLeft className="h-4 w-4" />
-        MCP Registry
-      </Link>
-    </Button>
   );
 }
 
@@ -524,7 +512,7 @@ function CatalogItemDetails({
         )
       }
       documentTitle={item.name}
-      backLink={<BackToRegistryLink />}
+      backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
       description={item.description ?? ""}
       tabs={tabs}
       actionButton={

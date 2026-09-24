@@ -1,5 +1,61 @@
 # Changelog
 
+## [1.4.0-rc.21](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.20...platform-v1.4.0-rc.21) (2026-09-24)
+
+
+### Features
+
+* **llm-proxy:** guide new virtual key connections ([#8147](https://github.com/archestra-ai/archestra/issues/8147)) ([4c2577d](https://github.com/archestra-ai/archestra/commit/4c2577d83a4b99b551b823cd79de2f58a149cc6b))
+* **openappa:** Add chat-first OpenAPPA policy configuration ([#8149](https://github.com/archestra-ai/archestra/issues/8149)) ([1b6cfa0](https://github.com/archestra-ai/archestra/commit/1b6cfa0ac2709f5d4395b2d5c708723530f5c96d))
+* **openappa:** add policy targets overview and source tracing ([#8162](https://github.com/archestra-ai/archestra/issues/8162)) ([71ea3e0](https://github.com/archestra-ai/archestra/commit/71ea3e0c8e5542e1056ebb0353e56863d265e371))
+* **openappa:** admit known provider-hosted tools ([#8181](https://github.com/archestra-ai/archestra/issues/8181)) ([cc8acb0](https://github.com/archestra-ai/archestra/commit/cc8acb0060163c58d0c83bbd82d21ca8d6c04e36))
+* **openappa:** attach annotator-only batteries organization-wide ([#8148](https://github.com/archestra-ai/archestra/issues/8148)) ([3f9295a](https://github.com/archestra-ai/archestra/commit/3f9295a46103050a47193089464ced60cf0acd42))
+* **openappa:** guide policy setup and review across proxy clients ([#8107](https://github.com/archestra-ai/archestra/issues/8107)) ([832d0eb](https://github.com/archestra-ai/archestra/commit/832d0ebce7ea8be7823d1748bd3d5aa9aba91d4f))
+* **openappa:** polish policy target details and source line focus ([#8175](https://github.com/archestra-ai/archestra/issues/8175)) ([2cc319e](https://github.com/archestra-ai/archestra/commit/2cc319e824e383bae86a107442a920d5139cd997))
+* **openappa:** record external consults as an exportable dataset ([#8150](https://github.com/archestra-ai/archestra/issues/8150)) ([2ce0f31](https://github.com/archestra-ai/archestra/commit/2ce0f3120aa9950f55e9dbac7a00589fdc3e049e))
+* **openappa:** scope audiences to organization members ([#8186](https://github.com/archestra-ai/archestra/issues/8186)) ([0ee53e3](https://github.com/archestra-ai/archestra/commit/0ee53e3b678d5848817f4b8951077fddacaec0fd))
+* **proxy:** protect stateless CLI subagent returns ([#8024](https://github.com/archestra-ai/archestra/issues/8024)) ([8559a6f](https://github.com/archestra-ai/archestra/commit/8559a6f707275cd88c835a43bd4cc4573a29245a))
+
+
+### Bug Fixes
+
+* **agent-runtime:** bump Claude Code to 2.1.280 for Opus 5 ([#8152](https://github.com/archestra-ai/archestra/issues/8152)) ([37cfae3](https://github.com/archestra-ai/archestra/commit/37cfae3b530edd6ffb081e47254e9d24c0eb7f73))
+* **agent-runtime:** Hermes first-turn MCP race and one log session per conversation ([#8140](https://github.com/archestra-ai/archestra/issues/8140)) ([8ad8194](https://github.com/archestra-ai/archestra/commit/8ad819438dc6f3fc972ff219d6b15eea3e2a425a))
+* **apps:** expose viewer email in app SDK identity ([#8190](https://github.com/archestra-ai/archestra/issues/8190)) ([8bf9664](https://github.com/archestra-ai/archestra/commit/8bf966411be84df7a5828ea28531709cb880ff5e))
+* **backend:** preserve Claude requests on cold replay ([#8192](https://github.com/archestra-ai/archestra/issues/8192)) ([55591ea](https://github.com/archestra-ai/archestra/commit/55591ea2032bbd8c7299ee20af3514dea213e59e))
+* **connection:** avoid redundant OpenCode MCP re-authentication ([#8163](https://github.com/archestra-ai/archestra/issues/8163)) ([ed43d94](https://github.com/archestra-ai/archestra/commit/ed43d948c738108f501158548f4591cecc2021fb))
+* **connection:** enable marketplace auto-update for Claude Code on connect ([#8142](https://github.com/archestra-ai/archestra/issues/8142)) ([36a6c8c](https://github.com/archestra-ai/archestra/commit/36a6c8cd519c1388293c576af4c5a289b3cc9778))
+* **connection:** preserve Codex handoff arguments on Windows ([#8164](https://github.com/archestra-ai/archestra/issues/8164)) ([0cdc033](https://github.com/archestra-ai/archestra/commit/0cdc033948ee876be23a2051cfd9204fae1b7e8a))
+* **frontend:** align detail page headers and sticky save footers ([#8141](https://github.com/archestra-ai/archestra/issues/8141)) ([25a3013](https://github.com/archestra-ai/archestra/commit/25a3013b63d32d904427f87ccd623d4fd9e4aade))
+* **frontend:** improve mobile agent and gateway layouts ([#8160](https://github.com/archestra-ai/archestra/issues/8160)) ([200692f](https://github.com/archestra-ai/archestra/commit/200692f8d75e86d05c53bb33e5db7f3edace7cfd))
+* **frontend:** parse quoted CSV cells and render markdown lists in install dialog ([#8145](https://github.com/archestra-ai/archestra/issues/8145)) ([5c6f60b](https://github.com/archestra-ai/archestra/commit/5c6f60b24c43398b2bc3cb8557696051ed21000e))
+* increase combobox width to match trigger ([#8177](https://github.com/archestra-ai/archestra/issues/8177)) ([e75e3bb](https://github.com/archestra-ai/archestra/commit/e75e3bb4e4af942e6deaac03314717111d8b679f))
+* **mcp:** clear stale auth validation when switching methods ([#8161](https://github.com/archestra-ai/archestra/issues/8161)) ([26a64ab](https://github.com/archestra-ai/archestra/commit/26a64abe85490ee626ceac2144c3a8292ab57317))
+* **mcp:** reuse shared registry card quick actions ([#8159](https://github.com/archestra-ai/archestra/issues/8159)) ([fc2a184](https://github.com/archestra-ai/archestra/commit/fc2a184bff3333471add7ad16a034398ae64db63))
+* **openappa:** complete protected Claude subagent lifecycle ([#8168](https://github.com/archestra-ai/archestra/issues/8168)) ([1a96c0d](https://github.com/archestra-ai/archestra/commit/1a96c0dd1645f15de82d3bf057ad93455282b74c))
+* **openappa:** keep chat composer pinned instead of scrolling with the page ([#8178](https://github.com/archestra-ai/archestra/issues/8178)) ([ca38b3b](https://github.com/archestra-ai/archestra/commit/ca38b3bd866b617e914b3fef20fa4c8d519670b2))
+* **openappa:** let log:read users see their own external consults ([#8153](https://github.com/archestra-ai/archestra/issues/8153)) ([e7d82bf](https://github.com/archestra-ai/archestra/commit/e7d82bf9b76bcb7365220400e7904afcab00272b))
+* **openappa:** reject subagent calls without a prepared fork ([#8167](https://github.com/archestra-ai/archestra/issues/8167)) ([fcd4915](https://github.com/archestra-ai/archestra/commit/fcd4915963954c3116b950a95a127fc844735a17))
+* **openappa:** show CLI session marks and route Codex subscriptions ([#8173](https://github.com/archestra-ai/archestra/issues/8173)) ([37e4362](https://github.com/archestra-ai/archestra/commit/37e43629939781cde2317e77fb9ca8144db151d2))
+* **openappa:** verify OpenCode task returns before parent inference ([#8165](https://github.com/archestra-ai/archestra/issues/8165)) ([689c9fa](https://github.com/archestra-ai/archestra/commit/689c9fa384ddad531daf3eb34a9ca308e9cded09))
+* **proxy:** route Codex exec subscriptions through ChatGPT ([#8176](https://github.com/archestra-ai/archestra/issues/8176)) ([5b64803](https://github.com/archestra-ai/archestra/commit/5b64803a4c2c46ce7d395b9312ed021de7bbad4f))
+* remove card wrappers from skill, plugin, and MCP forms ([#8151](https://github.com/archestra-ai/archestra/issues/8151)) ([9d04338](https://github.com/archestra-ai/archestra/commit/9d0433891544cf030f14b3efd609facb1beb657d))
+
+
+### Performance Improvements
+
+* **backend:** isolate database-free Vitest tests from server setup ([#8180](https://github.com/archestra-ai/archestra/issues/8180)) ([4fe4f46](https://github.com/archestra-ai/archestra/commit/4fe4f46de80fffbad62b77cc9e48184f70b4b6a7))
+
+
+### Documentation
+
+* **agent-runtime:** document guardrails headers and failures for custom images ([#8146](https://github.com/archestra-ai/archestra/issues/8146)) ([1fb0875](https://github.com/archestra-ai/archestra/commit/1fb08756179678fcd3fe8d16d866bb263929a1ea))
+
+
+### Miscellaneous Chores
+
+* **dev:** add resource cleanup skill and use AGENTS.md directly ([#8171](https://github.com/archestra-ai/archestra/issues/8171)) ([b6eff34](https://github.com/archestra-ai/archestra/commit/b6eff3402648c282ac0392df64327857c4d8c2b0))
+
 ## [1.4.0-rc.20](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.19...platform-v1.4.0-rc.20) (2026-09-23)
 
 

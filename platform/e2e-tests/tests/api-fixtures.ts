@@ -200,12 +200,16 @@ function extractPaginatedArray<T>(data: unknown): T[] {
  * Create an agent
  * (authnz is handled by the authenticated session)
  */
-const createAgent = async (request: APIRequestContext, name: string) =>
+const createAgent = async (
+  request: APIRequestContext,
+  name: string,
+  agentType?: "agent" | "mcp_gateway",
+) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/agents",
-    data: { name },
+    data: { name, ...(agentType ? { agentType } : {}) },
   });
 
 /**

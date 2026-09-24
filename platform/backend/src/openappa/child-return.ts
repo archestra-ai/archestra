@@ -162,6 +162,16 @@ export function collectAndStripChildReturns(
     context: WalkContext = DEFAULT_CONTEXT,
   ): unknown => {
     if (typeof value === "string") {
+      if (
+        context.nativeResultSite &&
+        isOpenCodeBackgroundCompletion(value) &&
+        !isCompleteTaskResultFraming(value)
+      ) {
+        throw new ApiError(
+          409,
+          "OpenAPPA withheld a malformed child completion",
+        );
+      }
       const parsedJson = context.nativeResultSite
         ? jsonContainer(value)
         : undefined;
@@ -225,7 +235,14 @@ export function collectAndStripChildReturns(
       context.nativeResultSite ||
       (toolResultEnvelope === true &&
         envelopeId !== undefined &&
-        nativeResultCallIds.has(normalizeCallId(envelopeId) ?? envelopeId));
+        nativeResultCallIds.has(normalizeCallId(envelopeId) ?? envelopeId)) ||
+      (record.role === "user" &&
+        (typeof record.content === "string"
+          ? isOpenCodeBackgroundCompletion(record.content)
+          : Array.isArray(record.content) &&
+            record.content.some((part) =>
+              isOpenCodeBackgroundCompletion(asRecord(part)?.text),
+            )));
     const childNativeId =
       stringField(record["task-id"]) ??
       taskIdIn(record) ??
@@ -495,7 +512,11 @@ function replaceTaskResults(
       ...context,
       childNativeId: taskId ?? context.childNativeId,
     };
-    const result = value.slice(start + open.length, end);
+    // OpenCode adds one newline on either side of the child's actual text.
+    const result = value
+      .slice(start + open.length, end)
+      .replace(/^\r?\n/, "")
+      .replace(/\r?\n$/, "");
     const parsed = stripReceipt(result, taskContext, true);
     recordCompletion(parsed, taskContext, collected);
     canonical.push(`${open}${parsed.value}${close}`);
@@ -965,8 +986,17 @@ function isCompleteTaskResultFraming(value: string): boolean {
   if (start === -1 || end < start) return false;
   const prefix = value.slice(0, start).trim();
   const suffix = value.slice(end + close.length).trim();
-  const validPrefix = prefix === "" || /^<task\b[^>]*>$/.test(prefix);
+  const validPrefix =
+    prefix === "" ||
+    /^<task\b[^>]*>(?:\s*<summary>[\s\S]*?<\/summary>)?$/.test(prefix);
   return validPrefix && (suffix === "" || suffix === "</task>");
+}
+
+function isOpenCodeBackgroundCompletion(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\s*<task\b[^>]*\bstate="completed"[^>]*>/.test(value)
+  );
 }
 
 function isBoundedNativeMetadata(value: unknown): value is string {

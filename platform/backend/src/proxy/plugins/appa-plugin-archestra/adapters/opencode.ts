@@ -126,7 +126,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
-    return this.isSpawnTool(result.name, result.namespace) && !result.isError;
+    return (
+      this.isSpawnTool(result.name, result.namespace) &&
+      !result.isError &&
+      !(
+        typeof result.content === "string" &&
+        /^\s*<task\b[^>]*\bstate="running"[^>]*>/.test(result.content)
+      )
+    );
   }
 
   spawnPromptField(

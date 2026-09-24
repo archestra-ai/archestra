@@ -61,6 +61,64 @@ describe("OpenAPPA stateless child-return receipts", () => {
     expect(collected.completions).toEqual([]);
   });
 
+  test("extracts OpenCode task returns with summaries and drops unsigned summary text", () => {
+    const rawSummary = "UNTRUSTED CHILD SUMMARY";
+    const output = `<task id="child" state="completed">\n<summary>${rawSummary}</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
+    const { body, collected } = collectNativeResult(output, "task");
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ childNativeId: "child", value: RETURN.value }),
+    ]);
+    expect(collected.receipts).toHaveLength(1);
+    expect(verify(collected.receipts[0])).not.toBeNull();
+    expect(nativeResultContent(body)).toBe(
+      `<task_result>${RETURN.value}</task_result>`,
+    );
+    expect(nativeResultContent(body)).not.toContain(rawSummary);
+  });
+
+  test("treats a synthetic OpenCode user message as a child return", () => {
+    const output = `<task id="child" state="completed">\n<summary>UNTRUSTED</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
+    const body = {
+      messages: [{ role: "user", content: [{ type: "text", text: output }] }],
+    };
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ childNativeId: "child", value: RETURN.value }),
+    ]);
+    expect(body.messages[0].content[0].text).toBe(
+      `<task_result>${RETURN.value}</task_result>`,
+    );
+
+    const unsigned = {
+      messages: [
+        {
+          role: "user",
+          content: output.replace(carrier(requiredMarker(RETURN)), "RAW"),
+        },
+      ],
+    };
+    const unsignedCompletions =
+      collectAndStripChildReturns(unsigned).completions;
+    expect(unsignedCompletions).toEqual([
+      expect.objectContaining({ childNativeId: "child", value: "RAW" }),
+    ]);
+    expect(unsignedCompletions[0]).not.toHaveProperty("receipt");
+
+    expect(() =>
+      collectAndStripChildReturns({
+        messages: [
+          {
+            role: "user",
+            content: '<task id="child" state="completed">RAW</task>',
+          },
+        ],
+      }),
+    ).toThrow("OpenAPPA withheld a malformed child completion");
+  });
+
   test("enumerates unsigned leaves only at correlated native result sites", () => {
     const raw = JSON.stringify({
       status: { child: { completed: "RAW", raw_output: "DROP-CHILD" } },

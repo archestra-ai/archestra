@@ -22,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -83,7 +84,7 @@ import {
   useSkillLabelKeys,
   useSkillLabelValues,
 } from "@/lib/entity-labels.query";
-import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
   useBulkSelection,
@@ -175,7 +176,6 @@ function SkillsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const appName = useAppName();
   const appIconLogo = useAppIconLogo();
 
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
@@ -737,30 +737,28 @@ function SkillsList() {
       ),
       size: 420,
       cell: ({ row }) => (
-        <ListedSkillName
-          item={row.original}
-          appName={appName}
-          appIconLogo={appIconLogo}
-        />
+        <ListedSkillName item={row.original} appIconLogo={appIconLogo} />
       ),
     },
     {
-      id: "visibility",
-      size: 130,
-      header: "Visibility",
+      id: "source",
+      size: 180,
+      header: "Source",
       cell: ({ row }) => {
-        const item = row.original;
-        const standalone = item.source === "standalone" ? item.skill : null;
+        const source = listedSkillSource(row.original);
         return (
-          <ResourceVisibilityBadge
-            scope={item.skill.scope}
-            teams={standalone?.teams}
-            users={standalone?.users}
-            authorId={standalone?.authorId ?? currentUserId}
-            authorName={standalone?.authorName ?? session?.user?.name}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
+          <span
+            className="block truncate text-sm text-muted-foreground"
+            title={source.label}
+          >
+            {source.isRepo ? (
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                {source.label}
+              </code>
+            ) : (
+              source.label
+            )}
+          </span>
         );
       },
     },
@@ -1053,10 +1051,7 @@ function SkillsList() {
                             <Link href={href} className="truncate">
                               {item.skill.name}
                             </Link>
-                            <ListedSkillSourceBadge
-                              item={item}
-                              appName={appName}
-                            />
+                            <ListedSkillSourceBadge item={item} />
                             {standalone ? (
                               <LabelTags labels={standalone.labels} />
                             ) : null}
@@ -1138,7 +1133,7 @@ function SkillsList() {
                   onRowSelectionChange={onRowSelectionChange}
                   onPageRowIdsChange={selection.onPageRowIdsChange}
                   rangeSelection={rangeSelection}
-                  fixedWidthColumnIds={["visibility", "files", "usageCount"]}
+                  fixedWidthColumnIds={["source", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}
                 />
               </section>
@@ -1303,11 +1298,9 @@ function listedSkillFileCount(item: ListedSkill) {
 
 function ListedSkillName({
   item,
-  appName,
   appIconLogo,
 }: {
   item: ListedSkill;
-  appName: string;
   appIconLogo: string;
 }) {
   const standalone = item.source === "standalone" ? item.skill : null;
@@ -1323,19 +1316,25 @@ function ListedSkillName({
         <div className="flex items-baseline gap-2">
           <span className="truncate font-medium">{item.skill.name}</span>
           {compatibility && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="shrink-0 gap-1">
-                  <Info className="h-3 w-3" />
-                  compatibility
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                {compatibility}
-              </TooltipContent>
-            </Tooltip>
+            <RowClickShield className="inline-flex shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    role="img"
+                    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the compatibility note without implying a click action
+                    tabIndex={0}
+                    aria-label="Compatibility notes"
+                    className="inline-flex size-5 cursor-help items-center justify-center rounded-sm text-amber-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-amber-400"
+                  >
+                    <Info className="size-3.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  {compatibility}
+                </TooltipContent>
+              </Tooltip>
+            </RowClickShield>
           )}
-          <ListedSkillSourceBadge item={item} appName={appName} />
           {standalone?.labels ? <LabelTags labels={standalone.labels} /> : null}
           {standalone?.githubSyncInterval && (
             <Tooltip>
@@ -1392,27 +1391,34 @@ function ListedSkillName({
   );
 }
 
-function ListedSkillSourceBadge({
-  item,
-  appName,
-}: {
-  item: ListedSkill;
-  appName: string;
-}) {
+function ListedSkillSourceBadge({ item }: { item: ListedSkill }) {
+  const source = listedSkillSource(item);
+  if (
+    item.source === "standalone" &&
+    item.skill.sourceType !== "built_in" &&
+    !source.isRepo
+  ) {
+    return null;
+  }
+  return (
+    <Badge
+      variant="secondary"
+      title={source.label}
+      className="inline-flex max-w-56 shrink overflow-hidden font-normal"
+    >
+      <span className={cn("truncate", source.isRepo && "font-mono")}>
+        {source.label}
+      </span>
+    </Badge>
+  );
+}
+
+function listedSkillSource(item: ListedSkill): {
+  label: string;
+  isRepo: boolean;
+} {
   if (item.source === "external_mcp") {
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.serverName} · MCP`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
-      >
-        <span className="truncate">{item.skill.serverName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">MCP</span>
-      </Badge>
-    );
+    return { label: `${item.skill.serverName} · MCP`, isRepo: false };
   }
   if (item.source === "plugin") {
     const repo =
@@ -1421,52 +1427,23 @@ function ListedSkillSourceBadge({
       item.skill.pluginName.toLowerCase() === "openappa" &&
       repo?.toLowerCase() === "archestra-ai/openappa";
     if (isOpenAppa) {
-      return (
-        <Badge
-          variant="secondary"
-          title="OpenAPPA"
-          className="inline-flex max-w-48 shrink items-center overflow-hidden font-normal"
-        >
-          <span className="truncate">OpenAPPA</span>
-        </Badge>
-      );
+      return { label: "OpenAPPA", isRepo: false };
     }
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.pluginName} · Plugin`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
-      >
-        <span className="truncate">{item.skill.pluginName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">Plugin</span>
-      </Badge>
-    );
+    return { label: `${item.skill.pluginName} · Plugin`, isRepo: false };
   }
   if (item.skill.sourceType === "built_in") {
-    const label =
-      item.skill.sourceRef === "builtin:appa-guide" ? "OpenAPPA" : appName;
-    return (
-      <Badge variant="secondary" title={label} className="shrink-0 font-normal">
-        <span>{label}</span>
-      </Badge>
-    );
+    return { label: "Built in", isRepo: false };
   }
   const repo = parseRepoFromSourceRef(
     item.skill.sourceRef,
     item.skill.sourceOrigin,
   );
-  return repo ? (
-    <Badge
-      variant="secondary"
-      title={repo}
-      className="inline-flex max-w-48 shrink overflow-hidden font-normal"
-    >
-      <span className="truncate font-mono">{repo}</span>
-    </Badge>
-  ) : null;
+  return repo
+    ? { label: repo, isRepo: true }
+    : {
+        label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
+        isRepo: false,
+      };
 }
 
 function ListedSkillIcon({

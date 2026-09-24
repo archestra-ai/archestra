@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -255,14 +255,19 @@ describe("SkillsPage rows", () => {
 
     expect(screen.queryByRole("columnheader", { name: "Plugin" })).toBeNull();
     expect(screen.getByText("ste-writing")).toBeInTheDocument();
-    expect(screen.getByText("STE bundle")).toBeInTheDocument();
+    expect(screen.getByText("STE bundle · Plugin")).toBeInTheDocument();
     expect(screen.getByTitle("STE bundle · Plugin")).toBeVisible();
     expect(
       screen.getByRole("checkbox", { name: "Select ste-writing" }),
     ).toBeDisabled();
   });
 
-  it("shows compatibility beside the name and reveals its details on hover", async () => {
+  it("shows a compact compatibility icon beside the name without opening the row", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
     mockSkills([
       {
         ...MINE,
@@ -274,14 +279,46 @@ describe("SkillsPage rows", () => {
     render(<SkillsPage />);
 
     const nameRow = screen.getByText("pdf-tools").closest("div");
-    const badge = screen.getByText("compatibility");
+    const icon = screen.getByRole("img", { name: "Compatibility notes" });
     // The indicator lives in the name's own row, not trailing after the
     // description as a separate block competing for the row's width.
-    expect(nameRow).toContainElement(badge);
+    expect(nameRow).toContainElement(icon);
+    expect(screen.queryByText("compatibility")).not.toBeInTheDocument();
 
-    await userEvent.hover(badge);
+    await userEvent.hover(icon);
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("requires an external review tool");
+    await userEvent.click(icon);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("uses plain source text instead of a visibility column in the table", () => {
+    mockSkills([{ ...MINE, sourceRef: "tools/review@main:skills/pdf" }]);
+
+    render(<SkillsPage />);
+
+    expect(screen.getByRole("columnheader", { name: "Source" })).toBeVisible();
+    expect(
+      screen.queryByRole("columnheader", { name: "Visibility" }),
+    ).not.toBeInTheDocument();
+    const row = screen.getByText("pdf-tools").closest("tr");
+    expect(row).not.toBeNull();
+    const source = within(row as HTMLElement).getByText("tools/review");
+    expect(source).toBeVisible();
+    expect(source.tagName).toBe("CODE");
+  });
+
+  it("labels built-in skills by origin instead of the app name", () => {
+    mockSkills([
+      { ...MINE, sourceType: "built_in", sourceRef: "builtin:pdf-tools" },
+    ]);
+
+    render(<SkillsPage />);
+
+    const row = screen.getByText("pdf-tools").closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Built in")).toBeVisible();
+    expect(within(row as HTMLElement).queryByText("Archestra")).toBeNull();
   });
 
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {
@@ -323,8 +360,8 @@ describe("SkillsPage rows", () => {
       screen.queryByRole("columnheader", { name: "MCP server" }),
     ).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Plugin" })).toBeNull();
-    expect(screen.getByText("Release server")).toBeInTheDocument();
-    expect(screen.getByText("STE bundle")).toBeInTheDocument();
+    expect(screen.getByText("Release server · MCP")).toBeInTheDocument();
+    expect(screen.getByText("STE bundle · Plugin")).toBeInTheDocument();
     expect(screen.getByTitle("Release server · MCP")).toBeVisible();
     expect(screen.getByTitle("STE bundle · Plugin")).toBeVisible();
 

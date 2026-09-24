@@ -60,6 +60,7 @@ chmod 0600 "${mcp_config}"
 # session sat on the dialog with nobody able to answer, burning the whole run.
 # Merged rather than written, because Claude Code rewrites this file as it runs.
 claude_json="${CLAUDE_CONFIG_DIR:-${HOME}}/.claude.json"
+mkdir -p "$(dirname "${claude_json}")"
 workspace="$(pwd)"
 trust_patch="$(jq -n --arg dir "${workspace}" \
   '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,

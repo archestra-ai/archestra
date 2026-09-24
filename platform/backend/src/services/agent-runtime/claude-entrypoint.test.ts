@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -30,6 +31,7 @@ describe("Claude Code image entrypoint", () => {
       const runtime = path.join(root, "runtime");
       const workspace = path.join(root, "workspace");
       const home = path.join(root, "home");
+      const claudeConfigDir = path.join(home, ".claude");
       await Promise.all([
         mkdir(bin, { recursive: true }),
         mkdir(runtime, { recursive: true }),
@@ -71,6 +73,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-curl"
       const env = {
         ...process.env,
         HOME: home,
+        CLAUDE_CONFIG_DIR: claudeConfigDir,
         PATH: `${bin}:${process.env.PATH}`,
         ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
         ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
@@ -83,6 +86,12 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-curl"
         ARCHESTRA_AGENT_ATTENTION_COMMAND: ATTENTION_ENTRYPOINT,
       };
       await execFileAsync("bash", [ENTRYPOINT], { cwd: workspace, env });
+
+      expect(
+        JSON.parse(
+          await readFile(path.join(claudeConfigDir, ".claude.json"), "utf8"),
+        ).projects[await realpath(workspace)].hasTrustDialogAccepted,
+      ).toBe(true);
 
       const settings = JSON.parse(
         await readFile(path.join(runtime, "claude-settings.json"), "utf8"),

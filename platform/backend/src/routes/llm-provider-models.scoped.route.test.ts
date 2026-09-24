@@ -41,8 +41,6 @@ describe("scoped model grants", () => {
       payload: {
         customPricePerMillionInput: "2.5",
         customPricePerMillionOutput: "5",
-        teamIds: [],
-        userIds: [],
       },
     });
     expect(changed.statusCode, changed.body).toBe(200);
@@ -86,16 +84,20 @@ describe("scoped model grants", () => {
       [other.id],
     );
     expect((await ModelModel.findById(other.id))?.ignored).toBe(false);
+    // An edit no longer carries sharing: the retired `teamIds` field is
+    // refused, so an editor without permission management cannot hand the
+    // model to a team through it.
     const team = await makeTeam(ctx.organizationId, ctx.user.id);
-    expect(
-      (
-        await ctx.app.inject({
-          method: "PATCH",
-          url: `/api/llm-models/${model.id}`,
-          payload: { teamIds: [team.id] },
-        })
-      ).statusCode,
-    ).toBe(400);
+    const before = (await ResourcePermissionPolicyModel.find(key))?.grants;
+    const reshared = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${model.id}`,
+      payload: { teamIds: [team.id] },
+    });
+    expect(reshared.statusCode, reshared.body).toBe(400);
+    const after = (await ResourcePermissionPolicyModel.find(key))?.grants;
+    expect(after).toEqual(before);
+    expect(after?.some((grant) => grant.subject.type === "team")).toBe(false);
     await ResourcePermissionPolicyModel.replace({
       ...key,
       revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,

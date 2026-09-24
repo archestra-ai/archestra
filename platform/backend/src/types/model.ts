@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { LabelWithDetailsSchema } from "./label";
+import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
 export type {
   ModelInputModality,
@@ -248,6 +249,7 @@ export const PatchModelBodySchema = createUpdateSchema(
      */
     customContextLength: CustomModelTokenLimitSchema,
     customOutputLength: CustomModelTokenLimitSchema,
+    teamIds: RetiredSharingUpdateFieldSchema,
     ignored: z.boolean().optional(),
     embeddingDimensions:
       SupportedEmbeddingDimensionsSchema.nullable().optional(),

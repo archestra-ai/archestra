@@ -344,18 +344,23 @@ class ProjectService {
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       // Team-shared projects expose their team names for the badge to the
-      // owner and to an overseer of every project. A plain "shared"
+      // owner and to an overseer of every project, whose grant makes the
+      // project read as "shared" to them. A plain "shared"
       // recipient (a member of one of the teams) gets null — the full target
       // list stays the owner's business. Non-team projects: null.
       shareTeamNames:
-        (viewerRole === "owner" || viewerRole === "admin") &&
+        (viewerRole === "owner" ||
+          viewerRole === "admin" ||
+          params.isProjectAdmin === true) &&
         project.visibility === "team"
           ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
           : null,
       // Same gate as shareTeamNames: without these a project shared with named
       // people renders as private, which is the opposite of what happened.
       shareUserNames:
-        (viewerRole === "owner" || viewerRole === "admin") &&
+        (viewerRole === "owner" ||
+          viewerRole === "admin" ||
+          params.isProjectAdmin === true) &&
         project.visibility === "user"
           ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
           : null,

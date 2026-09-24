@@ -1456,7 +1456,7 @@ describe("chat model routes", () => {
       expect(unrestricted.teams).toEqual([]);
     });
 
-    test("PATCH /api/llm-models/:id ignores retired team restriction writes", async ({
+    test("PATCH /api/llm-models/:id refuses retired team restriction writes", async ({
       makeSecret,
       makeLlmProviderApiKey,
       makeTeam,
@@ -1471,15 +1471,15 @@ describe("chat model routes", () => {
       const devTeam = await makeTeam(organizationId, user.id);
       await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
 
-      // The retired field is no longer part of the body schema, so it is
-      // dropped rather than honoured, and the stored restriction stands.
+      // The retired field is refused rather than dropped, and the stored
+      // restriction stands.
       const restrict = await app.inject({
         method: "PATCH",
         url: `/api/llm-models/${frontierModel.id}`,
         body: { teamIds: [] },
       });
-      expect(restrict.statusCode).toBe(200);
-      expect(
+      expect(restrict.statusCode).toBe(400);
+      await expect(
         ModelTeamModel.getTeamIdsForModels([frontierModel.id]).then((teams) =>
           teams.get(frontierModel.id),
         ),

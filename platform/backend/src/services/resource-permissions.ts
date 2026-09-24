@@ -420,16 +420,26 @@ export class ResourcePermissions {
     return hasScopedPermission({ grants, required: params });
   }
 
-  static async resolve(params: PermissionContext): Promise<ScopedPermission[]> {
+  static async resolve(
+    context: PermissionContext,
+  ): Promise<ScopedPermission[]> {
+    const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];
     const policies = await ResourcePermissionPolicyModel.findApplicable(params);
     const subjectKeys = new Set(subjects.map(subjectKey));
-    return expandScopedGrants({ policies, subjectKeys }).filter(
-      (grant) =>
-        grant.scope === params.scope ||
-        (grant.scope === "*" && !sessionOversightOnly(params)),
-    );
+    return expandScopedGrants({ policies, subjectKeys })
+      .filter(
+        (grant) =>
+          grant.scope === params.scope ||
+          (grant.scope === "*" && !sessionOversightOnly(params)),
+      )
+      .map((grant) =>
+        // A parent's grant answers for the variant that was asked about.
+        grant.scope === params.scope
+          ? { ...grant, scope: context.scope }
+          : grant,
+      );
   }
 
   static async validateRecipients(params: {
@@ -544,6 +554,21 @@ export class ResourcePermissions {
         "Permissions changed since you opened this editor. Reload before saving.",
       );
     return policy;
+  }
+
+  /**
+   * The context whose grants answer for an object. A registry runtime variant
+   * has no policy of its own: its parent's grants decide, as they do for reads.
+   */
+  private static async grantContext(
+    params: PermissionContext,
+  ): Promise<PermissionContext> {
+    if (params.resource !== "mcpRegistry" || params.scope === "*")
+      return params;
+    const parentId = await ResourcePermissionTargetModel.findRegistryParentId(
+      params.scope,
+    );
+    return parentId ? { ...params, scope: parentId } : params;
   }
 
   private static async findRecipients(params: {

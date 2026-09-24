@@ -6,6 +6,7 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -38,6 +39,18 @@ export default class ResourcePermissionTargetModel {
       )
       .limit(1);
     return !!row;
+  }
+
+  /** The parent of a registry runtime variant, or null for any other id. */
+  static async findRegistryParentId(id: string): Promise<string | null> {
+    if (!z.string().uuid().safeParse(id).success) return null;
+    const table = schema.internalMcpCatalogTable;
+    const [row] = await db
+      .select({ parentId: table.parentCatalogItemId })
+      .from(table)
+      .where(eq(table.id, id))
+      .limit(1);
+    return row?.parentId ?? null;
   }
 
   static async find(params: {

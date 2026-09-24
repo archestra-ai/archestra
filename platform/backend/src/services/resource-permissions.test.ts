@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import db, { schema } from "@/database";
 import A2AContextModel from "@/models/a2a/context";
 import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
 import AgentRunModel from "@/models/agent-run";
 import ConversationModel from "@/models/conversation";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
@@ -212,6 +214,52 @@ describe("resource permissions", () => {
     expect(
       await ResourcePermissions.allows({ ...context, action: "read" }),
     ).toBe(false);
+  });
+
+  test("a registry runtime variant answers with its parent's grants", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const parent = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      access: { users: [user.id], preset: "use" },
+    });
+    const [variant] = await db
+      .insert(schema.internalMcpCatalogTable)
+      .values({
+        name: `${parent.name}-prod`,
+        serverType: parent.serverType,
+        organizationId: org.id,
+        childName: "prod",
+        parentCatalogItemId: parent.id,
+      })
+      .returning({ id: schema.internalMcpCatalogTable.id });
+    const context = {
+      organizationId: org.id,
+      userId: user.id,
+      resource: "mcpRegistry" as const,
+      scope: variant.id,
+    };
+
+    expect(
+      await ResourcePermissions.allows({ ...context, action: "use" }),
+    ).toBe(true);
+    expect(
+      await ResourcePermissions.allows({ ...context, action: "update" }),
+    ).toBe(false);
+    expect(
+      await McpCatalogTeamModel.userHasCatalogAccess({
+        userId: user.id,
+        catalogId: variant.id,
+        organizationId: org.id,
+        action: "use",
+      }),
+    ).toBe(true);
   });
 
   test("an organization grant never grants access to nonmembers", async ({

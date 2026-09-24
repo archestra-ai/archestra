@@ -177,6 +177,8 @@ class McpCatalogTeamModel {
         .limit(1);
       return readable !== undefined;
     }
+    // A runtime variant answers with its parent's grants, as the read rule does.
+    const grantScope = sql`coalesce(${schema.internalMcpCatalogTable.parentCatalogItemId}, ${schema.internalMcpCatalogTable.id})`;
     const [grant] = await db
       .select({ id: schema.internalMcpCatalogTable.id })
       .from(schema.internalMcpCatalogTable)
@@ -192,7 +194,7 @@ class McpCatalogTeamModel {
               organizationId,
               userId,
               resource: "mcpRegistry",
-              scopeColumn: schema.internalMcpCatalogTable.id,
+              scopeColumn: grantScope,
               action: params.action,
             }),
             // A reader finds the item, so the caller's own check answers 403.
@@ -200,7 +202,7 @@ class McpCatalogTeamModel {
               organizationId,
               userId,
               resource: "mcpRegistry",
-              scopeColumn: schema.internalMcpCatalogTable.id,
+              scopeColumn: grantScope,
               action: "read",
             }),
           ),

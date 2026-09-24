@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { logRingBuffer } from "./log-ring-buffer";
 
 function write(record: Record<string, unknown>): void {

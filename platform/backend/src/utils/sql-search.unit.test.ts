@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { escapeLikePattern } from "./sql-search";
 
 describe("sql-search utils", () => {

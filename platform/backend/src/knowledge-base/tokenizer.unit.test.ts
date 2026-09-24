@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { countTokens, getEncoding, truncateToTokens } from "./tokenizer";
 
 describe("truncateToTokens", () => {

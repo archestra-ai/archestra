@@ -1,5 +1,5 @@
 import { Writable } from "node:stream";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { createLogger } from "./create-logger";
 
 /**

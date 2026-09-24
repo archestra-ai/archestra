@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { nextPermissionSyncDueAt } from "./permission-sync-schedule";
 
 describe("nextPermissionSyncDueAt", () => {

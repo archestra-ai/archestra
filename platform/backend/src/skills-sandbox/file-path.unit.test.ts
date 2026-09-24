@@ -1,5 +1,5 @@
 import path from "node:path";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { resolveWithinRoot, safeSegment, UnsafePathError } from "./file-path";
 
 const NUL = String.fromCharCode(0);

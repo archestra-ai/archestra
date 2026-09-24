@@ -63,26 +63,36 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
    installs a system-prompt file injected into every future session launch —
    tell the user plainly; the client itself does not make that obvious.
 5. Follow the setup output to reload the client and finish its native MCP OAuth sign-in.
-   The gateway only registers in a NEW session — the current one cannot see it, so
-   never send the user to /mcp here and do not attempt the sign-in yourself.
+   Claude Code only registers the gateway in a NEW session, so never send the
+   user to /mcp here. OpenCode's separate CLI can read the updated config now.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: use its MCP settings to connect/authenticate the configured server.
    Codex: use codex mcp login SERVER_NAME.
-   OpenCode: run opencode mcp auth SERVER_NAME here with a timeout of 600000 ms.
-   Keep it running while the user completes the browser consent. If no browser
-   opens, relay the printed URL immediately. Explain that this second URL is the
-   gateway's native MCP OAuth consent, not another connection approval. Then run
+   OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
+   skip authentication; do not re-authenticate a working connection. Otherwise
+   run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,
+   report the connection error instead of forcing another OAuth flow.
+   If authentication is missing or expired, run opencode mcp auth SERVER_NAME
+   here with a timeout of 600000 ms and CI=true for this process. On macOS/Linux:
+   CI=true opencode mcp auth SERVER_NAME
+   On PowerShell:
+   $previousCI=$env:CI; $env:CI='true'; try { opencode mcp auth SERVER_NAME } finally { $env:CI=$previousCI }
+   CI=true keeps the OAuth URL visible in captured output instead of filling it
+   with spinner frames. Keep the process running while the user completes browser
+   consent. If no browser opens, relay the printed URL immediately. Explain that
+   this URL is the gateway's native MCP OAuth consent, not another connection approval.
+   If no URL appears within 60 seconds, interrupt the command and report the
+   error; do not pipe a confirmation answer or start another auth. Then run
    opencode mcp list and confirm the gateway is connected.
    Let the user complete any browser consent or client execution approval.
    Then close with one short, imperative user instruction and nothing else, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
    OpenCode: "Close every OpenCode process, then start opencode again."
 6. Verify the configured gateway can list tools before reporting a working connection —
-   in the new session, after authentication; this session cannot verify anything.
-   OpenCode: opencode mcp list reports connected after the in-session OAuth
-   command completes. Restart OpenCode to load the new tools.
+   in the new session, after authentication. OpenCode can check its connection
+   now with opencode mcp list, but must restart to load new tools.
    Configuration applied alone does not prove MCP authentication succeeded.
-   Verification is that session's job — never hand it to the user as a step.
+   For clients requiring a new session, verification is that session's job.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 

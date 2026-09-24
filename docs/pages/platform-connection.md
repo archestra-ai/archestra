@@ -47,7 +47,7 @@ Browser approval authorizes installation. MCP gateway authentication remains the
 Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
 
-For OpenCode, the connection agent runs the installer and `opencode mcp auth <name>` in sequence. Your browser opens twice: first for connection approval, then for gateway OAuth consent. Restart OpenCode after both steps complete.
+For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
 
 Cursor still requires its model settings and marketplace steps inside the app.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
@@ -225,7 +225,7 @@ See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for r
 
 OpenCode 1.17 or newer supports the reviewed setup script.
 
-- **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. Run `opencode mcp auth <name>` once to finish browser sign-in.
+- **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. If `opencode mcp list` reports that authentication is needed, run `opencode mcp auth <name>`. If credentials are valid but the connection fails, check the connection error instead of signing in again.
 - **LLM proxy** — keeps OpenCode provider IDs, model IDs, and local credentials. It enables compatible providers with valid credentials and routes them to proxy endpoints. Unsupported or uncredentialed providers stay hidden. If an active model becomes unavailable, OpenCode clears it without choosing a replacement.
 - **OAuth connections** — OpenCode refreshes local Google and ChatGPT access tokens. The routing guard forwards request bearer tokens and required account headers to the proxy adapter. Archestra does not store or refresh the OAuth tokens.
 - **Routing guard** — installs a global OpenCode plugin. The plugin updates the provider allowlist after project configuration loads. It blocks requests if a project overrides the Archestra base URL or chooses an unsupported provider, preventing direct provider requests.

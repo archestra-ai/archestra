@@ -159,6 +159,7 @@ RUN apk add --no-cache \
    # stale cache.
    apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
        "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
+   # CVE-2026-76641, CVE-2026-66046: expat vulnerabilities (HIGH) fixed in 2.8.4-r0.
    # CVE-2026-93990: expat vulnerability (HIGH) fixed in 2.8.5-r0.
    # expat is pulled in transitively (python), never named in an `apk add` here, so it
    # needs its own floor for the same reason the openssl ones above do: the cached layer

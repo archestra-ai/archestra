@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -24,11 +25,9 @@ import {
   test,
 } from "@/test";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
+beforeEach(() => {
+  config.plugins.enabled = true;
+});
 
 async function seedSkill(params: {
   organizationId: string;

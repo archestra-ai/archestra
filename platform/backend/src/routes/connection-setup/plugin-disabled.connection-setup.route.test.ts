@@ -1,5 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
 import { PluginModel } from "@/models";
+import { test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import connectionSetupRoutes from "./connection-setup.routes";
 

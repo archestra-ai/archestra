@@ -1,6 +1,7 @@
 import { APPS_HACKATHON_OPENS_AT_MS } from "@archestra/shared";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import config from "@/config";
+import { test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appGalleryRoutes from "./app-gallery.routes";
 

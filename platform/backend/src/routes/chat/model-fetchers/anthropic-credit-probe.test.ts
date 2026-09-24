@@ -103,7 +103,7 @@ describe("probeAnthropicCredit", () => {
       .mockResolvedValueOnce(jsonResponse(200, { id: "msg_1" }));
 
     const promise = probeAnthropicCredit("sk-key");
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(500);
     await expect(promise).resolves.toBe("usable");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

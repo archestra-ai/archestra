@@ -18,9 +18,11 @@ inside one outer transaction per test. The harness rolls that transaction back
 after each test instead of truncating all tables. Use it only after proving that
 the suite does not need a real commit, run schema changes, or leave untracked
 background database work running. Production `db.transaction` calls become
-nested savepoints, which can change commit-sensitive behavior. Benchmark the
-full file in ordinary and rollback projects, run shuffled order with several
-seeds, and run it alongside ordinary database suites before opting in. Keep
+nested savepoints, which can change commit-sensitive behavior. Postgres
+sequence increments do not roll back, so the suite must not rely on sequence
+values resetting. Benchmark the full file in ordinary and rollback projects,
+run shuffled order with several seeds, and run it alongside ordinary database
+suites before opting in. Keep
 ordinary `*.test.ts` for uncertain cases; a passing suite alone is insufficient
 evidence because fire-and-forget writes can fail after assertions finish.
 

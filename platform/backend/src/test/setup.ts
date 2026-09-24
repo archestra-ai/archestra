@@ -273,17 +273,43 @@ afterEach(() => {
 async function finishTestTransaction(): Promise<void> {
   // Registered fire-and-forget work must finish while its test's transaction
   // is still open. The ordinary project continues to drain at file teardown.
-  const { drainBackgroundWork } = await import("../utils/background-work.js");
-  await drainBackgroundWork();
-  releaseTestTransaction?.();
-  await testTransactionFinished;
-  const dbModule = await import("../database/index.js");
-  dbModule.__setTestDb(
-    testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
-  );
-  releaseTestTransaction = null;
-  testTransactionFinished = null;
-  completedRollbackTests += 1;
+  const errors: unknown[] = [];
+  const release = releaseTestTransaction;
+  const finished = testTransactionFinished;
+  try {
+    const { drainBackgroundWork } = await import("../utils/background-work.js");
+    await drainBackgroundWork();
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    try {
+      release?.();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await finished;
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      const dbModule = await import("../database/index.js");
+      dbModule.__setTestDb(
+        testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+      );
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      releaseTestTransaction = null;
+      testTransactionFinished = null;
+      // An unsuccessful teardown makes the next test rebuild the clean state.
+      completedRollbackTests =
+        errors.length === 0 ? completedRollbackTests + 1 : 0;
+    }
+  }
+  if (errors.length > 0) {
+    throw errors[0];
+  }
 }
 
 function restoreTestGlobals(): void {

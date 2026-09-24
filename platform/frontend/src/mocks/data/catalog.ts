@@ -51,6 +51,8 @@ export function makeCatalogItem(
     toolCount: 0,
     skillCount: 0,
     providesSkills: false,
+    // The seeded viewer is an admin, who may do anything to any entry.
+    effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
     ...overrides,
   };
 }

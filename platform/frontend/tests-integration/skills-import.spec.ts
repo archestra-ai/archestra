@@ -287,9 +287,7 @@ test.describe("Skills import", () => {
       path: "packages/skills",
       githubAppConfigId: appId,
       skillPaths: [skillPath],
-      scope: "personal",
-      teamIds: [],
-      userIds: [],
+      initialGrants: [],
       sync: { interval: "1d" },
     });
     await expect(selectDialog).toBeHidden();

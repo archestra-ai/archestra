@@ -1,5 +1,8 @@
 import type { APIRequestContext } from "@playwright/test";
-import { makeUserPermissions } from "@/mocks/data/auth";
+import {
+  adminScopedCapabilitiesSeed,
+  makeUserPermissions,
+} from "@/mocks/data/auth";
 import { expect, test } from "./fixtures";
 import type { MswControl } from "./helpers/msw-control";
 
@@ -74,6 +77,18 @@ async function setPermissions(
     method: "get",
     url: "/api/user/permissions",
     body: makeUserPermissions(overrides),
+  });
+  // A page also opens through a grant on one of its objects, so a resource
+  // the reader has no role action on loses its grants too.
+  const withdrawn = Object.entries(overrides ?? {})
+    .filter(([, actions]) => actions?.length === 0)
+    .map(([resource]) => resource);
+  await mswControl.use({
+    method: "get",
+    url: "/api/resource-permissions",
+    body: adminScopedCapabilitiesSeed.filter(
+      (grant) => !withdrawn.includes(grant.resource),
+    ),
   });
 }
 

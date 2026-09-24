@@ -161,7 +161,6 @@ describe("NewMcpCatalogItemPage clone flow", () => {
       namespace: null,
       description: null,
       networkPolicy: null,
-      restricted: false,
     } as ReturnType<typeof useDefaultEnvironment>);
     vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useTeams

@@ -213,7 +213,6 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/environments", {
     environments: [],
     defaultAssignedCatalogCount: 0,
-    canDeployToDefault: true,
   }),
   // Fetched by the agent settings page's messaging-channels section, and by
   // the record's own Messaging Channels tab. No configured providers and no

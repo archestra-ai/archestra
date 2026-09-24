@@ -2,7 +2,15 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import {
+  Info,
+  Layers,
+  Pencil,
+  Plus,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -20,12 +28,12 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { FormDialog } from "@/components/form-dialog";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import {
   Accordion,
@@ -40,7 +48,6 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +59,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
@@ -118,7 +124,6 @@ type EnvironmentTableRow =
       namespace: string | null;
       description: string | null;
       networkPolicy: NetworkPolicy | null;
-      restricted: boolean;
       assignedCatalogCount: number;
     }
   | (EnvironmentWithAssignedCount & { kind: "environment" });
@@ -208,7 +213,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         namespace: defaultEnvironment.namespace,
         description: defaultEnvironment.description,
         networkPolicy: defaultEnvironment.networkPolicy,
-        restricted: defaultEnvironment.restricted,
         assignedCatalogCount: defaultAssignedCatalogCount,
       },
       ...environments.map((environment) => ({
@@ -335,18 +339,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         cell: ({ row }) => (
           <NetworkPolicyCell policy={row.original.networkPolicy} />
         ),
-      },
-      {
-        accessorKey: "restricted",
-        header: "Access",
-        cell: ({ row }) =>
-          row.original.restricted ? (
-            <Badge variant="secondary">Restricted</Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">
-              Open
-            </Badge>
-          ),
       },
       {
         id: "actions",
@@ -587,8 +579,8 @@ function EnvironmentEditorDialog({
   capabilities,
 }: {
   // "default" edits the org-level default environment; "create"/"edit" manage
-  // real environments. Name, description, namespace, and restricted are all
-  // editable in every mode.
+  // real environments. Name, description and namespace are editable in every
+  // mode.
   mode: "create" | "edit" | "default";
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -598,7 +590,6 @@ function EnvironmentEditorDialog({
     namespace: string | null;
     description: string | null;
     networkPolicy: NetworkPolicy | null;
-    restricted: boolean;
     validationRegex: string | null;
     trustedImageRegistries: string[] | null;
   };
@@ -628,7 +619,6 @@ function EnvironmentEditorDialog({
   // touched policy is persisted — see resolveNetworkPolicyUpdate — so seeding the
   // controls for display never lets a passive save rewrite the stored policy.
   const [egressDirty, setEgressDirty] = useState(false);
-  const [restricted, setRestricted] = useState(false);
   const [validationRegex, setValidationRegex] = useState("");
   const [trustedImageRegistries, setTrustedImageRegistries] = useState<
     string[]
@@ -638,6 +628,8 @@ function EnvironmentEditorDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [activeSection, setActiveSection] =
+    useState<EnvironmentDialogSection>("general");
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy) => {
     setEgressMode(policy.egressMode);
     setDomainPreset(policy.domainPreset);
@@ -653,6 +645,7 @@ function EnvironmentEditorDialog({
   useEffect(() => {
     if (open) {
       setShowConfirm(false);
+      setActiveSection("general");
       setRegistryDraft("");
       setRegistryError(null);
       setEgressDirty(false);
@@ -672,7 +665,6 @@ function EnvironmentEditorDialog({
             policyLoaded: orgLoaded,
           }),
         );
-        setRestricted(defaultEnvironment?.restricted ?? false);
         setValidationRegex(defaultEnvironment?.validationRegex ?? "");
         setTrustedImageRegistries(
           defaultEnvironment?.trustedImageRegistries ?? [],
@@ -690,7 +682,6 @@ function EnvironmentEditorDialog({
             policyLoaded: orgLoaded,
           }),
         );
-        setRestricted(environment?.restricted ?? false);
         setValidationRegex(environment?.validationRegex ?? "");
         setTrustedImageRegistries(environment?.trustedImageRegistries ?? []);
       }
@@ -804,7 +795,6 @@ function EnvironmentEditorDialog({
           namespace: namespaceValue,
           description: descriptionValue,
           ...policyPatch,
-          restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
           labels: finalLabels,
@@ -818,7 +808,6 @@ function EnvironmentEditorDialog({
           namespace: namespaceValue,
           description: descriptionValue,
           ...policyPatch,
-          restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
         },
@@ -833,7 +822,6 @@ function EnvironmentEditorDialog({
             namespace: namespaceValue,
             description: descriptionValue,
             ...policyPatch,
-            restricted,
             validationRegex: validationRegexValue,
             trustedImageRegistries: trustedImageRegistriesValue,
             labels: finalLabels,
@@ -858,35 +846,78 @@ function EnvironmentEditorDialog({
       : mode === "default"
         ? "Edit default environment"
         : "Edit environment";
-  const dialogDescription = (
-    <>
-      <span>
-        {mode === "create"
-          ? "Create an org-level deployment environment."
-          : mode === "default"
-            ? "Update the default environment."
-            : "Update this environment."}
-      </span>{" "}
-      <ExternalDocsLink
-        href={ENVIRONMENTS_DOCS_URL}
-        className="underline"
-        showIcon={false}
-      >
-        Learn more
-      </ExternalDocsLink>
-    </>
-  );
+  const dialogDescriptionText =
+    mode === "create"
+      ? "Create an org-level deployment environment."
+      : mode === "default"
+        ? "Update the default environment."
+        : "Update this environment.";
+
+  const navItems: Array<{ id: EnvironmentDialogSection; label: string }> = [
+    { id: "general", label: "General" },
+    { id: "egress", label: "Network Egress Policy" },
+    // Only a saved environment has an id to hang grants on. The Default
+    // environment is org configuration rather than a row, and is open to all.
+    ...(mode === "edit" && environment
+      ? [{ id: "permissions" as const, label: "Permissions" }]
+      : []),
+  ];
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description={dialogDescription}
-      size="medium"
-      className="sm:max-w-3xl h-[88vh]"
+      description={dialogDescriptionText}
+      headerExtra={
+        <ExternalDocsLink
+          href={ENVIRONMENTS_DOCS_URL}
+          className="text-sm underline"
+          showIcon={false}
+        >
+          Learn more
+        </ExternalDocsLink>
+      }
+      sidebarLabel={name.trim() || title}
+      sidebarDescription={
+        mode === "default" ? "Default environment" : "Environment"
+      }
+      sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={navItems}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave && !isPending) handleSave();
+      }}
+      footer={
+        showConfirm ? (
+          <ReinstallConfirmBar
+            mode="auto"
+            className="mt-0"
+            affectedServerCount={environment?.assignedCatalogCount ?? 0}
+            isSubmitting={isPending}
+            onCancel={() => setShowConfirm(false)}
+            onConfirm={doSave}
+          />
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSave || isPending}>
+              {isPending ? "Saving…" : "Save"}
+            </Button>
+          </>
+        )
+      }
     >
-      <DialogBody className="space-y-4">
+      <div hidden={activeSection !== "general"} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="environment-name">
             Name <span className="text-destructive">*</span>
@@ -942,72 +973,6 @@ function EnvironmentEditorDialog({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="environment-restricted">Restricted</Label>
-            <FieldDescription>
-              Only people granted access to this environment can deploy into it.
-              Grant it in Permissions below. Unrestricted environments stay open
-              to anyone who can create the resource.
-            </FieldDescription>
-          </div>
-          <Switch
-            id="environment-restricted"
-            checked={restricted}
-            onCheckedChange={setRestricted}
-            disabled={isPending}
-          />
-        </div>
-        {/*
-          Who may deploy here. Only a saved environment has an id to hang
-          grants on, and the Default environment is org configuration rather
-          than a row, so neither the create form nor the default editor shows
-          it. Both land in the unrestricted case anyway, which asks nobody for
-          anything.
-        */}
-        {mode === "edit" && environment && (
-          <div className="border-t pt-4">
-            <ResourceAccessSection resource="environment" id={environment.id} />
-          </div>
-        )}
-        <section className="space-y-4 border-t pt-4">
-          <div className="space-y-1">
-            <h3 className="font-medium text-sm">Network Egress Policy</h3>
-            <p className="text-xs text-muted-foreground">
-              Configure outbound network access for workloads in this
-              environment.
-            </p>
-          </div>
-
-          <NetworkPolicyFields
-            egressMode={egressMode}
-            setEgressMode={(value) => {
-              setEgressMode(value);
-              setEgressDirty(true);
-            }}
-            domainPreset={domainPreset}
-            setDomainPreset={(value) => {
-              setDomainPreset(value);
-              setEgressDirty(true);
-            }}
-            allowedDomainsText={allowedDomainsText}
-            setAllowedDomainsText={(value) => {
-              setAllowedDomainsText(value);
-              setEgressDirty(true);
-            }}
-            allowedCidrsText={allowedCidrsText}
-            setAllowedCidrsText={(value) => {
-              setAllowedCidrsText(value);
-              setEgressDirty(true);
-            }}
-            supportsFqdn={supportsFqdn}
-            enforcementStatus={
-              capabilities?.networkPolicy.enforcementStatus ?? null
-            }
-            baselineLoaded={egressBaselineLoaded}
-            disabled={isPending || !egressBaselineLoaded}
-          />
-        </section>
         <Accordion type="single" collapsible className="border-t">
           <AccordionItem value="advanced">
             <AccordionTrigger className="hover:no-underline">
@@ -1118,33 +1083,54 @@ function EnvironmentEditorDialog({
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-      </DialogBody>
-      {showConfirm ? (
-        <ReinstallConfirmBar
-          mode="auto"
-          className="mt-0"
-          affectedServerCount={environment?.assignedCatalogCount ?? 0}
-          isSubmitting={isPending}
-          onCancel={() => setShowConfirm(false)}
-          onConfirm={doSave}
+      </div>
+      <div hidden={activeSection !== "egress"} className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Configure outbound network access for workloads in this environment.
+        </p>
+        <NetworkPolicyFields
+          egressMode={egressMode}
+          setEgressMode={(value) => {
+            setEgressMode(value);
+            setEgressDirty(true);
+          }}
+          domainPreset={domainPreset}
+          setDomainPreset={(value) => {
+            setDomainPreset(value);
+            setEgressDirty(true);
+          }}
+          allowedDomainsText={allowedDomainsText}
+          setAllowedDomainsText={(value) => {
+            setAllowedDomainsText(value);
+            setEgressDirty(true);
+          }}
+          allowedCidrsText={allowedCidrsText}
+          setAllowedCidrsText={(value) => {
+            setAllowedCidrsText(value);
+            setEgressDirty(true);
+          }}
+          supportsFqdn={supportsFqdn}
+          enforcementStatus={
+            capabilities?.networkPolicy.enforcementStatus ?? null
+          }
+          baselineLoaded={egressBaselineLoaded}
+          disabled={isPending || !egressBaselineLoaded}
         />
-      ) : (
-        <DialogStickyFooter className="mt-0">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!canSave || isPending}>
-            {isPending ? "Saving…" : "Save"}
-          </Button>
-        </DialogStickyFooter>
+      </div>
+      {mode === "edit" && environment && (
+        <div hidden={activeSection !== "permissions"}>
+          <ResourceAccessSection
+            resource="environment"
+            id={environment.id}
+            standalone
+          />
+        </div>
       )}
-    </FormDialog>
+    </TabbedDialogShell>
   );
 }
+
+type EnvironmentDialogSection = "general" | "egress" | "permissions";
 
 export function NetworkPolicyFields({
   egressMode,

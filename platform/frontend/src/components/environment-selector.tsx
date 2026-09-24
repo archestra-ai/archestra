@@ -65,8 +65,8 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
             description: scope
               ? "Applies to every environment unless overridden"
               : (defaultEnvironment.description ?? ""),
-            // The org Default can itself be marked restricted.
-            deployable: scope || (environmentList?.canDeployToDefault ?? true),
+            // The org Default is open to all.
+            deployable: true,
           },
         ];
   const options = [

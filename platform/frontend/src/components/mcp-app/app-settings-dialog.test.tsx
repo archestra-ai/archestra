@@ -78,7 +78,6 @@ const server = setupServer(
     HttpResponse.json({
       environments: [],
       defaultAssignedCatalogCount: 0,
-      canDeployToDefault: true,
     }),
   ),
   http.get(`${API_ORIGIN}/api/organization`, () =>

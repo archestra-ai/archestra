@@ -32,7 +32,6 @@ const savedId = "10000000-0000-4000-8000-000000000001";
 const savedEnvironment = {
   id: savedId,
   name: "Restricted test environment",
-  restricted: true,
   // The listing answers deploy authority per environment; this one is closed
   // to the caller, which is what makes its option disabled below.
   canDeploy: false,
@@ -41,7 +40,6 @@ const savedEnvironment = {
 const otherEnvironment = {
   id: "10000000-0000-4000-8000-000000000002",
   name: "Other test environment",
-  restricted: false,
   canDeploy: true,
   description: null,
 };
@@ -79,7 +77,6 @@ beforeEach(() => {
           mcpGateway: null,
           knowledgeSource: null,
         },
-        canDeployToDefault: true,
       });
     }),
     http.get(`${origin}/api/organization`, () =>

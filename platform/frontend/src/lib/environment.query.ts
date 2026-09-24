@@ -36,7 +36,6 @@ const EMPTY_ENVIRONMENT_LIST: EnvironmentList = {
   environments: [],
   defaultAssignedCatalogCount: 0,
   resourceDefaults: EMPTY_RESOURCE_DEFAULTS,
-  canDeployToDefault: false,
 };
 
 export function useEnvironments(enabled = true) {

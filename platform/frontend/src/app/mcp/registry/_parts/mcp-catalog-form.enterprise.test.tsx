@@ -105,7 +105,6 @@ describe("McpCatalogForm enterprise gating", () => {
       namespace: null,
       description: null,
       networkPolicy: null,
-      restricted: false,
     } as ReturnType<typeof useDefaultEnvironment>);
     vi.mocked(useTeams).mockReturnValue({
       data: [],

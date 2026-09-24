@@ -454,11 +454,11 @@ Ownership and team administration do not override revocation.
 
 ### Environments
 
-Deploying a resource into a [restricted environment](/docs/platform-environments) requires a `use` grant on that environment.
-Grants are per environment, so a team can deploy to one restricted environment without reaching another.
+Deploying a resource into an [environment](/docs/platform-environments#deploy-permissions) requires a `use` grant on that environment.
+Grants are per environment, so a team can deploy to one environment without reaching another.
 One grant covers every kind of resource deployed there.
-Unrestricted environments stay open to anyone who can create the resource.
-The organization's implicit Default environment has no object to grant on, so deploying into a restricted Default requires `use` on every environment.
+A new environment is granted to the whole organization.
+The organization's implicit Default environment is open to anyone who can create the resource.
 Creating, editing, and deleting environments remain role permissions.
 
 ### OAuth Clients

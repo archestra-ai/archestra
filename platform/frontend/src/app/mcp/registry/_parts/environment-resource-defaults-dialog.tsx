@@ -85,7 +85,7 @@ function ResourceDefaultRow({
 }: {
   resource: EnvironmentDefaultableResource;
   value: string | null;
-  environments: { id: string; name: string; restricted: boolean }[];
+  environments: { id: string; name: string }[];
   defaultEnvironmentName: string;
   disabled: boolean;
   onChange: (environmentId: string | null) => void;
@@ -102,9 +102,9 @@ function ResourceDefaultRow({
       onChange={onChange}
       disabled={disabled}
       helpText={
-        selected?.restricted ? (
+        selected ? (
           <span>
-            Creators without access to this restricted environment fall back to{" "}
+            Creators who may not deploy into this environment fall back to{" "}
             {defaultEnvironmentName}.
           </span>
         ) : undefined

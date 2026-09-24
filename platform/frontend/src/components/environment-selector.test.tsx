@@ -77,7 +77,6 @@ describe("EnvironmentSelector — saved value", () => {
             id: "env-restricted",
             name: "Restricted Environment",
             description: "",
-            restricted: true,
           },
         ],
       },

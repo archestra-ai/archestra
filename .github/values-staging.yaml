@@ -69,6 +69,9 @@ archestra:
   env:
     # Runtime pods reach this installation through its in-cluster API Service.
     ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
+    # APPA runs inside the web/worker backends, not inside Lobster pods.
+    # Reuse the deployment's Grafana Alloy endpoint and authentication.
+    ARCHESTRA_OPENAPPA_OTEL_ENABLED: "true"
     # Retention stays OFF here on purpose. This deployment is where the
     # platform gets stress-tested, and a large `interactions` table is the
     # point — the volume is the test data, not a problem to sweep up. Storage

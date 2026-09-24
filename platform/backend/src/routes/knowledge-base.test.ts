@@ -28,6 +28,7 @@ import {
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -46,13 +47,15 @@ describe("knowledge base routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     // The auto-sync-permissions routes are beta-gated; the suite runs with the
     // gate open, and the dedicated flag-off tests close it per test.
     config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // Grants reach members only. Tests that need another role set it below.
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -82,7 +85,7 @@ describe("knowledge base routes", () => {
       makeMember,
       makeUser,
     }) => {
-      await makeMember(user.id, organizationId, { role: "editor" });
+      await MemberModel.updateRole(user.id, organizationId, "editor");
       const creator = user;
       const knowledgeBase = await app.inject({
         method: "POST",
@@ -132,7 +135,7 @@ describe("knowledge base routes", () => {
       }
 
       user = await makeUser();
-      await makeMember(user.id, organizationId, { role: "editor" });
+      await MemberModel.updateRole(user.id, organizationId, "editor");
       for (const url of urls) {
         expect((await app.inject({ method: "GET", url })).statusCode).toBe(404);
       }
@@ -145,7 +148,7 @@ describe("knowledge base routes", () => {
       makeUser,
       makeKnowledgeBase,
     }) => {
-      await makeMember(user.id, organizationId, { role: "member" });
+      await MemberModel.updateRole(user.id, organizationId, "member");
       const owner = user;
       const created = await app.inject({
         method: "POST",
@@ -173,7 +176,7 @@ describe("knowledge base routes", () => {
         const response = await app.inject({
           method,
           url: `/api/knowledge-bases/${hidden.id}`,
-          ...(method === "PUT" ? { payload: { visibility: "org-wide" } } : {}),
+          ...(method === "PUT" ? { payload: { name: "Taken" } } : {}),
         });
         expect(response.statusCode).toBe(404);
       }
@@ -183,31 +186,30 @@ describe("knowledge base routes", () => {
         (await app.inject({ method: "GET", url: `/api/knowledge-bases/${id}` }))
           .statusCode,
       ).toBe(404);
-      user = owner;
-      const shared = await app.inject({
-        method: "PUT",
-        url: `/api/knowledge-bases/${id}`,
-        payload: { visibility: "org-wide" },
-      });
-      expect(shared.statusCode).toBe(200);
-      await expect
-        .poll(async () =>
+      // Sharing is a grant now; the owner shares through the permissions API.
+      await ResourcePermissionPolicyModel.replace({
+        organizationId,
+        resource: "knowledgeBase",
+        scope: id,
+        revision:
           (
-            await AuditLogModel.findPaginated({
+            await ResourcePermissionPolicyModel.find({
               organizationId,
-              resourceType: "knowledgeBase",
-              limit: 20,
-              offset: 0,
+              resource: "knowledgeBase",
+              scope: id,
             })
-          ).data.find(
-            (row) =>
-              row.resourceId === id && row.action === "knowledgeBase.updated",
-          ),
-        )
-        .toMatchObject({
-          before: { visibility: "private" },
-          after: { visibility: "org-wide" },
-        });
+          )?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: owner.id },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      });
       user = hiddenOwner;
       expect(
         (await app.inject({ method: "GET", url: `/api/knowledge-bases/${id}` }))
@@ -221,7 +223,7 @@ describe("knowledge base routes", () => {
       makeKnowledgeBase,
       makeTeam,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const other = await makeUser();
       const team = await makeTeam(organizationId, user.id);
       const own = await makeKnowledgeBase(organizationId, {
@@ -277,7 +279,7 @@ describe("knowledge base routes", () => {
       makeMember,
       makeKnowledgeBase,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const engineering = await makeTeam(organizationId, user.id);
       const kb = await makeKnowledgeBase(organizationId);
       for (const payload of [
@@ -306,7 +308,7 @@ describe("knowledge base routes", () => {
       makeKnowledgeBase,
       makeUser,
     }) => {
-      await makeMember(user.id, organizationId, { role: "member" });
+      await MemberModel.updateRole(user.id, organizationId, "member");
       const owner = await makeUser();
       const parent = await makeTeam(organizationId, owner.id);
       const child = await makeTeam(organizationId, owner.id, {
@@ -364,7 +366,7 @@ describe("knowledge base routes", () => {
       makeTeam,
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const first = await makeTeam(organizationId, user.id);
       const second = await makeTeam(organizationId, user.id);
       const response = await app.inject({
@@ -1473,7 +1475,7 @@ describe("knowledge base routes", () => {
     }) => {
       // Default member role: knowledgeSource create, but no
       // knowledgeSourceAutoSync grants.
-      await makeMember(user.id, organizationId);
+      await MemberModel.updateRole(user.id, organizationId, "member");
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
@@ -1500,7 +1502,7 @@ describe("knowledge base routes", () => {
     test("allows an admin to create an auto-sync-permissions connector", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
@@ -1669,13 +1671,16 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId);
+      await MemberModel.updateRole(user.id, organizationId, "member");
       const kb = await makeKnowledgeBase(organizationId);
       const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
         connectorType: "github",
         syncPermissionsFromSource: true,
+        access: "org",
       });
-      const orgWide = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const orgWide = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+        access: "org",
+      });
 
       const list = await app.inject({
         method: "GET",
@@ -1711,7 +1716,7 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const kb = await makeKnowledgeBase(organizationId);
       const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
         connectorType: "github",
@@ -1970,7 +1975,7 @@ describe("knowledge base routes", () => {
     }) => {
       // Switching into auto-sync (and touching the connector afterwards)
       // requires the knowledgeSourceAutoSync permission (admin role here).
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
         name: "Switch Connector",
@@ -2013,7 +2018,7 @@ describe("knowledge base routes", () => {
     test("editing an auto-sync connector stops the pass computed against its old settings", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
         name: "Edited Auto-Sync Connector",
@@ -2068,7 +2073,7 @@ describe("knowledge base routes", () => {
     }) => {
       // Default member role: knowledgeSource update, but no
       // knowledgeSourceAutoSync grants.
-      await makeMember(user.id, organizationId);
+      await MemberModel.updateRole(user.id, organizationId, "member");
       const connector = await KnowledgeBaseConnectorModel.create(
         {
           organizationId,
@@ -2178,7 +2183,7 @@ describe("knowledge base routes", () => {
     test("rejects inline credentials on a GitHub App connector update", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const appConfig = await GithubAppConfigModel.create({
         organizationId,
         name: "App",
@@ -2211,7 +2216,7 @@ describe("knowledge base routes", () => {
     test("switching a GitHub App connector to PAT without credentials is rejected", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const appConfig = await GithubAppConfigModel.create({
         organizationId,
         name: "App",
@@ -2251,7 +2256,7 @@ describe("knowledge base routes", () => {
     test("a rejected App switch does not drop the connector's existing secret", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const appConfig = await GithubAppConfigModel.create({
         organizationId,
         name: "App",
@@ -2304,7 +2309,7 @@ describe("knowledge base routes", () => {
     test("a GitHub App connector adopts the App config's host", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const appConfig = await GithubAppConfigModel.create({
         organizationId,
         name: "GHES App",
@@ -2339,8 +2344,15 @@ describe("knowledge base routes", () => {
       );
     });
 
-    test("creating a GitHub App connector requires githubAppConfig:read", async () => {
-      // the default test user has no githubAppConfig permission
+    test("creating a GitHub App connector requires githubAppConfig:read", async ({
+      makeCustomRole,
+    }) => {
+      // A role that may create connectors but holds no credential:read,
+      // which a stored GitHub App needs.
+      const role = await makeCustomRole(organizationId, {
+        permission: { knowledgeSource: ["read", "create"] },
+      });
+      await MemberModel.updateRole(user.id, organizationId, role.role);
       const appConfig = await GithubAppConfigModel.create({
         organizationId,
         name: "App",
@@ -3268,7 +3280,7 @@ describe("knowledge base routes", () => {
     // Auto-sync connector surfaces need the knowledgeSourceAutoSync
     // permission (admin role here); everyone else gets 404/403.
     beforeEach(async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     });
 
     test("enqueues a permission_sync task for an auto-sync github connector", async ({
@@ -3349,7 +3361,7 @@ describe("knowledge base routes", () => {
 
   describe("GET /api/connectors/:id/permission-coverage", () => {
     beforeEach(async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     });
 
     test("reports total vs fail-closed documents for an auto-sync connector", async ({
@@ -3532,7 +3544,7 @@ describe("knowledge base routes", () => {
 
   describe("GET /api/connectors/:id/user-groups", () => {
     beforeEach(async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     });
 
     test("aggregates the membership snapshot and resolves members to org users", async ({
@@ -3784,7 +3796,7 @@ describe("knowledge base routes", () => {
 
   describe("PUT/DELETE /api/connectors/:id/member-overrides", () => {
     beforeEach(async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     });
 
     /** Auto-sync connector with one hidden-email membership. */
@@ -4108,7 +4120,7 @@ describe("knowledge base routes", () => {
 
   describe("auto-sync permissions beta gate", () => {
     beforeEach(async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     });
 
     test("selecting the visibility and the permission-family routes are rejected when the flag is off", async ({
@@ -4329,10 +4341,11 @@ describe("knowledge base permission configuration", () => {
     let user: User;
     let organizationId: string;
 
-    beforeEach(async ({ makeOrganization, makeUser }) => {
+    beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
       user = await makeUser();
       const organization = await makeOrganization();
       organizationId = organization.id;
+      await makeMember(user.id, organizationId, { role: "member" });
 
       app = createFastifyInstance();
       app.addHook("onRequest", async (request) => {
@@ -4359,21 +4372,25 @@ describe("knowledge base permission configuration", () => {
       makeUser,
     }) => {
       const hiddenOwner = await makeUser();
-      await makeTeam(organizationId, hiddenOwner.id, {
+      const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id, {
         name: "Hidden Team",
       });
 
       const orgWideKb = await makeKnowledgeBase(organizationId, {
         name: "Org Wide KB",
+        access: "org",
       });
       const visibleTeamKb = await makeKnowledgeBase(organizationId, {
         name: "Visible Team KB",
+        access: "org",
       });
       const hiddenTeamKb = await makeKnowledgeBase(organizationId, {
         name: "Hidden Team KB",
+        access: "org",
       });
       const kbWithHiddenConnector = await makeKnowledgeBase(organizationId, {
         name: "KB With Hidden Connector",
+        access: "org",
       });
 
       const visibleConnector = await makeKnowledgeBaseConnector(
@@ -4382,15 +4399,18 @@ describe("knowledge base permission configuration", () => {
         {
           name: "Visible Connector",
           connectorType: "jira",
+          access: "org",
         },
       );
       await makeKnowledgeBaseConnector(visibleTeamKb.id, organizationId, {
         name: "Visible Team Connector",
         connectorType: "confluence",
+        access: "org",
       });
       await makeKnowledgeBaseConnector(hiddenTeamKb.id, organizationId, {
         name: "Hidden Team Connector",
         connectorType: "github",
+        access: { teams: [hiddenTeam.id] },
       });
       await makeKnowledgeBaseConnector(
         kbWithHiddenConnector.id,
@@ -4398,6 +4418,7 @@ describe("knowledge base permission configuration", () => {
         {
           name: "Hidden Connector On Visible KB",
           connectorType: "gitlab",
+          access: { teams: [hiddenTeam.id] },
         },
       );
 
@@ -4568,7 +4589,13 @@ describe("knowledge base permission configuration", () => {
       makeTeam,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          access: { users: [user.id], preset: "edit" },
+        },
+      );
       const team = await makeTeam(organizationId, user.id, {
         name: "Scoped Team",
       });

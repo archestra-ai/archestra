@@ -85554,6 +85554,7 @@ export type GetOpenappaCoverageEntitiesData = {
         offset?: number;
         search?: string;
         type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        entityId?: string;
         toolId?: string;
     };
     url: '/api/openappa/coverage/entities';

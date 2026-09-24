@@ -25,12 +25,15 @@ describe("openAppaTargetChatSubtitle", () => {
 });
 
 describe("openAppaTargetScopeContext", () => {
+  const targetId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
   test.each([
-    ["agent", "Research assistant", 'the agent "Research assistant"'],
-    ["mcp_gateway", "Prod gateway", 'the MCP gateway "Prod gateway"'],
-    ["mcp_server", "GitHub", 'the MCP server "GitHub"'],
-  ] as const)("scopes the context to %s %s", (kind, name, phrase) => {
-    expect(openAppaTargetScopeContext(kind, name)).toContain(phrase);
+    ["agent", "the agent"],
+    ["mcp_gateway", "the MCP gateway"],
+    ["mcp_server", "the MCP server"],
+  ] as const)("scopes the context to %s", (kind, phrase) => {
+    expect(openAppaTargetScopeContext(kind, targetId)).toContain(
+      `${phrase} with ID ${targetId}`,
+    );
   });
 });
 

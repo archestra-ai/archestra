@@ -6,14 +6,20 @@ export default async function OpenAppaConversationPage({
   searchParams,
 }: {
   params: Promise<{ conversationId: string }>;
-  searchParams: Promise<{ targetType?: string; targetName?: string }>;
+  searchParams: Promise<{
+    targetType?: string;
+    targetId?: string;
+  }>;
 }) {
   const { conversationId } = await params;
-  const { targetType, targetName } = await searchParams;
+  const { targetType, targetId } = await searchParams;
   return (
     <OpenAppaOverview
       conversationId={conversationId}
-      policyTarget={resolveOpenAppaPolicyTarget({ targetType, targetName })}
+      policyTarget={resolveOpenAppaPolicyTarget({
+        targetType,
+        targetId,
+      })}
     />
   );
 }

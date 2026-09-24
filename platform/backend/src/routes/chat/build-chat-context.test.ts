@@ -186,10 +186,15 @@ describe("buildChatContext", () => {
       const policyTool = archestraMcpBranding.getToolName(
         "get_guardrails_policy",
       );
+      const getAgentTool = archestraMcpBranding.getToolName("get_agent");
+      const getGatewayTool =
+        archestraMcpBranding.getToolName("get_mcp_gateway");
       const remedyTool = archestraMcpBranding.getToolName("get_remedy_plans");
       const appTool = archestraMcpBranding.getToolName("scaffold_app");
       mockGetChatMcpTools.mockResolvedValue({
         [policyTool]: {},
+        [getAgentTool]: {},
+        [getGatewayTool]: {},
         [remedyTool]: {},
         [appTool]: {},
       });
@@ -202,6 +207,8 @@ describe("buildChatContext", () => {
       expect(policyChat.systemPrompt).toContain("preview proposed changes");
       expect(Object.keys(policyChat.mcpTools)).toEqual([
         policyTool,
+        getAgentTool,
+        getGatewayTool,
         remedyTool,
       ]);
       expect(Object.keys(ordinaryChat.mcpTools)).toContain(appTool);

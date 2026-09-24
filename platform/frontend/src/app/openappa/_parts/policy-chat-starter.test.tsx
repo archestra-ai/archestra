@@ -65,6 +65,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
 }));
 
 const create = vi.fn();
+const targetId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const sendMessage = vi.fn();
 const push = vi.fn();
 const replace = vi.fn();
@@ -75,7 +76,7 @@ const renderStarter = (
     title?: string;
     subtitle?: string;
     suggestedPrompts?: readonly SuggestedPrompt[];
-    policyTarget?: { kind: OpenAppaPolicyTargetKind; name: string };
+    policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
   },
 ) =>
   render(
@@ -256,7 +257,7 @@ test("shows a target-scoped title, subtitle, and suggested prompts on the welcom
         prompt: "Explain the policy for the agent Research assistant.",
       },
     ],
-    policyTarget: { kind: "agent", name: "Research assistant" },
+    policyTarget: { kind: "agent", id: targetId },
   });
   expect(
     screen.getByText("What should the policy do for Research assistant?"),
@@ -274,7 +275,7 @@ test("shows a target-scoped title, subtitle, and suggested prompts on the welcom
   );
   await vi.waitFor(() =>
     expect(push).toHaveBeenCalledWith(
-      "/openappa/conversation-1?targetType=agent&targetName=Research%20assistant",
+      `/openappa/conversation-1?targetType=agent&targetId=${targetId}`,
     ),
   );
   view.unmount();
@@ -296,7 +297,7 @@ test("shows a target-scoped title, subtitle, and suggested prompts on the welcom
 test("does not auto-send when a conversation is scoped to a policy target", () => {
   renderStarter(undefined, undefined, {
     title: "What should the policy do for Research assistant?",
-    policyTarget: { kind: "agent", name: "Research assistant" },
+    policyTarget: { kind: "agent", id: targetId },
   });
   // The target flow never passes an initial prompt, so the auto-send effect
   // (gated on `initialPrompt`) must not fire: the user lands on the welcome
@@ -307,7 +308,7 @@ test("does not auto-send when a conversation is scoped to a policy target", () =
 
 test("attaches the scoped policy target as hidden metadata on the opening message", async () => {
   const view = renderStarter(undefined, undefined, {
-    policyTarget: { kind: "mcp_server", name: "GitHub" },
+    policyTarget: { kind: "mcp_server", id: targetId },
   });
   fireEvent.change(
     screen.getByRole("textbox", {
@@ -318,21 +319,21 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
   fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
   await vi.waitFor(() =>
     expect(push).toHaveBeenCalledWith(
-      "/openappa/conversation-1?targetType=mcp_server&targetName=GitHub",
+      `/openappa/conversation-1?targetType=mcp_server&targetId=${targetId}`,
     ),
   );
   view.unmount();
   // The opening message goes through the create → handoff → sendMessage
   // round-trip, so the metadata must survive that hop.
   renderStarter(undefined, "conversation-1", {
-    policyTarget: { kind: "mcp_server", name: "GitHub" },
+    policyTarget: { kind: "mcp_server", id: targetId },
   });
   await vi.waitFor(() =>
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         parts: [{ type: "text", text: "What can this server do?" }],
         metadata: expect.objectContaining({
-          openAppaPolicyTarget: { kind: "mcp_server", name: "GitHub" },
+          openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
         }),
       }),
     ),
@@ -341,7 +342,7 @@ test("attaches the scoped policy target as hidden metadata on the opening messag
 
 test("carries the policy target through the create-and-redirect navigation URL", async () => {
   renderStarter(undefined, undefined, {
-    policyTarget: { kind: "mcp_server", name: "GitHub" },
+    policyTarget: { kind: "mcp_server", id: targetId },
   });
   fireEvent.change(
     screen.getByRole("textbox", {
@@ -357,7 +358,7 @@ test("carries the policy target through the create-and-redirect navigation URL",
   // the deferred opening message and every follow-up on that conversation.
   await vi.waitFor(() =>
     expect(push).toHaveBeenCalledWith(
-      "/openappa/conversation-1?targetType=mcp_server&targetName=GitHub",
+      `/openappa/conversation-1?targetType=mcp_server&targetId=${targetId}`,
     ),
   );
 });
@@ -378,7 +379,7 @@ test("omits the target query params when redirecting an unscoped conversation", 
 
 test("attaches the scoped policy target to every follow-up message", () => {
   renderStarter(undefined, "conversation-1", {
-    policyTarget: { kind: "mcp_server", name: "GitHub" },
+    policyTarget: { kind: "mcp_server", id: targetId },
   });
   fireEvent.change(
     screen.getByRole("textbox", {
@@ -391,7 +392,64 @@ test("attaches the scoped policy target to every follow-up message", () => {
     expect.objectContaining({
       parts: [{ type: "text", text: "And now?" }],
       metadata: expect.objectContaining({
-        openAppaPolicyTarget: { kind: "mcp_server", name: "GitHub" },
+        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+      }),
+    }),
+  );
+});
+
+test("recovers the policy target when a conversation is reopened from history", () => {
+  vi.mocked(useConversation).mockReturnValue({
+    data: {
+      id: "conversation-1",
+      origin: "openappa",
+      messages: [
+        {
+          id: "previous-user-message",
+          role: "user",
+          parts: [{ type: "text", text: "Explain this policy" }],
+          metadata: {
+            openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+          },
+        },
+      ],
+    },
+  } as unknown as ReturnType<typeof useConversation>);
+  const view = renderStarter(undefined, "conversation-1");
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "What about approvals?" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      parts: [{ type: "text", text: "What about approvals?" }],
+      metadata: expect.objectContaining({
+        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+      }),
+    }),
+  );
+  view.unmount();
+  sendMessage.mockClear();
+  renderStarter(undefined, "conversation-1", {
+    policyTarget: {
+      kind: "agent",
+      id: "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0",
+    },
+  });
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "And after reopening this link?" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      metadata: expect.objectContaining({
+        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
       }),
     }),
   );

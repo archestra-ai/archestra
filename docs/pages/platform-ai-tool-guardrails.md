@@ -32,6 +32,8 @@ Each session acts for the signed-in user, identified by their email. Sessions st
 
 Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. Filter by server or policy source, then follow a source link to the rule in the organization policy or included battery.
 
+Choose **Configure with chat** on a target to open a conversation focused on that agent, gateway, or server. The chat waits for your first message or suggested prompt.
+
 ## Configure with the Agent
 
 Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.

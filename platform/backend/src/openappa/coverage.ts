@@ -121,6 +121,7 @@ class OpenAppaCoverageService {
     return page(
       entities.filter(
         (entity) =>
+          (!params.entityId || entity.id === params.entityId) &&
           (!search || entity.name.toLowerCase().includes(search)) &&
           (!params.type || entity.type === params.type) &&
           (!reaching || reaching.has(entity.id)),

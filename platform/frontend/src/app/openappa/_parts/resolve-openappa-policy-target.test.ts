@@ -1,25 +1,33 @@
 import { describe, expect, test } from "vitest";
 import { resolveOpenAppaPolicyTarget } from "./resolve-openappa-policy-target";
 
+const targetId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
+
 describe("resolveOpenAppaPolicyTarget", () => {
-  test("resolves a valid target type and name", () => {
+  test("resolves a valid target type and ID", () => {
     expect(
       resolveOpenAppaPolicyTarget({
         targetType: "mcp_server",
-        targetName: "GitHub",
+        targetId,
       }),
-    ).toEqual({ kind: "mcp_server", name: "GitHub" });
+    ).toEqual({ kind: "mcp_server", id: targetId });
   });
 
   test("returns undefined when the target type is missing", () => {
-    expect(
-      resolveOpenAppaPolicyTarget({ targetName: "GitHub" }),
-    ).toBeUndefined();
+    expect(resolveOpenAppaPolicyTarget({ targetId })).toBeUndefined();
   });
 
-  test("returns undefined when the target name is missing", () => {
+  test("returns undefined when the target ID is missing or invalid", () => {
     expect(
-      resolveOpenAppaPolicyTarget({ targetType: "mcp_server" }),
+      resolveOpenAppaPolicyTarget({
+        targetType: "mcp_server",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveOpenAppaPolicyTarget({
+        targetType: "mcp_server",
+        targetId: "not-an-id",
+      }),
     ).toBeUndefined();
   });
 
@@ -27,7 +35,7 @@ describe("resolveOpenAppaPolicyTarget", () => {
     expect(
       resolveOpenAppaPolicyTarget({
         targetType: "bogus",
-        targetName: "GitHub",
+        targetId,
       }),
     ).toBeUndefined();
   });

@@ -23,11 +23,13 @@ import {
   test,
   vi,
 } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { OverviewTab } from "./overview-tab";
 import { ToolTable } from "./tool-table";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/lib/auth/auth.query");
 
 const origin = "http://localhost:9000";
 const entityId = "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0";
@@ -35,6 +37,12 @@ const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "test-user" } },
+  } as ReturnType<typeof useSession>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
@@ -226,14 +234,33 @@ test("links the configure-with-chat action to the selected policy target", async
     }),
   ).toHaveAttribute(
     "href",
-    "/openappa/configure?targetType=agent&targetName=Research%20assistant",
+    `/openappa/configure?targetType=agent&targetId=${entityId}`,
   );
   expect(
     screen.getByRole("link", { name: "Configure with chat GitHub" }),
   ).toHaveAttribute(
     "href",
-    "/openappa/configure?targetType=mcp_server&targetName=GitHub",
+    `/openappa/configure?targetType=mcp_server&targetId=${serverId}`,
   );
+});
+
+test("disables server chat when registry read access is missing", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as ReturnType<typeof useHasPermissions>);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <OverviewTab />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("GitHub")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Configure with chat GitHub" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Configure with chat GitHub" }),
+  ).toHaveAttribute("aria-disabled", "true");
 });
 
 test("filters tool policy sources and links each rule to its TOML line", async () => {

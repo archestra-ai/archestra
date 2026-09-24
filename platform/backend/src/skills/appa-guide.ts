@@ -28,6 +28,8 @@ Access and manage the policy and platform state through Archestra MCP tools:
 - Publish an approved change: \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`. An optional \`title\` and \`summary\` describe the GitHub PR if sync is configured.
 - Check a policy PR: \`archestra__get_guardrails_policy_change_status\` with \`{ "number": N }\`, using the number returned by publish.
 - Inspect deployed MCP servers: \`archestra__list_mcp_server_deployments\` with no arguments.
+- Inspect a selected agent: \`archestra__get_agent\` with its ID.
+- Inspect a selected MCP gateway: \`archestra__get_mcp_gateway\` with its ID.
 - Inspect server tools: \`archestra__get_mcp_server_tools\` with \`{ "mcpServerId": "<Catalog ID>" }\`.
 - Discover agent tools: \`archestra__search_tools\` for tools available to the calling agent.
 - Reference materials: \`archestra__load_skill\` with \`{ "name": "appa-guide", "path": "references/contracts.md" }\` or \`references/policy-writing.md\`.

@@ -73,17 +73,22 @@ export function openAppaTargetChatSubtitle(
 }
 
 /**
- * Hidden scope reminder for a policy-target conversation. Attached as message
- * metadata rather than sent as a message, so it reaches the agent's system
- * prompt before the user's first visible turn and again on every follow-up,
- * without ever appearing as a chat message itself.
+ * Hidden scope reminder for a policy-target conversation. Use only the stable
+ * UUID and a validated kind: target names are free text and must not be
+ * promoted from client metadata into the system prompt.
  */
 export function openAppaTargetScopeContext(
   kind: OpenAppaPolicyTargetKind,
-  name: string,
+  id: string,
 ): string {
-  const target = describeOpenAppaPolicyTarget(kind, name);
-  return `This conversation is scoped to ${target}. Explain what its current OpenAPPA policy rules allow, deny, or require approval for, and keep any changes scoped to this target unless the user says otherwise.`;
+  const targetKind = OPENAPPA_POLICY_TARGET_KIND_LABELS[kind];
+  const lookup = {
+    agent: "Call archestra__get_agent with this ID",
+    mcp_gateway: "Call archestra__get_mcp_gateway with this ID",
+    mcp_server:
+      "Call archestra__get_mcp_server_tools with this ID as mcpServerId",
+  }[kind];
+  return `This conversation is scoped to the ${targetKind} with ID ${id}. ${lookup} before explaining its current OpenAPPA policy rules or proposing changes. If it is unavailable, ask the user to select a target again. Keep changes scoped to this target unless the user says otherwise.`;
 }
 
 /** {@link OPENAPPA_CONFIG_SUGGESTED_PROMPTS}, reworded to name the policy target. */

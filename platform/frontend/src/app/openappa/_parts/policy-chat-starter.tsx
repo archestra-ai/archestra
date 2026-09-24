@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChatMessageMetadataSchema,
   OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   type OpenAppaPolicyTargetKind,
 } from "@archestra/shared";
@@ -12,6 +13,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -58,7 +60,7 @@ export function PolicyChatStarter({
    * instead of an auto-sent first message, so the scope reaches the agent
    * before the user's first visible turn and persists on every follow-up.
    */
-  policyTarget?: { kind: OpenAppaPolicyTargetKind; name: string };
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,29 @@ export function PolicyChatStarter({
   const createConversation = useCreateConversation();
   const conversation = useConversation(conversationId);
   const isPolicyConversation = conversation.data?.origin === "openappa";
+  // History links omit the target query. Recover the scope from a persisted
+  // user message so later turns remain scoped after reopening the conversation.
+  const persistedPolicyTarget = useMemo(() => {
+    const persistedMessages = conversation.data?.messages as
+      | UIMessage[]
+      | undefined;
+    const lastScopedMessage = persistedMessages?.findLast(
+      (message) =>
+        message.role === "user" &&
+        ChatMessageMetadataSchema.safeParse(message.metadata).data
+          ?.openAppaPolicyTarget,
+    );
+    return ChatMessageMetadataSchema.safeParse(lastScopedMessage?.metadata).data
+      ?.openAppaPolicyTarget;
+  }, [conversation.data?.messages]);
+  const activePolicyTarget = useMemo(
+    () =>
+      persistedPolicyTarget ??
+      (policyTarget
+        ? { kind: policyTarget.kind, id: policyTarget.id }
+        : undefined),
+    [policyTarget, persistedPolicyTarget],
+  );
   const selectedModel = conversation.data?.modelId ?? "";
   const modelName = models.data?.find(
     (model) => model.dbId === selectedModel,
@@ -97,9 +122,11 @@ export function PolicyChatStarter({
   const messageMetadata = useCallback(
     () => ({
       createdAt: new Date().toISOString(),
-      ...(policyTarget ? { openAppaPolicyTarget: policyTarget } : {}),
+      ...(activePolicyTarget
+        ? { openAppaPolicyTarget: activePolicyTarget }
+        : {}),
     }),
-    [policyTarget],
+    [activePolicyTarget],
   );
 
   useEffect(() => {
@@ -147,7 +174,7 @@ export function PolicyChatStarter({
         // URL both the deferred opening message and every follow-up would
         // lose their `openAppaPolicyTarget` metadata.
         const targetQuery = policyTarget
-          ? `?targetType=${encodeURIComponent(policyTarget.kind)}&targetName=${encodeURIComponent(policyTarget.name)}`
+          ? `?targetType=${encodeURIComponent(policyTarget.kind)}&targetId=${encodeURIComponent(policyTarget.id)}`
           : "";
         router.push(
           `/openappa/${encodeURIComponent(created.id)}${targetQuery}`,

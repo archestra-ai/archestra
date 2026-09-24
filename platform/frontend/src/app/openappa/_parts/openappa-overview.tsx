@@ -22,7 +22,7 @@ export function OpenAppaOverview({
   title?: string;
   subtitle?: string;
   suggestedPrompts?: readonly SuggestedPrompt[];
-  policyTarget?: { kind: OpenAppaPolicyTargetKind; name: string };
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
 }) {
   const [chatStarted, setChatStarted] = useState(false);
   const showChat = chatStarted || Boolean(conversationId);

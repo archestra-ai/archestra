@@ -1,9 +1,5 @@
-import {
-  openAppaTargetChatSubtitle,
-  openAppaTargetChatTitle,
-  openAppaTargetSuggestedPrompts,
-} from "@archestra/shared";
 import { OpenAppaOverview } from "../_parts/openappa-overview";
+import { OpenAppaTargetConfiguration } from "../_parts/openappa-target-configuration";
 import { resolveOpenAppaPolicyTarget } from "../_parts/resolve-openappa-policy-target";
 
 export default async function ConfigureOpenAppaPage({
@@ -12,27 +8,17 @@ export default async function ConfigureOpenAppaPage({
   searchParams: Promise<{
     start?: string;
     targetType?: string;
-    targetName?: string;
+    targetId?: string;
   }>;
 }) {
-  const { start, targetType, targetName } = await searchParams;
-  const policyTarget = resolveOpenAppaPolicyTarget({ targetType, targetName });
+  const { start, targetType, targetId } = await searchParams;
+  const policyTarget = resolveOpenAppaPolicyTarget({
+    targetType,
+    targetId,
+  });
 
   if (policyTarget) {
-    return (
-      <OpenAppaOverview
-        title={openAppaTargetChatTitle(policyTarget.name)}
-        subtitle={openAppaTargetChatSubtitle(
-          policyTarget.kind,
-          policyTarget.name,
-        )}
-        policyTarget={policyTarget}
-        suggestedPrompts={openAppaTargetSuggestedPrompts(
-          policyTarget.kind,
-          policyTarget.name,
-        )}
-      />
-    );
+    return <OpenAppaTargetConfiguration policyTarget={policyTarget} />;
   }
 
   return (

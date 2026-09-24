@@ -122,7 +122,11 @@ export function EntitiesTable() {
                 icon: <MessageCircle />,
                 label: "Configure with chat",
                 tooltip: `Configure the policy for ${row.original.name} with chat`,
-                href: `/openappa/configure?targetType=${row.original.type}&targetName=${encodeURIComponent(row.original.name)}`,
+                permissions:
+                  row.original.type === "mcp_server"
+                    ? { mcpRegistry: ["read"] }
+                    : undefined,
+                href: `/openappa/configure?targetType=${row.original.type}&targetId=${encodeURIComponent(row.original.id)}`,
               },
             ]}
           />

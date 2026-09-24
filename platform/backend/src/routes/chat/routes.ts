@@ -868,10 +868,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : Promise.resolve(undefined);
 
         // For an OpenAPPA policy-target conversation, the client attaches the
-        // selected target on the turn's last user message the same way; unlike
-        // the app case above, restating it needs no access check (it only
-        // phrases a sentence in the caller's own conversation), so it resolves
-        // synchronously rather than joining the promises below.
+        // selected target on the turn's last user message the same way. Only
+        // its validated kind and UUID enter the prompt; policy tools perform
+        // the access checks when the agent resolves the exact target.
         const openAppaPolicyTargetContext = readOpenAppaPolicyTargetContext(
           messages as ChatMessage[],
         );

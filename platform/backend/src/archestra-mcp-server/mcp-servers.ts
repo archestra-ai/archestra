@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_AGENT_IDS,
   isBuiltInCatalogId,
   ResourcePermissionGrantSchema,
   redactCatalogToolArguments,
@@ -700,13 +701,26 @@ async function handleGetMcpServerTools(
         organizationId,
       },
     );
-    if (
-      !catalogItem ||
-      !(await catalogReachableByAgent({
+    const reachableInEnvironment =
+      catalogItem &&
+      (await catalogReachableByAgent({
         catalogItem,
         agentId: contextAgent.id,
-      }))
-    ) {
+      }));
+    // The policy agent configures an organization-wide policy. Its operator
+    // may select any catalog visible to them in Coverage, even when that
+    // catalog is outside the policy agent's default environment. The catalog
+    // lookup above still enforces the operator's own read permission.
+    const policyAgentCanInspect =
+      catalogItem &&
+      !reachableInEnvironment &&
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organizationId,
+        )
+      )?.id === contextAgent.id;
+    if (!catalogItem || (!reachableInEnvironment && !policyAgentCanInspect)) {
       const getMcpServersName = archestraMcpBranding.getToolName(
         TOOL_GET_MCP_SERVERS_SHORT_NAME,
       );

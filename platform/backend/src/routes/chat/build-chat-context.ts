@@ -201,6 +201,8 @@ export async function buildChatContext(params: {
 }
 
 const POLICY_CHAT_TOOL_SHORT_NAMES = new Set([
+  "get_agent",
+  "get_mcp_gateway",
   "get_guardrails_policy",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",

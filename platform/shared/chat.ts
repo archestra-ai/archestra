@@ -645,15 +645,12 @@ export type ChatOpenedAppMetadata = z.infer<typeof ChatOpenedAppMetadataSchema>;
 /**
  * The OpenAPPA policy target (an agent, MCP gateway, or MCP server) an
  * OpenAPPA configuration chat is scoped to, attached to every outgoing user
- * message so the backend can restate that scope in that turn's system prompt
- * without it ever appearing as a visible chat message. An untrusted hint —
- * the backend only uses `kind`/`name` to phrase a sentence in the caller's
- * own conversation, the same trust level as text the caller could type
- * directly; it never resolves them into a distinct permission grant.
+ * message. Only the row's stable UUID and kind reach the system prompt. The
+ * client-provided display name stays in the welcome screen and user prompts.
  */
 export const ChatOpenAppaPolicyTargetMetadataSchema = z.object({
   kind: z.enum(["agent", "mcp_gateway", "mcp_server"]),
-  name: z.string().min(1).max(200),
+  id: z.uuid(),
 });
 
 export type ChatOpenAppaPolicyTargetMetadata = z.infer<

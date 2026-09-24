@@ -8,6 +8,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { TestAccess } from "@/test/access-grants";
 import type { User } from "@/types";
 import routes from "./internal-mcp-catalog";
 
@@ -73,6 +74,44 @@ describe("catalog object grants", () => {
     expect((await InternalMcpCatalogModel.findById(catalogId))?.scope).toBe(
       "personal",
     );
+  });
+
+  test("an app backing catalog opens for whoever can read the app, as the list shows it", async ({
+    makeApp,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const catalogIdFor = async (access: TestAccess) => {
+      const created = await makeApp({
+        organizationId,
+        authorId: owner.id,
+        access,
+        enabled: true,
+      });
+      if (!created.mcpServerId) throw new Error("Missing app backing server");
+      const server = await McpServerModel.findById(created.mcpServerId);
+      if (!server?.catalogId) throw new Error("Missing app backing catalog");
+      return server.catalogId;
+    };
+    const shared = await catalogIdFor({ users: [user.id], preset: "view" });
+    const hidden = await catalogIdFor("personal");
+
+    const open = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${shared}`,
+    });
+    expect(open.statusCode, open.body).toBe(200);
+    const tools = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${shared}/tools`,
+    });
+    expect(tools.statusCode, tools.body).toBe(200);
+
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${hidden}`,
+    });
+    expect(denied.statusCode, denied.body).toBe(404);
   });
 
   test("an exact update grant permits a metadata edit and audit, but not deletion or another object", async ({

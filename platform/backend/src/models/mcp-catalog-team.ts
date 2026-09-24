@@ -162,6 +162,21 @@ class McpCatalogTeamModel {
     if (catalog.organizationId && catalog.organizationId !== organizationId) {
       return false;
     }
+    // Opening an item follows the same rule as listing it, so a built-in or
+    // an app backing catalog that a list shows also opens.
+    if (!params.action || params.action === "read") {
+      const [readable] = await db
+        .select({ id: schema.internalMcpCatalogTable.id })
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          and(
+            eq(schema.internalMcpCatalogTable.id, catalogId),
+            McpCatalogTeamModel.readCondition({ organizationId, userId }),
+          ),
+        )
+        .limit(1);
+      return readable !== undefined;
+    }
     const [grant] = await db
       .select({ id: schema.internalMcpCatalogTable.id })
       .from(schema.internalMcpCatalogTable)
@@ -178,17 +193,16 @@ class McpCatalogTeamModel {
               userId,
               resource: "mcpRegistry",
               scopeColumn: schema.internalMcpCatalogTable.id,
-              action: params.action ?? "read",
+              action: params.action,
             }),
-            params.action && params.action !== "read"
-              ? ResourcePermissionPolicyModel.grantCondition({
-                  organizationId,
-                  userId,
-                  resource: "mcpRegistry",
-                  scopeColumn: schema.internalMcpCatalogTable.id,
-                  action: "read",
-                })
-              : undefined,
+            // A reader finds the item, so the caller's own check answers 403.
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "mcpRegistry",
+              scopeColumn: schema.internalMcpCatalogTable.id,
+              action: "read",
+            }),
           ),
         ),
       )

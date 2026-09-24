@@ -46,6 +46,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
@@ -2675,30 +2676,17 @@ async function requireCatalogRead({
   request: FastifyRequest;
   id: string;
 }): Promise<void> {
-  if (isBuiltInCatalogId(id)) {
-    if (
-      !(await userHasPermission(
-        request.user.id,
-        request.organizationId,
-        "mcpRegistry",
-        "read",
-      ))
-    )
-      throw new ApiError(
-        403,
-        "You do not have permission to view this catalog item",
-      );
-    return;
-  }
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  await ResourcePermissions.require({
-    organizationId: request.organizationId,
+  // The registry list rule decides: built-ins reach every member, and an app
+  // backing catalog follows its app's grants. A built-in may have no row.
+  if (isBuiltInCatalogId(id)) return;
+  const readable = await McpCatalogTeamModel.userHasCatalogAccess({
     userId: request.user.id,
-    resource: "mcpRegistry",
-    scope: id,
-    action: "read",
+    catalogId: id,
+    organizationId: request.organizationId,
   });
+  if (!readable) throw new ApiError(404, "Catalog item not found");
   // SPDX-SnippetEnd
 }

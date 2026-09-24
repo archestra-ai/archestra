@@ -742,7 +742,7 @@ function SkillsList() {
     },
     {
       id: "source",
-      size: 180,
+      size: 220,
       header: "Source",
       cell: ({ row }) => {
         const source = listedSkillSource(row.original);

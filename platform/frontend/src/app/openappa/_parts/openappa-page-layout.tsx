@@ -37,7 +37,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             ]
       }
       actionButton={
-        pathname === "/openappa" ? (
+        pathname === "/openappa/policy" ? (
           <Button asChild>
             <Link href="/openappa/configure">
               <MessageCircle />
@@ -46,9 +46,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           </Button>
         ) : isChat ? (
           <Button variant="outline" asChild>
-            <Link href="/openappa">
+            <Link href="/openappa/policy">
               <ArrowLeft />
-              <span>Overview</span>
+              <span>Policy</span>
             </Link>
           </Button>
         ) : (

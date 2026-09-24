@@ -31,9 +31,17 @@ test.each([
     "aria-current",
     "page",
   );
+  const configureLink = screen.queryByRole("link", {
+    name: "Configure with chat",
+  });
+  if (pathname === "/openappa/policy") {
+    expect(configureLink).toHaveAttribute("href", "/openappa/configure");
+  } else {
+    expect(configureLink).not.toBeInTheDocument();
+  }
 });
 
-test("configuration chat replaces the tabs and links back to overview", () => {
+test("configuration chat replaces the tabs and links back to policy", () => {
   vi.mocked(usePathname).mockReturnValue("/openappa/configure");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -42,8 +50,8 @@ test("configuration chat replaces the tabs and links back to overview", () => {
   expect(
     screen.queryByRole("link", { name: "Batteries" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Policy" })).toHaveAttribute(
     "href",
-    "/openappa",
+    "/openappa/policy",
   );
 });

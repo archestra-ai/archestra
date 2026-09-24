@@ -180,6 +180,11 @@ for (const viewport of [
       await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
       await page.goto("/openappa");
+      await expect(
+        page.getByRole("link", { name: "Configure with chat" }),
+      ).toHaveCount(0);
+      await page.goto("/openappa/policy");
+      await expect(page.getByText("Configure with the agent")).toHaveCount(0);
       await page.getByRole("link", { name: "Configure with chat" }).click();
       await expect(page).toHaveURL(/\/openappa\/configure$/);
       await expect(
@@ -198,8 +203,8 @@ for (const viewport of [
       await expect(page.getByRole("link", { name: "Batteries" })).toHaveCount(
         0,
       );
-      await page.getByRole("link", { name: "Overview", exact: true }).click();
-      await expect(page).toHaveURL(/\/openappa$/);
+      await page.getByRole("link", { name: "Policy", exact: true }).click();
+      await expect(page).toHaveURL(/\/openappa\/policy$/);
       await page.goto("/openappa/chat");
       await expect(page).toHaveURL(/\/openappa\/configure$/);
       await page.goto("/openappa/policy");

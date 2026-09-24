@@ -28,7 +28,7 @@ Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with
 
 ## Configure with the Agent
 
-Select **Configure with chat** on the OpenAPPA Overview and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
+Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
 
 The agent needs an available LLM provider key. If none is configured, the configuration chat offers provider setup. Configuration sessions appear in AI chat history. Reopen one there to continue the conversation with its agent and model fixed.
 
@@ -39,8 +39,6 @@ The agent can save a validated local revision. If you [connect GitHub sync](#git
 ## Policy and Effective Policy
 
 Open **OpenAPPA → Policy** to inspect your policy. In the **Policy** subtab, choose `organization.appa.toml` or search included batteries. The selector shows each battery's status. Select a source tag in **Overview** to open its matching TOML line here. These files are read-only references; use the agent to propose changes. The **Effective policy** subtab shows the composed document.
-
-![The read-only policy view and its configuration-agent shortcut](/docs/automated_screenshots/platform-openappa_policy.webp)
 
 Review the effective policy after a change. It reports batteries that could not become active and shows the last working document if composition fails.
 

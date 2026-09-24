@@ -485,6 +485,68 @@ describe("resource permission routes", () => {
     });
   });
 
+  test("an organization-wide grant does not open the sharing of another user's own provider key", async ({
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-owner-only" } });
+    const ownKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: owner.id,
+    });
+    const wildcard = {
+      organizationId,
+      resource: "llmProviderApiKey" as const,
+      scope: "*",
+    };
+    const initial = await ResourcePermissionPolicyModel.find(wildcard);
+    await ResourcePermissionPolicyModel.replace({
+      ...wildcard,
+      revision: initial?.revision ?? 0,
+      grants: [
+        ...(initial?.grants ?? []),
+        {
+          subject: { type: "user", id: user.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
+    });
+    const url = `/api/resource-permissions/llmProviderApiKey/${ownKey.id}`;
+    const before = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "llmProviderApiKey",
+      scope: ownKey.id,
+    });
+
+    const read = await app.inject({ method: "GET", url });
+    expect(read.statusCode, read.body).toBe(403);
+    const saved = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: before?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: user.id },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(403);
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "llmProviderApiKey",
+        scope: ownKey.id,
+      }),
+    ).toEqual(before);
+  });
+
   test("rejects duplicate recipient rows without saving an ambiguous policy", async ({
     makeAgent,
   }) => {

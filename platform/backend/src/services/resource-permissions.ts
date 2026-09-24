@@ -289,6 +289,14 @@ export class ResourcePermissions {
       target.authorId !== params.userId
     )
       return { target, grants: [] as ScopedPermission[] };
+    // A provider key with an owner is that person's own key. Nobody else
+    // reaches it or its sharing, whatever `*` grants they hold.
+    if (
+      params.resource === "llmProviderApiKey" &&
+      target?.authorId &&
+      target.authorId !== params.userId
+    )
+      return { target, grants: [] as ScopedPermission[] };
     // Stored grants are authoritative. `resolve` answers nothing for a
     // disabled service account or a user whose membership has been removed.
     return { target, grants: await ResourcePermissions.resolve(params) };

@@ -1,17 +1,13 @@
 # Shared coding-agent configuration
 
 Keep shared instructions in `AGENTS.md` and shared skills in `.agents/skills/`.
-Claude Code v2.1.277+ reads `AGENTS.md` when no `CLAUDE.md` or
-`CLAUDE.local.md` is present in the working directory or its ancestors. Use a
-current Claude Code version and check `/context` after changing instruction
-files. Keep individual platform preferences in the ignored
+Claude Code and Codex read `AGENTS.md` for repository instructions. Keep
+individual platform preferences in the ignored
 `platform/CLAUDE_LOCAL.md`; `platform/AGENTS.md` explicitly tells agents to read
 it when present.
 
-Claude Code discovers repository skills through the root `.claude/skills`
-symlink to `../.agents/skills`. Its documented discovery paths do not include
-`.agents/skills`, so retain this one compatibility link. Codex reads the shared
-location directly.
+The root `.claude/skills` symlink points to `../.agents/skills` for Claude Code
+discovery. Codex reads the shared location directly.
 
 The root `.claude/settings.json` disables Claude attribution in commits and PRs.
 `platform/.claude/settings.json` points to it. The root `AGENTS.md` also asks

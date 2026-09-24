@@ -59,6 +59,9 @@ export const ToolSchema = z
     codeExecution: z.any().optional(),
     googleSearch: z.any().optional(),
     urlContext: z.any().optional(),
+    googleMaps: z.any().optional(),
+    enterpriseWebSearch: z.any().optional(),
+    fileSearch: z.any().optional(),
   })
   .describe(`
 Tool details that the model may use to generate response.

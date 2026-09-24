@@ -16,28 +16,39 @@ describe("KnowledgeBaseConnectorModel", () => {
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const kb = await makeKnowledgeBase(org.id);
-      // Each retired visibility contradicts the grants written below.
+      // Every connector starts private; the grants written below decide.
       const published = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Published",
+        access: "personal",
       });
       const teamGranted = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Team granted",
+        access: "personal",
       });
-      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Ungranted" });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Ungranted",
+        access: "personal",
+      });
       await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Auto Sync",
         connectorType: "github",
         syncPermissionsFromSource: true,
+        access: "personal",
       });
       for (const [connector, subject] of [
         [published, { type: "organization", id: "*" }],
         [teamGranted, { type: "team", id: team.id }],
       ] as const) {
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource: "knowledgeConnector",
+          scope: connector.id,
+        });
         await ResourcePermissionPolicyModel.replace({
           organizationId: org.id,
           resource: "knowledgeConnector",
           scope: connector.id,
-          revision: 0,
+          revision: policy?.revision ?? 0,
           grants: [{ subject, actions: ["read", "use"] }],
         });
       }

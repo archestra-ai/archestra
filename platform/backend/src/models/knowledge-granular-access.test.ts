@@ -25,7 +25,14 @@ for (const resource of ["knowledgeFile", "knowledgeConnector"] as const) {
     for (const user of [owner, recipient, outsider])
       await makeMember(user.id, org.id);
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // For a file, the file's own grants decide and the connector stays
+    // private; for a connector, its grant is the one under test.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      access:
+        resource === "knowledgeConnector"
+          ? { users: [recipient.id], preset: "use" }
+          : "personal",
+    });
     const grant = {
       subject: { type: "user" as const, id: recipient.id },
       actions: ["read" as const, "use" as const],
@@ -45,17 +52,6 @@ for (const resource of ["knowledgeFile", "knowledgeConnector"] as const) {
           })
         : null;
     const scope = file?.id ?? connector.id;
-    if (!file)
-      await db.transaction((tx) =>
-        ResourcePermissionPolicyModel.createInitial({
-          tx,
-          organizationId: org.id,
-          resource,
-          scope,
-          grants: [grant],
-          authorId: owner.id,
-        }),
-      );
     // Stale public tokens must not keep exposing a document after migration.
     const document = await KbDocumentModel.create({
       organizationId: org.id,
@@ -167,26 +163,24 @@ test("knowledge listing and source checks honor grants to private objects and re
   const outsider = await makeUser();
   for (const user of [recipient, outsider]) await makeMember(user.id, org.id);
   const kb = await makeKnowledgeBase(org.id);
-  const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {});
-  for (const [resource, scope] of [
-    ["knowledgeBase", kb.id],
-    ["knowledgeConnector", connector.id],
-  ] as const)
-    await db.transaction((tx) =>
-      ResourcePermissionPolicyModel.createInitial({
-        tx,
-        organizationId: org.id,
-        resource,
-        scope,
-        authorId: null,
-        grants: [
-          {
-            subject: { type: "user", id: recipient.id },
-            actions: ["read", "use"],
-          },
-        ],
-      }),
-    );
+  const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+    access: { users: [recipient.id], preset: "use" },
+  });
+  await db.transaction((tx) =>
+    ResourcePermissionPolicyModel.createInitial({
+      tx,
+      organizationId: org.id,
+      resource: "knowledgeBase",
+      scope: kb.id,
+      authorId: null,
+      grants: [
+        {
+          subject: { type: "user", id: recipient.id },
+          actions: ["read", "use"],
+        },
+      ],
+    }),
+  );
   for (const user of [recipient, outsider]) {
     const access =
       await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -229,19 +223,11 @@ test("source permission sync keeps its per-document restriction even when connec
   const user = await makeUser();
   await makeMember(user.id, org.id);
   const kb = await makeKnowledgeBase(org.id);
+  // The user holds full access to the connector itself.
   const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
     syncPermissionsFromSource: true,
+    access: { users: [user.id], preset: "manage" },
   });
-  await db.transaction((tx) =>
-    ResourcePermissionPolicyModel.createInitial({
-      tx,
-      organizationId: org.id,
-      resource: "knowledgeConnector",
-      scope: connector.id,
-      authorId: user.id,
-      grants: [],
-    }),
-  );
   const document = await KbDocumentModel.create({
     organizationId: org.id,
     connectorId: connector.id,

@@ -100,7 +100,6 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser();
-  // Org-wide sharing requires the member role's project:share-org.
   await makeMember(owner.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
   const project = await ProjectModel.create({
@@ -123,7 +122,9 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
     projectId: project.id,
   });
 
+  // Organization sharing reaches the organization's members.
   const member = await makeUser({ email: "org-share-member@test.com" });
+  await makeMember(member.id, org.id);
   const scope = await resolveProjectFileScope({
     conversationId: conv.id,
     userId: member.id,

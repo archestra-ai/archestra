@@ -56,8 +56,11 @@ describe("knowledge sharing conversion", () => {
     const base = await makeKnowledgeBase(org.id);
     // Per-document ACLs synced from upstream: no static grant can express
     // them, so the conversion's CASE falls through to the organization branch.
+    // A pre-upgrade row: `legacy` inserts it with no policy, as the cutover
+    // finds it.
     const connector = await makeKnowledgeBaseConnector(base.id, org.id, {
       syncPermissionsFromSource: true,
+      legacy: { visibility: "auto-sync-permissions", teamIds: [] },
     });
 
     await runScopedResourcePermissionCutover();

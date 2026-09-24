@@ -202,7 +202,7 @@ if (args[0] === "app-server") {
     if (request.method === "config/read") console.log(JSON.stringify({id:request.id,result:{config:{developer_instructions:"Keep existing guidance."}}}));
   });
 } else {
-  if (args[0] !== "mcp") process.exit(23);
+  if (args[0] !== "mcp") process.exit(Number(process.env.ARCHESTRA_TEST_CLIENT_EXIT || 23));
   if (args[1] === "remove") process.exit(1);
   process.exit(args[1] === "add" && process.env.ARCHESTRA_TEST_FAIL_ADD === "1" ? 42 : 0);
 }
@@ -266,7 +266,7 @@ foreach ($attempt in 1..2) {
   if ((Get-Content -Raw $profilePath) -cne $priorProfile) { throw 'Failed reconnect changed the profile' }
   if ((Get-Content -Raw $guardPath) -cne $priorGuard) { throw 'Failed reconnect changed the guard' }
   ${binary} @invokeArgs
-  if ($LASTEXITCODE -ne 23) { throw 'Restored wrapper lost client exit status' }
+  if ($LASTEXITCODE -ne ${clientId === "codex" ? 125 : 23}) { throw 'Restored wrapper lost client exit status' }
   $env:ARCHESTRA_TEST_FAIL_ADD = '0'
   Invoke-Expression $setup
   if (-not (Get-Item Function:${binary} -ErrorAction SilentlyContinue)) { throw 'Retry did not activate the wrapper' }
@@ -274,7 +274,12 @@ foreach ($attempt in 1..2) {
   if ([regex]::Matches($profileText, [regex]::Escape('${guard.markerStart}')).Count -ne 1) { throw 'Retry duplicated the profile hook' }
   if (-not $profileText.Contains('# unrelated profile setting')) { throw 'Retry lost unrelated profile settings' }
   ${binary} @invokeArgs
-  if ($LASTEXITCODE -ne 23) { throw 'Reinstalled wrapper lost client exit status' }
+  if ($LASTEXITCODE -ne ${clientId === "codex" ? 125 : 23}) { throw 'Reinstalled wrapper lost client exit status' }
+}
+if ('${clientId}' -eq 'codex') {
+  Remove-Item ($guardPath + '.handoff.cjs') -Force
+  ${binary} @invokeArgs
+  if ($LASTEXITCODE -ne 125) { throw 'Missing handoff helper blocked the client' }
 }
 exit 0
 `,
@@ -291,6 +296,7 @@ exit 0
               NO_COLOR: "1",
               ARCHESTRA_TEST_COMMAND_LOG: callsPath,
               ARCHESTRA_TEST_SETUP_PATH: setupPath,
+              ARCHESTRA_TEST_CLIENT_EXIT: clientId === "codex" ? "125" : "23",
             },
             timeout: 30_000,
           },
@@ -299,26 +305,30 @@ exit 0
           .trim()
           .split("\n")
           .map((line) => JSON.parse(line));
-        expect(calls.filter((args) => args.includes("invoke"))).toEqual(
-          Array.from({ length: 4 }, () => [
+        const originalArgs = [
+          "invoke",
+          "two words",
+          "",
+          "single'quote",
+          "$HOME",
+          "*",
+        ];
+        expect(calls.filter((args) => args.includes("invoke"))).toEqual([
+          ...Array.from({ length: 4 }, () => [
             ...(clientId === "codex"
               ? [
                   "-c",
                   `developer_instructions=${JSON.stringify(`Keep existing guidance.\n\n${DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS}`)}`,
                 ]
               : []),
-            "invoke",
-            "two words",
-            "",
-            "single'quote",
-            "$HOME",
-            "*",
+            ...originalArgs,
           ]),
-        );
+          ...(clientId === "codex" ? [originalArgs] : []),
+        ]);
         expect(
           calls.filter((args) => args[0] === "mcp" && args[1] === "add"),
         ).toHaveLength(6);
-        expect(healthRequests).toHaveLength(4);
+        expect(healthRequests).toHaveLength(clientId === "codex" ? 5 : 4);
         expect(
           healthRequests.every((url) => url === "/v1/health?mcp=test-gateway"),
         ).toBe(true);

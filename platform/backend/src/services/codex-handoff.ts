@@ -1,7 +1,7 @@
 /** Local helper installed beside the guard. Reads native config without starting a session. */
 export const CODEX_HANDOFF_HELPER = String.raw`
 const { spawn } = require('node:child_process');
-const { existsSync, readFileSync } = require('node:fs');
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { createInterface } = require('node:readline');
 if (process.argv[2] === '--launch') {
@@ -16,6 +16,10 @@ if (process.argv[2] === '--launch') {
     process.exit(125);
   }
   const executable = process.argv[3];
+  if (typeof executable !== 'string' || !executable) {
+    process.stderr.write('Could not find the Codex executable.\n');
+    process.exit(125);
+  }
   const isNpmShim = /\.cmd$/i.test(executable);
   const entry = isNpmShim ? path.join(path.dirname(executable), 'node_modules', '@openai', 'codex', 'bin', 'codex.js') : executable;
   if ((isNpmShim && !existsSync(entry)) || /\.ps1$/i.test(entry)) {
@@ -24,9 +28,16 @@ if (process.argv[2] === '--launch') {
   }
   const env = { ...process.env };
   delete env.ARCHESTRA_CODEX_LAUNCH_ARGS;
+  delete env.ARCHESTRA_CODEX_LAUNCH_MARKER;
   const child = spawn(isNpmShim ? process.execPath : entry, isNpmShim ? [entry, ...args] : args, { stdio: 'inherit', env, windowsHide: true });
-  child.on('error', error => { process.stderr.write(error.message + '\n'); process.exitCode = 125; });
-  child.on('exit', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 125); });
+  let spawnFailed = false;
+  child.on('spawn', () => {
+    if (process.env.ARCHESTRA_CODEX_LAUNCH_MARKER) {
+      writeFileSync(process.env.ARCHESTRA_CODEX_LAUNCH_MARKER, '', { flag: 'wx' });
+    }
+  });
+  child.on('error', error => { spawnFailed = true; process.stderr.write(error.message + '\n'); process.exitCode = 125; });
+  child.on('exit', (code, signal) => { if (!spawnFailed) process.exitCode = code ?? (signal ? 1 : 125); });
 } else {
 const args = process.argv.slice(3);
 const base64Output = args[0] === '--output-base64';

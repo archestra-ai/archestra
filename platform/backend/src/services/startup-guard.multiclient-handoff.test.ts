@@ -32,6 +32,7 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
   const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
   const helper = path.join(home, "handoff.cjs");
   const result = path.join(home, "args.json");
+  const marker = path.join(home, "launched");
   const args = [
     "-c",
     `developer_instructions=${JSON.stringify(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)}`,
@@ -45,7 +46,7 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
     await writeFile(shim, "npm shim placeholder");
     await writeFile(
       entry,
-      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify(process.argv.slice(2))); process.exit(23);",
+      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify({args:process.argv.slice(2),marker:process.env.ARCHESTRA_CODEX_LAUNCH_MARKER})); process.exit(23);",
     );
     await writeFile(helper, CODEX_HANDOFF_HELPER);
     await expect(
@@ -53,13 +54,30 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
         env: {
           ...process.env,
           CODEX_TEST_RESULT: result,
+          ARCHESTRA_CODEX_LAUNCH_MARKER: marker,
           ARCHESTRA_CODEX_LAUNCH_ARGS: Buffer.from(
             JSON.stringify(args),
           ).toString("base64"),
         },
       }),
     ).rejects.toMatchObject({ code: 23 });
-    expect(JSON.parse(await readFile(result, "utf8"))).toEqual(args);
+    expect(JSON.parse(await readFile(result, "utf8"))).toEqual({ args });
+    expect(await readFile(marker, "utf8")).toBe("");
+
+    await writeFile(entry, "process.exit(125);");
+    const exitMarker = path.join(home, "exit-125");
+    await expect(
+      exec(process.execPath, [helper, "--launch", shim], {
+        env: {
+          ...process.env,
+          ARCHESTRA_CODEX_LAUNCH_MARKER: exitMarker,
+          ARCHESTRA_CODEX_LAUNCH_ARGS: Buffer.from(
+            JSON.stringify(args),
+          ).toString("base64"),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 125 });
+    expect(await readFile(exitMarker, "utf8")).toBe("");
   } finally {
     await rm(home, { recursive: true, force: true });
   }

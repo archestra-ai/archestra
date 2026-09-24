@@ -1,67 +1,31 @@
 # Shared coding-agent configuration
 
-Keep shared skills in the repository-root `.agents/skills/`. They cover the
-platform, docs, catalog, benchmarks, and releases. Codex discovers this directory
-when started in `platform/` or a deeper directory; no platform symlink is needed.
+Keep shared instructions in `AGENTS.md` and shared skills in `.agents/skills/`.
+Claude Code v2.1.277+ reads `AGENTS.md` when no `CLAUDE.md` or
+`CLAUDE.local.md` is present in the working directory or its ancestors. Use a
+current Claude Code version and check `/context` after changing instruction
+files. Keep individual platform preferences in the ignored
+`platform/CLAUDE_LOCAL.md`; `platform/AGENTS.md` explicitly tells agents to read
+it when present.
 
-`AGENTS.md` files hold shared instructions. The adjacent `CLAUDE.md` files are
-relative symlinks to `AGENTS.md`, so both clients read the same content without
-duplicating instructions. Keep individual platform preferences in the ignored
-`platform/CLAUDE_LOCAL.md` file.
-
-Claude Code still discovers project skills through `.claude/skills/`. The single
-root `.claude/skills` symlink points to `../.agents/skills`, so both clients read
-the same files. Keep this compatibility link until Claude supports the shared
-location directly. Both clients discover root skills when launched in
-`platform/`; do not add another skills link there. Check out Git symlinks as
-symlinks on systems that require explicit symlink support.
-
-Use instruction-file symlinks rather than `@AGENTS.md` import wrappers. When
-Claude Code starts in `platform/` or a deeper directory, an ancestor's import
-points outside the working directory and can require external-import approval.
-Fresh non-interactive sessions can silently skip that import. A `CLAUDE.md`
-symlink loads the instructions directly without this extra approval step. Git
-must check out these links as real symlinks, just like the shared skills link.
+Claude Code discovers repository skills through the root `.claude/skills`
+symlink to `../.agents/skills`. Its documented discovery paths do not include
+`.agents/skills`, so retain this one compatibility link. Codex reads the shared
+location directly.
 
 The root `.claude/settings.json` disables Claude attribution in commits and PRs.
-`platform/.claude/settings.json` symlinks to it so the same setting applies when
-Claude starts from `platform/`. Only the settings file is linked; skills continue
-to be discovered from the root. Formatting checks remain in the existing Husky
-pre-commit workflow.
+`platform/.claude/settings.json` points to it. The root `AGENTS.md` also asks
+agents to omit AI attribution.
 
-The root `AGENTS.md` asks all agents, including Codex, to omit AI attribution from
-commits and PRs. This is an instruction, not a client-enforced setting. There is
-no Codex attribution key in the documented configuration reference, so no
-`.codex/config.toml` is needed for this preference.
+The root `.codex/config.toml` raises `project_doc_max_bytes` to 64 KiB so the
+platform instructions fit in Codex's project instruction budget. Codex loads
+project configuration only in trusted projects.
 
-The root `.codex/config.toml` raises `project_doc_max_bytes` to 64 KiB. The
-platform guide alone exceeds Codex's default 32 KiB combined instruction budget;
-without the override, its tail can be truncated and nested instructions omitted.
-Keep the combined root-to-working-directory instruction chain below this limit.
-Codex loads project configuration only in trusted projects. In an untrusted
-checkout, use `codex -c project_doc_max_bytes=65536` if you need the full guide
-without enabling project configuration. Restart existing sessions after changing
-the budget.
+Skill discovery does not guarantee invocation. Use a matching skill explicitly
+when a workflow requires it. In fresh sessions from the repository root and
+`platform/`, check Claude Code `/skills` and `/context` for shared skills and
+`AGENTS.md` instructions.
 
-Discovery makes skills available; it does not guarantee automatic invocation or
-instruction compliance. Explicitly invoke a skill for workflows that require it.
-`CLAUDE_LOCAL.md` is our custom filename, read through the instruction in
-`platform/AGENTS.md`; it is not Claude Code's auto-loaded `CLAUDE.local.md`.
-
-Other clients can read the skills as files using the routing instructions in
-`AGENTS.md`; automatic discovery and slash commands depend on the client's
-supported locations. This layout does not claim universal automatic discovery.
-
-After changing this layout, start fresh sessions from the repository root and
-from `platform/`. In Codex, check the skills selector and instruction sources.
-In Claude Code, check `/skills` and `/context`. Confirm that shared skills appear
-and that the relevant `AGENTS.md` content appears under the `CLAUDE.md` paths.
-
-References:
-
-- [Codex skills discovery](https://learn.chatgpt.com/docs/build-skills)
-- [Codex instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
-- [Claude Code skills discovery](https://code.claude.com/docs/en/skills)
-- [Claude Code AGENTS.md imports](https://code.claude.com/docs/en/memory#agentsmd)
-
-- [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+References: [Claude Code project instructions](https://code.claude.com/docs/en/memory#agentsmd),
+[Claude Code skills](https://code.claude.com/docs/en/skills),
+[Codex skills](https://learn.chatgpt.com/docs/build-skills).

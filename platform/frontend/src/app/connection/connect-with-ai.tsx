@@ -16,7 +16,10 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
     const timeout = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timeout);
   }, [copied]);
-  const prompt = `Read ${origin}/connect.md and connect ${client.label}.`;
+  const prompt =
+    client.id === "claude-code"
+      ? `Read ${origin}/connect.md?client=claude-code and guide me through connecting Claude Code. I will review and run the setup in my own terminal.`
+      : `Read ${origin}/connect.md and connect ${client.label}.`;
 
   return (
     <div className="space-y-4">
@@ -54,7 +57,9 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Requires Node.js 18+ and terminal access in {client.label}.
+        {client.id === "claude-code"
+          ? "Requires Node.js 18+ on the computer running Claude Code."
+          : `Requires Node.js 18+ and terminal access in ${client.label}.`}
       </p>
     </div>
   );

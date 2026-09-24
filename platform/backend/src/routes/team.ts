@@ -9,7 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
-import { TeamLabelModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   validateInheritedTeamRoles,
   validateTeamRoles,
@@ -423,6 +423,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "manage team members",
       });
+
+      const orgMember = await MemberModel.getByUserId(userId, organizationId);
+      if (!orgMember) {
+        throw new ApiError(404, "User not found in this organization");
+      }
 
       const isMember = await TeamModel.isUserInTeam(id, userId);
       if (isMember) {

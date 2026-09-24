@@ -6,6 +6,7 @@ import {
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 
 // The connector write paths gate environment assignment exactly like the agent
@@ -27,7 +28,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
   // Toggles the answer to the knowledgeSource:deploy-to-restricted probe.
   let canDeployToRestricted: boolean;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     canDeployToRestricted = false;
     // Only the environment-gate probes vary per test; everything else
     // (knowledge source access, etc.) is granted so the suite isolates the
@@ -44,6 +45,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -81,9 +83,9 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
 
   test("creating a connector in a RESTRICTED env without deploy-to-restricted is 403", async () => {
     canDeployToRestricted = false;
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     const response = await app.inject({
@@ -97,9 +99,9 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
 
   test("updating a connector to a RESTRICTED env without deploy-to-restricted is 403 and unchanged", async () => {
     canDeployToRestricted = false;
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const connector = await makeConnector(null);
 
@@ -116,9 +118,9 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
 
   test("updating a connector to a RESTRICTED env WITH deploy-to-restricted persists (200)", async () => {
     canDeployToRestricted = true;
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const connector = await makeConnector(null);
 
@@ -136,7 +138,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     canDeployToRestricted = false;
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const connector = await makeConnector(null);
 

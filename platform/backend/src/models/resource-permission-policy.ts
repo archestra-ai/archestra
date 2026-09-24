@@ -1037,4 +1037,7 @@ const USE_UNGATED_BY_ROLE = new Set<ScopedResource>([
   "agent",
   "mcpGateway",
   "llmModel",
+  // Deploying into an environment never asked for an environment role action,
+  // only for the right to create the thing deployed.
+  "environment",
 ]);

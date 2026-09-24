@@ -11,7 +11,6 @@ import {
   AgentVersionModel,
   EnvironmentModel,
   HookFileModel,
-  OrganizationModel,
   ToolModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -747,38 +746,6 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     return member;
   }
 
-  test("403s when the version moves the agent into a restricted default environment", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    // `environmentId: null` is not "no environment" — it is the implicit
-    // default one, which an org can mark restricted. The update route gates
-    // that target, so a restore must gate it too.
-    await OrganizationModel.patch(organizationId, {
-      defaultEnvironmentRestricted: true,
-    });
-    const environment = await EnvironmentModel.create({
-      organizationId,
-      name: `Prod ${crypto.randomUUID().slice(0, 8)}`,
-    });
-
-    const author = await makeRestrictedDeployer(makeUser, makeMember);
-    const agent = await makeAgent({
-      organizationId,
-      access: "personal",
-      authorId: author.id,
-    });
-    await AgentModel.update(agent.id, { environmentId: environment.id });
-    user = author;
-
-    const response = await restore(agent.id, 1);
-    expect(response.statusCode).toBe(403);
-
-    const agentRow = await AgentModel.findById(agent.id, undefined, true);
-    expect(agentRow?.environmentId).toBe(environment.id);
-  });
-
   test("403s when the version moves the agent into a restricted named environment", async ({
     makeAgent,
     makeUser,
@@ -787,7 +754,6 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const environment = await EnvironmentModel.create({
       organizationId,
       name: `Restricted ${crypto.randomUUID().slice(0, 8)}`,
-      restricted: true,
     });
 
     const author = await makeRestrictedDeployer(makeUser, makeMember);

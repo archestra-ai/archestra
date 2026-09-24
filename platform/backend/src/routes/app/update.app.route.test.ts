@@ -416,7 +416,6 @@ describe("PATCH /api/apps/:appId", () => {
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-prod",
-      restricted: true,
     });
     // The admin (current `user`) binds the app to the restricted environment.
     const created = await app.inject({

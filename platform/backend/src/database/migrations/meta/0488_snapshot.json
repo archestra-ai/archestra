@@ -9355,13 +9355,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "restricted": {
-          "name": "restricted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -18215,13 +18208,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
-        },
-        "default_environment_restricted": {
-          "name": "default_environment_restricted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "default_environment_validation_regex": {
           "name": "default_environment_validation_regex",

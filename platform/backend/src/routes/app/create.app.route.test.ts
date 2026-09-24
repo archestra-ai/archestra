@@ -339,7 +339,6 @@ describe("POST /api/apps", () => {
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-prod",
-      restricted: true,
     });
     const response = await app.inject({
       method: "POST",
@@ -357,7 +356,6 @@ describe("POST /api/apps", () => {
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-prod",
-      restricted: true,
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
@@ -388,7 +386,6 @@ describe("POST /api/apps", () => {
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-prod",
-      restricted: true,
     });
     // The role holds the app-specific deploy permission and nothing else
     // environment-related — pinning that the per-resource action alone
@@ -558,7 +555,6 @@ describe("POST /api/apps — the environment of the agent that builds it", () =>
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-launch",
-      restricted: true,
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });

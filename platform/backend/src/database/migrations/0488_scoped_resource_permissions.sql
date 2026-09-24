@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=resource_permission_policies is created empty here, so its validating foreign key scans no rows, and cascading organization deletion removes only that organization's permission documents. Primary provider keys move from scope partitions to owner partitions and skill names from scope partitions to author partitions; duplicates are demoted or renamed first and no reader of the old partitions is left. Old non-default LLM proxy rows are repointed to the organization's default proxy before they are deleted.
+-- drizzle-migration-linter: reason=resource_permission_policies is created empty here, so its validating foreign key scans no rows, and cascading organization deletion removes only that organization's permission documents. Primary provider keys move from scope partitions to owner partitions and skill names from scope partitions to author partitions; duplicates are demoted or renamed first and no reader of the old partitions is left. Old non-default LLM proxy rows are repointed to the organization's default proxy before they are deleted. The environment restricted flags are dropped after each open environment is granted to its organization, so no reader of them is left.
 --
 -- Scoped resource permissions. Converting the old visibility fields to grants,
 -- and retiring the `admin` and `team-admin` role actions, are not done here:
@@ -234,3 +234,26 @@ WHERE backing_server."id" = derived."server_id"
     backing_server."scope" IS DISTINCT FROM derived."scope"
     OR backing_server."team_id" IS NOT NULL
   );
+--> statement-breakpoint
+-- Who may deploy into an environment is its `use` grants now, not a
+-- restricted flag. An open environment was open to anyone who could create
+-- what is deployed into it, so it is granted to the whole organization. A
+-- restricted one gets no such grant: the startup conversion gives `use` to
+-- whoever held the retired deploy-to-restricted actions. The organization's
+-- Default environment has no row and is open to all from here on.
+INSERT INTO "resource_permission_policies"
+  (organization_id, resource, scope, grants, revision, legacy_sharing_migrated, updated_at)
+SELECT e.organization_id, 'environment', e.id::text,
+  '[{"subject":{"type":"organization","id":"*"},"actions":["read","use"]}]'::jsonb,
+  1, true, now()
+FROM "environments" e
+WHERE NOT e.restricted
+ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
+  grants = resource_permission_policies.grants || EXCLUDED.grants,
+  revision = resource_permission_policies.revision + 1,
+  updated_at = now()
+WHERE NOT resource_permission_policies.grants @> EXCLUDED.grants;
+--> statement-breakpoint
+ALTER TABLE "environments" DROP COLUMN "restricted";
+--> statement-breakpoint
+ALTER TABLE "organization" DROP COLUMN "default_environment_restricted";

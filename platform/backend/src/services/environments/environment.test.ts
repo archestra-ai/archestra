@@ -23,6 +23,10 @@ import {
   updateEnvironment,
 } from "@/services/environments/environment";
 import { test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 
 const MISSING_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -240,47 +244,43 @@ describe("EnvironmentService", () => {
     }
   });
 
-  test("createEnvironment persists restricted=true and lists it back", async ({
+  test("a new environment is open to every member, and restricting it keeps its creator", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
-    const created = await createEnvironment({
+    const creator = await makeUser();
+    await makeMember(creator.id, org.id, { role: "admin" });
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    const open = await createEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      userId: creator.id,
+      data: { name: "Sandbox" },
     });
-    expect(created.restricted).toBe(true);
+    const locked = await createRestrictedEnvironment({
+      organizationId: org.id,
+      userId: creator.id,
+      data: { name: "Prod" },
+    });
 
     const listed = await listEnvironments({
       organizationId: org.id,
-      userId: LISTER_ID,
+      userId: member.id,
     });
-    const prod = listed.environments.find((e) => e.id === created.id);
-    expect(prod?.restricted).toBe(true);
-  });
-
-  test("createEnvironment defaults restricted to false", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const created = await createEnvironment({
+    const canDeploy = (id: string) =>
+      listed.environments.find((e) => e.id === id)?.canDeploy;
+    expect(canDeploy(open.id)).toBe(true);
+    expect(canDeploy(locked.id)).toBe(false);
+    const policy = await ResourcePermissionPolicyModel.find({
       organizationId: org.id,
-      data: { name: "Sandbox" },
+      resource: "environment",
+      scope: locked.id,
     });
-    expect(created.restricted).toBe(false);
-  });
-
-  test("updateEnvironment toggles restricted", async ({ makeOrganization }) => {
-    const org = await makeOrganization();
-    const created = await createEnvironment({
-      organizationId: org.id,
-      data: { name: "Staging" },
-    });
-    const updated = await updateEnvironment({
-      id: created.id,
-      organizationId: org.id,
-      data: { restricted: true },
-    });
-    expect(updated.restricted).toBe(true);
+    expect(policy?.grants).toEqual([
+      expect.objectContaining({ subject: { type: "user", id: creator.id } }),
+    ]);
   });
 
   /**
@@ -289,7 +289,7 @@ describe("EnvironmentService", () => {
    * grant and one whose role does not. The pair is what the retired
    * `deploy-to-restricted` action used to decide.
    */
-  test("assertCanAssignEnvironment allows the default (null) environment when not restricted", async ({
+  test("assertCanAssignEnvironment allows the default (null) environment to any member", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -302,46 +302,6 @@ describe("EnvironmentService", () => {
         environmentId: null,
         organizationId: org.id,
         userId: member.id,
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  test("assertCanAssignEnvironment rejects the restricted default (null) environment without an environment grant (403)", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, {
-      defaultEnvironmentRestricted: true,
-    });
-    const member = await makeUser();
-    await makeMember(member.id, org.id);
-    await expect(
-      assertCanAssignEnvironment({
-        environmentId: null,
-        organizationId: org.id,
-        userId: member.id,
-      }),
-    ).rejects.toMatchObject({ statusCode: 403 });
-  });
-
-  test("assertCanAssignEnvironment allows the restricted default (null) environment with a wildcard grant", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, {
-      defaultEnvironmentRestricted: true,
-    });
-    const admin = await makeUser();
-    await makeMember(admin.id, org.id, { role: "admin" });
-    await expect(
-      assertCanAssignEnvironment({
-        environmentId: null,
-        organizationId: org.id,
-        userId: admin.id,
       }),
     ).resolves.toBeUndefined();
   });
@@ -373,9 +333,9 @@ describe("EnvironmentService", () => {
     makeMember,
   }) => {
     const org = await makeOrganization();
-    const env = await createEnvironment({
+    const env = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const member = await makeUser();
     await makeMember(member.id, org.id);
@@ -394,9 +354,9 @@ describe("EnvironmentService", () => {
     makeMember,
   }) => {
     const org = await makeOrganization();
-    const env = await createEnvironment({
+    const env = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const admin = await makeUser();
     await makeMember(admin.id, org.id, { role: "admin" });
@@ -421,9 +381,9 @@ describe("EnvironmentService", () => {
     makeCustomRole,
   }) => {
     const org = await makeOrganization();
-    const env = await createEnvironment({
+    const env = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const role = await makeCustomRole(org.id, {
       permission: { environment: ["read"] },
@@ -449,24 +409,20 @@ describe("EnvironmentService", () => {
     makeMember,
   }) => {
     const org = await makeOrganization();
-    const granted = await createEnvironment({
+    const granted = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod EU", restricted: true },
+      data: { name: "Prod EU" },
     });
-    const other = await createEnvironment({
+    const other = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod US", restricted: true },
+      data: { name: "Prod US" },
     });
     const member = await makeUser();
     await makeMember(member.id, org.id);
-    await ResourcePermissionPolicyModel.replace({
+    await grantEnvironmentUse({
       organizationId: org.id,
-      resource: "environment",
-      scope: granted.id,
-      revision: 0,
-      grants: [
-        { subject: { type: "user", id: member.id }, actions: ["read", "use"] },
-      ],
+      environmentId: granted.id,
+      userId: member.id,
     });
     await expect(
       assertCanAssignEnvironment({

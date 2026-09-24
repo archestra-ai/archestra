@@ -1,9 +1,12 @@
 import { type Mock, vi } from "vitest";
 import { InternalMcpCatalogModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -59,14 +62,10 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
 
   /** Let this user deploy into exactly one environment. */
   async function grantDeploy(environmentId: string) {
-    await ResourcePermissionPolicyModel.replace({
+    await grantEnvironmentUse({
       organizationId,
-      resource: "environment",
-      scope: environmentId,
-      revision: 0,
-      grants: [
-        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
-      ],
+      environmentId: environmentId,
+      userId: user.id,
     });
   }
 
@@ -80,9 +79,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   }
 
   test("a member without a grant on a RESTRICTED env is rejected (403) and nothing is created", async () => {
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     const before = await InternalMcpCatalogModel.findAll({
@@ -110,9 +109,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   });
 
   test("a caller granted use on that environment assigning a RESTRICTED env succeeds", async () => {
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     await grantDeploy(restricted.id);
 
@@ -129,7 +128,7 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   test("a member with no grant assigning an UNRESTRICTED env succeeds", async () => {
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
 
     const response = await app.inject({
@@ -167,7 +166,7 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   test("updating environmentId on an existing catalog item persists, and clearing to default works", async () => {
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
     const id = await createWith(name, null);
@@ -190,9 +189,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   });
 
   test("updating to a RESTRICTED env without a grant on it is rejected (403) and the assignment is unchanged", async () => {
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
     const id = await createWith(name, null);
@@ -211,9 +210,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   });
 
   test("updating to a RESTRICTED env with a grant on it succeeds", async () => {
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     await grantDeploy(restricted.id);
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;

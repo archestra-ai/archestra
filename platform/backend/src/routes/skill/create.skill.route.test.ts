@@ -6,8 +6,10 @@ import {
 import { EnvironmentModel, SkillModel } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { createEnvironment } from "@/services/environments/environment";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import skillRoutes from "./skill.routes";
 import {
   MANIFEST,
@@ -36,13 +38,13 @@ describe("POST /api/skills", () => {
   });
 
   test("persists explicit environment assignments (one or several)", async () => {
-    const staging = await EnvironmentModel.create({
+    const staging = await createEnvironment({
       organizationId: ctx.organizationId,
-      name: "Staging",
+      data: { name: "Staging" },
     });
-    const production = await EnvironmentModel.create({
+    const production = await createEnvironment({
       organizationId: ctx.organizationId,
-      name: "Production",
+      data: { name: "Production" },
     });
 
     const response = await ctx.app.inject({
@@ -75,14 +77,13 @@ describe("POST /api/skills", () => {
   });
 
   test("assigning a restricted environment requires skill:deploy-to-restricted", async () => {
-    const open = await EnvironmentModel.create({
+    const open = await createEnvironment({
       organizationId: ctx.organizationId,
-      name: "Open",
+      data: { name: "Open" },
     });
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId: ctx.organizationId,
-      name: "Restricted",
-      restricted: true,
+      data: { name: "Restricted" },
     });
     // members hold skill:create but not skill:deploy-to-restricted
     await MemberModel.updateRole(

@@ -4,6 +4,7 @@ import { EnvironmentResourceDefaultModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -26,7 +27,7 @@ describe("Internal MCP Catalog - configured default environment", () => {
   let organizationId: string;
   let canDeployToRestricted: boolean;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     canDeployToRestricted = false;
     mockHasPermission.mockImplementation(async (permissions: Permissions) => {
@@ -43,6 +44,7 @@ describe("Internal MCP Catalog - configured default environment", () => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -159,9 +161,9 @@ describe("Internal MCP Catalog - configured default environment", () => {
 
   test("a restricted default the caller may not deploy to falls back to the default environment", async () => {
     canDeployToRestricted = false;
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,
@@ -182,9 +184,9 @@ describe("Internal MCP Catalog - configured default environment", () => {
 
   test("a restricted default applies for a caller who may deploy there", async () => {
     canDeployToRestricted = true;
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,

@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import EnvironmentModel from "@/models/environment";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
@@ -21,9 +23,24 @@ const dataStatements = migrationSql
   .map((statement) => statement.trim())
   .filter((statement) => /^(UPDATE|INSERT|DELETE)\b/.test(codeOf(statement)));
 
-async function runDataMigration() {
-  for (const statement of dataStatements) {
-    await db.execute(sql.raw(statement));
+/**
+ * Replay the data statements. The migration drops the environment
+ * `restricted` column after it reads it, so the column is put back for the
+ * replay and removed again; `prepare` sets the values a test needs in it.
+ */
+async function runDataMigration(prepare?: () => Promise<void>) {
+  await db.execute(
+    sql`ALTER TABLE "environments" ADD COLUMN IF NOT EXISTS "restricted" boolean DEFAULT false NOT NULL`,
+  );
+  try {
+    await prepare?.();
+    for (const statement of dataStatements) {
+      await db.execute(sql.raw(statement));
+    }
+  } finally {
+    await db.execute(
+      sql`ALTER TABLE "environments" DROP COLUMN IF EXISTS "restricted"`,
+    );
   }
 }
 
@@ -193,6 +210,7 @@ describe("0488 schema", () => {
       'DELETE FROM "resource_permission_policies" policy',
       'DELETE FROM "agents" agent',
       'UPDATE "mcp_server" backing_server', // app backing install scope
+      'INSERT INTO "resource_permission_policies"', // environment grants
     ]);
   });
 });
@@ -732,5 +750,98 @@ describe("0488 skill names unique per author", () => {
     expect(names.get(shared.id)).toBe("refunds");
     expect(names.get(otherAuthors.id)).toBe("refunds");
     expect(names.get(personal.id)).toBe(`refunds-${personal.id.slice(0, 8)}`);
+  });
+});
+
+describe("0488 environment grants", () => {
+  const organizationWide = {
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  };
+
+  test("grants each open environment to its organization and leaves a restricted one closed", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const open = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Sandbox",
+    });
+    const restricted = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Prod",
+    });
+    const elsewhere = await EnvironmentModel.create({
+      organizationId: other.id,
+      name: "Sandbox",
+    });
+    const restrict = () =>
+      db
+        .execute(
+          sql`UPDATE "environments" SET "restricted" = true WHERE "id" = ${restricted.id}`,
+        )
+        .then(() => undefined);
+
+    await runDataMigration(restrict);
+    await runDataMigration(restrict);
+
+    const policyOf = (organizationId: string, scope: string) =>
+      ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "environment",
+        scope,
+      });
+    const openPolicy = await policyOf(org.id, open.id);
+    expect(openPolicy?.grants).toEqual([organizationWide]);
+    // Written once: the second replay changes nothing.
+    expect(openPolicy?.revision).toBe(1);
+    expect(await policyOf(org.id, restricted.id)).toBeNull();
+    // Each environment is granted to its own organization only.
+    expect((await policyOf(other.id, elsewhere.id))?.grants).toEqual([
+      organizationWide,
+    ]);
+    expect(await policyOf(org.id, elsewhere.id)).toBeNull();
+  });
+
+  test("adds the organization grant to an open environment's existing grants", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const team = await makeTeam(org.id, owner.id);
+    const open = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Staging",
+    });
+    const teamGrant = {
+      subject: { type: "team" as const, id: team.id },
+      actions: ["read" as const, "use" as const, "update" as const],
+    };
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: org.id,
+      resource: "environment",
+      scope: open.id,
+      revision: 0,
+      grants: [teamGrant],
+    });
+
+    await runDataMigration();
+    await runDataMigration();
+
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "environment",
+      scope: open.id,
+    });
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining(teamGrant),
+        organizationWide,
+      ]),
+    );
+    expect(policy?.grants).toHaveLength(2);
   });
 });

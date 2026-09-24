@@ -10,7 +10,6 @@ import AgentUserModel from "@/models/agent-user";
 import AppAccessModel from "@/models/app-access";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import MemberModel from "@/models/member";
-import OrganizationModel from "@/models/organization";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
 import TeamModel from "@/models/team";
@@ -19,6 +18,7 @@ import {
   createEnvironment,
 } from "@/services/environments/environment";
 import { accessGrants, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import { ResourcePermissions } from "./resource-permissions";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
@@ -189,21 +189,20 @@ describe("upgrade access preservation", () => {
       second: await makeServiceAccount(org.id, { createdBy: null }),
     };
 
-    // Two environments and a restricted org default, so the deploy rows below
-    // cover all three shapes the gate has: an open environment, a restricted
-    // one, and the implicit Default.
+    await removeObjectPolicies(org.id);
+    // Two environments, so the deploy rows below cover all three shapes the
+    // gate has: an open environment, a restricted one, and the implicit
+    // Default. They are made after the removal above because their grants
+    // come from the schema migration, which ran before the upgrade starts:
+    // an open environment is granted to the organization there.
     const openEnvironment = await createEnvironment({
       organizationId: org.id,
       data: { name: "Sandbox" },
     });
-    const restrictedEnvironment = await createEnvironment({
+    const restrictedEnvironment = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
-    await OrganizationModel.patch(org.id, {
-      defaultEnvironmentRestricted: true,
-    });
-    await removeObjectPolicies(org.id);
 
     const principals = {
       creator,
@@ -405,7 +404,9 @@ describe("upgrade access preservation", () => {
         for (const [what, environmentId, restricted] of [
           ["open", openEnvironment.id, false],
           ["restricted", restrictedEnvironment.id, true],
-          ["default", null, true],
+          // The Default environment is open to all. It could be restricted
+          // before; it no longer can be, a deliberate widening.
+          ["default", null, false],
         ] as const) {
           rows[`deploy:${what}:${who}`] = converted
             ? await assertCanAssignEnvironment({
@@ -459,7 +460,7 @@ describe("upgrade access preservation", () => {
     expect(before["deploy:restricted:admin"]).toBe(true);
     expect(before["deploy:restricted:loner"]).toBe(false);
     expect(before["deploy:default:admin"]).toBe(true);
-    expect(before["deploy:default:loner"]).toBe(false);
+    expect(before["deploy:default:loner"]).toBe(true);
 
     await runScopedResourcePermissionCutover();
     converted = true;
@@ -513,9 +514,9 @@ describe("upgrade access preservation", () => {
     makeCustomRole,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     // Holds every one of the six, like the built-in Admin and Editor roles.

@@ -1,9 +1,12 @@
 import { type Mock, vi } from "vitest";
 import { EnvironmentResourceDefaultModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 /**
@@ -136,9 +139,9 @@ describe("Agent routes - configured default environment", () => {
   });
 
   test("a restricted default the caller may not deploy to falls back rather than failing the create", async () => {
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,
@@ -152,18 +155,14 @@ describe("Agent routes - configured default environment", () => {
   });
 
   test("a restricted default applies for a caller who may deploy there", async () => {
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
     });
-    await ResourcePermissionPolicyModel.replace({
+    await grantEnvironmentUse({
       organizationId,
-      resource: "environment",
-      scope: locked.id,
-      revision: 0,
-      grants: [
-        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
-      ],
+      environmentId: locked.id,
+      userId: user.id,
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,

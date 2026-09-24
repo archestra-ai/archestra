@@ -1,9 +1,12 @@
 import { type Mock, vi } from "vitest";
 import { AgentModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 /**
@@ -96,25 +99,20 @@ describe("Agent routes - restricted environment assignment guard", () => {
   }
 
   async function makeRestrictedEnvironment() {
-    return createEnvironment({
+    return createRestrictedEnvironment({
       organizationId,
       data: {
         name: `Prod-${crypto.randomUUID().slice(0, 8)}`,
-        restricted: true,
       },
     });
   }
 
   /** Let this user deploy into exactly one environment. */
   async function grantDeploy(environmentId: string) {
-    await ResourcePermissionPolicyModel.replace({
+    await grantEnvironmentUse({
       organizationId,
-      resource: "environment",
-      scope: environmentId,
-      revision: 0,
-      grants: [
-        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
-      ],
+      environmentId: environmentId,
+      userId: user.id,
     });
   }
 
@@ -166,7 +164,7 @@ describe("Agent routes - restricted environment assignment guard", () => {
   test("updating to an UNRESTRICTED env without any grant succeeds (200)", async () => {
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const agent = await makeOrgAgent();
 

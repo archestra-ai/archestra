@@ -104,7 +104,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectEnvironmentSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
       if (body.namespace != null && mcpServerRuntimeManager.isEnabled) {
         try {
           await mcpServerRuntimeManager.validateNamespace(body.namespace);
@@ -116,7 +116,11 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       return reply.send(
-        await createEnvironment({ organizationId, data: body }),
+        await createEnvironment({
+          organizationId,
+          userId: user.id,
+          data: body,
+        }),
       );
     },
   );

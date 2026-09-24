@@ -150165,9 +150165,6 @@
                               "pattern": "^[a-z0-9._:/-]+$"
                             }
                           },
-                          "restricted": {
-                            "type": "boolean"
-                          },
                           "sortOrder": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -150230,7 +150227,6 @@
                           "networkPolicy",
                           "validationRegex",
                           "trustedImageRegistries",
-                          "restricted",
                           "sortOrder",
                           "createdAt",
                           "updatedAt",
@@ -150288,16 +150284,12 @@
                         "knowledgeSource"
                       ],
                       "additionalProperties": false
-                    },
-                    "canDeployToDefault": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
                     "environments",
                     "defaultAssignedCatalogCount",
-                    "resourceDefaults",
-                    "canDeployToDefault"
+                    "resourceDefaults"
                   ],
                   "additionalProperties": false
                 }
@@ -150610,7 +150602,7 @@
                     }
                   },
                   "restricted": {
-                    "type": "boolean"
+                    "not": {}
                   },
                   "validationRegex": {
                     "nullable": true,
@@ -150749,9 +150741,6 @@
                         "pattern": "^[a-z0-9._:/-]+$"
                       }
                     },
-                    "restricted": {
-                      "type": "boolean"
-                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -150775,7 +150764,6 @@
                     "networkPolicy",
                     "validationRegex",
                     "trustedImageRegistries",
-                    "restricted",
                     "sortOrder",
                     "createdAt",
                     "updatedAt"
@@ -151430,7 +151418,7 @@
                     }
                   },
                   "restricted": {
-                    "type": "boolean"
+                    "not": {}
                   },
                   "validationRegex": {
                     "nullable": true,
@@ -151578,9 +151566,6 @@
                         "pattern": "^[a-z0-9._:/-]+$"
                       }
                     },
-                    "restricted": {
-                      "type": "boolean"
-                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -151604,7 +151589,6 @@
                     "networkPolicy",
                     "validationRegex",
                     "trustedImageRegistries",
-                    "restricted",
                     "sortOrder",
                     "createdAt",
                     "updatedAt"
@@ -336435,9 +336419,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -336542,7 +336523,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -337527,9 +337507,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -337634,7 +337611,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -338874,9 +338850,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -338981,7 +338954,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -339818,9 +339790,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -339925,7 +339894,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -340762,9 +340730,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -340869,7 +340834,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -341718,9 +341682,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -341825,7 +341786,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -342737,9 +342697,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -342844,7 +342801,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -343719,9 +343675,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -343826,7 +343779,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -344149,7 +344101,7 @@
                     }
                   },
                   "restricted": {
-                    "type": "boolean"
+                    "not": {}
                   },
                   "validationRegex": {
                     "nullable": true,
@@ -344733,9 +344685,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -344840,7 +344789,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -345691,9 +345639,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -345798,7 +345743,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -346680,9 +346624,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -346787,7 +346728,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -347606,9 +347546,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -347713,7 +347650,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -349720,9 +349656,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "defaultEnvironmentRestricted": {
-                      "type": "boolean"
-                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -349827,7 +349760,6 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
-                    "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",

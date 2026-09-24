@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   integer,
   jsonb,
@@ -16,8 +15,8 @@ import organizationsTable from "./organization";
  * Org-level list of deployment environments (e.g. "sandbox", "staging",
  * "production"). A catalog item may be assigned to exactly one environment via
  * internal_mcp_catalog.environment_id (nullable). Each environment carries a
- * Kubernetes namespace its MCP server pods are deployed into. Assignment to a
- * `restricted` environment is gated by per-resource `deploy-to-restricted` permissions.
+ * Kubernetes namespace its MCP server pods are deployed into. Who may deploy
+ * into it is its `use` grants.
  */
 const environmentsTable = pgTable(
   "environments",
@@ -53,13 +52,6 @@ const environmentsTable = pgTable(
     trustedImageRegistries: jsonb(
       "trusted_image_registries",
     ).$type<TrustedImageRegistries>(),
-    /**
-     * When true, assigning a catalog item to this environment requires the
-     * resource-specific `deploy-to-restricted` permission. Unrestricted environments (and the
-     * org-default/null environment) are open to anyone who can create catalog
-     * items. Flipped via PATCH /api/environments/:id.
-     */
-    restricted: boolean("restricted").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

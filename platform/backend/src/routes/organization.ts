@@ -497,7 +497,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentDescription: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultNetworkPolicy: typeof body.networkPolicy;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: TrustedImageRegistries | null;
       }> = {};
@@ -512,9 +511,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("networkPolicy" in body) {
         data.defaultNetworkPolicy = body.networkPolicy ?? null;
-      }
-      if ("restricted" in body) {
-        data.defaultEnvironmentRestricted = body.restricted ?? false;
       }
       if ("validationRegex" in body) {
         data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;

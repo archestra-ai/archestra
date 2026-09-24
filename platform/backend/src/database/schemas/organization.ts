@@ -457,16 +457,6 @@ const organizationsTable = pgTable("organization", {
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
 
   /**
-   * When true, assigning a catalog item to the implicit "default" environment
-   * (environment_id = null) requires the resource-specific `deploy-to-restricted` permission — i.e.
-   * creating a catalog item without choosing an environment is gated too.
-   * Mirrors the per-environment `environment.restricted` flag for the default.
-   */
-  defaultEnvironmentRestricted: boolean("default_environment_restricted")
-    .notNull()
-    .default(false),
-
-  /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
    * environment (internal_mcp_catalog.environment_id = null). User-supplied
    * config values are allowed only if they MATCH. NULL disables. Mirrors

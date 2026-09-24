@@ -98,11 +98,11 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const from = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const to = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `mt-relocate-${crypto.randomUUID().slice(0, 8)}`;
@@ -145,11 +145,11 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const from = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const to = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `st-relocate-${crypto.randomUUID().slice(0, 8)}`;
@@ -192,7 +192,7 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const from = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `st-to-default-${crypto.randomUUID().slice(0, 8)}`;
@@ -234,11 +234,11 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const from = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const to = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `st-combined-${crypto.randomUUID().slice(0, 8)}`;
@@ -284,7 +284,7 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const to = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `mt-from-default-${crypto.randomUUID().slice(0, 8)}`;
@@ -317,11 +317,11 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
   }) => {
     const from = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const to = await createEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: false },
+      data: { name: "Prod" },
     });
 
     const name = `mt-combined-${crypto.randomUUID().slice(0, 8)}`;

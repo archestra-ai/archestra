@@ -2,6 +2,7 @@ import {
   type EnvironmentDefaultableResource,
   hasScopedPermission,
 } from "@archestra/shared";
+import { withDbTransaction } from "@/database";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -13,6 +14,7 @@ import {
   OrganizationModel,
   PlaywrightRuntimeModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -90,35 +92,24 @@ export async function listEnvironments(params: {
   labels?: Record<string, string[]>;
 }): Promise<EnvironmentList> {
   const { organizationId, userId, labels } = params;
-  const [rows, defaultAssignedCatalogCount, resourceDefaults, organization] =
+  const [rows, defaultAssignedCatalogCount, resourceDefaults] =
     await Promise.all([
       EnvironmentModel.listForOrganization(organizationId, labels),
       EnvironmentModel.countDefaultAssigned(organizationId),
       EnvironmentResourceDefaultModel.getForOrganization(organizationId),
-      OrganizationModel.getById(organizationId),
     ]);
-  // An unrestricted environment is open to anyone who can create the resource
-  // being deployed, so only a restricted one has a question to answer.
+  // Deploying into an environment takes a `use` grant on it.
   const environments = await Promise.all(
     rows.map(async (environment) => ({
       ...environment,
-      canDeploy:
-        !environment.restricted ||
-        (await canDeployToEnvironment({
-          organizationId,
-          userId,
-          scope: environment.id,
-        })),
+      canDeploy: await canDeployToEnvironment({
+        organizationId,
+        userId,
+        scope: environment.id,
+      }),
     })),
   );
-  return {
-    environments,
-    defaultAssignedCatalogCount,
-    resourceDefaults,
-    canDeployToDefault:
-      !organization?.defaultEnvironmentRestricted ||
-      (await canDeployToEnvironment({ organizationId, userId, scope: "*" })),
-  };
+  return { environments, defaultAssignedCatalogCount, resourceDefaults };
 }
 
 /**
@@ -162,7 +153,7 @@ export async function updateEnvironmentResourceDefaults(params: {
  * The environment a newly created resource of this kind should be bound to when
  * its creator did not choose one. Returns null — the org Default environment,
  * i.e. the historical behavior — when no default is configured, or when the
- * configured one is restricted and the caller may not deploy there. Falling
+ * caller may not deploy into the configured one. Falling
  * back rather than throwing keeps an admin's convenience setting from blocking
  * a create the caller is otherwise allowed to perform; explicitly *choosing*
  * that environment is still refused by `assertCanAssignEnvironment`.
@@ -186,7 +177,6 @@ export async function resolveDefaultEnvironmentForNewResource(params: {
   );
   if (!environment) return null;
   if (
-    environment.restricted &&
     !(await canDeployToEnvironment({
       organizationId,
       userId,
@@ -200,9 +190,11 @@ export async function resolveDefaultEnvironmentForNewResource(params: {
 
 export async function createEnvironment(params: {
   organizationId: string;
+  /** The creator, who gets full access. Omitted for a system create. */
+  userId?: string;
   data: CreateEnvironment;
 }): Promise<Environment> {
-  const { organizationId, data } = params;
+  const { organizationId, userId, data } = params;
   const existing = await EnvironmentModel.listForOrganization(organizationId);
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
@@ -213,10 +205,25 @@ export async function createEnvironment(params: {
     description: data.description ?? null,
     namespace: data.namespace ?? null,
     networkPolicy: data.networkPolicy ?? null,
-    restricted: data.restricted,
     validationRegex: data.validationRegex ?? null,
     trustedImageRegistries: data.trustedImageRegistries ?? null,
   });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // A new environment is open to anyone who can create what is deployed into
+  // it, as environments always were. Its Permissions tab narrows that.
+  await withDbTransaction((tx) =>
+    ResourcePermissionPolicyModel.createInitial({
+      tx,
+      organizationId,
+      resource: "environment",
+      scope: created.id,
+      authorId: userId ?? null,
+      publishToOrganization: true,
+    }),
+  );
+  // SPDX-SnippetEnd
 
   if (data.labels?.length) {
     await EnvironmentLabelModel.syncLabels(created.id, data.labels);
@@ -247,7 +254,6 @@ export async function updateEnvironment(params: {
     description: data.description,
     namespace: data.namespace,
     networkPolicy: data.networkPolicy,
-    restricted: data.restricted,
     validationRegex: data.validationRegex,
     trustedImageRegistries: data.trustedImageRegistries,
   });
@@ -266,16 +272,13 @@ export async function updateEnvironment(params: {
 }
 
 /**
- * Gate assigning a catalog item to an environment. Unrestricted environments
- * are open; a `restricted` environment requires a `use` grant on that
- * environment. An environment is a place you deploy into, so the authority to
- * deploy there belongs to the environment rather than to each kind of thing
- * deployed — which is what the retired `deploy-to-restricted` role actions
- * tried to say, once per resource type and never per environment.
+ * Gate assigning a catalog item to an environment: it takes a `use` grant on
+ * that environment. An environment is a place you deploy into, so the
+ * authority to deploy there belongs to the environment rather than to each
+ * kind of thing deployed.
  *
- * The organization's Default environment has no row to grant on, so deploying
- * into it while it is restricted asks for `use` across every environment
- * (`*`). That is exactly the reach the single retired action had.
+ * The organization's Default environment has no row to grant on, and is open
+ * to anyone who can create the resource being deployed.
  */
 export async function assertCanAssignEnvironment(params: {
   environmentId: string | null | undefined;
@@ -284,19 +287,7 @@ export async function assertCanAssignEnvironment(params: {
 }): Promise<void> {
   const { environmentId, organizationId, userId } = params;
 
-  if (!environmentId) {
-    const organization = await OrganizationModel.getById(organizationId);
-    if (
-      organization?.defaultEnvironmentRestricted &&
-      !(await canDeployToEnvironment({ organizationId, userId, scope: "*" }))
-    ) {
-      throw new ApiError(
-        403,
-        "You do not have permission to assign catalog items to the default environment.",
-      );
-    }
-    return;
-  }
+  if (!environmentId) return;
 
   const environment = await EnvironmentModel.findByIdForOrganization(
     environmentId,
@@ -306,7 +297,6 @@ export async function assertCanAssignEnvironment(params: {
     throw new ApiError(404, "Environment not found");
   }
   if (
-    environment.restricted &&
     !(await canDeployToEnvironment({
       organizationId,
       userId,
@@ -315,7 +305,7 @@ export async function assertCanAssignEnvironment(params: {
   ) {
     throw new ApiError(
       403,
-      "You do not have permission to assign catalog items to this restricted environment.",
+      "You do not have permission to assign catalog items to this environment.",
     );
   }
 }

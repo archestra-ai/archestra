@@ -18,7 +18,6 @@ interface EnvironmentWithAssignedCount {
   description: string | null;
   namespace: string | null;
   networkPolicy: NetworkPolicy | null;
-  restricted: boolean;
   validationRegex: string | null;
   trustedImageRegistries: TrustedImageRegistries | null;
   sortOrder: number;
@@ -53,7 +52,6 @@ class EnvironmentModel {
         description: schema.environmentsTable.description,
         namespace: schema.environmentsTable.namespace,
         networkPolicy: schema.environmentsTable.networkPolicy,
-        restricted: schema.environmentsTable.restricted,
         validationRegex: schema.environmentsTable.validationRegex,
         trustedImageRegistries: schema.environmentsTable.trustedImageRegistries,
         sortOrder: schema.environmentsTable.sortOrder,
@@ -141,7 +139,6 @@ class EnvironmentModel {
     description?: string | null;
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
-    restricted?: boolean;
     validationRegex?: string | null;
     trustedImageRegistries?: TrustedImageRegistries | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
@@ -151,7 +148,6 @@ class EnvironmentModel {
       description,
       namespace,
       networkPolicy,
-      restricted,
       validationRegex,
       trustedImageRegistries,
     } = params;
@@ -163,7 +159,6 @@ class EnvironmentModel {
         description: description ?? null,
         namespace: namespace ?? null,
         networkPolicy: networkPolicy ?? null,
-        restricted: restricted ?? false,
         validationRegex: validationRegex ?? null,
         trustedImageRegistries: trustedImageRegistries ?? null,
         sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
@@ -179,7 +174,6 @@ class EnvironmentModel {
     description?: string | null;
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
-    restricted?: boolean;
     validationRegex?: string | null;
     trustedImageRegistries?: TrustedImageRegistries | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
@@ -190,7 +184,6 @@ class EnvironmentModel {
       description,
       namespace,
       networkPolicy,
-      restricted,
       validationRegex,
       trustedImageRegistries,
     } = params;
@@ -199,7 +192,6 @@ class EnvironmentModel {
     if (description !== undefined) patch.description = description;
     if (namespace !== undefined) patch.namespace = namespace;
     if (networkPolicy !== undefined) patch.networkPolicy = networkPolicy;
-    if (restricted !== undefined) patch.restricted = restricted;
     if (validationRegex !== undefined) patch.validationRegex = validationRegex;
     if (trustedImageRegistries !== undefined)
       patch.trustedImageRegistries = trustedImageRegistries;

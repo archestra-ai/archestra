@@ -3,6 +3,7 @@ import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { LabelWithDetailsSchema } from "./label";
+import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
 // === Public schemas & types ===
 
@@ -137,8 +138,9 @@ export const SelectEnvironmentSchema = createSelectSchema(
 /**
  * Listing response shape — row columns plus the number of catalog items
  * currently assigned to this environment, for delete-confirmation UI, and
- * whether the caller may deploy into it. `canDeploy` answers per environment,
- * so the picker can offer one restricted environment while disabling another.
+ * whether the caller may deploy into it. `canDeploy` answers per environment
+ * from its `use` grants, so the picker can offer one environment while
+ * disabling another.
  */
 export const EnvironmentWithAssignedCountSchema =
   SelectEnvironmentSchema.extend({
@@ -180,8 +182,6 @@ export const EnvironmentListSchema = z.object({
   environments: z.array(EnvironmentWithAssignedCountSchema),
   defaultAssignedCatalogCount: z.number().int().nonnegative(),
   resourceDefaults: EnvironmentResourceDefaultsSchema,
-  /** Whether the caller may deploy into the org's implicit Default environment. */
-  canDeployToDefault: z.boolean(),
 });
 
 export const KubernetesNamespaceSchema = z
@@ -199,7 +199,7 @@ export const CreateEnvironmentSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
-  restricted: z.boolean().optional(),
+  restricted: RetiredSharingUpdateFieldSchema,
   validationRegex: ValidationRegexSchema.nullable().optional(),
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
@@ -214,7 +214,7 @@ export const UpdateEnvironmentSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
-  restricted: z.boolean().optional(),
+  restricted: RetiredSharingUpdateFieldSchema,
   validationRegex: ValidationRegexSchema.nullable().optional(),
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),

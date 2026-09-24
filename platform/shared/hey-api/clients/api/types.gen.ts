@@ -41374,7 +41374,6 @@ export type ListEnvironmentsResponses = {
             } | null;
             validationRegex: string | null;
             trustedImageRegistries: Array<string> | null;
-            restricted: boolean;
             sortOrder: number;
             createdAt: string;
             updatedAt: string;
@@ -41395,7 +41394,6 @@ export type ListEnvironmentsResponses = {
             mcpGateway: string | null;
             knowledgeSource: string | null;
         };
-        canDeployToDefault: boolean;
     };
 };
 
@@ -41412,7 +41410,7 @@ export type CreateEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
         labels?: Array<{
@@ -41510,7 +41508,6 @@ export type CreateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
-        restricted: boolean;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -41708,7 +41705,7 @@ export type UpdateEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
         labels?: Array<{
@@ -41808,7 +41805,6 @@ export type UpdateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
-        restricted: boolean;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -87274,7 +87270,6 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -87595,7 +87590,6 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -87799,7 +87793,6 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -87998,7 +87991,6 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88197,7 +88189,6 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88397,7 +88388,6 @@ export type UpdateAgentSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88612,7 +88602,6 @@ export type UpdateConnectionSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88825,7 +88814,6 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88849,7 +88837,7 @@ export type UpdateDefaultEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
     };
@@ -89034,7 +89022,6 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89238,7 +89225,6 @@ export type UpdateAuthSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89444,7 +89430,6 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89640,7 +89625,6 @@ export type DropEmbeddingConfigResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90186,7 +90170,6 @@ export type CompleteOnboardingResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;

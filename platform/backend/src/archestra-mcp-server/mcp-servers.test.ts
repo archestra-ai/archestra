@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_SERVER_NAME,
@@ -14,8 +15,8 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
-import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -848,9 +849,9 @@ describe("create_mcp_server restricted environment guard", () => {
       userId: user.id,
       organizationId: org.id,
     };
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     const serverName = `restricted-env-rejected-${crypto.randomUUID().slice(0, 8)}`;
@@ -866,7 +867,7 @@ describe("create_mcp_server restricted environment guard", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("restricted environment");
+    expect((result.content[0] as any).text).toContain("this environment");
 
     const created = await InternalMcpCatalogModel.findByName(serverName);
     expect(created).toBeFalsy();
@@ -887,9 +888,9 @@ describe("create_mcp_server restricted environment guard", () => {
       userId: user.id,
       organizationId: org.id,
     };
-    const restricted = await createEnvironment({
+    const restricted = await createRestrictedEnvironment({
       organizationId: org.id,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     const serverName = `restricted-env-allowed-${crypto.randomUUID().slice(0, 8)}`;

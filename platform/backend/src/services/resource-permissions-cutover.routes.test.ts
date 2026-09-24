@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { eq } from "drizzle-orm";
-import { type TestAPI, vi } from "vitest";
-import { betterAuth } from "@/auth";
-import { authPlugin } from "@/auth/fastify-plugin";
+import type { TestAPI } from "vitest";
 import db, { schema } from "@/database";
-import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -17,6 +14,10 @@ import llmProviderApiKeyRoutes from "@/routes/llm-provider-api-keys";
 import resourcePermissionRoutes from "@/routes/resource-permission/resource-permission.routes";
 import skillRoutes from "@/routes/skill/skill.routes";
 import { accessGrants, describe, expect, test } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 type Fixtures = Pick<
@@ -383,8 +384,6 @@ describe("write routes after the upgrade", () => {
 
 // ===
 
-const USER_HEADER = "x-test-user";
-
 type Statuses = [read: number, edit: number, savePermissions: number];
 type World = Awaited<ReturnType<typeof seedLegacyWorld>>;
 type ObjectName = keyof World["objects"];
@@ -586,45 +585,18 @@ async function seedLegacyWorld(fx: Fixtures) {
   return { organizationId: org.id, principals, objects };
 }
 
-/**
- * The routes behind the real authentication middleware, so the role gate of
- * each endpoint applies as well as the object grant. Only the session lookup
- * is stubbed: it names the user in a test header.
- */
-async function routesAs(organizationId: string) {
-  vi.spyOn(betterAuth.api, "getSession").mockImplementation((async ({
-    headers,
-  }: {
-    headers: Headers;
-  }) => {
-    const userId = headers.get(USER_HEADER);
-    return {
-      response: userId
-        ? {
-            user: { id: userId },
-            session: {
-              id: `session-${userId}`,
-              createdAt: new Date(),
-              activeOrganizationId: organizationId,
-            },
-          }
-        : null,
-      headers: new Headers(),
-    };
-  }) as unknown as typeof betterAuth.api.getSession);
-  const app = createFastifyInstance();
-  await app.register(authPlugin);
-  for (const routes of [
-    agentRoutes,
-    skillRoutes,
-    internalMcpCatalogRoutes,
-    knowledgeBaseRoutes,
-    llmProviderApiKeyRoutes,
-    resourcePermissionRoutes,
-  ]) {
-    await app.register(routes);
-  }
-  return app;
+function routesAs(organizationId: string) {
+  return authenticatedRouteApp({
+    organizationId,
+    routes: [
+      agentRoutes,
+      skillRoutes,
+      internalMcpCatalogRoutes,
+      knowledgeBaseRoutes,
+      llmProviderApiKeyRoutes,
+      resourcePermissionRoutes,
+    ],
+  });
 }
 
 /**

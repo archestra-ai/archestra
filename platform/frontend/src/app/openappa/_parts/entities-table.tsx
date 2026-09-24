@@ -13,7 +13,6 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ScopeBadge } from "@/components/scope-badge";
 import { scopeLabel } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -103,12 +102,6 @@ export function EntitiesTable() {
         header: "Type",
         size: 150,
         cell: ({ row }) => entityTypeLabel(row.original.type),
-      },
-      {
-        id: "visibility",
-        header: "Visibility",
-        size: 150,
-        cell: ({ row }) => <ScopeBadge scope={row.original.scope} showLabel />,
       },
       {
         id: "tools",

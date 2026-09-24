@@ -105,25 +105,6 @@ export function ProjectsTable({
       },
     },
     {
-      id: "sharing",
-      size: 160,
-      header: "Sharing",
-      cell: ({ row }) => {
-        const project = row.original;
-        return (
-          <span className="flex flex-wrap items-center gap-1">
-            {project.viewerRole === "admin" && project.visibility === null && (
-              <Badge variant="secondary">
-                {project.ownerName
-                  ? `Owned by ${project.ownerName}`
-                  : "Other user"}
-              </Badge>
-            )}
-          </span>
-        );
-      },
-    },
-    {
       id: "actions",
       size: 112,
       header: () => <div className="text-right">Actions</div>,

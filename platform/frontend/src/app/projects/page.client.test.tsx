@@ -379,31 +379,6 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Other project")).toBeInTheDocument();
   });
 
-  it("shows visibility labels on project cards", () => {
-    mockProjects = [
-      makeProject({ id: "personal", name: "Personal project" }),
-      makeProject({
-        id: "team",
-        name: "Team project",
-        visibility: "team",
-        shareTeamNames: ["Design"],
-      }),
-      makeProject({
-        id: "organization",
-        name: "Organization project",
-        visibility: "organization",
-      }),
-    ];
-
-    render(<ProjectsPageClient />);
-
-    expect(screen.getByText("Personal", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("Team", { selector: "span" })).toBeVisible();
-    expect(
-      screen.getByText("Organization", { selector: "span" }),
-    ).toBeVisible();
-  });
-
   it("shows pin, edit details, and delete in owner card menus", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 

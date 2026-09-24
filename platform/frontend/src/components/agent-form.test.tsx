@@ -1314,7 +1314,6 @@ describe("AgentForm delegation state", () => {
     const option = screen.getByRole("option", { name: /Target Agent/ });
     expect(within(option).getByText("🔭")).toBeInTheDocument();
     expect(within(option).getByText("Agent Owner")).toBeInTheDocument();
-    expect(within(option).getByLabelText("Personal")).toBeInTheDocument();
   });
 
   it.each([

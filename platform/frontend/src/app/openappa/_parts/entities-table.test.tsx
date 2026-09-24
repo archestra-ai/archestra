@@ -160,8 +160,8 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   expect(screen.getByRole("heading", { name: "Policy targets" })).toBeVisible();
   expect(screen.getByRole("columnheader", { name: "Type" })).toBeVisible();
   expect(
-    screen.getByRole("columnheader", { name: "Visibility" }),
-  ).toBeVisible();
+    screen.queryByRole("columnheader", { name: "Visibility" }),
+  ).not.toBeInTheDocument();
   expect(screen.getByRole("columnheader", { name: "Tools" })).toBeVisible();
   expect(screen.getByText("2 of 3 with tool rules")).toBeVisible();
   expect(screen.getByText("Includes your Auto mode access")).toBeVisible();

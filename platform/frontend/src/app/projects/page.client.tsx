@@ -32,14 +32,12 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import {
@@ -655,12 +653,6 @@ function ProjectCard({
       onNavigate={() => router.push(`/projects/${project.id}`)}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <ScopeBadge
-          scope={projectVisibilityToScope(project.visibility)}
-          teamNames={project.shareTeamNames}
-          userNames={project.shareUserNames}
-          showLabel
-        />
         {project.viewerRole === "admin" && project.visibility === null ? (
           <Badge variant="secondary">
             {project.ownerName ? `Owned by ${project.ownerName}` : "Other user"}

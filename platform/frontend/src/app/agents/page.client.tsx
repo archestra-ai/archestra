@@ -78,7 +78,6 @@ import {
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -756,15 +755,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <ResourceVisibilityBadge
-              scope={agent.scope}
-              teams={agent.teams}
-              users={agent.users}
-              authorId={agent.authorId}
-              authorName={agent.authorName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
             <Badge variant={agent.connection.enabled ? "default" : "secondary"}>
               {agent.connection.enabled ? "Enabled" : "Disabled"}
             </Badge>

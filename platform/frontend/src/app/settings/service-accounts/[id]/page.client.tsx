@@ -13,11 +13,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -59,6 +56,7 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -567,11 +565,13 @@ export default function ServiceAccountDetailPage({
           {/* Only when something is actually wrong. A banner that is always
               present is one nobody reads. */}
           {healthExplanation && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>This service account cannot authenticate</AlertTitle>
-              <AlertDescription>{healthExplanation}</AlertDescription>
-            </Alert>
+            <InlineNotice variant="error">
+              <AlertTriangle />
+              <span className="font-medium">
+                This service account cannot authenticate
+              </span>
+              <InlineNoticeText>{healthExplanation}</InlineNoticeText>
+            </InlineNotice>
           )}
 
           {activeTab === "keys" ? (
@@ -806,21 +806,6 @@ export default function ServiceAccountDetailPage({
                 </div>
               </SettingsBlock>
 
-              <SettingsBlock
-                title="Labels"
-                description="Key-value labels to organize and filter this service account."
-              >
-                {/* The component carries its own heading and helper text,
-                    which would repeat this block's. */}
-                <ProfileLabels
-                  ref={labelsRef}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                  showLabel={false}
-                  showDescription={false}
-                />
-              </SettingsBlock>
-
               {/* SPDX-SnippetBegin */}
               {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
               {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
@@ -829,6 +814,14 @@ export default function ServiceAccountDetailPage({
                 id={serviceAccountId}
               />
               {/* SPDX-SnippetEnd */}
+
+              {/* Labels are rarely edited, so they sit collapsed below the
+                  permissions. */}
+              <AdvancedLabelsSection
+                ref={labelsRef}
+                labels={labels}
+                onLabelsChange={setLabels}
+              />
 
               <SettingsSaveBar
                 hasChanges={hasChanges}

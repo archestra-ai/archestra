@@ -1367,6 +1367,56 @@ describe("OpenAI Responses proxy", () => {
       },
     ]);
     expect(fetchStub).toHaveBeenCalledOnce();
+    expect(fetchStub.mock.calls[0]?.[0].toString()).toBe(
+      "https://chatgpt.com/backend-api/codex/models",
+    );
+    const forwardedHeaders = new Headers(fetchStub.mock.calls[0]?.[1]?.headers);
+    expect(forwardedHeaders.get("authorization")).toBe(headers.authorization);
+    expect(forwardedHeaders.get("chatgpt-account-id")).toBe("account_123");
+    expect(forwardedHeaders.get("originator")).toBe("codex_cli_rs");
+    expect(forwardedHeaders.has("x-archestra-virtual-key")).toBe(false);
+  });
+
+  test("reports an upstream models error without exposing the subscription token", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex models error" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-models-error",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const accessToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature";
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Forbidden", { status: 403 }))
+      .mockResolvedValueOnce(new Response("<html>Unavailable</html>"))
+      .mockRejectedValueOnce(new Error("network unavailable"));
+    vi.stubGlobal("fetch", fetchStub);
+
+    for (const status of [403, 502, 502]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/openai/${agent.id}/models`,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "x-archestra-virtual-key": passthroughToken,
+          "chatgpt-account-id": "account_123",
+          originator: "codex_exec",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(status);
+      expect(response.body).not.toContain(accessToken);
+    }
+    expect(fetchStub).toHaveBeenCalledTimes(3);
   });
 
   test("lists subscription models for codex exec without sending its bearer to OpenAI", async ({

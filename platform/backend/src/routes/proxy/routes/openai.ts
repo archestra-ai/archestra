@@ -363,6 +363,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "chatgpt-account-id": headers["chatgpt-account-id"],
           originator,
         },
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => {
+        throw new ApiError(502, "Unable to fetch Codex subscription models.");
       });
       if (!upstream.ok) {
         throw new ApiError(
@@ -370,7 +373,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Unable to fetch Codex subscription models.",
         );
       }
-      const result = CodexModelsSchema.safeParse(await upstream.json());
+      const result = CodexModelsSchema.safeParse(
+        await upstream.json().catch(() => null),
+      );
       if (!result.success) {
         throw new ApiError(502, "Invalid Codex subscription models response.");
       }

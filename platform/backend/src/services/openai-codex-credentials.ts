@@ -126,17 +126,15 @@ export function extractChatgptAccountId(jwt: string): string | undefined {
 
 /**
  * The set of models Archestra surfaces for a ChatGPT-subscription credential.
- * The Codex backend (`chatgpt.com/backend-api/codex`) exposes no public
- * `/models` endpoint and availability is governed by the account's plan, so
- * (like Perplexity/MiniMax) the list is maintained here rather than synced.
+ * The Codex backend has a subscription-authenticated `/models` endpoint, but
+ * this Archestra model-picker list is maintained here rather than synced per account.
  * These are subscription-billed, so their token price is treated as zero.
  *
  * Manually curated — update when OpenAI adds or removes Codex models.
  * Last synchronized: 2026-09 (Codex CLI model set).
  */
 /**
- * The Codex backend exposes no /models endpoint, so this list is maintained by
- * hand. Its source of truth is the Codex CLI's own model catalog
+ * Its source of truth is the Codex CLI's own model catalog
  * (`codex-rs/models-manager/models.json` in openai/codex), cross-checked
  * against the backend itself: retired slugs are rejected with 400 "The
  * '<model>' model is not supported when using Codex with a ChatGPT account"

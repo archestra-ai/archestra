@@ -138,6 +138,82 @@ describe("GET /api/openappa/external-consults", () => {
     ).toEqual([mine]);
   });
 
+  test("an audience source's answer is withheld from a caller who cannot read members", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const logReader = await makeCustomRole(organizationId, {
+      permission: { log: ["read"] },
+    });
+    const rawResponse = Buffer.from('{"version":1}');
+    const exported = async () => {
+      await seedConsult({
+        organizationId,
+        callerId: `user:${caller.id}`,
+        role: "audience_source",
+        rawResponse,
+      });
+      await seedConsult({
+        organizationId,
+        callerId: `user:${caller.id}`,
+        rawResponse,
+      });
+      const json = (await list()).json().data;
+      const jsonl = (await list("?format=jsonl")).body
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(jsonl).toEqual(json);
+      return json.map(
+        (row: {
+          role: string;
+          outcome: string;
+          answer: unknown;
+          rawResponse: string | null;
+        }) => ({
+          role: row.role,
+          outcome: row.outcome,
+          answer: row.answer,
+          rawResponse: row.rawResponse,
+        }),
+      );
+    };
+    const encoded = rawResponse.toString("base64");
+
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: logReader.role });
+    expect(await exported()).toEqual(
+      expect.arrayContaining([
+        {
+          role: "audience_source",
+          outcome: "answered",
+          answer: null,
+          rawResponse: null,
+        },
+        {
+          role: "annotator",
+          outcome: "answered",
+          answer: { verdict: "ok" },
+          rawResponse: encoded,
+        },
+      ]),
+    );
+
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: EDITOR_ROLE_NAME });
+    expect(await exported()).toEqual(
+      expect.arrayContaining([
+        {
+          role: "audience_source",
+          outcome: "answered",
+          answer: { verdict: "ok" },
+          rawResponse: encoded,
+        },
+      ]),
+    );
+  });
+
   test("a caller without log:read is refused", async ({
     makeUser,
     makeMember,
@@ -180,6 +256,7 @@ async function seedConsult(params: {
   rawResponse?: Buffer;
   diagnostics?: Buffer;
   callerId?: string;
+  role?: "annotator" | "audience_source";
 }): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date(Date.now() - (params.secondsAgo ?? 0) * 1000);
@@ -191,7 +268,7 @@ async function seedConsult(params: {
     createdAt,
     startedAt: createdAt,
     durationMs: 12,
-    role: "annotator",
+    role: params.role ?? "annotator",
     externalName: params.externalName ?? "scan",
     backend: "url",
     request: { version: 1 },

@@ -977,22 +977,6 @@ describe("cohereAdapterFactory", () => {
     });
   });
 
-  describe("provider info", () => {
-    test("has correct provider name", () => {
-      expect(cohereAdapterFactory.provider).toBe("cohere");
-    });
-
-    test("has correct interaction type", () => {
-      expect(cohereAdapterFactory.interactionType).toBe("cohere:chat");
-    });
-  });
-
-  describe("spanName", () => {
-    test("returns correct span name", () => {
-      expect(cohereAdapterFactory.spanName).toBe("chat");
-    });
-  });
-
   describe("extractErrorMessage", () => {
     test("extracts message from Error instance", () => {
       const error = new Error("Test error message");

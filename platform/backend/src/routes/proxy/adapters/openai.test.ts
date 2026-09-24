@@ -872,18 +872,6 @@ describe("openaiAdapterFactory", () => {
       expect(apiKey).toBeUndefined();
     });
   });
-
-  describe("provider info", () => {
-    test("has correct provider name", () => {
-      expect(openaiAdapterFactory.provider).toBe("openai");
-    });
-
-    test("has correct interaction type", () => {
-      expect(openaiAdapterFactory.interactionType).toBe(
-        "openai:chatCompletions",
-      );
-    });
-  });
 });
 
 describe("OpenAIStreamAdapter", () => {

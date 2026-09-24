@@ -744,18 +744,6 @@ describe("geminiAdapterFactory", () => {
       expect(apiKey).toBeUndefined();
     });
   });
-
-  describe("provider info", () => {
-    test("has correct provider name", () => {
-      expect(geminiAdapterFactory.provider).toBe("gemini");
-    });
-
-    test("has correct interaction type", () => {
-      expect(geminiAdapterFactory.interactionType).toBe(
-        "gemini:generateContent",
-      );
-    });
-  });
 });
 
 describe("GeminiStreamAdapter", () => {

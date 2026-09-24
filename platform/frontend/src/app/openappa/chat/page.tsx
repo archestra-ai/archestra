@@ -1,4 +1,4 @@
-import { OpenAppaOverview } from "../_parts/openappa-overview";
+import { redirect } from "next/navigation";
 
 export default async function OpenAppaChatPage({
   searchParams,
@@ -6,9 +6,9 @@ export default async function OpenAppaChatPage({
   searchParams: Promise<{ start?: string }>;
 }) {
   const { start } = await searchParams;
-  const initialPrompt =
+  redirect(
     start === "review"
-      ? "Review my current OpenAPPA policy. Explain what it does, then suggest one useful improvement. Do not change it yet."
-      : undefined;
-  return <OpenAppaOverview initialPrompt={initialPrompt} />;
+      ? "/openappa/configure?start=review"
+      : "/openappa/configure",
+  );
 }

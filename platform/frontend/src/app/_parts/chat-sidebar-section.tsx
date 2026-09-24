@@ -201,11 +201,7 @@ export function ChatSidebarSection({
   const currentConversationId =
     pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
-      : pathname.startsWith("/openappa/") &&
-          pathname !== "/openappa/policy" &&
-          pathname !== "/openappa/batteries"
-        ? (pathname.split("/").at(-1) ?? null)
-        : null;
+      : null;
   const currentRunTaskId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
@@ -301,7 +297,7 @@ export function ChatSidebarSection({
   const handleDeleteConversation = async (id: string) => {
     // Navigate away before deleting to avoid "conversation not found" flash
     if (currentConversationId === id) {
-      router.push(pathname.startsWith("/openappa/") ? "/openappa" : "/chat");
+      router.push("/chat");
     }
 
     try {
@@ -660,7 +656,7 @@ export function ChatSidebarSection({
               controls must not be nested, and the trigger must be a real
               button rather than a bare svg. */}
           {editingId !== conv.id &&
-            (canUpdateConversation ||
+            ((canUpdateConversation && conv.origin !== "openappa") ||
               canDeleteConversation ||
               showCreateProject) && (
               <DropdownMenu
@@ -685,7 +681,7 @@ export function ChatSidebarSection({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right">
-                  {canUpdateConversation && (
+                  {canUpdateConversation && conv.origin !== "openappa" && (
                     <>
                       <DropdownMenuItem
                         onClick={(e) => {

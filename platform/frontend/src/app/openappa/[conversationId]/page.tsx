@@ -1,4 +1,4 @@
-import { OpenAppaOverview } from "../_parts/openappa-overview";
+import { redirect } from "next/navigation";
 
 export default async function OpenAppaConversationPage({
   params,
@@ -6,5 +6,5 @@ export default async function OpenAppaConversationPage({
   params: Promise<{ conversationId: string }>;
 }) {
   const { conversationId } = await params;
-  return <OpenAppaOverview conversationId={conversationId} />;
+  redirect(`/chat/${encodeURIComponent(conversationId)}`);
 }

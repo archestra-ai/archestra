@@ -224,6 +224,7 @@ export interface ArchestraPromptInputProps
   /** Reuse the chat composer for a focused launch form without chat controls. */
   minimalMode?: boolean;
   fixedAgentName?: string;
+  fixedModelName?: string;
   placeholderOverride?: string;
 }
 
@@ -293,6 +294,7 @@ const PromptInputContent = ({
   runtimeAgentName,
   minimalMode = false,
   fixedAgentName,
+  fixedModelName,
   placeholderOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
@@ -346,8 +348,11 @@ const PromptInputContent = ({
   // the backend still rejects — sandbox `!` commands. Uploads are NOT among
   // them any more: a locked chat's attachments are sealed under its key.
   const lockedChatActive =
-    !isActionAvailableForConversation(conversation, "sandboxCommands") ||
-    (lockedChat && !conversationId);
+    conversation?.lockedChat === true || (lockedChat && !conversationId);
+  const sandboxCommandsBlocked = !isActionAvailableForConversation(
+    conversation,
+    "sandboxCommands",
+  );
   const appName = useAppName();
 
   // Any file type can be attached regardless of model modalities or sandbox:
@@ -508,7 +513,7 @@ const PromptInputContent = ({
   // Hidden for locked chats, where the backend rejects sandbox commands.
   const isSandboxCommandHintVisible =
     sandboxAvailable &&
-    !lockedChatActive &&
+    !sandboxCommandsBlocked &&
     controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
@@ -678,7 +683,7 @@ const PromptInputContent = ({
       // `!` goes to the model as ordinary text.
       const isSandboxCommand =
         sandboxAvailable &&
-        !lockedChatActive &&
+        !sandboxCommandsBlocked &&
         parseSandboxCommand(trimmed) !== null;
 
       // a skill command activates the skill; any text after the token is an
@@ -734,7 +739,7 @@ const PromptInputContent = ({
     [
       canDebug,
       dispatchSubmit,
-      lockedChatActive,
+      sandboxCommandsBlocked,
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
@@ -1128,10 +1133,19 @@ const PromptInputContent = ({
                   <span className="truncate">{fixedAgentName}</span>
                 </span>
               )}
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={onModelChange}
-              />
+              {fixedModelName ? (
+                <span
+                  className="truncate px-2 text-sm text-muted-foreground"
+                  title={`Model: ${fixedModelName}`}
+                >
+                  {fixedModelName}
+                </span>
+              ) : (
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onModelChange={onModelChange}
+                />
+              )}
             </div>
           )}
           {!minimalMode && (
@@ -1297,6 +1311,7 @@ const ArchestraPromptInput = ({
   runtimeAgentName,
   minimalMode,
   fixedAgentName,
+  fixedModelName,
   placeholderOverride,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
@@ -1412,6 +1427,7 @@ const ArchestraPromptInput = ({
           runtimeAgentName={runtimeAgentName}
           minimalMode={minimalMode}
           fixedAgentName={fixedAgentName}
+          fixedModelName={fixedModelName}
           placeholderOverride={placeholderOverride}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}

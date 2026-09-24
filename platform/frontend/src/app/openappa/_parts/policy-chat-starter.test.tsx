@@ -2,11 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useConversation,
-  useCreateConversation,
-  useUpdateConversation,
-} from "@/lib/chat/chat.query";
+import { useConversation, useCreateConversation } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
@@ -90,10 +86,6 @@ beforeEach(() => {
     mutateAsync: create,
     isPending: false,
   } as unknown as ReturnType<typeof useCreateConversation>);
-  vi.mocked(useUpdateConversation).mockReturnValue({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  } as unknown as ReturnType<typeof useUpdateConversation>);
   vi.mocked(useConversation).mockImplementation(
     (id) =>
       ({
@@ -148,7 +140,6 @@ test("starts a policy conversation on this page and sends the user's request", a
 
   await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );
@@ -167,7 +158,6 @@ test("starts a prompted configuration session when a model is available", async 
 
   await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );
@@ -199,7 +189,6 @@ test("starts with a policy-specific suggested prompt", async () => {
   );
   await vi.waitFor(() =>
     expect(create).toHaveBeenCalledWith({
-      modelId: "model-1",
       origin: "openappa",
     }),
   );

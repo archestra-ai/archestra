@@ -2723,6 +2723,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (sourceConversation.lockedChat) {
         throw new ApiError(400, "Locked chats cannot be forked");
       }
+      if (sourceConversation.origin === "openappa") {
+        throw new ApiError(400, "Policy conversations cannot be forked");
+      }
 
       const forked = await forkConversation({
         sourceConversation,
@@ -2846,6 +2849,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (origin === "openappa" && !openappaEnabled()) {
         throw new ApiError(400, "OpenAPPA is unavailable");
       }
+      if (
+        origin === "openappa" &&
+        (modelId !== undefined ||
+          chatApiKeyId !== undefined ||
+          projectId !== undefined ||
+          title !== undefined)
+      ) {
+        throw new ApiError(
+          400,
+          "Policy conversations use their configured agent and model",
+        );
+      }
       // Locked chats stay out of projects: a project lists its chats to
       // everyone it is shared with, so a locked one would sit in a shared
       // space advertising a conversation none of them can open.
@@ -2915,6 +2930,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         explicitModelId: modelId,
         explicitApiKeyId: chatApiKeyId,
+        includeMemberChatDefault: origin !== "openappa",
       });
 
       logger.info(
@@ -2981,6 +2997,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
+      const currentConversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!currentConversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+      if (
+        currentConversation.origin === "openappa" &&
+        (body.agentId !== undefined ||
+          body.projectId !== undefined ||
+          body.modelId !== undefined ||
+          body.chatApiKeyId !== undefined ||
+          body.title !== undefined ||
+          body.pinnedAt !== undefined ||
+          body.thinkingEffort !== undefined)
+      ) {
+        throw new ApiError(
+          400,
+          "Policy conversations can only be resumed or deleted",
+        );
+      }
       if (body.projectId) {
         const project = await ProjectModel.findById(body.projectId);
         if (
@@ -2994,12 +3033,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(404, "Project not found");
         }
 
-        const currentConversation = await ConversationModel.findById({
-          id,
-          userId: user.id,
-          organizationId,
-        });
-        if (currentConversation?.lockedChat) {
+        if (currentConversation.lockedChat) {
           throw new ApiError(400, "Locked chats cannot be moved to a project");
         }
       }
@@ -3007,16 +3041,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (body.chatApiKeyId) {
-        const currentConversation = await ConversationModel.findById({
-          id,
-          userId: user.id,
-          organizationId,
-        });
-
-        if (
-          !currentConversation ||
-          body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId
-        ) {
+        if (body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId) {
           await validateChatApiKeyAccess(
             body.chatApiKeyId,
             user.id,
@@ -3060,19 +3085,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // neither. Validate the merged result only when this update touches
       // either field.
       if (body.modelId !== undefined || body.chatApiKeyId !== undefined) {
-        const currentConversation = await ConversationModel.findById({
-          id,
-          userId: user.id,
-          organizationId,
-        });
         const mergedModelId =
           body.modelId !== undefined
             ? body.modelId
-            : (currentConversation?.modelId ?? null);
+            : currentConversation.modelId;
         const mergedApiKeyId =
           body.chatApiKeyId !== undefined
             ? body.chatApiKeyId
-            : (currentConversation?.chatApiKeyId ?? null);
+            : currentConversation.chatApiKeyId;
         if (
           !isModelSelectionComplete({
             modelId: mergedModelId,
@@ -3479,6 +3499,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // don't hold the key) and would leak the conversation's existence.
         throw new ApiError(400, "Locked chats cannot be shared");
       }
+      if (conversation.origin === "openappa") {
+        throw new ApiError(400, "Policy conversations cannot be shared");
+      }
 
       const teamIds = Array.from(new Set(body.teamIds ?? []));
       const userIds = Array.from(new Set(body.userIds ?? []));
@@ -3614,6 +3637,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!sharedConversation) {
         throw new ApiError(404, "Shared conversation not found");
       }
+      if (sharedConversation.origin === "openappa") {
+        throw new ApiError(400, "Policy conversations cannot be forked");
+      }
 
       const forked = await forkConversation({
         sourceConversation: sharedConversation,
@@ -3668,6 +3694,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Title generation sends message content to an LLM and stores a
         // plaintext derived title; locked chats keep their static title.
         return reply.send(conversation);
+      }
+      if (
+        conversation.origin === "openappa" &&
+        regenerate &&
+        !conversation.titleIsPlaceholder
+      ) {
+        throw new ApiError(
+          400,
+          "Policy conversation titles cannot be regenerated",
+        );
       }
 
       // Skip if title is already set (unless regenerating). A placeholder title

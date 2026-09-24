@@ -21,7 +21,7 @@ export default async function OpenAppaPolicyPage({
           changes.
         </InlineNoticeText>
         <Button asChild variant="outline" size="sm" className="ml-auto">
-          <Link href="/openappa/chat?start=review">
+          <Link href="/openappa/configure?start=review">
             <span>Try now</span>
             <ArrowRight />
           </Link>

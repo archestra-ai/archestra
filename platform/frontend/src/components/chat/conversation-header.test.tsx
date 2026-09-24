@@ -210,3 +210,31 @@ describe("ConversationHeader — mobile overflow menu", () => {
     expect(panel.onOpenTab).not.toHaveBeenCalled();
   });
 });
+
+it("keeps a policy conversation focused on its messages", () => {
+  render(
+    <ConversationHeader
+      conversationId="policy-1"
+      conversation={makeConversation({ origin: "openappa" })}
+      messageCount={2}
+      isTitleAnimating={false}
+      canManageShare={false}
+      isShared={false}
+      canCreateProject={false}
+      isPolicyConversation
+      onShare={vi.fn()}
+      onExportMarkdown={vi.fn()}
+      onCreateProject={vi.fn()}
+      panel={makePanel()}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: "My chat" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Chat actions" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Apps" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "More options" }),
+  ).not.toBeInTheDocument();
+});

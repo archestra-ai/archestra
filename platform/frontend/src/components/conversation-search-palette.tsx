@@ -352,11 +352,8 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (
-        pathname === `/chat/${conversationId}` ||
-        pathname === `/openappa/${conversationId}`
-      ) {
-        router.push(pathname.startsWith("/openappa/") ? "/openappa" : "/chat");
+      if (pathname === `/chat/${conversationId}`) {
+        router.push("/chat");
       }
     },
     [deleteMutation, conversations, pathname, router],
@@ -365,7 +362,7 @@ export function ConversationSearchPalette({
   const handlePinConversation = useCallback(
     (conversationId: string) => {
       const conv = conversations.find((c) => c.id === conversationId);
-      if (!conv) return;
+      if (!conv || conv.origin === "openappa") return;
       pinMutation.mutate({ id: conversationId, pinned: !conv.pinnedAt });
     },
     [pinMutation, conversations],

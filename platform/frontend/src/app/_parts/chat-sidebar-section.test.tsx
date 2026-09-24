@@ -419,7 +419,7 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
     fireEvent.click(screen.getByText("Review policy"));
     expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
-      "/openappa/policy-session",
+      "/chat/policy-session",
     );
   });
 

@@ -13,8 +13,6 @@ vi.mock("./batteries-panel", () => ({
 
 test.each([
   ["/openappa", "Overview"],
-  ["/openappa/chat", "Chat"],
-  ["/openappa/conversation-123", "Chat"],
   ["/openappa/batteries", "Batteries"],
   ["/openappa/policy", "Policy"],
 ])("selects %s as the %s tab", (pathname, tabName) => {
@@ -33,9 +31,19 @@ test.each([
     "aria-current",
     "page",
   );
-  if (tabName === "Chat") {
-    expect(
-      screen.getAllByRole("link", { name: "Overview" })[0],
-    ).not.toHaveAttribute("aria-current");
-  }
+});
+
+test("configuration chat replaces the tabs and links back to overview", () => {
+  vi.mocked(usePathname).mockReturnValue("/openappa/configure");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
+  render(<OpenAppaPageLayout>Chat</OpenAppaPageLayout>);
+  expect(
+    screen.queryByRole("link", { name: "Batteries" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "href",
+    "/openappa",
+  );
 });

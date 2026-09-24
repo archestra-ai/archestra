@@ -1,6 +1,7 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -100,5 +101,64 @@ describe("OauthClientsPage", () => {
     expect(
       screen.queryByText("Couldn't load OAuth clients"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens a client's permissions from its row actions", async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
+        HttpResponse.json([
+          {
+            id: "client-row-1",
+            clientId: "client-1",
+            name: "Deploy bot",
+            organizationId: "org-1",
+            grantType: "client_credentials",
+            allowedGatewayIds: [],
+            redirectUris: [],
+            disabled: false,
+            authorId: "user-1",
+            authorName: "Ada",
+            createdBy: null,
+            labels: [],
+            createdAt: "2026-09-01T00:00:00.000Z",
+            updatedAt: "2026-09-01T00:00:00.000Z",
+          },
+        ]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/:resource/:scope`,
+        ({ params }) => {
+          requested.push(`${params.resource}/${params.scope}`);
+          return HttpResponse.json({
+            resource: params.resource,
+            scope: params.scope,
+            name: "Deploy bot",
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "manage-permissions"],
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OauthClientsPage />
+      </QueryClientProvider>,
+    );
+
+    const row = (await screen.findByText("Deploy bot")).closest("tr");
+    if (!row) throw new Error("Missing client row");
+    await user.click(within(row).getByRole("button", { name: /Permissions/ }));
+
+    expect(
+      await screen.findByRole("dialog", { name: /Deploy bot permissions/ }),
+    ).toBeVisible();
+    expect(requested).toContain("mcpOauthClient/client-row-1");
   });
 });

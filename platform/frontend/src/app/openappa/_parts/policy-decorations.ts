@@ -85,16 +85,45 @@ type ModelDecoration = NonNullable<
   Parameters<CodeEditor["createDecorationsCollection"]>[0]
 >[number];
 
-/** Reveal the rule header linked from a tool's policy source. */
-export function focusPolicyLine(editor: CodeEditor, line?: number) {
+/**
+ * Reveal the rule header linked from a tool's policy source and mark it with
+ * a whole-line highlight. An unfocused editor paints its selection in a faint
+ * inactive colour, so the mark is a decoration rather than a selection. The
+ * mark goes away as soon as the reader clicks, moves the cursor or types.
+ * Returns a function that removes it early.
+ */
+export function focusPolicyLine(
+  editor: CodeEditor,
+  line?: number,
+): (() => void) | undefined {
   if (!line || line > (editor.getModel()?.getLineCount() ?? 0)) return;
   editor.revealLineInCenter(line);
-  editor.setSelection({
-    startLineNumber: line,
-    startColumn: 1,
-    endLineNumber: line,
-    endColumn: editor.getModel()?.getLineMaxColumn(line) ?? 1,
-  });
+  editor.setPosition({ lineNumber: line, column: 1 });
+  const highlight = editor.createDecorationsCollection([
+    {
+      range: {
+        startLineNumber: line,
+        startColumn: 1,
+        endLineNumber: line,
+        endColumn: 1,
+      },
+      options: {
+        isWholeLine: true,
+        className: "openappa-focus-line",
+        linesDecorationsClassName: "openappa-focus-line-gutter",
+      },
+    },
+  ]);
+  // Registered after `setPosition`, so only the reader's own moves count.
+  const listeners = [
+    editor.onMouseDown(() => clear()),
+    editor.onDidChangeCursorPosition(() => clear()),
+  ];
+  function clear() {
+    highlight.clear();
+    for (const listener of listeners) listener.dispose();
+  }
+  return clear;
 }
 
 function isWarning(annotation: PolicyAnnotation): boolean {

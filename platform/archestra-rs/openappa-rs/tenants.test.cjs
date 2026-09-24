@@ -170,7 +170,7 @@ test('a session keeps the root its row records, as one started before roots name
   assert.equal(await events(`archestra:${sha256(`${organization_id}\n${earlier.session_id}`)}`), 0, 'no new root opened');
 });
 
-test('two organizations start sessions under one client session id, each with its own root and state', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
+test('two organizations concurrently start sessions under one client session id, each with its own root and state', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 4);
   const policy = { content: '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n', credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
@@ -181,10 +181,10 @@ test('two organizations start sessions under one client session id, each with it
   const session_id = randomUUID();
   const orgA = { organization_id: `shared-id-a-${randomUUID()}`, caller_id: 'user:test', session_id };
   const orgB = { ...orgA, organization_id: `shared-id-b-${randomUUID()}` };
-  assert.equal((await hook(orgA, { event: 'session_start' }, policy)).decision, 'ack');
-  assert.equal((await hook(orgB, { event: 'session_start' }, policy)).decision, 'ack');
-  assert.equal((await call(orgA, 'a-only', 'read', policy)).decision, 'allow_call');
-  assert.equal((await call(orgB, 'b-only', 'read', policy)).decision, 'allow_call');
+  const started = await Promise.all([orgA, orgB].map((session) => hook(session, { event: 'session_start' }, policy)));
+  assert.deepEqual(started.map(({ decision }) => decision), ['ack', 'ack']);
+  const calls = await Promise.all([call(orgA, 'a-only', 'read', policy), call(orgB, 'b-only', 'read', policy)]);
+  assert.deepEqual(calls.map(({ decision }) => decision), ['allow_call', 'allow_call']);
 
   const { rows } = await client.query(
     'SELECT organization_id, actor, root FROM openappa_sessions WHERE session_id = $1 ORDER BY organization_id',
@@ -203,4 +203,7 @@ test('two organizations start sessions under one client session id, each with it
   // A child resolves its parent only in its own organization.
   const orgC = { ...orgA, organization_id: `shared-id-c-${randomUUID()}`, session_id: randomUUID(), parent_id: session_id };
   await assert.rejects(hook(orgC, { event: 'session_start' }, policy), /parent session has not started/);
+  // A fork resolves the session it forks only in its own organization.
+  const forkC = { ...orgA, organization_id: orgC.organization_id, session_id: randomUUID(), fork_of: session_id };
+  await assert.rejects(hook(forkC, { event: 'session_start' }, policy), /the session this one forks has not started/);
 });

@@ -64,38 +64,7 @@ struct State {
     /// here, asynchronously, and never inside the store.
     connections: Arc<Semaphore>,
     deployments: Arc<deployments::Deployments>,
-    roots: Arc<RecordedRoots>,
     reporting: Option<ReportingOptions>,
-}
-
-/// The roots top-level sessions' rows record, by organization and actor. A recorded
-/// root never changes, so a session that has one skips its lookup. Only a root read
-/// from a row or written into one is held; a full map is emptied, which costs only
-/// lookups.
-#[derive(Default)]
-struct RecordedRoots(std::sync::Mutex<HashMap<SessionKey, String>>);
-
-const RECORDED_ROOTS: usize = 65_536;
-
-impl RecordedRoots {
-    fn get(&self, key: &SessionKey) -> Option<String> {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(key)
-            .cloned()
-    }
-
-    fn record(&self, key: &SessionKey, root: &str) {
-        let mut roots = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if roots.len() >= RECORDED_ROOTS {
-            roots.clear();
-        }
-        roots.insert(key.clone(), root.to_owned());
-    }
 }
 
 /// Field order is drop order: the connection goes back before its permit does.
@@ -392,9 +361,9 @@ fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
 }
 
 /// The key of a session's `openappa_sessions` row. Session ids come from clients, so
-/// two organizations may share one; the row, its lookups, and its cached root are
-/// therefore keyed by the organization as well as the actor.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+/// two organizations may share one; the row and its lookups are therefore keyed by
+/// the organization as well as the actor.
+#[derive(Clone)]
 struct SessionKey {
     organization_id: String,
     actor: String,
@@ -482,7 +451,6 @@ pub async fn initialize_openappa(
             store,
             connections: Arc::new(Semaphore::new(max_connections.get())),
             deployments: Arc::default(),
-            roots: Arc::default(),
             reporting,
         })
     })
@@ -1399,12 +1367,8 @@ impl State {
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
-    /// the session id alone keeps that root, so its history carries on. A root already
-    /// recorded is answered from [`RecordedRoots`] without a connection.
+    /// the session id alone keeps that root, so its history carries on.
     async fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
-        if let Some(root) = self.roots.get(key) {
-            return Ok(root);
-        }
         let lookup = key.clone();
         let leased = self.lease().await?;
         let recorded = postgres_store(&leased.state.store)?
@@ -1417,9 +1381,6 @@ impl State {
                     .map(|row| row.get::<_, String>(0)))
             })
             .map_err(error)?;
-        if let Some(root) = &recorded {
-            self.roots.record(key, root);
-        }
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
@@ -1510,9 +1471,6 @@ impl State {
                     &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
-        }
-        if input.parent_id.is_none() {
-            self.roots.record(&key, &root);
         }
 
         if input.event == HookEventKind::SessionStart {
@@ -2674,22 +2632,6 @@ mod typed_tests {
             super::root_id("org", "session"),
             super::session_actor("session")
         );
-    }
-
-    /// Two organizations may share a client session id: their rows keep the one actor
-    /// formula, and the organization tells them apart.
-    #[test]
-    fn a_session_key_names_its_organization_beside_the_unchanged_actor() {
-        let a = super::SessionKey::new("org-a", "session");
-        let b = super::SessionKey::new("org-b", "session");
-        assert_eq!(a.actor, super::session_actor("session"));
-        assert_eq!(a.actor, b.actor);
-        assert_ne!(a, b);
-
-        let roots = super::RecordedRoots::default();
-        roots.record(&a, "root-a");
-        assert_eq!(roots.get(&a).as_deref(), Some("root-a"));
-        assert_eq!(roots.get(&b), None);
     }
 
     #[test]

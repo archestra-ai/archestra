@@ -329072,6 +329072,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -329381,6 +329400,25 @@
                           "object",
                           "created",
                           "owned_by"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name"
                         ],
                         "additionalProperties": false
                       }

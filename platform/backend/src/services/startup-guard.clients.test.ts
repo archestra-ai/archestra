@@ -569,6 +569,49 @@ describe("Codex disconnect reports what it could not remove", () => {
 });
 
 describe("Codex disconnect reverses the credential it installed", () => {
+  test.each([
+    {
+      previous: 'model_provider = "openai"\nmodel = "gpt-5.5"\n',
+      selected: 'model_provider = "acme_proxy"',
+      expected: 'model_provider = "openai"',
+    },
+    {
+      previous: 'model = "gpt-5.5"\n',
+      selected: 'model_provider = "acme_proxy"',
+      expected: "",
+    },
+    {
+      previous: 'model_provider = "openai"\n',
+      selected: 'model_provider = "other_provider"',
+      expected: 'model_provider = "other_provider"',
+    },
+  ])("restores the prior provider without undoing a later user selection", async ({
+    previous,
+    selected,
+    expected,
+  }) => {
+    const { code } = await runGuardSnippet({
+      client: CODEX_GUARD_CLIENT,
+      functions: ["disconnect_proxy", "codex_logout_if_ours"],
+      files: {
+        "config.toml": `${selected}\n[tools]\nweb_search = true\n# >>> archestra:acme_proxy >>>\n[model_providers.acme_proxy]\nname = "acme_proxy"\n# <<< archestra:acme_proxy <<<\n`,
+        "config.toml.archestra-backup": previous,
+      },
+      env: { CODEX_HOME: "{HOME}" },
+      invoke: `disconnect_proxy
+if [ -n '${expected}' ]; then
+  grep -Fx '${expected}' "$CODEX_HOME/config.toml" || exit 7
+else
+  ! grep -q '^model_provider' "$CODEX_HOME/config.toml" || exit 8
+fi
+grep -F '[tools]' "$CODEX_HOME/config.toml" || exit 9
+! grep -F '[model_providers.acme_proxy]' "$CODEX_HOME/config.toml" || exit 10
+`,
+    });
+
+    expect(code).toBe(0);
+  });
+
   test("signs Codex out of an archestra virtual key", async () => {
     const { codexArgs, stdout } = await runCodexGuardSnippet({
       functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],

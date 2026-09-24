@@ -1158,6 +1158,268 @@ describe("OpenAI Responses proxy", () => {
     });
   });
 
+  test("routes a Codex ChatGPT bearer to its subscription backend without treating it as an IdP JWT", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const { value: passthroughToken, virtualKey } =
+      await VirtualApiKeyModel.create({
+        organizationId: org.id,
+        name: "codex-subscription",
+        keyType: "passthrough",
+        scope: "personal",
+        authorId: owner.id,
+      });
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (_apiKey, options) => {
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+    const accessToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature";
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+        originator: "codex_cli_rs",
+        version: "0.156.1",
+        "user-agent": "codex_cli_rs/0.156.1",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(capturedOptions?.openAiCodexPassthrough).toMatchObject({
+      accessToken,
+      accountId: "account_123",
+      originator: "codex_cli_rs",
+      version: "0.156.1",
+    });
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      userId: owner.id,
+      passthroughVirtualKeyId: virtualKey.id,
+      authMethod: "passthrough_virtual_key",
+      billingMode: "subscription",
+    });
+    expect(JSON.stringify(interactions)).not.toContain(accessToken);
+  });
+
+  test("does not forward a Codex ChatGPT bearer without proxy access", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex subscription gate" });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization:
+          "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
+        "chatgpt-account-id": "account_123",
+        originator: "codex_cli_rs",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toMatch(/passthrough virtual key/i);
+    expect(openAiResponsesAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
+
+  test("lists Codex subscription models only for a caller with proxy access", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex model listing" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-model-listing",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const headers = {
+      authorization:
+        "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
+      "chatgpt-account-id": "account_123",
+      originator: "codex_cli_rs",
+    };
+    const denied = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/models`,
+      headers,
+    });
+    expect(denied.statusCode).toBe(401);
+
+    const allowed = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/models`,
+      headers: { ...headers, "x-archestra-virtual-key": passthroughToken },
+    });
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json().object).toBe("list");
+    expect(allowed.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ object: "model", owned_by: "openai" }),
+      ]),
+    );
+    expect(allowed.json().models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: expect.any(String),
+          display_name: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
+  test("keeps a Codex provider API key on the metered OpenAI endpoint", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex provider API key" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-api-key-attribution",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    let capturedApiKey: string | undefined;
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (apiKey, options) => {
+        capturedApiKey = apiKey;
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer sk-own-test-key",
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+        originator: "codex_cli_rs",
+        "user-agent": "codex_cli_rs/0.156.1",
+      },
+      payload: { model: "gpt-4o", input: "Hello!" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(capturedApiKey).toBe("sk-own-test-key");
+    expect(capturedOptions?.openAiCodexPassthrough).toBeUndefined();
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      userId: owner.id,
+      authMethod: "passthrough_virtual_key",
+      billingMode: "metered",
+    });
+  });
+
+  test("maps a Codex virtual API key to its provider credential", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex mapped key" });
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-mapped-provider-key" },
+    });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-mapped-key",
+      scope: "personal",
+      authorId: owner.id,
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+    let capturedApiKey: string | undefined;
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (apiKey, options) => {
+        capturedApiKey = apiKey;
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${virtualKey}`,
+        originator: "codex_cli_rs",
+      },
+      payload: { model: "gpt-4o", input: "Hello!" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(capturedApiKey).toBe("sk-mapped-provider-key");
+    expect(capturedOptions?.openAiCodexPassthrough).toBeUndefined();
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      userId: owner.id,
+      authMethod: "virtual_key",
+      billingMode: "metered",
+    });
+  });
+
   test("rejects a signaled bridge request without a ChatGPT account ID before upstream creation", async ({
     makeAgent,
     makeMember,

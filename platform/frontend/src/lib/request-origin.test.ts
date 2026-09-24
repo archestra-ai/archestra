@@ -165,7 +165,7 @@ test("the connection guide keeps installer source out of the conversation", asyn
   );
 });
 
-test("the connection guide automates both OpenCode browser approvals without duplicate installers", async () => {
+test("the connection guide skips unnecessary OpenCode OAuth and keeps needed approval visible", async () => {
   const response = connect(
     new Request("http://localhost:3005/connect.md", {
       headers: { host: "localhost:3005" },
@@ -177,8 +177,12 @@ test("the connection guide automates both OpenCode browser approvals without dup
   expect(body).toContain(
     "not start a second installer while the first request is pending",
   );
+  expect(body).toContain("run opencode mcp list first");
+  expect(body).toContain("skip authentication; do not re-authenticate");
+  expect(body).toContain("CI=true opencode mcp auth SERVER_NAME");
+  expect(body).toContain("If no URL appears within 60 seconds, interrupt");
   expect(body).toContain("opencode mcp auth SERVER_NAME");
-  expect(body).toContain("this second URL is the");
+  expect(body).toContain("this URL is the gateway's native MCP OAuth consent");
   expect(body).toContain("not another connection approval");
   expect(body).not.toContain("so do the sign-in from here");
 });

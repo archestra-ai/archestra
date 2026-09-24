@@ -3178,6 +3178,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         events.filter((event) => event.event === "child_end"),
       ).toHaveLength(2);
       const carrier = childReturnCarrier(child.body, admitted);
+      const framedReturn = `<task id="oc-return-child" state="completed">\n<summary>UNTRUSTED SUMMARY</summary>\n<task_result>\n${carrier}\n</task_result>\n</task>`;
 
       providerRequests.length = 0;
       const parent = await send({
@@ -3197,12 +3198,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               },
             ],
           },
-          { role: "tool", tool_call_id: spawnCall.id, content: carrier },
+          { role: "tool", tool_call_id: spawnCall.id, content: framedReturn },
         ],
       });
       expect(parent.statusCode, parent.body).toBe(200);
       expect(JSON.stringify(providerRequests)).toContain(admitted);
       expect(JSON.stringify(providerRequests)).not.toContain(rawMarker);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "UNTRUSTED SUMMARY",
+      );
       expect(events).toContainEqual(
         expect.objectContaining({
           event: "tool_result",
@@ -3211,6 +3215,48 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output: admitted,
         }),
       );
+
+      providerRequests.length = 0;
+      const background = await send({
+        id: "oc-return-root",
+        messages: [
+          { role: "user", content: "Delegate the report" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [spawnCall],
+          },
+          {
+            role: "tool",
+            tool_call_id: spawnCall.id,
+            content:
+              '<task id="oc-return-child" state="running">\n<summary>Background task started</summary>\n</task>',
+          },
+          { role: "user", content: framedReturn },
+        ],
+      });
+      expect(background.statusCode, background.body).toBe(200);
+      expect(JSON.stringify(providerRequests)).toContain(admitted);
+      expect(JSON.stringify(providerRequests)).not.toContain(rawMarker);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "UNTRUSTED SUMMARY",
+      );
+
+      providerRequests.length = 0;
+      const unsigned = await send({
+        id: "oc-return-root",
+        messages: [
+          { role: "user", content: "Delegate the report" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [spawnCall],
+          },
+          { role: "user", content: framedReturn.replace(carrier, rawMarker) },
+        ],
+      });
+      expect(unsigned.statusCode, unsigned.body).toBe(409);
+      expect(providerRequests).toHaveLength(0);
     });
 
     test.each([

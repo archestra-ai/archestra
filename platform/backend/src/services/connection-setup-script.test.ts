@@ -1115,17 +1115,105 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   test.each([
     "macos",
     "windows",
-  ] as const)("opencode (%s): next steps sign in first, then restart the client", (platform) => {
+  ] as const)("opencode (%s): next steps check authentication before restarting", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
-    expect(script).toContain("Run `opencode mcp auth");
+    expect(script).toContain("Run `opencode mcp list` first");
+    expect(script).toContain("connected (OAuth), skip sign-in");
     expect(script).toContain(
-      "this second browser approval is the gateway's native OAuth flow",
+      "report the connection error rather than forcing re-authentication",
+    );
+    expect(script).toContain("run `opencode mcp auth");
+    expect(script).toContain("CI=true set for the process");
+    expect(script).toContain(
+      "this browser approval is the gateway's native OAuth flow",
     );
     expect(script).toContain("If no browser opens, relay the URL");
     const signInAt = script.indexOf(`opencode mcp auth ${MCP.serverName}`);
     const restartAt = script.indexOf("Close every running OpenCode process");
     expect(signInAt).toBeGreaterThan(-1);
     expect(restartAt).toBeGreaterThan(signInAt);
+  });
+
+  test("opencode: rerunning setup preserves a connected gateway and LLM proxy without requiring OAuth again", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-rerun-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const scriptPath = path.join(root, "setup.sh");
+    const configPath = path.join(home, ".config", "opencode", "opencode.json");
+    const pluginPath = path.join(
+      home,
+      ".config",
+      "opencode",
+      "plugins",
+      "archestra-llm-proxy.js",
+    );
+    const commandLog = path.join(root, "opencode-commands.log");
+    try {
+      await mkdir(home);
+      await mkdir(bin);
+      await writeFile(
+        path.join(bin, "opencode"),
+        `#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_OPENCODE_LOG"
+case "$1 $2" in
+  "mcp list")
+    if [ -f "$HOME/oauth-connected" ]; then
+      printf '✓ prod_gateway connected (OAuth)\n'
+    else
+      printf '⚠ prod_gateway needs authentication\n'
+    fi
+    ;;
+  "debug config") cat "$HOME/.config/opencode/opencode.json" ;;
+  *) exit 1 ;;
+esac
+`,
+      );
+      await chmod(path.join(bin, "opencode"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("opencode", "linux"),
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+          skills: null,
+        }),
+      );
+      const env = {
+        ...process.env,
+        HOME: home,
+        XDG_CONFIG_HOME: path.join(home, ".config"),
+        XDG_DATA_HOME: path.join(home, ".local", "share"),
+        PATH: `${bin}:${process.env.PATH}`,
+        FAKE_OPENCODE_LOG: commandLog,
+      };
+
+      const first = await execFileAsync("bash", [scriptPath], {
+        cwd: root,
+        env,
+      });
+      expect(first.stdout).toContain("prod_gateway needs authentication");
+      const originalConfig = await readFile(configPath, "utf8");
+      const originalPlugin = await readFile(pluginPath, "utf8");
+
+      await writeFile(path.join(home, "oauth-connected"), "");
+      const second = await execFileAsync("bash", [scriptPath], {
+        cwd: root,
+        env,
+      });
+      expect(second.stdout).toContain("prod_gateway connected (OAuth)");
+      expect(second.stdout).toContain(
+        'If "prod_gateway" is connected (OAuth), skip sign-in',
+      );
+      expect(second.stdout).not.toContain(
+        "Run `opencode mcp auth prod_gateway` now",
+      );
+      expect(await readFile(configPath, "utf8")).toBe(originalConfig);
+      expect(await readFile(pluginPath, "utf8")).toBe(originalPlugin);
+      expect((await readFile(commandLog, "utf8")).split("\n")).not.toContain(
+        "mcp auth prod_gateway",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test.each([

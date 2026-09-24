@@ -1626,10 +1626,14 @@ function assertPerUserCredentialOwnership(params: {
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function authorizeApiKeyAccess(params: {
   action?: "update" | "delete";
-  apiKey: { id: string };
+  apiKey: { id: string; userId: string | null };
   userId: string;
   organizationId: string;
 }): Promise<void> {
+  // Only the owner changes their own key, whatever grants others hold.
+  if (params.apiKey.userId && params.apiKey.userId !== params.userId) {
+    throw new ApiError(403, "You can only modify your own personal API keys");
+  }
   await ResourcePermissions.require({
     organizationId: params.organizationId,
     userId: params.userId,

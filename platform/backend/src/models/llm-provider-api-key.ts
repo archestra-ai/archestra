@@ -21,6 +21,7 @@ import {
   isNull,
   ne,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
@@ -899,11 +900,19 @@ class LlmProviderApiKeyModel {
     userId: string;
     action: "read" | "use";
   }) {
-    return ResourcePermissionPolicyModel.grantCondition({
-      ...params,
-      resource: "llmProviderApiKey",
-      scopeColumn: schema.llmProviderApiKeysTable.id,
-    });
+    // A key with an owner is that person's own key: no grant, not even `*`,
+    // reaches it for anyone else.
+    return and(
+      or(
+        isNull(schema.llmProviderApiKeysTable.userId),
+        eq(schema.llmProviderApiKeysTable.userId, params.userId),
+      ),
+      ResourcePermissionPolicyModel.grantCondition({
+        ...params,
+        resource: "llmProviderApiKey",
+        scopeColumn: schema.llmProviderApiKeysTable.id,
+      }),
+    ) as SQL;
   }
   // SPDX-SnippetEnd
 

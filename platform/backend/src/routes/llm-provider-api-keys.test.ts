@@ -1821,6 +1821,65 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     expect(await LlmProviderApiKeyModel.findById(key.id)).not.toBeNull();
   });
 
+  // An upgraded role's old `llmProviderApiKey:admin` became Full access at
+  // `*`. That grant must not reach another person's own key.
+  test("a full organization-wide grant does not reach another user's own key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-owner-only" } });
+    const ownKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: owner.id,
+    });
+    const wildcard = {
+      organizationId,
+      resource: "llmProviderApiKey" as const,
+      scope: "*",
+    };
+    const initial = await ResourcePermissionPolicyModel.find(wildcard);
+    await ResourcePermissionPolicyModel.replace({
+      ...wildcard,
+      revision: initial?.revision ?? 0,
+      grants: [
+        ...(initial?.grants ?? []),
+        {
+          subject: { type: "user", id: memberUser.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
+    });
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(404);
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+    expect(list.json().map((key: { id: string }) => key.id)).not.toContain(
+      ownKey.id,
+    );
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+      payload: { name: "Taken over" },
+    });
+    expect(update.statusCode, update.body).toBe(403);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(403);
+    expect((await LlmProviderApiKeyModel.findById(ownKey.id))?.name).toBe(
+      ownKey.name,
+    );
+  });
+
   test("rotates the caller's own personal subscription key in place", async ({
     makeSecret,
     makeLlmProviderApiKey,

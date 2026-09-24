@@ -35,8 +35,7 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "Agents",
     resource: "agent",
     defaultIconType: "agent",
-    createDescription:
-      "Give the agent a name and instructions.",
+    createDescription: "Give the agent a name and instructions.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },

@@ -382,18 +382,19 @@ describe("AgentModel", () => {
       expect(agent.teams[0]).toMatchObject({ id: team.id, name: team.name });
     });
 
-    test("admin can see all agents", async ({ makeAdmin, makeAgent }) => {
+    test("admin can see all agents", async ({
+      makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
+    }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
-      await makeAgent({
-        name: "Agent 1",
-      });
-      await makeAgent({
-        name: "Agent 2",
-      });
-      await makeAgent({
-        name: "Agent 3",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent 1" });
+      await makeAgent({ organizationId: org.id, name: "Agent 2" });
+      await makeAgent({ organizationId: org.id, name: "Agent 3" });
 
       const agents = await AgentModel.findAll(admin.id, true);
       expect(agents).toHaveLength(3);
@@ -1129,19 +1130,17 @@ describe("AgentModel", () => {
     test("pagination count includes all agents for admin", async ({
       makeAdmin,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 3 agents
-      await makeAgent({
-        name: "Agent 1",
-      });
-      await makeAgent({
-        name: "Agent 2",
-      });
-      await makeAgent({
-        name: "Agent 3",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent 1" });
+      await makeAgent({ organizationId: org.id, name: "Agent 2" });
+      await makeAgent({ organizationId: org.id, name: "Agent 3" });
 
       // Query as admin (should see all agents)
       const result = await AgentModel.findAllPaginated(
@@ -1161,25 +1160,28 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 5 agents with varying numbers of tools
       const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
       });
       const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
       });
       const agent3 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 3",
       });
-      await makeAgent({
-        name: "Agent 4",
-      });
-      await makeAgent({
-        name: "Agent 5",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent 4" });
+      await makeAgent({ organizationId: org.id, name: "Agent 5" });
 
       // Give agent1 and agent2 many tools (50+ each) via junction table
       for (let i = 0; i < 50; i++) {
@@ -1239,19 +1241,20 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 3 agents
       const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent A",
       });
-      await makeAgent({
-        name: "Agent B",
-      });
-      await makeAgent({
-        name: "Agent C",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent B" });
+      await makeAgent({ organizationId: org.id, name: "Agent C" });
 
       // Give agent1 many tools via junction table
       for (let i = 0; i < 30; i++) {
@@ -1388,18 +1391,22 @@ describe("AgentModel", () => {
     test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
       makeAdmin,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       const gatewayA = await makeAgent({
+        organizationId: org.id,
         name: "Gateway A",
       });
       const gatewayB = await makeAgent({
+        organizationId: org.id,
         name: "Gateway B",
       });
-      await makeAgent({
-        name: "Gateway Never Used",
-      });
+      await makeAgent({ organizationId: org.id, name: "Gateway Never Used" });
 
       const older = new Date("2026-07-01T10:00:00Z");
       const newer = new Date("2026-07-05T10:00:00Z");
@@ -1555,13 +1562,18 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 5 agents, each with many tools
       const agentIds: string[] = [];
       for (let i = 1; i <= 5; i++) {
         const agent = await makeAgent({
+          organizationId: org.id,
           name: `Agent ${i}`,
         });
         agentIds.push(agent.id);
@@ -1611,14 +1623,20 @@ describe("AgentModel", () => {
     test("prioritizes the current user's personal agent ahead of other sort results", async ({
       makeAdmin,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       await makeAgent({
+        organizationId: org.id,
         name: "Alpha Shared Agent",
         authorId: admin.id,
       });
       await makeAgent({
+        organizationId: org.id,
         name: "Zulu Personal Agent",
         authorId: admin.id,
         access: "personal",
@@ -1644,11 +1662,16 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent
       const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
       });
 
@@ -1701,15 +1724,21 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create two agents
       const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with 5 regular tools",
       });
 
       const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with 2 regular tools",
       });
 
@@ -1792,11 +1821,16 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent with only Archestra tools
       const agent = await makeAgent({
+        organizationId: org.id,
         name: "Archestra Only Agent",
       });
 
@@ -1834,11 +1868,16 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent
       const agent = await makeAgent({
+        organizationId: org.id,
         name: "Pattern Test Agent",
       });
 
@@ -1901,15 +1940,21 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create two agents
       const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with mixed tools",
       });
 
       const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with single underscore",
       });
 
@@ -2421,14 +2466,20 @@ describe("AgentModel", () => {
     test("findAllPaginated hides built-in agents from non-admin users", async ({
       makeAdmin,
       makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       await makeAgent({
+        organizationId: org.id,
         name: "Regular Agent",
         agentType: "agent",
       });
       await makeAgent({
+        organizationId: org.id,
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
         agentType: "agent",
         builtInAgentConfig: {

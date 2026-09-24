@@ -4390,6 +4390,8 @@ class AgentModel {
             )
             .returning();
           const row = rows[0];
+          // An agent outside any organization has nobody to grant access to.
+          if (!row.organizationId) return rows;
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

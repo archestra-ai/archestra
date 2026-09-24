@@ -329089,7 +329089,7 @@
                           "slug",
                           "display_name"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": {}
                       }
                     }
                   },
@@ -329420,7 +329420,7 @@
                           "slug",
                           "display_name"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": {}
                       }
                     }
                   },

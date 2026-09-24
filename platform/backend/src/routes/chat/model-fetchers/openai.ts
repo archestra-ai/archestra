@@ -61,9 +61,8 @@ export async function fetchOpenAiModels(
   opts?: ModelFetchOptions,
 ): Promise<ModelInfo[]> {
   // "ChatGPT subscription" (Codex) auth mode: the credential is an encoded
-  // ChatGPT OAuth credential, and the Codex backend exposes no /models endpoint.
-  // Validate the credential by redeeming an access token, then return the
-  // maintained Codex model list.
+  // ChatGPT OAuth credential. Validate it by redeeming an access token, then
+  // return the maintained catalog list for the Archestra model picker.
   const codexCredential = decodeOpenAiCodexCredential(apiKey);
   if (codexCredential) {
     // Throws (401) when the refresh token is rejected, so key creation surfaces

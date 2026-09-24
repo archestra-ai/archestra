@@ -64,7 +64,38 @@ struct State {
     /// here, asynchronously, and never inside the store.
     connections: Arc<Semaphore>,
     deployments: Arc<deployments::Deployments>,
+    roots: Arc<RecordedRoots>,
     reporting: Option<ReportingOptions>,
+}
+
+/// The roots top-level sessions' rows record, by organization and actor. A recorded
+/// root never changes, so a session that has one skips its lookup. Only a root read
+/// from a row or written into one is held; a full map is emptied, which costs only
+/// lookups.
+#[derive(Default)]
+struct RecordedRoots(std::sync::Mutex<HashMap<SessionKey, String>>);
+
+const RECORDED_ROOTS: usize = 65_536;
+
+impl RecordedRoots {
+    fn get(&self, key: &SessionKey) -> Option<String> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(key)
+            .cloned()
+    }
+
+    fn record(&self, key: &SessionKey, root: &str) {
+        let mut roots = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if roots.len() >= RECORDED_ROOTS {
+            roots.clear();
+        }
+        roots.insert(key.clone(), root.to_owned());
+    }
 }
 
 /// Field order is drop order: the connection goes back before its permit does.
@@ -360,20 +391,37 @@ fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
         .ok_or_else(|| error("OpenAPPA requires PostgreSQL storage"))
 }
 
-fn identity(input: &Input) -> String {
-    session_actor(&input.session_id)
+/// The key of a session's `openappa_sessions` row. Session ids come from clients, so
+/// two organizations may share one; the row, its lookups, and its cached root are
+/// therefore keyed by the organization as well as the actor.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+struct SessionKey {
+    organization_id: String,
+    actor: String,
 }
 
-/// The key of a session's `openappa_sessions` row, and a child session's trajectory id.
+impl SessionKey {
+    fn new(organization_id: &str, session_id: &str) -> Self {
+        Self {
+            organization_id: organization_id.to_owned(),
+            actor: session_actor(session_id),
+        }
+    }
+
+    fn of(input: &Input) -> Self {
+        Self::new(&input.organization_id, &input.session_id)
+    }
+}
+
+/// A session's actor, and a child session's trajectory id. It hashes the session id
+/// alone; the organization is part of the row key beside it.
 fn session_actor(session_id: &str) -> String {
     format!("archestra:{}", sha256_hex(session_id.as_bytes()))
 }
 
 /// The root a top-level session opens. The runtime shares in-process state by root id
-/// alone, so the root formula names the organization. The session's row key is still
-/// its actor, which hashes the session id alone: a session id already started in
-/// another organization is refused as a changed identity. Neither identity may hold
-/// a control character, which makes the separator unambiguous.
+/// alone, so the root formula names the organization. Neither identity may hold a
+/// control character, which makes the separator unambiguous.
 fn root_id(organization_id: &str, session_id: &str) -> String {
     format!(
         "archestra:{}",
@@ -434,6 +482,7 @@ pub async fn initialize_openappa(
             store,
             connections: Arc::new(Semaphore::new(max_connections.get())),
             deployments: Arc::default(),
+            roots: Arc::default(),
             reporting,
         })
     })
@@ -1219,18 +1268,14 @@ impl State {
                 "an OpenAPPA session cannot both fork a session and be its child",
             ));
         }
-        let parent_actor = session_actor(fork_of);
-        let (lookup, organization_id, caller_id) = (
-            parent_actor.clone(),
-            input.organization_id.clone(),
-            input.caller_id.clone(),
-        );
+        let parent = SessionKey::new(&input.organization_id, fork_of);
+        let (lookup, caller_id) = (parent.clone(), input.caller_id.clone());
         let (parent_root, parent_is_child) = pg
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root, parent_id IS NOT NULL FROM openappa_sessions WHERE actor = $1 AND organization_id = $2 AND caller_id IS NOT DISTINCT FROM $3",
-                        &[&lookup, &organization_id, &caller_id],
+                        "SELECT root, parent_id IS NOT NULL FROM openappa_sessions WHERE organization_id = $1 AND actor = $2 AND caller_id IS NOT DISTINCT FROM $3",
+                        &[&lookup.organization_id, &lookup.actor, &caller_id],
                     )?
                     .map(|row| (row.get::<_, String>(0), row.get::<_, bool>(1))))
             })
@@ -1238,7 +1283,7 @@ impl State {
             .ok_or_else(|| error("the session this one forks has not started"))?;
         // A top-level session's trajectory is its root, a child's is its actor.
         let parent_trajectory = if parent_is_child {
-            parent_actor
+            parent.actor
         } else {
             parent_root.clone()
         };
@@ -1314,33 +1359,26 @@ impl State {
     }
 
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
-        let actor_id = identity(&input);
-        let parent = input.parent_id.clone().map(|id| Input {
-            session_id: id,
-            ..input.clone()
-        });
+        let key = SessionKey::of(&input);
         let root = if let Some(root) = input.owner_root.clone() {
             root
-        } else if let Some(parent) = parent {
-            let parent_key = identity(&parent);
-            let organization_id = input.organization_id.clone();
+        } else if let Some(parent_id) = &input.parent_id {
+            // A parent is only ever looked up in the child's own organization.
+            let parent = SessionKey::new(&input.organization_id, parent_id);
             let leased = self.lease().await?;
             postgres_store(&leased.state.store)?
                 .with_client(move |client| {
                     client
                         .query_opt(
-                            "SELECT root, organization_id FROM openappa_sessions WHERE actor = $1",
-                            &[&parent_key],
+                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                            &[&parent.organization_id, &parent.actor],
                         )?
-                        .and_then(|row| {
-                            (row.get::<_, String>(1) == organization_id)
-                                .then(|| row.get::<_, String>(0))
-                        })
+                        .map(|row| row.get::<_, String>(0))
                         .ok_or_else(|| PostgresError("parent session has not started".into()))
                 })
                 .map_err(error)?
         } else {
-            self.session_root(&input, &actor_id).await?
+            self.session_root(&input, &key).await?
         };
         let _root = RootLock::acquire(root.clone()).await;
         let mut leased = self.lease().await?;
@@ -1351,7 +1389,7 @@ impl State {
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
         };
-        let result = leased.state.dispatch_on_lease(input, root, actor_id).await;
+        let result = leased.state.dispatch_on_lease(input, root, key).await;
         // On the dispatch's own connection, after its session lock is released.
         if let Ok(pg) = postgres_store(&leased.state.store) {
             consults::store(pg, attribution, &consults);
@@ -1361,20 +1399,27 @@ impl State {
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
-    /// the session id alone keeps that root, so its history carries on.
-    async fn session_root(&self, input: &Input, actor_id: &str) -> napi::Result<String> {
-        let (actor, organization_id) = (actor_id.to_owned(), input.organization_id.clone());
+    /// the session id alone keeps that root, so its history carries on. A root already
+    /// recorded is answered from [`RecordedRoots`] without a connection.
+    async fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
+        if let Some(root) = self.roots.get(key) {
+            return Ok(root);
+        }
+        let lookup = key.clone();
         let leased = self.lease().await?;
         let recorded = postgres_store(&leased.state.store)?
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
-                        &[&actor, &organization_id],
+                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&lookup.organization_id, &lookup.actor],
                     )?
                     .map(|row| row.get::<_, String>(0)))
             })
             .map_err(error)?;
+        if let Some(root) = &recorded {
+            self.roots.record(key, root);
+        }
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
@@ -1384,7 +1429,7 @@ impl State {
         &self,
         input: Input,
         root: String,
-        actor_id: String,
+        key: SessionKey,
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
@@ -1403,31 +1448,27 @@ impl State {
             child: input
                 .parent_id
                 .is_some()
-                .then(|| TrajectoryId(actor_id.clone())),
+                .then(|| TrajectoryId(key.actor.clone())),
         };
-        let lookup = actor_id.clone();
+        let lookup = key.clone();
         let existing = pg
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root, parent_id, organization_id, forked_from FROM openappa_sessions WHERE actor = $1",
-                        &[&lookup],
+                        "SELECT root, parent_id, forked_from FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&lookup.organization_id, &lookup.actor],
                     )?
                     .map(|row| {
                         (
                             row.get::<_, String>(0),
                             row.get::<_, Option<String>>(1),
-                            row.get::<_, String>(2),
-                            row.get::<_, Option<String>>(3),
+                            row.get::<_, Option<String>>(2),
                         )
                     }))
             })
             .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_organization, saved_fork)) = &existing {
-            if *saved_root != root
-                || *saved_parent != input.parent_id
-                || *saved_organization != input.organization_id
-            {
+        if let Some((saved_root, saved_parent, saved_fork)) = &existing {
+            if *saved_root != root || *saved_parent != input.parent_id {
                 return Err(error("session identity changed"));
             }
             // A fork retains its parent session. A session with its own root cannot move
@@ -1463,12 +1504,15 @@ impl State {
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
             let start_decision = wire(&decision)?;
-            let (id, root, input) = (actor_id.clone(), root.clone(), input.clone());
+            let (id, root, input) = (key.actor.clone(), root.clone(), input.clone());
             pg.with_client(move |client| {
                 client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
                     &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
+        }
+        if input.parent_id.is_none() {
+            self.roots.record(&key, &root);
         }
 
         if input.event == HookEventKind::SessionStart {
@@ -1476,8 +1520,8 @@ impl State {
                 .with_client(move |client| {
                     Ok(client
                         .query_one(
-                            "SELECT start_decision FROM openappa_sessions WHERE actor = $1",
-                            &[&actor_id],
+                            "SELECT start_decision FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                            &[&key.organization_id, &key.actor],
                         )?
                         .get(0))
                 })
@@ -2227,8 +2271,8 @@ fn inherited_result(
         for _ in 0..MAX_FORK_DEPTH {
             let Some((parent, forked_at)) = client
                 .query_opt(
-                    "SELECT forked_from, forked_at FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
-                    &[&session_actor(&session), &organization_id],
+                    "SELECT forked_from, forked_at FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&organization_id, &session_actor(&session)],
                 )?
                 .and_then(|row| {
                     row.get::<_, Option<String>>(0)
@@ -2328,10 +2372,11 @@ fn read_completed_operation(
 ) -> napi::Result<Option<CompletedOperation>> {
     let session_id = key.scope.session_id.clone();
     let operation_id = key.operation_id.clone();
+    let organization_id = key.scope.organization_id.clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
-            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2",
-            &[&session_id, &operation_id],
+            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
+            &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
             return Ok(None);
@@ -2423,14 +2468,13 @@ fn routing_owner(
     if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
         return Ok(None);
     }
-    let actor = session_actor(&input.session_id);
-    let organization_id = input.organization_id.clone();
+    let key = SessionKey::new(&input.organization_id, &input.session_id);
     let root = pg
         .with_client(move |client| {
             Ok(client
                 .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
-                    &[&actor, &organization_id],
+                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
                 )?
                 .map(|row| row.get::<_, String>(0)))
         })
@@ -2630,6 +2674,22 @@ mod typed_tests {
             super::root_id("org", "session"),
             super::session_actor("session")
         );
+    }
+
+    /// Two organizations may share a client session id: their rows keep the one actor
+    /// formula, and the organization tells them apart.
+    #[test]
+    fn a_session_key_names_its_organization_beside_the_unchanged_actor() {
+        let a = super::SessionKey::new("org-a", "session");
+        let b = super::SessionKey::new("org-b", "session");
+        assert_eq!(a.actor, super::session_actor("session"));
+        assert_eq!(a.actor, b.actor);
+        assert_ne!(a, b);
+
+        let roots = super::RecordedRoots::default();
+        roots.record(&a, "root-a");
+        assert_eq!(roots.get(&a).as_deref(), Some("root-a"));
+        assert_eq!(roots.get(&b), None);
     }
 
     #[test]

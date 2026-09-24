@@ -169,3 +169,38 @@ test('a session keeps the root its row records, as one started before roots name
   assert.ok(await events(recorded) > before, 'the call continued the recorded root');
   assert.equal(await events(`archestra:${sha256(`${organization_id}\n${earlier.session_id}`)}`), 0, 'no new root opened');
 });
+
+test('two organizations start sessions under one client session id, each with its own root and state', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 4);
+  const policy = { content: '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n', credentials: {} };
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  t.after(() => client.end());
+  const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+  const session_id = randomUUID();
+  const orgA = { organization_id: `shared-id-a-${randomUUID()}`, caller_id: 'user:test', session_id };
+  const orgB = { ...orgA, organization_id: `shared-id-b-${randomUUID()}` };
+  assert.equal((await hook(orgA, { event: 'session_start' }, policy)).decision, 'ack');
+  assert.equal((await hook(orgB, { event: 'session_start' }, policy)).decision, 'ack');
+  assert.equal((await call(orgA, 'a-only', 'read', policy)).decision, 'allow_call');
+  assert.equal((await call(orgB, 'b-only', 'read', policy)).decision, 'allow_call');
+
+  const { rows } = await client.query(
+    'SELECT organization_id, actor, root FROM openappa_sessions WHERE session_id = $1 ORDER BY organization_id',
+    [session_id],
+  );
+  assert.deepEqual(rows, [orgA, orgB].map(({ organization_id }) => ({
+    organization_id,
+    actor: `archestra:${sha256(session_id)}`,
+    root: `archestra:${sha256(`${organization_id}\n${session_id}`)}`,
+  })));
+
+  // B holds no record of the call A released, so its result for that id is withheld.
+  const result = await hook(orgB, { event: 'tool_result', tool_call_id: 'a-only', output: 'from b', outcome: 'success' }, policy);
+  assert.equal(result.decision, 'block', JSON.stringify(result));
+
+  // A child resolves its parent only in its own organization.
+  const orgC = { ...orgA, organization_id: `shared-id-c-${randomUUID()}`, session_id: randomUUID(), parent_id: session_id };
+  await assert.rejects(hook(orgC, { event: 'session_start' }, policy), /parent session has not started/);
+});

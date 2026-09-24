@@ -1,5 +1,5 @@
 import type { APIResponse, Response } from "@playwright/test";
-import { UI_BASE_URL } from "../consts";
+import { ORGANIZATION_USE_GRANT, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 
 test("connection loads skills without treating the proxy as a skill agent", async ({
@@ -9,6 +9,8 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
   const skillName = makeRandomString(8, "connection-skill").toLowerCase();
   const skillResponse = await page.request.post(`${UI_BASE_URL}/api/skills`, {
     data: {
+      // A gateway that reaches all skills publishes only organization-wide ones.
+      initialGrants: [ORGANIZATION_USE_GRANT],
       content: `---\nname: ${skillName}\ndescription: Review a client connection.\n---\nReview the client connection settings.`,
     },
   });

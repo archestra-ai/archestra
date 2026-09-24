@@ -2,6 +2,7 @@ import type { APIRequestContext } from "@playwright/test";
 import {
   getE2eRequestUrl,
   LLM_PROVIDER_API_KEYS_ROUTE,
+  ORGANIZATION_USE_GRANT,
   UI_BASE_URL,
   WIREMOCK_INTERNAL_URL,
 } from "../consts";
@@ -58,8 +59,9 @@ async function ensureOrgProviderKey(request: APIRequestContext): Promise<void> {
         name: ORG_KEY_NAME,
         provider: "openai",
         apiKey: "sk-e2e-test",
-        // An organization key belongs to no one.
+        // An organization key belongs to no one, and the organization uses it.
         shared: true,
+        initialGrants: [ORGANIZATION_USE_GRANT],
         baseUrl: `${WIREMOCK_INTERNAL_URL}/v1`,
       },
     },

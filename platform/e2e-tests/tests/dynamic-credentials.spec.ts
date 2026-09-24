@@ -41,6 +41,7 @@ test("Verify tool calling using dynamic credentials", async ({
       page: adminPage,
       cookieHeaders,
       catalogItemName: CATALOG_ITEM_NAME,
+      shareWithOrganization: true,
       envVars: {
         key: "ARCHESTRA_TEST",
         promptOnInstallation: true,

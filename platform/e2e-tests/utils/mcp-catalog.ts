@@ -1,7 +1,12 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { testMcpServerCommand } from "@archestra/shared/test-mcp-server";
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
-import { E2eTestId, getE2eRequestUrl, UI_BASE_URL } from "../consts";
+import {
+  E2eTestId,
+  getE2eRequestUrl,
+  ORGANIZATION_USE_GRANT,
+  UI_BASE_URL,
+} from "../consts";
 import { goToPage } from "../fixtures";
 
 export async function addCustomSelfHostedCatalogItem({
@@ -9,10 +14,13 @@ export async function addCustomSelfHostedCatalogItem({
   cookieHeaders,
   catalogItemName,
   envVars,
+  shareWithOrganization,
 }: {
   page: Page;
   cookieHeaders: string;
   catalogItemName: string;
+  /** Let every member of the organization find and install the item. */
+  shareWithOrganization?: boolean;
   envVars?: {
     key: string;
     promptOnInstallation: boolean;
@@ -132,8 +140,9 @@ export async function addCustomSelfHostedCatalogItem({
     await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
   // Who can reach the item is its permissions; the create form no longer
-  // carries a personal/team/organization choice. Organization permissions
-  // (the `*` policy) already let every role that reads the registry see it.
+  // carries a personal/team/organization choice. A new item reaches its
+  // author and the roles with registry access at `*`, so `shareWithOrganization`
+  // grants the rest of the organization after creation.
   await createForm.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("domcontentloaded");
 
@@ -171,6 +180,13 @@ export async function addCustomSelfHostedCatalogItem({
   }
 
   const createdCatalogItem = newCatalogItem as { id: string; name: string };
+  if (shareWithOrganization) {
+    await grantOrganizationUse({
+      cookieHeaders,
+      resource: "mcpRegistry",
+      scope: createdCatalogItem.id,
+    });
+  }
 
   return {
     id: createdCatalogItem.id,
@@ -385,4 +401,46 @@ export async function waitForServerInstallation(
   throw new Error(
     `MCP server installation timed out after ${maxAttempts * 2} seconds`,
   );
+}
+
+/**
+ * Add the organization-wide use grant to an object's own policy, keeping the
+ * grants it already has. The create form has no sharing choice, so specs that
+ * need an object every member can reach share it here after creation.
+ */
+async function grantOrganizationUse(params: {
+  cookieHeaders: string;
+  resource: "mcpRegistry";
+  scope: string;
+}) {
+  const headers = { Cookie: params.cookieHeaders };
+  const path = { resource: params.resource, scope: params.scope };
+  const current = await archestraApiSdk.getResourcePermissions({
+    headers,
+    path,
+  });
+  if (current.error || !current.data) {
+    throw new Error(
+      `Failed to read permissions: ${JSON.stringify(current.error)}`,
+    );
+  }
+  const updated = await archestraApiSdk.updateResourcePermissions({
+    headers,
+    path,
+    body: {
+      revision: current.data.revision,
+      grants: [
+        ...current.data.grants,
+        {
+          subject: { ...ORGANIZATION_USE_GRANT.subject },
+          actions: [...ORGANIZATION_USE_GRANT.actions],
+        },
+      ],
+    },
+  });
+  if (updated.error) {
+    throw new Error(
+      `Failed to share with the organization: ${JSON.stringify(updated.error)}`,
+    );
+  }
 }

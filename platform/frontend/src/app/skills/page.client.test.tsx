@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -255,11 +261,70 @@ describe("SkillsPage rows", () => {
 
     expect(screen.queryByRole("columnheader", { name: "Plugin" })).toBeNull();
     expect(screen.getByText("ste-writing")).toBeInTheDocument();
-    expect(screen.getByText("STE bundle")).toBeInTheDocument();
+    expect(screen.getByText("STE bundle · Plugin")).toBeInTheDocument();
     expect(screen.getByTitle("STE bundle · Plugin")).toBeVisible();
     expect(
       screen.getByRole("checkbox", { name: "Select ste-writing" }),
     ).toBeDisabled();
+  });
+
+  it("shows a compact compatibility icon beside the name without opening the row", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    mockSkills([
+      {
+        ...MINE,
+        compatibility:
+          "requires an external review tool — nitpicker, codex, or opencode — configured for this workspace before the skill can run",
+      },
+    ]);
+
+    render(<SkillsPage />);
+
+    const nameRow = screen.getByText("pdf-tools").closest("div");
+    const icon = screen.getByRole("img", { name: "Compatibility notes" });
+    // The indicator lives in the name's own row, not trailing after the
+    // description as a separate block competing for the row's width.
+    expect(nameRow).toContainElement(icon);
+    expect(screen.queryByText("compatibility")).not.toBeInTheDocument();
+
+    await userEvent.hover(icon);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("requires an external review tool");
+    await userEvent.click(icon);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("uses plain source text instead of a visibility column in the table", () => {
+    mockSkills([{ ...MINE, sourceRef: "tools/review@main:skills/pdf" }]);
+
+    render(<SkillsPage />);
+
+    expect(screen.getByRole("columnheader", { name: "Source" })).toBeVisible();
+    expect(
+      screen.queryByRole("columnheader", { name: "Visibility" }),
+    ).not.toBeInTheDocument();
+    const row = screen.getByText("pdf-tools").closest("tr");
+    expect(row).not.toBeNull();
+    const source = within(row as HTMLElement).getByText("tools/review");
+    expect(source).toBeVisible();
+    expect(source.tagName).toBe("CODE");
+  });
+
+  it("labels built-in skills by origin instead of the app name", () => {
+    mockSkills([
+      { ...MINE, sourceType: "built_in", sourceRef: "builtin:pdf-tools" },
+    ]);
+
+    render(<SkillsPage />);
+
+    const row = screen.getByText("pdf-tools").closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Built in")).toBeVisible();
+    expect(within(row as HTMLElement).queryByText("Archestra")).toBeNull();
   });
 
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {
@@ -301,8 +366,8 @@ describe("SkillsPage rows", () => {
       screen.queryByRole("columnheader", { name: "MCP server" }),
     ).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Plugin" })).toBeNull();
-    expect(screen.getByText("Release server")).toBeInTheDocument();
-    expect(screen.getByText("STE bundle")).toBeInTheDocument();
+    expect(screen.getByText("Release server · MCP")).toBeInTheDocument();
+    expect(screen.getByText("STE bundle · Plugin")).toBeInTheDocument();
     expect(screen.getByTitle("Release server · MCP")).toBeVisible();
     expect(screen.getByTitle("STE bundle · Plugin")).toBeVisible();
 
@@ -325,6 +390,80 @@ describe("SkillsPage rows", () => {
         selector: '[aria-hidden="true"]',
       }),
     ).toBeVisible();
+  });
+
+  it("opens a plugin from its source in table and card views", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [PLUGIN_SKILL],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+
+    const pluginHref = `/plugins/${PLUGIN_SKILL.pluginId}`;
+    const sourceLink = screen.getByRole("link", {
+      name: "STE bundle · Plugin",
+    });
+    expect(sourceLink).toHaveAttribute("href", pluginHref);
+    sourceLink.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.click(sourceLink);
+    expect(push).not.toHaveBeenCalledWith(
+      expect.stringContaining("/skills/plugins/"),
+    );
+
+    cleanup();
+    window.localStorage.setItem("archestra-skills-view", "cards");
+    render(<SkillsPage />);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("columnheader", { name: "Skill" }),
+      ).not.toBeInTheDocument(),
+    );
+    const cardSourceLink = screen.getByRole("link", {
+      name: "STE bundle · Plugin",
+    });
+    expect(cardSourceLink).toHaveAttribute("href", pluginHref);
+    cardSourceLink.addEventListener("click", (event) => event.preventDefault());
+    push.mockClear();
+    await userEvent.click(cardSourceLink);
+    expect(push).not.toHaveBeenCalledWith(
+      expect.stringContaining("/skills/plugins/"),
+    );
+  });
+
+  it("shows plugin sources without a detail link for readers", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions: Record<string, string[]>) =>
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+        ({ data: !permissions.plugin?.includes("admin") }) as any,
+    );
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [PLUGIN_SKILL],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+    expect(screen.getByText("STE bundle · Plugin")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "STE bundle · Plugin" }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    window.localStorage.setItem("archestra-skills-view", "cards");
+    render(<SkillsPage />);
+    expect(screen.getByText("STE bundle · Plugin")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "STE bundle · Plugin" }),
+    ).not.toBeInTheDocument();
   });
 
   it("disables projected skill selection in card view", async () => {

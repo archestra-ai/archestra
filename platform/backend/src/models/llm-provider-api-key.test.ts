@@ -1150,6 +1150,81 @@ describe("LlmProviderApiKeyModel", () => {
       expect(resolved?.id).toBe(conversationKey.id);
     });
 
+    test("never picks a key its own policy grants nobody, even for an administrator", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeUser();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      // A personal key whose owner is gone, as the upgrade converts it: no
+      // owner and a policy that grants no one. It is the older primary, so
+      // only the orphan rule keeps it from winning the tie.
+      const orphan = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Departed user's key",
+        provider: "anthropic",
+        scope: "personal",
+        isPrimary: true,
+        secretId: (await makeSecret()).id,
+      });
+      const key = {
+        organizationId: org.id,
+        resource: "llmProviderApiKey" as const,
+        scope: orphan.id,
+      };
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+        grants: [],
+      });
+      const shared = await LlmProviderApiKeyModel.create(
+        {
+          organizationId: org.id,
+          name: "Organization key",
+          provider: "anthropic",
+          scope: "org",
+          secretId: (await makeSecret()).id,
+        },
+        { publishToOrganization: true },
+      );
+
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: admin.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(shared.id);
+    });
+
+    test("a system key reaches every member", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+        organizationId: org.id,
+        name: "Platform key",
+        provider: "gemini",
+      });
+
+      const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+        org.id,
+        user.id,
+        [],
+      );
+
+      expect(available.map((entry) => entry.id)).toContain(systemKey.id);
+    });
+
     test("returns null when no keys available", async ({
       makeOrganization,
       makeUser,

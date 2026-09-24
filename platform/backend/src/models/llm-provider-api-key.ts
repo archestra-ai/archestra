@@ -613,12 +613,15 @@ class LlmProviderApiKeyModel {
       }
     }
 
-    const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+    const available = await LlmProviderApiKeyModel.withoutOrphans({
       organizationId,
-      userId,
-      userTeamIds,
-      provider,
-    );
+      keys: await LlmProviderApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        userId,
+        userTeamIds,
+        provider,
+      ),
+    });
     const rank = await LlmProviderApiKeyModel.ownershipRanks({
       organizationId,
       userId,
@@ -864,6 +867,32 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Drop the keys nobody was given: a key without an owner whose own policy
+   * grants no one. That is a personal key whose owner was deleted. An
+   * administrator reaches it through their authority over every key, to
+   * manage it, but it is nobody's to pick as a default credential.
+   */
+  private static async withoutOrphans<
+    T extends { id: string; userId: string | null },
+  >(params: { organizationId: string; keys: T[] }): Promise<T[]> {
+    const ownerless = params.keys.filter((key) => key.userId === null);
+    if (ownerless.length === 0) return params.keys;
+    const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
+      organizationId: params.organizationId,
+      resource: "llmProviderApiKey",
+      scopes: ownerless.map((key) => key.id),
+    });
+    const granted = new Set(
+      policies
+        .filter((policy) => policy.scope !== "*" && policy.grants.length > 0)
+        .map((policy) => policy.scope),
+    );
+    return params.keys.filter(
+      (key) => key.userId !== null || granted.has(key.id),
+    );
+  }
+
   private static async ownershipRanks(params: {
     organizationId: string;
     userId: string | undefined;
@@ -1142,26 +1171,41 @@ class LlmProviderApiKeyModel {
     name: string;
     provider: SupportedProvider;
   }): Promise<LlmProviderApiKey> {
-    const [apiKey] = await db
-      .insert(schema.llmProviderApiKeysTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: {
-            organizationId: params.organizationId,
-            name: params.name,
-            provider: params.provider,
-            scope: "org",
-            isSystem: true,
-            secretId: null,
-            userId: null,
-            teamId: null,
-          },
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
-
-    return apiKey;
+    const values = await CreatedByModel.forInsert({
+      data: {
+        organizationId: params.organizationId,
+        name: params.name,
+        provider: params.provider,
+        scope: "org" as const,
+        isSystem: true,
+        secretId: null,
+        userId: null,
+        teamId: null,
+      },
+      userIdField: "createdBy",
+    });
+    return await db.transaction(async (tx) => {
+      const [apiKey] = await tx
+        .insert(schema.llmProviderApiKeysTable)
+        .values(values)
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The platform provides this key to the whole organization, so it is
+      // published there rather than left to whoever holds authority over
+      // every key.
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: apiKey.organizationId,
+        resource: "llmProviderApiKey",
+        scope: apiKey.id,
+        authorId: null,
+        publishToOrganization: true,
+      });
+      // SPDX-SnippetEnd
+      return apiKey;
+    });
   }
 
   /**

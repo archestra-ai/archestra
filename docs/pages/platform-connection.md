@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-24
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -165,7 +165,7 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
-- **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
+- **Plugins** — installs the selected Claude Code plugins. You can import OpenAPPA from the Plugins catalog, then select it here.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.

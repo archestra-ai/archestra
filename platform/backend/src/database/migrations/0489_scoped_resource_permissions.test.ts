@@ -7,7 +7,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0488_scoped_resource_permissions.sql"),
+  path.join(__dirname, "0489_scoped_resource_permissions.sql"),
   "utf-8",
 );
 
@@ -103,7 +103,7 @@ async function findAgent(id: string) {
   return row ?? null;
 }
 
-describe("0488 schema", () => {
+describe("0489 schema", () => {
   test("creates the permission policy table, keyed per object and removed with its organization", async () => {
     const columns = await db.execute<{
       column_name: string;
@@ -215,7 +215,7 @@ describe("0488 schema", () => {
   });
 });
 
-describe("0488 connector sync switch", () => {
+describe("0489 connector sync switch", () => {
   test("turns the switch on exactly for auto-sync connectors", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -252,7 +252,7 @@ describe("0488 connector sync switch", () => {
   });
 });
 
-describe("0488 retire non-default LLM proxy rows", () => {
+describe("0489 retire non-default LLM proxy rows", () => {
   test("repoints every reference to the organization's default proxy, then deletes the old rows", async ({
     makeOrganization,
     makeUser,
@@ -459,7 +459,7 @@ describe("0488 retire non-default LLM proxy rows", () => {
   });
 });
 
-describe("0488 primary provider keys by owner", () => {
+describe("0489 primary provider keys by owner", () => {
   test("keeps one primary per owner and one per shared provider, preferring the organization primary", async ({
     makeOrganization,
     makeUser,
@@ -541,7 +541,7 @@ describe("0488 primary provider keys by owner", () => {
   });
 });
 
-describe("0488 app backing install scope", () => {
+describe("0489 app backing install scope", () => {
   test("re-derives the install scope of every app backing server from the app's grants", async ({
     makeApp,
     makeOrganization,
@@ -606,7 +606,7 @@ describe("0488 app backing install scope", () => {
   });
 });
 
-describe("0488 app backing install scope before the startup conversion", () => {
+describe("0489 app backing install scope before the startup conversion", () => {
   test("an app with no policy yet takes the audience the conversion will grant it", async ({
     makeApp,
     makeOrganization,
@@ -684,7 +684,7 @@ describe("0488 app backing install scope before the startup conversion", () => {
   });
 });
 
-describe("0488 skill names unique per author", () => {
+describe("0489 skill names unique per author", () => {
   test("renames the personal skill that clashes with the author's shared skill of the same name", async ({
     makeOrganization,
     makeUser,
@@ -753,7 +753,7 @@ describe("0488 skill names unique per author", () => {
   });
 });
 
-describe("0488 environment grants", () => {
+describe("0489 environment grants", () => {
   /** Environments made before the upgrade had no grants of their own. */
   const clearEnvironmentPolicies = () =>
     db

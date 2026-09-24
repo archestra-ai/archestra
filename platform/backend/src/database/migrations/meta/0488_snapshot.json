@@ -1,5 +1,5 @@
 {
-  "id": "e12680ea-8864-4cd0-b2e1-f014dd72fdc8",
+  "id": "1ee24636-b641-4f74-9705-b370badb6702",
   "prevId": "5161fcef-5958-4ce9-9aa9-c6f3cd753846",
   "version": "7",
   "dialect": "postgresql",
@@ -9355,6 +9355,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "restricted": {
+          "name": "restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -13393,13 +13400,6 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
-        "sync_permissions_from_source": {
-          "name": "sync_permissions_from_source",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "connector_type": {
           "name": "connector_type",
           "type": "text",
@@ -14646,8 +14646,8 @@
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_primary_owner_unique": {
-          "name": "chat_api_keys_primary_owner_unique",
+        "chat_api_keys_primary_personal_unique": {
+          "name": "chat_api_keys_primary_personal_unique",
           "columns": [
             {
               "expression": "organization_id",
@@ -14657,6 +14657,12 @@
             },
             {
               "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scope",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -14669,13 +14675,13 @@
             }
           ],
           "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"user_id\" IS NOT NULL",
+          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'personal'",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_primary_shared_unique": {
-          "name": "chat_api_keys_primary_shared_unique",
+        "chat_api_keys_primary_team_unique": {
+          "name": "chat_api_keys_primary_team_unique",
           "columns": [
             {
               "expression": "organization_id",
@@ -14688,10 +14694,50 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"user_id\" IS NULL",
+          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'team'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_api_keys_primary_org_unique": {
+          "name": "chat_api_keys_primary_org_unique",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"chat_api_keys\".\"is_primary\" = true AND \"chat_api_keys\".\"scope\" = 'org'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -18209,6 +18255,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "default_environment_restricted": {
+          "name": "default_environment_restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "default_environment_validation_regex": {
           "name": "default_environment_validation_regex",
           "type": "text",
@@ -19767,95 +19820,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.resource_permission_policies": {
-      "name": "resource_permission_policies",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resource": {
-          "name": "resource",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "grants": {
-          "name": "grants",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "legacy_sharing_migrated": {
-          "name": "legacy_sharing_migrated",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "legacy_organization_audience": {
-          "name": "legacy_organization_audience",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "resource_permission_policies_organization_id_organization_id_fk": {
-          "name": "resource_permission_policies_organization_id_organization_id_fk",
-          "tableFrom": "resource_permission_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "resource_permission_policies_organization_id_resource_scope_pk": {
-          "name": "resource_permission_policies_organization_id_resource_scope_pk",
-          "columns": [
-            "organization_id",
-            "resource",
-            "scope"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -23730,8 +23694,8 @@
           "method": "btree",
           "with": {}
         },
-        "skills_org_author_name_idx": {
-          "name": "skills_org_author_name_idx",
+        "skills_org_personal_name_idx": {
+          "name": "skills_org_personal_name_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -23740,9 +23704,9 @@
               "nulls": "last"
             },
             {
-              "expression": "coalesce(\"author_id\", \"created_by_service_account_id\"::text)",
+              "expression": "author_id",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
               "nulls": "last"
             },
             {
@@ -23753,7 +23717,29 @@
             }
           ],
           "isUnique": true,
-          "where": "\"skills\".\"deleted_at\" IS NULL",
+          "where": "\"skills\".\"scope\" = 'personal' AND \"skills\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skills_org_shared_name_idx": {
+          "name": "skills_org_shared_name_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"skills\".\"scope\" in ('team', 'org') AND \"skills\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -26890,7 +26876,7 @@
         "actor": {
           "name": "actor",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true
         },
         "root": {
@@ -27036,7 +27022,15 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_sessions_organization_id_actor_pk": {
+          "name": "openappa_sessions_organization_id_actor_pk",
+          "columns": [
+            "organization_id",
+            "actor"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

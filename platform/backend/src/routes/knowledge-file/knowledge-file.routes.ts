@@ -40,13 +40,11 @@ import {
   constructResponseSchema,
   KbDirectoryWithTeamsSchema,
   KbFileSchema,
-  KnowledgeFileVisibilitySchema,
   LabelWithDetailsSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
   BulkDeleteBodySchema,
-  BulkIdsSchema,
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
@@ -58,11 +56,6 @@ import { registerEntityLabelRoutes } from "../entity-labels";
 
 const FileParamsSchema = z.object({ fileId: z.string().uuid() });
 const DirectoryParamsSchema = z.object({ directoryId: z.string().uuid() });
-
-const VisibilityBodySchema = z.object({
-  visibility: KnowledgeFileVisibilitySchema.default("org-wide"),
-  teamIds: z.array(z.string()).default([]),
-});
 
 const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
@@ -606,22 +599,25 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateKnowledgeFile,
-        description: "Rename a document, move it, or change who can see it",
+        description:
+          "Rename a document, move it, or change its labels. Who can read it " +
+          "is its permission grants; the retired `visibility` and `teamIds` " +
+          "fields are refused.",
         tags: ["Knowledge Files"],
         params: FileParamsSchema,
-        body: z.object({
-          filename: z.string().trim().min(1).max(512).optional(),
-          directoryId: z.string().uuid().nullable().optional(),
-          visibility: KnowledgeFileVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
-          labels: z
-            .array(LabelWithDetailsSchema)
-            .optional()
-            .describe(
-              "Key/value labels. Omit to leave existing labels untouched; pass [] " +
-                "to clear them.",
-            ),
-        }),
+        body: z
+          .object({
+            filename: z.string().trim().min(1).max(512).optional(),
+            directoryId: z.string().uuid().nullable().optional(),
+            labels: z
+              .array(LabelWithDetailsSchema)
+              .optional()
+              .describe(
+                "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+                  "to clear them.",
+              ),
+          })
+          .strict(),
         response: constructResponseSchema(KbFileSchema),
       },
     },
@@ -632,10 +628,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
       }
-      if (body.teamIds) {
-        await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
-      }
-
       // `labels` lives in its own junction table, so it must not reach the
       // column update below.
       const { labels: bodyLabels, ...columns } = body;
@@ -685,80 +677,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(await grantedAudience({ organizationId, fileId: file.id })),
         labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
-    },
-  );
-
-  fastify.patch(
-    "/api/knowledge-files/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateKnowledgeFiles,
-        description:
-          "Update several repository documents in one request. Today the only " +
-          "bulk-editable surface is who can see them, and every document in " +
-          "the batch is moved to the same audience. The target teams are " +
-          "validated once for the whole request (a 400 changes nothing); " +
-          "documents the caller cannot see are reported in `failed` and leave " +
-          "the rest of the batch applied.",
-        tags: ["Knowledge Files"],
-        body: z.object({
-          ids: BulkIdsSchema,
-          visibility: KnowledgeFileVisibilitySchema.describe(
-            "The audience every document in the batch moves to.",
-          ),
-          teamIds: z
-            .array(z.string())
-            .optional()
-            .describe("Only meaningful for `team-scoped`; required there."),
-        }),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { organizationId, body } = request;
-      const teamIds =
-        body.visibility === "team-scoped"
-          ? [...new Set(body.teamIds ?? [])]
-          : [];
-
-      // Request-level: the audience is the same for every document, so an
-      // unusable one is a bad request rather than N identical failures.
-      await assertTeamsInOrg({ teamIds, organizationId });
-
-      const viewer = await resolveViewer(request);
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "knowledge documents bulk update",
-        notFoundMessage: "File not found",
-        unexpectedMessage: "Could not update this document",
-        load: async (ids) =>
-          new Map(
-            (
-              await KbFileModel.findManyByIds({ ids, organizationId, viewer })
-            ).map((file) => [file.id, file]),
-          ),
-        describe: (file) => file.filename,
-        applyEach: async (_file, id) => {
-          const updated = await KbFileModel.update({
-            id,
-            organizationId,
-            visibility: body.visibility,
-            teamIds,
-          });
-          if (!updated) throw new ApiError(404, "File not found");
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            files: await KbFileModel.findVisibilityForBulkAudit({
-              ids,
-              organizationId,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 
@@ -951,21 +869,18 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateKnowledgeDirectory,
-        description: "Create a knowledge file directory",
+        description:
+          "Create a knowledge file directory. A directory only organizes " +
+          "documents; the retired `visibility` and `teamIds` fields are refused.",
         tags: ["Knowledge Files"],
-        body: VisibilityBodySchema.extend({
-          name: z.string().trim().min(1).max(256),
-        }),
+        body: z.object({ name: z.string().trim().min(1).max(256) }).strict(),
         response: constructResponseSchema(KbDirectoryWithTeamsSchema),
       },
     },
     async ({ body, organizationId, user }) => {
-      await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
       const directory = await KbDirectoryModel.create({
         organizationId,
         name: body.name,
-        visibility: body.visibility,
-        teamIds: body.teamIds,
         createdBy: user.id,
       });
       return {
@@ -973,7 +888,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(directory, directory.createdBy),
         ),
-        teamIds: body.teamIds,
+        teamIds: [],
         fileCount: 0,
       };
     },
@@ -984,21 +899,18 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateKnowledgeDirectory,
-        description: "Rename a directory or change who can see it",
+        description:
+          "Rename a directory. The retired `visibility` and `teamIds` fields " +
+          "are refused.",
         tags: ["Knowledge Files"],
         params: DirectoryParamsSchema,
-        body: z.object({
-          name: z.string().trim().min(1).max(256).optional(),
-          visibility: KnowledgeFileVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
-        }),
+        body: z
+          .object({ name: z.string().trim().min(1).max(256).optional() })
+          .strict(),
         response: constructResponseSchema(KbDirectoryWithTeamsSchema),
       },
     },
     async ({ params, body, organizationId }) => {
-      if (body.teamIds) {
-        await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
-      }
       const directory = await KbDirectoryModel.update({
         id: params.directoryId,
         organizationId,
@@ -1018,79 +930,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds,
         fileCount,
       };
-    },
-  );
-
-  fastify.patch(
-    "/api/knowledge-directories/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateKnowledgeDirectories,
-        description:
-          "Change who can see several directories in one request. The target " +
-          "teams are validated once for the whole request; per-directory " +
-          "problems are reported in `failed` and leave the rest applied. " +
-          "Directories are the other half of a repository selection, so this " +
-          "is the companion to the documents bulk update.",
-        tags: ["Knowledge Files"],
-        body: z.object({
-          ids: BulkIdsSchema,
-          visibility: KnowledgeFileVisibilitySchema.describe(
-            "The audience every directory in the batch moves to.",
-          ),
-          teamIds: z
-            .array(z.string())
-            .optional()
-            .describe("Only meaningful for `team-scoped`; required there."),
-        }),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { organizationId, body } = request;
-      const teamIds =
-        body.visibility === "team-scoped"
-          ? [...new Set(body.teamIds ?? [])]
-          : [];
-
-      await assertTeamsInOrg({ teamIds, organizationId });
-
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "knowledge directories bulk update",
-        notFoundMessage: "Directory not found",
-        unexpectedMessage: "Could not update this directory",
-        load: async (ids) => {
-          const wanted = new Set(ids);
-          const directories = await KbDirectoryModel.findAll(organizationId);
-          return new Map(
-            directories
-              .filter((directory) => wanted.has(directory.id))
-              .map((directory) => [directory.id, directory]),
-          );
-        },
-        describe: (directory) => directory.name,
-        applyEach: async (_directory, id) => {
-          const updated = await KbDirectoryModel.update({
-            id,
-            organizationId,
-            visibility: body.visibility,
-            teamIds,
-          });
-          if (!updated) throw new ApiError(404, "Directory not found");
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            directories: await KbDirectoryModel.findVisibilityForBulkAudit({
-              ids,
-              organizationId,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 
@@ -1213,19 +1052,6 @@ async function assertDirectoryInOrg(params: {
     organizationId: params.organizationId,
   });
   if (!directory) throw new ApiError(404, "Directory not found");
-}
-
-async function assertTeamsInOrg(params: {
-  teamIds: string[];
-  organizationId: string;
-}): Promise<void> {
-  if (params.teamIds.length === 0) return;
-  const teams = await TeamModel.findByOrganization(params.organizationId);
-  const known = new Set(teams.map((team) => team.id));
-  const foreign = params.teamIds.filter((teamId) => !known.has(teamId));
-  if (foreign.length > 0) {
-    throw new ApiError(400, "One or more teams are not in this organization");
-  }
 }
 
 async function assertKnowledgeBaseInOrg(params: {

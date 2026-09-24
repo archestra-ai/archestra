@@ -113,7 +113,11 @@ describe("PUT knowledge file content", () => {
     makeKnowledgeBase,
   }) => {
     await put();
-    await KbFileModel.update({ id, organizationId, visibility: "private" });
+    // Seed the retired column directly: no route or model writes it now.
+    await db
+      .update(schema.kbFilesTable)
+      .set({ visibility: "private" })
+      .where(eq(schema.kbFilesTable.id, id));
     const otherKb = await makeKnowledgeBase(organizationId, {
       createdBy: user.id,
       name: "Second research base",

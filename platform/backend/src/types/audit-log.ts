@@ -115,12 +115,16 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeDirectory.created",
   "knowledgeDirectory.updated",
   "knowledgeDirectory.deleted",
+  // Retired with the directory bulk visibility endpoint; kept so old records
+  // still parse.
   "knowledgeDirectory.bulk_updated",
   "knowledgeDirectory.bulk_deleted",
   "knowledgeFile.created",
   "knowledgeFile.updated",
   "knowledgeFile.content_upserted",
   "knowledgeFile.deleted",
+  // Retired with the document bulk visibility endpoint; kept so old records
+  // still parse.
   "knowledgeFile.bulk_updated",
   "knowledgeFile.bulk_deleted",
   "limit.created",

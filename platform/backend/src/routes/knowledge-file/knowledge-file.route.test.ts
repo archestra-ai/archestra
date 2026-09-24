@@ -274,16 +274,12 @@ describe("knowledge file routes", () => {
       });
       const fileId = uploaded.json().id;
 
-      // The PATCH the edit dialog sends when only the name changed: the
-      // seeded team list rides along unchanged.
+      // The PATCH the edit dialog sends: name, directory and labels only.
+      // The audience comes from the grants, which a rename does not touch.
       const renamed = await app.inject({
         method: "PATCH",
         url: `/api/knowledge-files/${fileId}`,
-        payload: {
-          filename: "retainer-2026.txt",
-          visibility: "team-scoped",
-          teamIds: [team.id],
-        },
+        payload: { filename: "retainer-2026.txt" },
       });
       expect(renamed.statusCode).toBe(200);
       expect(renamed.json().teamIds).toEqual([team.id]);
@@ -293,6 +289,68 @@ describe("knowledge file routes", () => {
         url: "/api/knowledge-files",
       });
       expect(listed.json().data[0].teamIds).toEqual([team.id]);
+    });
+  });
+
+  describe("retired audience fields", () => {
+    // These fields only wrote the retired column and team rows; a file's
+    // grants decide who reads and retrieves it. They are refused, not dropped.
+    test("editing a file refuses visibility and teams and changes nothing", async () => {
+      const fileId = (await upload({ filename: "kept.txt" })).json().id;
+      for (const retired of [
+        { visibility: "private" },
+        { teamIds: [crypto.randomUUID()] },
+      ]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: `/api/knowledge-files/${fileId}`,
+          payload: { filename: "renamed.txt", ...retired },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+      const [stored] = await db.select().from(schema.kbFilesTable);
+      expect(stored.filename).toBe("kept.txt");
+    });
+
+    test("creating or editing a directory refuses visibility and teams", async () => {
+      for (const retired of [
+        { visibility: "private" },
+        { teamIds: [crypto.randomUUID()] },
+      ]) {
+        const created = await app.inject({
+          method: "POST",
+          url: "/api/knowledge-directories",
+          payload: { name: "Refused", ...retired },
+        });
+        expect(created.statusCode).toBe(400);
+      }
+      expect(await db.select().from(schema.kbDirectoriesTable)).toHaveLength(0);
+
+      const directoryId = (
+        await app.inject({
+          method: "POST",
+          url: "/api/knowledge-directories",
+          payload: { name: "Contracts" },
+        })
+      ).json().id;
+      const edited = await app.inject({
+        method: "PATCH",
+        url: `/api/knowledge-directories/${directoryId}`,
+        payload: { name: "Vendor contracts", visibility: "team-scoped" },
+      });
+      expect(edited.statusCode).toBe(400);
+      const [stored] = await db.select().from(schema.kbDirectoriesTable);
+      expect(stored.name).toBe("Contracts");
+    });
+
+    test("the bulk audience endpoints for files and directories are gone", () => {
+      for (const url of [
+        "/api/knowledge-files/bulk",
+        "/api/knowledge-directories/bulk",
+      ]) {
+        expect(app.hasRoute({ method: "PATCH", url })).toBe(false);
+        expect(app.hasRoute({ method: "DELETE", url })).toBe(true);
+      }
     });
   });
 

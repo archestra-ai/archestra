@@ -223,51 +223,32 @@ class KbFileModel {
     });
   }
 
+  /**
+   * Rename or move a file. Who can read it is its grants, so the retired
+   * `visibility` column and `kb_file_team` rows are not written here.
+   */
   static async update(params: {
     id: string;
     organizationId: string;
     filename?: string;
     directoryId?: string | null;
-    visibility?: KnowledgeFileVisibility;
-    teamIds?: string[];
   }) {
-    return db.transaction(async (tx) => {
-      const [file] = await tx
-        .update(schema.kbFilesTable)
-        .set({
-          ...(params.filename === undefined
-            ? {}
-            : { filename: params.filename }),
-          ...(params.directoryId === undefined
-            ? {}
-            : { directoryId: params.directoryId }),
-          ...(params.visibility === undefined
-            ? {}
-            : { visibility: params.visibility }),
-        })
-        .where(
-          and(
-            eq(schema.kbFilesTable.id, params.id),
-            eq(schema.kbFilesTable.organizationId, params.organizationId),
-          ),
-        )
-        .returning();
-      if (!file) return null;
-
-      if (params.teamIds !== undefined) {
-        await tx
-          .delete(schema.kbFileTeamsTable)
-          .where(eq(schema.kbFileTeamsTable.kbFileId, file.id));
-        if (file.visibility === "team-scoped" && params.teamIds.length > 0) {
-          await tx
-            .insert(schema.kbFileTeamsTable)
-            .values(
-              params.teamIds.map((teamId) => ({ kbFileId: file.id, teamId })),
-            );
-        }
-      }
-      return file;
-    });
+    const [file] = await db
+      .update(schema.kbFilesTable)
+      .set({
+        ...(params.filename === undefined ? {} : { filename: params.filename }),
+        ...(params.directoryId === undefined
+          ? {}
+          : { directoryId: params.directoryId }),
+      })
+      .where(
+        and(
+          eq(schema.kbFilesTable.id, params.id),
+          eq(schema.kbFilesTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning();
+    return file ?? null;
   }
 
   /**

@@ -71088,8 +71088,6 @@ export type UpdateKnowledgeFileData = {
     body: {
         filename?: string;
         directoryId?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -71306,111 +71304,6 @@ export type BulkDeleteKnowledgeFilesResponses = {
 
 export type BulkDeleteKnowledgeFilesResponse = BulkDeleteKnowledgeFilesResponses[keyof BulkDeleteKnowledgeFilesResponses];
 
-export type BulkUpdateKnowledgeFilesData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The audience every document in the batch moves to.
-         */
-        visibility: 'org-wide' | 'team-scoped' | 'private';
-        /**
-         * Only meaningful for `team-scoped`; required there.
-         */
-        teamIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/knowledge-files/bulk';
-};
-
-export type BulkUpdateKnowledgeFilesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateKnowledgeFilesError = BulkUpdateKnowledgeFilesErrors[keyof BulkUpdateKnowledgeFilesErrors];
-
-export type BulkUpdateKnowledgeFilesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateKnowledgeFilesResponse = BulkUpdateKnowledgeFilesResponses[keyof BulkUpdateKnowledgeFilesResponses];
-
 export type IndexKnowledgeFilesData = {
     body: {
         fileIds?: Array<string>;
@@ -71603,8 +71496,6 @@ export type GetKnowledgeDirectoriesResponse = GetKnowledgeDirectoriesResponses[k
 
 export type CreateKnowledgeDirectoryData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         name: string;
     };
     path?: never;
@@ -71790,8 +71681,6 @@ export type DeleteKnowledgeDirectoryResponse = DeleteKnowledgeDirectoryResponses
 export type UpdateKnowledgeDirectoryData = {
     body: {
         name?: string;
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
     };
     path: {
         directoryId: string;
@@ -71986,111 +71875,6 @@ export type BulkDeleteKnowledgeDirectoriesResponses = {
 };
 
 export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirectoriesResponses[keyof BulkDeleteKnowledgeDirectoriesResponses];
-
-export type BulkUpdateKnowledgeDirectoriesData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The audience every directory in the batch moves to.
-         */
-        visibility: 'org-wide' | 'team-scoped' | 'private';
-        /**
-         * Only meaningful for `team-scoped`; required there.
-         */
-        teamIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/knowledge-directories/bulk';
-};
-
-export type BulkUpdateKnowledgeDirectoriesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateKnowledgeDirectoriesError = BulkUpdateKnowledgeDirectoriesErrors[keyof BulkUpdateKnowledgeDirectoriesErrors];
-
-export type BulkUpdateKnowledgeDirectoriesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateKnowledgeDirectoriesResponse = BulkUpdateKnowledgeDirectoriesResponses[keyof BulkUpdateKnowledgeDirectoriesResponses];
 
 export type LimitLabelKeysData = {
     body?: never;

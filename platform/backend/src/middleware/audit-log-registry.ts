@@ -1413,18 +1413,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/knowledge-files/bulk": {
     resourceType: "knowledgeFile",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "knowledgeFile.bulk_updated",
-      DELETE: "knowledgeFile.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "knowledgeFile.bulk_deleted" },
   },
   "/api/knowledge-directories/bulk": {
     resourceType: "knowledgeDirectory",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "knowledgeDirectory.bulk_updated",
-      DELETE: "knowledgeDirectory.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "knowledgeDirectory.bulk_deleted" },
   },
   "/api/sessions/bulk": {
     resourceType: "auth",

@@ -1981,9 +1981,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateKnowledgeFile]: { knowledgeSource: ["update"] },
   [RouteId.UpdateKnowledgeDirectory]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeFile]: { knowledgeSource: ["delete"] },
-  [RouteId.BulkUpdateKnowledgeFiles]: { knowledgeSource: ["update"] },
   [RouteId.BulkDeleteKnowledgeFiles]: { knowledgeSource: ["delete"] },
-  [RouteId.BulkUpdateKnowledgeDirectories]: { knowledgeSource: ["update"] },
   [RouteId.BulkDeleteKnowledgeDirectories]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteKnowledgeDirectory]: { knowledgeSource: ["delete"] },
 };

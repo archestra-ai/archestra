@@ -1418,14 +1418,14 @@ class AgentModel {
   }
 
   /**
-   * Find all non-personal internal agents (excluding built-in agents).
-   * Used to populate the agent selection dropdown in Teams/Slack/etc channels.
-   * Personal agents are excluded because channels are shared — only org/team
-   * scoped agents make sense for channel assignment.
+   * Internal agents (not built-in) the user can use, for the agent picker in
+   * Teams/Slack/etc. A channel is shared, so it leaves personal agents out. A
+   * direct message is the user's own, so it keeps them.
    */
   static async findUsableChatopsAgents(params: {
     organizationId: string;
     userId: string;
+    includePersonal: boolean;
   }) {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1446,6 +1446,7 @@ class AgentModel {
             userId: params.userId,
             action: "use",
           }),
+          params.includePersonal ? undefined : not(agentAudienceIs("personal")),
         ),
       )
       .orderBy(asc(schema.agentsTable.name));

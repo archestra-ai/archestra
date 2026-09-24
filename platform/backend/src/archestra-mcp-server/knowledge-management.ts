@@ -1578,9 +1578,26 @@ async function handleUnassignKnowledgeBaseFromAgent(params: {
   args: KnowledgeBaseAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    // Same check as assigning: the caller must be able to reach the KB.
+    const knowledgeBase = await KnowledgeBaseModel.findById(
+      args.knowledge_base_id,
+    );
+    if (
+      !knowledgeBase ||
+      !(await canAccessKnowledgeBase({
+        knowledgeBase,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
+    ) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     const kbIds = await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
       args.agent_id,
     );

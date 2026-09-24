@@ -2196,7 +2196,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
 });
 
 describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", () => {
-  test("includes agents with use grants regardless of legacy personal visibility", async ({
+  test("excludes personal agents from channel (non-DM) context", async ({
     makeUser,
     makeOrganization,
     makeInternalAgent,
@@ -2224,7 +2224,8 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     });
 
     expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
-    expect(agents.some((a) => a.id === personalAgent.id)).toBe(true);
+    // A channel is shared, so a personal agent is never offered there.
+    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
   });
 
   test("includes user's own personal agents in DM context", async ({

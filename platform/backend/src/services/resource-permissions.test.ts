@@ -82,7 +82,12 @@ describe("resource permissions", () => {
         (grant) => grant.resource === "agent" && grant.action === "update",
       ),
     ).toBe(false);
-    expect(await AgentModel.findUsableChatopsAgents(context)).toEqual([]);
+    expect(
+      await AgentModel.findUsableChatopsAgents({
+        ...context,
+        includePersonal: true,
+      }),
+    ).toEqual([]);
     const display = await ResourcePermissions.getPolicy(context);
     expect(
       display.inheritedGrants.every((grant) => grant.sourceScope === "*"),
@@ -94,9 +99,12 @@ describe("resource permissions", () => {
         { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
       ],
     });
-    expect(await AgentModel.findUsableChatopsAgents(context)).toEqual([
-      { id: agent.id, name: agent.name },
-    ]);
+    expect(
+      await AgentModel.findUsableChatopsAgents({
+        ...context,
+        includePersonal: true,
+      }),
+    ).toEqual([{ id: agent.id, name: agent.name }]);
     const subjects = [{ type: "role" as const, id: "editor" }];
     expect(
       (

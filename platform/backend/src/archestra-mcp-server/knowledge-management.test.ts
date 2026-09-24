@@ -15,6 +15,7 @@ import {
 } from "@/knowledge-base";
 import {
   AgentExcludedConnectorModel,
+  AgentKnowledgeBaseModel,
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseModel,
@@ -1525,6 +1526,36 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain("unassigned");
+    });
+
+    test("unassign leaves a knowledge base the caller cannot reach alone", async ({
+      makeKnowledgeBase,
+      makeUser,
+      makeMember,
+    }) => {
+      // An editor may change knowledge sources, but holds no grant that
+      // reaches every knowledge base.
+      const editor = await makeUser();
+      await makeMember(editor.id, mockContext.organizationId!, {
+        role: "editor",
+      });
+      const stranger = await makeUser();
+      const hidden = await makeKnowledgeBase(mockContext.organizationId!, {
+        createdBy: stranger.id,
+        access: "personal",
+      });
+      await AgentKnowledgeBaseModel.assign(testAgent.id, hidden.id);
+
+      const result = await executeArchestraTool(
+        t("unassign_knowledge_base_from_agent"),
+        { knowledge_base_id: hidden.id, agent_id: testAgent.id },
+        { ...mockContext, userId: editor.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(
+        await AgentKnowledgeBaseModel.getKnowledgeBaseIds(testAgent.id),
+      ).toContain(hidden.id);
     });
 
     test("unassign returns error for nonexistent assignment", async () => {

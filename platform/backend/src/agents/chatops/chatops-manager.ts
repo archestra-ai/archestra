@@ -138,11 +138,13 @@ export class ChatOpsManager {
 
   /**
    * Offer only agents the resolved organization member can use. An unresolved
-   * sender receives no resource names. Legacy visibility does not restrict an
-   * explicit use grant; execution checks the grant again for each message.
+   * sender receives no resource names. A shared channel is never offered a
+   * personal agent; a direct message is. Execution checks the grant again for
+   * each message.
    */
   async getAccessibleChatopsAgents({
     senderEmail,
+    isDm,
   }: {
     senderEmail?: string;
     isDm: boolean;
@@ -157,6 +159,7 @@ export class ChatOpsManager {
     return AgentModel.findUsableChatopsAgents({
       organizationId: org.id,
       userId: user.id,
+      includePersonal: isDm,
     });
   }
 

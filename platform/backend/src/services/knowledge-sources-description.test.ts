@@ -24,8 +24,11 @@ describe("buildKnowledgeSourcesDescription", () => {
     await makeTeamMember(team.id, member.id);
     const kb = await makeKnowledgeBase(org.id, {
       name: "Restricted handbook",
+      access: { teams: [team.id] },
     });
-    await makeKnowledgeBaseConnector(kb.id, org.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      access: { teams: [team.id] },
+    });
     const agent = await makeAgent({
       organizationId: org.id,
       knowledgeBaseIds: [kb.id],
@@ -361,7 +364,7 @@ for (const auto of [true, false]) {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const owner = await makeUser();
-    await makeTeam(org.id, owner.id);
+    const ownersTeam = await makeTeam(org.id, owner.id);
     const env = await EnvironmentModel.create({
       organizationId: org.id,
       name: "Other environment",
@@ -369,6 +372,7 @@ for (const auto of [true, false]) {
     const kb = await makeKnowledgeBase(org.id, {
       name: "Team Handbook",
       description: "Operational guides",
+      access: "org",
     });
     const visible = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Visible Jira",
@@ -377,6 +381,7 @@ for (const auto of [true, false]) {
     const hidden = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Hidden Jira",
       description: "Restricted details",
+      access: { teams: [ownersTeam.id] },
     });
     const elsewhere = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Elsewhere Jira",
@@ -490,11 +495,10 @@ async function publishToOrganization(organizationId: string) {
     ).map(({ id }) => ["knowledgeConnector", id] as const),
   ];
   for (const [resource, scope] of sources) {
+    const key = { organizationId, resource, scope };
     await ResourcePermissionPolicyModel.replace({
-      organizationId,
-      resource,
-      scope,
-      revision: 0,
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
       grants: [
         {
           subject: { type: "organization", id: "*" },

@@ -52,7 +52,7 @@ describe("Google Drive individual (OAuth) connection", () => {
   /** Whose session the next request carries; swapped to test the binding. */
   let requestUser: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     mockEnqueue.mockClear();
     mockGetToken.mockReset();
     mockAboutGet.mockReset();
@@ -61,6 +61,7 @@ describe("Google Drive individual (OAuth) connection", () => {
     requestUser = user;
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

@@ -120,7 +120,12 @@ describe("knowledge repository bulk routes", () => {
       expect(response.json().failed).toEqual([
         { id: foreign.id, name: null, error: "File not found" },
       ]);
-      expect(await findFile(foreign.id, otherOrgId)).not.toBeNull();
+      // Read the row directly: this user cannot see the other organization.
+      const [kept] = await db
+        .select({ id: schema.kbFilesTable.id })
+        .from(schema.kbFilesTable)
+        .where(eq(schema.kbFilesTable.id, foreign.id));
+      expect(kept).toBeDefined();
     });
 
     test("rejects an empty batch", async () => {

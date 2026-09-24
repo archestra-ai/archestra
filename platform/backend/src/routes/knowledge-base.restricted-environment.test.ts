@@ -6,7 +6,10 @@ import {
   KnowledgeBaseConnectorModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { createRestrictedEnvironment } from "@/test/environments";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 // The connector write paths gate environment assignment exactly like the agent
@@ -71,17 +74,28 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     };
   }
 
+  /** A connector this user may edit, so only the environment gate varies. */
   async function makeConnector(environmentId: string | null) {
-    return KnowledgeBaseConnectorModel.create({
-      organizationId,
-      name: `conn-${crypto.randomUUID().slice(0, 8)}`,
-      connectorType: "web_crawler",
-      config: { type: "web_crawler", startUrl: "https://example.com" },
-      environmentId,
-    });
+    return KnowledgeBaseConnectorModel.create(
+      {
+        organizationId,
+        name: `conn-${crypto.randomUUID().slice(0, 8)}`,
+        connectorType: "web_crawler",
+        config: { type: "web_crawler", startUrl: "https://example.com" },
+        environmentId,
+      },
+      {
+        initialPermissionGrants: [
+          {
+            subject: { type: "user", id: user.id },
+            actions: ["read", "use", "update"],
+          },
+        ],
+      },
+    );
   }
 
-  test("creating a connector in a RESTRICTED env without deploy-to-restricted is 403", async () => {
+  test("creating a connector in a RESTRICTED env without a grant on it is 403", async () => {
     canDeployToRestricted = false;
     const restricted = await createRestrictedEnvironment({
       organizationId,
@@ -97,7 +111,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     expect(response.statusCode).toBe(403);
   });
 
-  test("updating a connector to a RESTRICTED env without deploy-to-restricted is 403 and unchanged", async () => {
+  test("updating a connector to a RESTRICTED env without a grant on it is 403 and unchanged", async () => {
     canDeployToRestricted = false;
     const restricted = await createRestrictedEnvironment({
       organizationId,
@@ -116,11 +130,15 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     expect(after?.environmentId ?? null).toBeNull();
   });
 
-  test("updating a connector to a RESTRICTED env WITH deploy-to-restricted persists (200)", async () => {
-    canDeployToRestricted = true;
+  test("updating a connector to a RESTRICTED env WITH a grant on that environment persists (200)", async () => {
     const restricted = await createRestrictedEnvironment({
       organizationId,
       data: { name: "Prod" },
+    });
+    await grantEnvironmentUse({
+      organizationId,
+      environmentId: restricted.id,
+      userId: user.id,
     });
     const connector = await makeConnector(null);
 
@@ -134,7 +152,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
     expect(response.json().environmentId).toBe(restricted.id);
   });
 
-  test("updating a connector to an UNRESTRICTED env without deploy-to-restricted succeeds (200)", async () => {
+  test("updating a connector to an UNRESTRICTED env succeeds (200)", async () => {
     canDeployToRestricted = false;
     const open = await createEnvironment({
       organizationId,

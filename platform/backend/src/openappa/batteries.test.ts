@@ -69,6 +69,34 @@ describe("composing an organization's declarations", () => {
     config.openappa.enabled = true;
   });
 
+  test("recompiles a cached revision-zero policy when the shipped default changes", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const initial =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const oldContent = "[policy]\nversion = 2\n";
+    await OpenAppaEffectivePolicyModel.save({
+      organizationId,
+      expected: initial,
+      values: {
+        content: oldContent,
+        contentHash: createHash("sha256").update(oldContent).digest("hex"),
+        rootRevision: 0,
+        installFingerprint: "cached-before-default-update",
+        error: null,
+      },
+    });
+
+    const refreshed =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const root = await guardrailsPolicyService.get(organizationId);
+    expect(refreshed.content).toContain("context_control = true");
+    expect(refreshed.installFingerprint).toMatch(
+      new RegExp(`:${root.contentHash}$`),
+    );
+  });
+
   test("a recompose derives one row per bound catalog and keeps its id across recomposes", async ({
     makeOrganization,
     makeUser,

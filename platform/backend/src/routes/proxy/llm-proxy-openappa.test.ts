@@ -152,7 +152,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         if (!block || event.tool === "allowed_first")
           return JSON.stringify({
             decision: "allow_call",
-            ...(event.spawn ? { spawn_binding: "prepared-fork" } : {}),
+            ...(event.spawn
+              ? { spawn_binding: `fork:${event.operation_id}` }
+              : {}),
           });
         denied.add(String(event.operation_id).replace(/^call:/, ""));
         return JSON.stringify({
@@ -3323,6 +3325,61 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
     });
 
+    test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {
+      const originalDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "tool_call" && event.spawn) {
+          events.push(event);
+          return JSON.stringify({ decision: "allow_call" });
+        }
+        return originalDispatch?.(raw);
+      });
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        streamingToolUse: {
+          name: "Agent",
+          input: {
+            description: "Investigate",
+            prompt: spawnPrompt,
+            subagent_type: "general-purpose",
+          },
+        },
+      };
+      const request = payload(true, [{ role: "user", content: "Investigate" }]);
+      request.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.0 (external, cli)",
+          "x-claude-code-session-id": "unprepared-spawn-parent",
+        },
+        payload: request,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("context_control");
+      expect(noticeFrom(response.body, true).name).toBe(
+        "archestra__get_remedy_plans",
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ event: "tool_call", spawn: true }),
+          expect.objectContaining({ event: "cancel_call" }),
+        ]),
+      );
+      expect(response.body).not.toContain("delegated trajectory");
+    });
+
     test("a Claude Code spawn carries its lineage to the child and grandchild, never to the provider", async () => {
       config.openappa.offerSigningSecret = secret;
       const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
@@ -3398,8 +3455,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: call.id,
-              content:
-                "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+              content: [
+                {
+                  type: "text",
+                  text: "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+                },
+              ],
             },
           ],
         },
@@ -3420,6 +3481,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         { role: "user", content: String(call.input.prompt) },
       ]);
       expect(child.statusCode, child.body).toBe(200);
+      expect(child.body).toContain("started subagent");
       expect(events).toContainEqual(boundAs(`${session}:a1`));
       expect(JSON.stringify(providerRequests)).not.toContain(
         "delegated trajectory",
@@ -3541,6 +3603,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         JSON.stringify(events),
       ).toBe(true);
       expect(child.body).toContain(admitted);
+      expect(child.body).toContain("finished subagent");
       expect(child.body).not.toContain(rawMarker);
       expect(child.body).not.toContain("protected session");
       if (!stream) expect(child.body).not.toContain("appact2-");
@@ -3606,8 +3669,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: call.id,
-              content:
-                "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+              content: [
+                {
+                  type: "text",
+                  text: "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+                },
+              ],
             },
           ],
         },
@@ -4893,8 +4960,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
     events.length = 0;
     const unprepared = await send(OPENCODE_FORK_SESSION);
-    expect(unprepared.statusCode, unprepared.body).toBe(409);
-    expect(unprepared.body).toContain("context_control = true");
+    expect(unprepared.statusCode, unprepared.body).toBe(200);
+    expect(unprepared.body).toContain("context_control");
+    expect(unprepared.json().output[0].name).toBe(
+      "archestra__get_remedy_plans",
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "cancel_call",

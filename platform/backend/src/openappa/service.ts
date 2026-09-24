@@ -665,14 +665,16 @@ export async function evaluateToolCalls(
         (decision.decision === "pass_control" ||
           (decision.decision === "allow_call" && !decision.spawn_binding))
       ) {
-        await dispatch(session, {
-          event: "cancel_call",
-          tool_call_id: call.id,
-        });
-        throw new ApiError(
-          409,
-          "OpenAPPA cannot open a child session: enable [policy.deployment] context_control = true and choose a return contract before spawning",
-        );
+        if (decision.decision === "allow_call")
+          await dispatch(session, {
+            event: "cancel_call",
+            tool_call_id: call.id,
+          });
+        return {
+          kind: "deny" as const,
+          feedback:
+            "OpenAPPA did not prepare a child fork. Enable policy.deployment.context_control and approve a child return contract before spawning a subagent.",
+        };
       }
       if (
         decision.decision === "allow_call" ||

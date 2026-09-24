@@ -114,7 +114,7 @@ WITH candidates AS (
   FROM chat_api_keys k
   UNION ALL
   -- An OAuth client keeps its owner and audience in its metadata, because the
-  -- row belongs to the OAuth provider's table. Only the two kinds Archestra
+  -- row belongs to the OAuth provider's table. Only the two kinds the platform
   -- registers convert; a client that registered itself (dynamic registration,
   -- a client metadata document) is nobody's to share. A row written before
   -- scoping existed has no scope and was visible organization-wide.

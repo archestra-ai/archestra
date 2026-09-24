@@ -120,7 +120,11 @@ describe("expandChunkContext", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Chunk ACLs only filter on a connector that syncs source permissions.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      syncPermissionsFromSource: true,
+    });
 
     // Chunk ACLs are per-row: a permission sync can legitimately leave one chunk
     // of a document readable and its neighbour restricted. Expansion must not
@@ -155,7 +159,10 @@ describe("expandChunkContext", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      syncPermissionsFromSource: true,
+    });
 
     // Chunk 1 is unreadable, so chunk 0 must not be pulled in behind it —
     // presenting 0 and 2 as one passage would fabricate continuity.

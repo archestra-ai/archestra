@@ -23,13 +23,21 @@ describe("BM25 recall cap", () => {
       makeKnowledgeBaseConnector: (
         kbId: string,
         orgId: string,
+        overrides: {
+          connectorType: "github";
+          syncPermissionsFromSource: boolean;
+        },
       ) => Promise<{ id: string }>;
     },
     acls: AclEntry[][],
   ) {
     const org = await fixtures.makeOrganization();
     const kb = await fixtures.makeKnowledgeBase(org.id);
-    const connector = await fixtures.makeKnowledgeBaseConnector(kb.id, org.id);
+    // Chunk ACLs only filter on a connector that syncs source permissions.
+    const connector = await fixtures.makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      syncPermissionsFromSource: true,
+    });
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
       organizationId: org.id,

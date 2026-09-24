@@ -216,7 +216,11 @@ describe("resolveParentPassages", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Chunk ACLs only filter on a connector that syncs source permissions.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+      syncPermissionsFromSource: true,
+    });
 
     const { chunks } = await seedDocument({
       organizationId: org.id,

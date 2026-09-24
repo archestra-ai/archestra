@@ -1438,12 +1438,15 @@ async function makeKnowledgeBaseConnector(
     >
   > & {
     /**
-     * Who the connector is shared with; see `TestAccess`. When set, the
-     * connector is created through `KnowledgeBaseConnectorModel.create`, which
-     * writes the grants. Without it the row is inserted with no policy.
+     * Who the connector is shared with; see `TestAccess`. Defaults to `"org"`,
+     * like the other object fixtures. The connector is created through
+     * `KnowledgeBaseConnectorModel.create`, which writes the grants.
      */
     access?: TestAccess;
-    /** Retired sharing columns, for upgrade (cutover) tests only. */
+    /**
+     * Retired sharing columns, for upgrade (cutover) tests only. The row is
+     * then inserted with no policy, as it was before the upgrade.
+     */
     legacy?: Pick<InsertKnowledgeBaseConnector, "visibility" | "teamIds">;
   } = {},
 ): Promise<KnowledgeBaseConnector> {
@@ -1462,8 +1465,13 @@ async function makeKnowledgeBaseConnector(
     ...legacy,
   };
   const [result] =
-    access !== undefined
-      ? [await KnowledgeBaseConnectorModel.create(row, accessGrants(access))]
+    legacy === undefined
+      ? [
+          await KnowledgeBaseConnectorModel.create(
+            row,
+            accessGrants(access ?? "org"),
+          ),
+        ]
       : await db
           .insert(schema.knowledgeBaseConnectorsTable)
           .values(row)

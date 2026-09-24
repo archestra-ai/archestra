@@ -600,8 +600,11 @@ describe("KbChunkModel BM25 ranking", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    // Chunk ACLs decide what a reader gets only on a connector that syncs
+    // permissions from its source.
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
+      syncPermissionsFromSource: true,
     });
     const doc = await KbDocumentModel.create(
       createDocumentData(connector.id, org.id),

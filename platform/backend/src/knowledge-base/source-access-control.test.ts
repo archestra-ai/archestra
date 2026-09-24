@@ -67,11 +67,12 @@ describe("knowledgeSourceAccessControlService", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
-    // Organization-wide by the retired visibility field, and no policy.
+    // Organization-wide by the retired visibility field, and no grants.
     const knowledgeBase = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(
       knowledgeBase.id,
       org.id,
+      { access: "personal" },
     );
     const context = () =>
       knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -90,11 +91,15 @@ describe("knowledgeSourceAccessControlService", () => {
       knowledgeSourceAccessControlService.canAccessConnector(access, connector),
     ).toBe(false);
 
-    await ResourcePermissionPolicyModel.replace({
+    const connectorKey = {
       organizationId: org.id,
-      resource: "knowledgeConnector",
+      resource: "knowledgeConnector" as const,
       scope: connector.id,
-      revision: 0,
+    };
+    await ResourcePermissionPolicyModel.replace({
+      ...connectorKey,
+      revision:
+        (await ResourcePermissionPolicyModel.find(connectorKey))?.revision ?? 0,
       grants: [
         { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
       ],

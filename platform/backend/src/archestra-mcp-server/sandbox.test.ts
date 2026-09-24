@@ -2272,11 +2272,15 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
         projectId: theirs.id,
         content: "secret rules",
       });
+      // The admin role holds Full on every project, so read as a plain member.
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+      const memberContext = { ...context, userId: member.id };
 
       const result = await executeArchestraTool(
         TOOL_READ_FILE_FULL_NAME,
         { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: theirs.id },
-        context,
+        memberContext,
       );
 
       expect(result.isError).toBe(true);
@@ -2286,7 +2290,7 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
       const missing = await executeArchestraTool(
         TOOL_READ_FILE_FULL_NAME,
         { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: missingId },
-        context,
+        memberContext,
       );
       expect(textOf(missing).replace(missingId, "<id>")).toBe(
         textOf(result).replace(theirs.id, "<id>"),

@@ -1123,8 +1123,11 @@ describe("handleBeforeHook", () => {
 
       const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
       await expect(handleBeforeHook(escalate)).rejects.toThrow(APIError);
+      // What admin holds beyond platform_admin is no longer a retired
+      // `log:admin` role action but the Full grants at `*` that replaced it,
+      // so the refusal now comes from the scoped-grant half of the gate.
       await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
-        body: { message: expect.stringContaining("log:admin") },
+        body: { message: expect.stringContaining("scoped permissions") },
       });
 
       // Managing users within their own permission set still works.

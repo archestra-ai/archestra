@@ -1298,35 +1298,39 @@ describe("createLLMModel", () => {
   test("uses an explicit keyless Azure conversation key and forwards its inference URL to the proxy", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeSecret,
     makeAgent,
+    makeLlmProviderApiKey,
   }) => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ name: "Azure Chat Agent" });
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      name: "Azure Chat Agent",
+      organizationId: org.id,
+    });
     const fallbackSecret = await makeSecret({
       secret: { apiKey: "sk-fallback" },
     });
 
-    const fallbackKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      secretId: fallbackSecret.id,
+    // Both keys are shared with the organization, so the conversation's key
+    // is chosen for being selected, not for being the only one visible.
+    const fallbackKey = await makeLlmProviderApiKey(org.id, fallbackSecret.id, {
       name: "Fallback Azure Key",
       provider: "azure",
-      scope: "org",
       baseUrl: "https://fallback.example.com/openai",
       inferenceBaseUrl: "https://fallback-runtime.example.com/openai",
+      access: "org",
     });
-    const selectedKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      secretId: null,
+    const selectedKey = await makeLlmProviderApiKey(org.id, null, {
       name: "Selected Keyless Azure Key",
       provider: "azure",
-      scope: "org",
       baseUrl: "https://discovery.example.com/openai",
       inferenceBaseUrl: "https://runtime.example.com/openai",
+      access: "org",
     });
     const conversation = await ConversationModel.create({
       agentId: agent.id,

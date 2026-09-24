@@ -163,7 +163,9 @@ describe("GET /api/projects (scope + search)", () => {
     await create(other, "other-private");
     actingUser = admin;
 
-    // personal with no owner filter → every private project, tagged by access.
+    // personal with no owner filter → every private project. The admin role's
+    // Full grant on every project is real read access, so another member's
+    // private project reads as "shared", not read-only oversight.
     const all = JSON.parse((await list("?scope=personal")).body) as Array<{
       name: string;
       viewerRole: string;
@@ -176,7 +178,7 @@ describe("GET /api/projects (scope + search)", () => {
       "owner",
     );
     expect(all.find((p) => p.name === "other-private")?.viewerRole).toBe(
-      "admin",
+      "shared",
     );
 
     expect(
@@ -190,7 +192,7 @@ describe("GET /api/projects (scope + search)", () => {
     ).toEqual(["other-private"]); // a specific other user
   });
 
-  test("admin default 'All' shows only accessible projects, hiding all oversight", async ({
+  test("default 'All' shows exactly the projects the caller's grants reach", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -221,21 +223,31 @@ describe("GET /api/projects (scope + search)", () => {
     await share(other, oversight.id, "team", [foreignTeam.id]);
     actingUser = admin;
 
-    // "All" shows only what the admin can actually access: their own projects,
-    // org-shared ones, and team-shared ones for a team they belong to. Every
-    // oversight row — other members' PRIVATE projects AND team-shared projects
-    // for teams the admin isn't in — is dropped. Those stay reachable via
-    // Personal → Other users and Team → pick that team.
+    // The admin role holds Full on every project, so "All" reaches every
+    // project in the org, other members' private ones included.
     expect(names((await list()).body).sort()).toEqual([
       "admin-private",
       "other-org",
+      "other-private",
+      "other-team-foreign",
       "other-team-mine",
     ]);
-
-    // The team-oversight project is still reachable by explicitly picking its team.
     expect(
       names((await list(`?scope=team&teamIds=${foreignTeam.id}`)).body),
     ).toEqual(["other-team-foreign"]);
+
+    // A plain member of "Mine" sees only what reaches them: the org-shared
+    // project and the one shared with their team. Other members' private
+    // projects and teams they aren't in stay hidden.
+    await makeTeamMember(myTeam.id, viewer.id);
+    actingUser = viewer;
+    expect(names((await list()).body).sort()).toEqual([
+      "other-org",
+      "other-team-mine",
+    ]);
+    expect(
+      names((await list(`?scope=team&teamIds=${foreignTeam.id}`)).body),
+    ).toEqual([]);
   });
 
   test("admin oversight of a team-shared project exposes its team names", async ({
@@ -254,15 +266,17 @@ describe("GET /api/projects (scope + search)", () => {
     await share(other, p.id, "team", [team.id]);
     actingUser = admin;
 
-    // The admin isn't a Finance member, so they reach the project via oversight
-    // (viewerRole "admin") — and still get the team name(s) for the pill tooltip.
+    // The admin isn't a Finance member; they reach the project through the
+    // admin role's Full grant on every project (viewerRole "shared"), and as
+    // someone who may manage it they still get the team name(s) for the pill
+    // tooltip.
     const items = JSON.parse((await list("?scope=team")).body) as Array<{
       name: string;
       viewerRole: string;
       shareTeamNames: string[] | null;
     }>;
     const item = items.find((i) => i.name === "team-proj");
-    expect(item?.viewerRole).toBe("admin");
+    expect(item?.viewerRole).toBe("shared");
     expect(item?.shareTeamNames).toEqual(["Finance"]);
   });
 

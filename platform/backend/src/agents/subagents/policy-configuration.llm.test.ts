@@ -111,11 +111,14 @@ describe("PolicyConfigurationService.resolveLlm (real resolution)", () => {
   test("resolves the org's usable key when the agent pins only a model", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    // An organization-shared key reaches the organization's members.
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-org-key" } });
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",

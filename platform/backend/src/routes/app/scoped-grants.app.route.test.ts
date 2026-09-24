@@ -87,7 +87,7 @@ describe("scoped app grants", () => {
     );
   });
 
-  test("a shared app can be edited without exposing other apps, granting execution, or granting sharing", async ({
+  test("a shared app can be edited without exposing other apps, granting deletion, or granting sharing", async ({
     makeApp,
     makeUser,
   }) => {
@@ -111,10 +111,11 @@ describe("scoped app grants", () => {
       resource: "app" as const,
       scope: target.id,
     };
+    // Edit is the smallest preset that carries `update`.
     const grants = [
       {
         subject: { type: "user" as const, id: ctx.user.id },
-        actions: ["read" as const, "update" as const],
+        actions: ["read" as const, "use" as const, "update" as const],
       },
     ];
     await ResourcePermissionPolicyModel.replace({
@@ -170,11 +171,19 @@ describe("scoped app grants", () => {
         })
       ).statusCode,
     ).toBe(403);
+    // Edit bundles running the app, but never sharing it onward.
     await expect(
       ResourcePermissions.require({
         ...key,
         userId: ctx.user.id,
         action: "use",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      ResourcePermissions.require({
+        ...key,
+        userId: ctx.user.id,
+        action: "manage-permissions",
       }),
     ).rejects.toThrow("permission");
     await AppModel.setEnabled(target.id, false);

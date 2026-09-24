@@ -324,10 +324,16 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Route token",
     });
-    // Which accounts a caller reaches is a grant now, and the conversion is
-    // what turns this role's `serviceAccount:read` into one. A deployment runs
-    // it at every start; a test has to say so.
-    await runScopedResourcePermissionCutover();
+    // Which accounts a caller reaches is a grant now. The organization's
+    // service-account policy is already converted when it is created, so a
+    // role added afterwards reaches accounts only through a grant an
+    // administrator gives it, never through its role actions.
+    await grantRoleEverywhere({
+      organizationId: organization.id,
+      resource: "serviceAccount",
+      roleId: role.id,
+      actions: ["read"],
+    });
 
     const response = await app.inject({
       method: "GET",

@@ -398,7 +398,11 @@ describe("chat conversation and message routes", () => {
   test("does not move a conversation into an inaccessible project", async ({
     makeAgent,
     makeUser,
+    makeMember,
   }) => {
+    // The admin role holds Full on every project, so act as a plain member.
+    currentUser = await makeUser();
+    await makeMember(currentUser.id, organizationId, { role: "member" });
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
@@ -410,6 +414,7 @@ describe("chat conversation and message routes", () => {
       agentId: agent.id,
     });
     const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
     const otherProject = await projectService.create({
       organizationId,
       userId: otherUser.id,
@@ -1640,8 +1645,13 @@ describe("chat conversation creation in projects", () => {
   test("an inaccessible or unknown project 404s", async ({
     makeAgent,
     makeUser,
+    makeMember,
   }) => {
+    // The admin role holds Full on every project, so act as a plain member.
+    currentUser = await makeUser();
+    await makeMember(currentUser.id, organizationId, { role: "member" });
     const stranger = await makeUser({ email: "proj-chat-stranger@test.com" });
+    await makeMember(stranger.id, organizationId, { role: "member" });
     const { projectService } = await import("@/services/project");
     const theirProject = await projectService.create({
       organizationId,

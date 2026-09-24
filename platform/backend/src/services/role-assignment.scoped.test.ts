@@ -93,12 +93,15 @@ describe("scoped grant delegation through assignments", () => {
     await expect(validateTeamRoles(context)).rejects.toThrow(
       "scoped permissions",
     );
+    // Every grant is a preset, so permission management only comes bundled
+    // with Full access. Edit carries the granted action and more, yet still
+    // cannot hand it on.
     await replacePolicy({
       ...key,
       revision: 2,
       grants: [
         roleGrant,
-        { subject: callerSubject, actions: ["manage-permissions"] },
+        { subject: callerSubject, actions: ["read", "use", "update"] },
       ],
     });
     await expect(validateTeamRoles(context)).rejects.toThrow(
@@ -109,7 +112,10 @@ describe("scoped grant delegation through assignments", () => {
       revision: 3,
       grants: [
         roleGrant,
-        { subject: callerSubject, actions: ["read", "manage-permissions"] },
+        {
+          subject: callerSubject,
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
       ],
     });
     await expect(validateTeamRoles(context)).resolves.toBeUndefined();

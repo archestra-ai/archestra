@@ -12,9 +12,11 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
   let owner: User;
   let actingUser: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
+    // Grants reach organization members only, the owner's own included.
+    await makeMember(owner.id, organizationId, {});
     actingUser = owner;
 
     app = createFastifyInstance();

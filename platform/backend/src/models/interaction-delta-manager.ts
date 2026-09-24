@@ -59,10 +59,12 @@ interface DeltaTipUpdate {
  * and re-inherited on read — the same prefix-delta idea applied to whole fields
  * instead of a message suffix.
  *
- * Caveat: inheritance is "carry the parent's value forward when the field is
- * absent", so a field that legitimately goes present -> absent mid-chain would
- * be re-inherited rather than dropped. Claude Code never removes `tools`/`system`
- * mid-conversation, so this can't happen in practice; revisit if that changes.
+ * Inheritance is "carry the parent's value forward when the field is absent",
+ * so a field going present -> absent mid-chain cannot be represented as a
+ * delta (the dropped field would reappear on cold reads). Claude CLI settings
+ * and tools can legitimately change on resume, so `encodeOnWrite` detects the
+ * disappearance — independently for request and processedRequest — and stores
+ * a full new head row instead; the next request chains to that head.
  */
 const INHERITABLE_ENVELOPE_FIELDS = ["tools", "system"] as const;
 
@@ -176,17 +178,46 @@ class InteractionDeltaManager {
     const lastHash = hashMessage(messages[lastIdx]);
     const key = tipKey(data.sessionId as string, threadId);
 
-    const parent = await InteractionDeltaManager.resolveParent(key, {
+    let parent = await InteractionDeltaManager.resolveParent(key, {
       sessionId: data.sessionId as string,
       threadId,
       messages,
     });
 
+    // An inheritable envelope field (`tools`/`system`) that disappears —
+    // present on the parent, absent now — cannot be delta-encoded against
+    // that parent: reconstruction re-inherits absent fields, so the dropped
+    // field would reappear on cold reads. request and processedRequest are
+    // checked independently against their own parent envelopes; either one
+    // dropping a field turns this into a full head row, and the next request
+    // chains to it.
+    if (
+      parent &&
+      (dropsInheritableField(request, parent.fullRequest) ||
+        (getMessages(data.processedRequest) !== null &&
+          dropsInheritableField(
+            data.processedRequest,
+            parent.fullProcessedRequest,
+          )))
+    ) {
+      parent = null;
+    }
+
     let requestSharedPrefix: number;
     let parentId: string | null;
     let deltaMessages: unknown[];
     if (parent) {
-      requestSharedPrefix = parent.requestLastMessageIdx + 1;
+      // Parent CHOICE used the normalized hash (a cache_control breakpoint
+      // moving off a message, or the equivalent string/block content shape,
+      // must still resolve the same parent). The STORED prefix must be exact:
+      // the normalized hash treats byte-different messages as equal, so a
+      // prefix defined by it would persist the parent's version of a message
+      // the client rewrote (moved breakpoint, edited history) and a cold
+      // reconstruction would return bytes this request never contained.
+      const parentMessages = getMessages(parent.fullRequest);
+      requestSharedPrefix = parentMessages
+        ? longestExactPrefixLen(parentMessages, messages)
+        : 0;
       parentId = parent.id;
       deltaMessages = messages.slice(requestSharedPrefix);
     } else {
@@ -217,7 +248,7 @@ class InteractionDeltaManager {
         ? getMessages(parent.fullProcessedRequest)
         : null;
       const prefix = parentProcessed
-        ? longestCommonPrefixLen(parentProcessed, processedMessages)
+        ? longestExactPrefixLen(parentProcessed, processedMessages)
         : 0;
       processedRequestSharedPrefix = prefix;
       processedToStore = omitInheritedFields(
@@ -705,11 +736,43 @@ function omitInheritedFields(
   return out;
 }
 
-function longestCommonPrefixLen(a: unknown[], b: unknown[]): number {
+/**
+ * True when an inheritable field (`tools`/`system`) is present on the parent
+ * envelope but absent on the child's — a drop the delta format cannot
+ * represent, because reconstruction re-inherits absent fields from the parent.
+ */
+function dropsInheritableField(
+  child: unknown,
+  parentEnvelope: unknown,
+): boolean {
+  if (!child || typeof child !== "object" || Array.isArray(child)) {
+    return false;
+  }
+  if (
+    !parentEnvelope ||
+    typeof parentEnvelope !== "object" ||
+    Array.isArray(parentEnvelope)
+  ) {
+    return false;
+  }
+  const childObj = child as Record<string, unknown>;
+  const parentObj = parentEnvelope as Record<string, unknown>;
+  return INHERITABLE_ENVELOPE_FIELDS.some(
+    (field) => field in parentObj && !(field in childObj),
+  );
+}
+
+/**
+ * Length of the leading run of JSON-semantically-equal messages (key order
+ * ignored, values exact). Unlike `hashMessage` this performs NO normalization,
+ * so a stored delta prefix defined by it is lossless: every message the child
+ * omits is exactly the message the parent's chain already stores.
+ */
+function longestExactPrefixLen(a: unknown[], b: unknown[]): number {
   const n = Math.min(a.length, b.length);
   let i = 0;
   for (; i < n; i++) {
-    if (hashMessage(a[i]) !== hashMessage(b[i])) break;
+    if (stableStringify(a[i]) !== stableStringify(b[i])) break;
   }
   return i;
 }
@@ -733,8 +796,13 @@ function hashMessage(message: unknown): string {
  * match fail — so `resolveParent` returned null, `parent_id` was always NULL,
  * and every row stored the full conversation instead of a delta.
  *
- * Normalization is hash-only: stored request bytes are left untouched, so
- * reconstruction still returns each request's persisted content verbatim.
+ * Normalization is hash-only and feeds ONLY thread identity and parent choice
+ * (`threadId`, `requestLastMessageHash`, candidate matching). It must never
+ * define a stored prefix: two messages that hash equal here can still differ
+ * in bytes, so the stored `requestSharedPrefix`/`processedRequestSharedPrefix`
+ * are computed with exact comparison (`longestExactPrefixLen`) and stored
+ * request bytes are left untouched — reconstruction returns each request's
+ * persisted content verbatim.
  */
 function normalizeMessageForHash(message: unknown): unknown {
   const stripped = stripEphemeral(message);

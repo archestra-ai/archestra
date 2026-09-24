@@ -65,8 +65,6 @@ import {
   type HibernationRuntimeHost,
   idleHibernationWindowSeconds,
   isIdleHibernationOffered,
-  McpServerWakeError,
-  McpServerWakePendingError,
   SWEEP_DEADLINE_MS,
   sweepIdleDeployments,
   wakeDeployment,
@@ -92,6 +90,16 @@ import type {
   K8sRuntimeStatusSummary,
   McpServerContainerLogs,
 } from "./schemas";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  McpServerWakeError,
+  McpServerWakePendingError,
+  // biome-ignore lint/style/noRestrictedImports: runtime-gated EE error import
+} from "./wake-errors.ee";
+
+// SPDX-SnippetEnd
 
 type CatalogItem = Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
 type EnvironmentRow = Awaited<ReturnType<typeof EnvironmentModel.findById>>;

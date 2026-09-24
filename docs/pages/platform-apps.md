@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -100,7 +100,7 @@ An app's HTML is pure UI authored against the **Archestra Apps SDK** — a clien
 
 The SDK:
 
-- `archestra.user` — the authenticated viewer as `{ id, name }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
+- `archestra.user` — the authenticated viewer as `{ id, name, email }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
 - `archestra.storage.user.get(key)` / `set(key, value)` / `list()` / `delete(key)` — persistent storage **private to each viewer** (favorites, drafts, settings). The right default for almost all app state. Values are plain JSON: pass objects directly to `set` and `get` returns exactly what was stored (`null` when absent) — no `JSON.stringify`/`JSON.parse` round-trip. Top-level `null` itself is not storable (`set` rejects it; `delete` clears a key). `list()` returns `[{ key, value }]` entries, not an array of keys.
 - `archestra.storage.shared.*` — same methods against one store **shared by every user of the app** (leaderboards, collaborative lists).
 - `archestra.tools.call(name, args)` — call an assigned tool **as the viewing user, with their existing MCP credentials** (see Tools below). Resolves with the tool's data directly: `structuredContent` when the tool provides it, else JSON parsed from its text output, else the raw text, else `{ media: [{ type, mimeType, dataUrl }] }` for image/audio-only results (the `dataUrl` drops straight into an `img`/`audio` src), else `null`. When the tool's server still needs connecting, the call rejects with a typed `{ code: "auth_required", url }` error the app can render as a link.
@@ -171,7 +171,7 @@ An app can declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` in
 
 ## Shared-app trust boundary
 
-A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
+A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id, display name, and email (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
 
 ## Templates
 

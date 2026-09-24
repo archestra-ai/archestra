@@ -2339,18 +2339,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }
           return undefined;
         })();
-        return {
-          [Symbol.asyncIterator]() {
-            return {
-              async next() {
-                const next = await stream.next();
-                return next.done
-                  ? { done: true, value: undefined }
-                  : { done: false, value: next.value };
-              },
-            };
-          },
-        };
+        return wrapAsyncIterator(stream);
       };
       return client as never;
     });
@@ -2444,18 +2433,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }
           return undefined;
         })();
-        return {
-          [Symbol.asyncIterator]() {
-            return {
-              async next() {
-                const next = await prefixed.next();
-                return next.done
-                  ? { done: true, value: undefined }
-                  : { done: false, value: next.value };
-              },
-            };
-          },
-        };
+        return wrapAsyncIterator(prefixed);
       };
       return client as never;
     });
@@ -4843,18 +4821,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             }
             return undefined;
           })();
-          return {
-            [Symbol.asyncIterator]() {
-              return {
-                async next() {
-                  const next = await prefixed.next();
-                  return next.done
-                    ? { done: true, value: undefined }
-                    : { done: false, value: next.value };
-                },
-              };
-            },
-          };
+          return wrapAsyncIterator(prefixed);
         };
         return client as never;
       });
@@ -6891,6 +6858,21 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     expectMatrix(responsesCallsFrom(response.body, stream), mode);
   });
 });
+
+function wrapAsyncIterator<T>(stream: AsyncGenerator<T, undefined, unknown>) {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          const next = await stream.next();
+          return next.done
+            ? { done: true, value: undefined }
+            : { done: false, value: next.value };
+        },
+      };
+    },
+  };
+}
 
 /** The response the interaction log recorded for the profile's latest turn. */
 async function latestLoggedResponse(profileId: string): Promise<string> {

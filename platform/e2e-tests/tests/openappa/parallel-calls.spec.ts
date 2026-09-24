@@ -52,9 +52,31 @@
  */
 import { randomUUID } from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
-import { getE2eRequestUrl, UI_BASE_URL, WIREMOCK_BASE_URL } from "../../consts";
+import { WIREMOCK_BASE_URL } from "../../consts";
 import { ensureWireMockAnthropicChatProvider } from "../../utils";
 import { expect, test } from "../api-fixtures";
+import {
+  absent,
+  addWireMockMapping,
+  anthropicMapping,
+  asObject,
+  assistantText,
+  collect,
+  findToolId,
+  type GuardrailsPolicy,
+  type MakeApiRequest,
+  outputFor,
+  readOfferId,
+  readPolicy,
+  runChatTurn,
+  type StreamEvent,
+  type ToolInput,
+  type ToolOutput,
+  textAnswerEvents,
+  textOf,
+  toolUseEvents,
+  writePolicy,
+} from "./helpers";
 
 // Every test mutates the deployment-wide switch and the shared policy, so
 // they cannot run beside each other under the project's fullyParallel default.
@@ -126,11 +148,6 @@ function policyGoverning(params: {
   ].join("\n\n");
   return `[policy]\nversion = 2\ntrust_chain = ["untrusted", "trusted"]\n\n${entries}\n`;
 }
-
-type GuardrailsPolicy = { revision: number; content: string };
-type StreamEvent = Record<string, unknown>;
-type ToolInput = { toolCallId: string; toolName: string; input: unknown };
-type ToolOutput = { toolCallId: string; output: unknown };
 
 test("releases every call untouched when the policy allows the whole batch", async ({
   request,
@@ -776,15 +793,6 @@ test("a spent offer cannot be executed twice: the duplicate is ruled unknown and
 
 // === Stack setup and teardown ==============================================
 
-/** Mirrors the `makeApiRequest` fixture's signature, as `utils/chat-ui.ts` does. */
-type MakeApiRequest = (args: {
-  request: APIRequestContext;
-  method: "get" | "post" | "put" | "patch" | "delete";
-  urlSuffix: string;
-  data?: unknown;
-  ignoreStatusCheck?: boolean;
-}) => Promise<APIResponse>;
-
 type CreateAgent = (
   request: APIRequestContext,
   name: string,
@@ -1052,315 +1060,4 @@ async function teardownGovernedChat(params: {
       data: { enabled: false },
     }).catch(() => {});
   }
-}
-
-// === The scripted provider turns ===========================================
-//
-// Stubs on POST /anthropic/v1/messages, discriminated by which of this run's
-// provider call ids the growing history already carries. Deliberately not
-// WireMock scenarios: scenario state is global to the instance, and
-// knowledge-permission-sync.spec.ts resets it.
-
-type SseEvent = { event: string; data: Record<string, unknown> };
-
-function anthropicMapping(params: {
-  priority: number;
-  bodyPatterns: Record<string, unknown>[];
-  events: SseEvent[];
-  templates?: Record<string, string>;
-}): Record<string, unknown> {
-  let body = anthropicSse(params.events);
-  for (const [placeholder, expression] of Object.entries(
-    params.templates ?? {},
-  )) {
-    body = body.split(placeholder).join(expression);
-  }
-  const templated = params.templates !== undefined;
-  return {
-    priority: params.priority,
-    request: {
-      method: "POST",
-      urlPath: "/anthropic/v1/messages",
-      bodyPatterns: params.bodyPatterns,
-    },
-    response: {
-      status: 200,
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
-      ...(templated ? { transformers: ["response-template"] } : {}),
-      body,
-    },
-  };
-}
-
-/** Negative body match. `(?s)` so a body carrying a newline still matches. */
-function absent(needle: string): Record<string, unknown> {
-  return { doesNotMatch: `(?s).*${needle}.*` };
-}
-
-/** One assistant message proposing `calls.length` tool calls, one content block each. */
-function toolUseEvents(
-  messageId: string,
-  calls: Array<{
-    callId: string;
-    toolName: string;
-    input: Record<string, unknown>;
-  }>,
-): SseEvent[] {
-  const events: SseEvent[] = [messageStart(messageId)];
-  calls.forEach((call, index) => {
-    events.push(
-      {
-        event: "content_block_start",
-        data: {
-          type: "content_block_start",
-          index,
-          content_block: {
-            type: "tool_use",
-            id: call.callId,
-            name: call.toolName,
-            input: {},
-          },
-        },
-      },
-      {
-        event: "content_block_delta",
-        data: {
-          type: "content_block_delta",
-          index,
-          delta: {
-            type: "input_json_delta",
-            partial_json: JSON.stringify(call.input),
-          },
-        },
-      },
-      {
-        event: "content_block_stop",
-        data: { type: "content_block_stop", index },
-      },
-    );
-  });
-  events.push(messageDelta("tool_use"), {
-    event: "message_stop",
-    data: { type: "message_stop" },
-  });
-  return events;
-}
-
-function textAnswerEvents(messageId: string, text: string): SseEvent[] {
-  return [
-    messageStart(messageId),
-    {
-      event: "content_block_start",
-      data: {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      },
-    },
-    {
-      event: "content_block_delta",
-      data: {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text },
-      },
-    },
-    {
-      event: "content_block_stop",
-      data: { type: "content_block_stop", index: 0 },
-    },
-    messageDelta("end_turn"),
-    { event: "message_stop", data: { type: "message_stop" } },
-  ];
-}
-
-function messageStart(id: string): SseEvent {
-  return {
-    event: "message_start",
-    data: {
-      type: "message_start",
-      message: {
-        id,
-        type: "message",
-        role: "assistant",
-        model: "claude-3-5-sonnet-20241022",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 20, output_tokens: 0 },
-      },
-    },
-  };
-}
-
-function messageDelta(stopReason: string): SseEvent {
-  return {
-    event: "message_delta",
-    data: {
-      type: "message_delta",
-      delta: { stop_reason: stopReason, stop_sequence: null },
-      usage: { output_tokens: 15 },
-    },
-  };
-}
-
-function anthropicSse(events: SseEvent[]): string {
-  return events
-    .map(
-      ({ event, data }) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-    )
-    .join("");
-}
-
-async function addWireMockMapping(
-  request: APIRequestContext,
-  mapping: Record<string, unknown>,
-): Promise<string> {
-  const response = await request.post(`${WIREMOCK_BASE_URL}/__admin/mappings`, {
-    data: mapping,
-  });
-  expect(response.ok()).toBe(true);
-  return ((await response.json()) as { id: string }).id;
-}
-
-// === Policy, tool, and stream plumbing ======================================
-
-async function readPolicy(
-  makeApiRequest: MakeApiRequest,
-  request: APIRequestContext,
-): Promise<GuardrailsPolicy> {
-  const response = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/guardrails-policy",
-  });
-  return (await response.json()) as GuardrailsPolicy;
-}
-
-async function writePolicy(
-  makeApiRequest: MakeApiRequest,
-  request: APIRequestContext,
-  data: { content: string; expectedRevision: number },
-): Promise<void> {
-  await makeApiRequest({
-    request,
-    method: "put",
-    urlSuffix: "/api/guardrails-policy",
-    data,
-  });
-}
-
-async function findToolId(
-  makeApiRequest: MakeApiRequest,
-  request: APIRequestContext,
-  name: string,
-): Promise<string> {
-  const response = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: `/api/tools/with-assignments?search=${encodeURIComponent(name)}`,
-  });
-  const { data } = (await response.json()) as {
-    data: { id: string; name: string }[];
-  };
-  const tool = data.find((entry) => entry.name === name);
-  if (!tool) throw new Error(`Tool ${name} is not registered on this stack`);
-  return tool.id;
-}
-
-/**
- * Posts one user turn and returns every chunk of the UI message stream.
- *
- * Chat runs the agentic loop server-side, so this single request spans all
- * scripted provider turns and the tool executions between them.
- */
-async function runChatTurn(
-  request: APIRequestContext,
-  params: { conversationId: string; prompt: string },
-): Promise<StreamEvent[]> {
-  const response = await request.post(getE2eRequestUrl("/api/chat"), {
-    headers: { "Content-Type": "application/json", Origin: UI_BASE_URL },
-    timeout: 120_000,
-    data: {
-      id: params.conversationId,
-      trigger: "submit-message",
-      messages: [
-        {
-          id: randomUUID(),
-          role: "user",
-          parts: [{ type: "text", text: params.prompt }],
-        },
-      ],
-    },
-  });
-  const raw = await response.text();
-  expect(response.ok(), `chat stream failed: ${response.status()} ${raw}`).toBe(
-    true,
-  );
-  const events = parseUiMessageStream(raw);
-  const errors = events.filter((event) => event.type === "error");
-  expect(
-    errors,
-    `chat stream reported an error: ${JSON.stringify(errors)}`,
-  ).toEqual([]);
-  return events;
-}
-
-function parseUiMessageStream(raw: string): StreamEvent[] {
-  const events: StreamEvent[] = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice("data:".length).trim();
-    if (!payload || payload === "[DONE]") continue;
-    try {
-      events.push(JSON.parse(payload) as StreamEvent);
-    } catch {
-      // Keep-alives and other non-JSON frames are not part of the contract.
-    }
-  }
-  return events;
-}
-
-function collect<T>(events: StreamEvent[], type: string): T[] {
-  return events.filter((event) => event.type === type) as T[];
-}
-
-function outputFor(outputs: ToolOutput[], toolCallId: string): unknown {
-  const match = outputs.find((output) => output.toolCallId === toolCallId);
-  if (match === undefined)
-    throw new Error(`No tool output was streamed for ${toolCallId}`);
-  return match.output;
-}
-
-/** A tool result reaches the stream as text or as MCP content blocks. */
-function textOf(output: unknown): string {
-  return typeof output === "string" ? output : JSON.stringify(output);
-}
-
-function asObject(value: unknown): unknown {
-  return typeof value === "string" ? JSON.parse(value) : value;
-}
-
-/**
- * The offer the ruling names.
- *
- * Tolerant of the two shapes the ruling can arrive in on this side: raw text,
- * or re-serialized MCP content blocks where the quotes carry backslashes.
- */
-function readOfferId(ruling: string): string {
-  const match = /execute_remedy_plan\(offer_id:\s*\\*"([0-9a-f]+)/.exec(ruling);
-  if (!match)
-    throw new Error(`The ruling named no offer_id:\n${ruling.slice(0, 2000)}`);
-  return match[1];
-}
-
-function assistantText(events: StreamEvent[]): string {
-  return events
-    .filter((event) => event.type === "text-delta")
-    .map((event) => String(event.delta ?? event.text ?? ""))
-    .join("");
 }

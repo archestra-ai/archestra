@@ -356,7 +356,9 @@ function SelectField({
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        {/* Below the trigger: item-aligned would lay the menu over the
+            fields around it, since each option is two lines tall. */}
+        <SelectContent position="popper">
           {options.map((option) => (
             <SelectItem
               key={option.value}

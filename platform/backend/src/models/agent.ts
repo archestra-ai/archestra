@@ -394,7 +394,21 @@ class AgentModel {
    * organization or a role, `team` when they reach a team, `personal`
    * otherwise. An LLM proxy has no grants and keeps its column.
    */
-  private static async populateGrantedScope(
+  /**
+   * An agent that is not someone else's personal one: it reaches more than
+   * its author by grants, or `userId` wrote it, or holds a grant on it. An
+   * overseer who can read every agent still does not list others' private
+   * ones.
+   */
+  static notOthersPersonalCondition(userId: string): SQL {
+    return or(
+      not(agentAudienceIs("personal")),
+      eq(schema.agentsTable.authorId, userId),
+      explicitAgentReadCondition(userId),
+    ) as SQL;
+  }
+
+  static async populateGrantedScope(
     agents: Pick<Agent, "id" | "organizationId" | "agentType" | "scope">[],
   ): Promise<void> {
     const byKey = new Map<string, string[]>();
@@ -1038,14 +1052,7 @@ class AgentModel {
 
     // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        not(agentAudienceIs("personal")),
-        eq(schema.agentsTable.authorId, userId),
-        explicitAgentReadCondition(userId),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
+      whereConditions.push(AgentModel.notOthersPersonalCondition(userId));
     }
 
     // Apply access control filtering for non-agent admins

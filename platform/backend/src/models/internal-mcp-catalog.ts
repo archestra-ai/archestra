@@ -1701,7 +1701,7 @@ class InternalMcpCatalogModel {
    * and an app's backing item (no registry policy; its install scope follows
    * the app) keep their column.
    */
-  private static async populateGrantedScope(
+  static async populateGrantedScope(
     items: Array<{
       id: string;
       organizationId: string | null;

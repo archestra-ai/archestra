@@ -83,6 +83,7 @@ import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
@@ -2909,6 +2910,7 @@ class ToolModel {
     const entityRows = await db
       .select({
         id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
         scope: schema.agentsTable.scope,
@@ -2931,8 +2933,9 @@ class ToolModel {
                 ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
                   ? [
                       or(
-                        ne(schema.agentsTable.scope, "personal"),
-                        eq(schema.agentsTable.authorId, visibility.userId),
+                        AgentModel.notOthersPersonalCondition(
+                          visibility.userId,
+                        ),
                         notInArray(
                           schema.agentsTable.agentType,
                           visibility.excludeOtherPersonalTypes ?? [],
@@ -2944,15 +2947,19 @@ class ToolModel {
             : []),
         ),
       );
-    const entities = entityRows.flatMap((row) =>
+    // The stored scope is retired; the audience comes from grants.
+    await AgentModel.populateGrantedScope(entityRows);
+    const entities = entityRows.flatMap(({ organizationId: _, ...row }) =>
       row.agentType === "agent" || row.agentType === "mcp_gateway"
         ? [{ ...row, agentType: row.agentType }]
         : [],
     );
     const entityIds = entities.map((entity) => entity.id);
-    const catalogs = await db
+    const catalogRows = await db
       .select({
         id: schema.internalMcpCatalogTable.id,
+        organizationId: schema.internalMcpCatalogTable.organizationId,
+        serverType: schema.internalMcpCatalogTable.serverType,
         name: schema.internalMcpCatalogTable.name,
         scope: schema.internalMcpCatalogTable.scope,
         icon: schema.internalMcpCatalogTable.icon,
@@ -2969,6 +2976,13 @@ class ToolModel {
           notDeleted(schema.internalMcpCatalogTable),
         ),
       );
+    await InternalMcpCatalogModel.populateGrantedScope(catalogRows);
+    const catalogs = catalogRows.map(({ id, name, scope, icon }) => ({
+      id,
+      name,
+      scope,
+      icon,
+    }));
     const catalogIds = catalogs.map((catalog) => catalog.id);
     if (catalogIds.length === 0)
       return { catalogs, tools: [], assignments: [], entities };

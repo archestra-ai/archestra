@@ -13,6 +13,17 @@ Use `*.unit.test.ts` only for tests whose runtime import graph is database-free.
 
 Use ordinary `*.test.ts` for tests that need real database behavior, fixtures, or route integration. They opt into the PGlite setup and migrated snapshot. Never rename a database-backed test to `*.unit.test.ts` merely to make it run faster.
 
+`*.rollback.test.ts` is a narrow opt-in for database suites that can safely run
+inside one outer transaction per test. The harness rolls that transaction back
+after each test instead of truncating all tables. Use it only after proving that
+the suite does not need a real commit, run schema changes, or leave untracked
+background database work running. Production `db.transaction` calls become
+nested savepoints, which can change commit-sensitive behavior. Benchmark the
+full file in ordinary and rollback projects, run shuffled order with several
+seeds, and run it alongside ordinary database suites before opting in. Keep
+ordinary `*.test.ts` for uncertain cases; a passing suite alone is insufficient
+evidence because fire-and-forget writes can fail after assertions finish.
+
 For values or types from `@archestra/shared`, import a narrow exported subpath (for example `@archestra/shared/consts`) in database-free tests. Its root barrel re-exports a large graph, including generated clients. Biome rejects the root import in `*.unit.test.ts`; when a subpath is missing, add a focused export to `shared/package.json` rather than importing the root. When converting an ordinary test to a database-free test, inspect imports of the code under test as well: a light test file can still load an expensive graph through the module it exercises.
 
 Within each group, `backend/vitest.config.ts` splits files by module mocking at config-load time:

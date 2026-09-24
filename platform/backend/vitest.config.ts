@@ -52,6 +52,7 @@ function partitionTestFiles(): {
   clean: string[];
   unitMocked: string[];
   unit: string[];
+  rollback: string[];
 } {
   const root = path.resolve(__dirname, "./src");
   const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
@@ -59,6 +60,7 @@ function partitionTestFiles(): {
   const clean: string[] = [];
   const unitMocked: string[] = [];
   const unit: string[] = [];
+  const rollback: string[] = [];
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -68,9 +70,15 @@ function partitionTestFiles(): {
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
     const databaseFree = entry.name.endsWith(".unit.test.ts");
+    const rollsBack = entry.name.endsWith(".rollback.test.ts");
     const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
     if (databaseFree) {
       (moduleMocks ? unitMocked : unit).push(relative);
+    } else if (rollsBack) {
+      if (moduleMocks) {
+        throw new Error(`${relative} cannot use module mocks with rollback`);
+      }
+      rollback.push(relative);
     } else {
       (moduleMocks ? mocked : clean).push(relative);
     }
@@ -83,7 +91,7 @@ function partitionTestFiles(): {
     );
   }
 
-  return { mocked, clean, unitMocked, unit };
+  return { mocked, clean, unitMocked, unit, rollback };
 }
 
 const testFiles = partitionTestFiles();
@@ -198,7 +206,7 @@ export default defineConfig({
           name: "clean",
           include: testFiles.clean,
           isolate: false,
-          // This project and `mocked` share one snapshot through global-setup.ts.
+          // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
           setupFiles: ["./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
@@ -206,6 +214,19 @@ export default defineConfig({
           // isolated project skips that — its per-file registries can't leak,
           // and exotic config mocks (getter-only properties) would break it.
           env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "rollback",
+          include: testFiles.rollback,
+          isolate: false,
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
+          // Only suites explicitly named *.rollback.test.ts use per-test
+          // transactions; ordinary database-backed suites keep table resets.
+          env: { ARCHESTRA_TEST_SHARED_WORKERS: "rollback" },
         },
       },
       {

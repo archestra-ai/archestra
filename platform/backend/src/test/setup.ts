@@ -63,6 +63,13 @@ let pgliteClient: PGlite | null = null;
 // Tests that never issue SQL leave the database unchanged, so the next test
 // can skip truncating hundreds of tables.
 let databaseTouched = false;
+// The rollback project opts in explicitly; all ordinary database tests keep
+// the table reset, including tests of commit and schema-change behavior.
+const rollbackMode = process.env.ARCHESTRA_TEST_SHARED_WORKERS === "rollback";
+let completedRollbackTests = 0;
+let releaseTestTransaction: (() => void) | null = null;
+let testTransactionFinished: Promise<void> | null = null;
+const rollbackSentinel = new Error("Test transaction rollback");
 // Pristine config snapshot for the per-test restore (see beforeEach).
 // Captured HERE at setup-module scope — setup files evaluate before any test
 // file's module code in the worker, so a test file that mutates config (or
@@ -78,7 +85,7 @@ let pristineConfig: Record<string, unknown> | null = null;
 // would pull config.ts before the env above is set.
 type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
 let enterpriseTier: EnterpriseTierRef | null = null;
-if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
+if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true" || rollbackMode) {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
     unknown
@@ -115,6 +122,7 @@ console.warn = (...args: unknown[]) => {
  * replay the migrations directly so the suite still works.
  */
 beforeAll(async () => {
+  completedRollbackTests = 0;
   const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
 
   if (snapshotPath && fs.existsSync(snapshotPath)) {
@@ -178,7 +186,7 @@ beforeEach(async () => {
     enterpriseTier.setUserCountForTesting(0);
   }
 
-  if (databaseTouched) {
+  if (databaseTouched && (!rollbackMode || completedRollbackTests === 0)) {
     // Get all user tables from the database (excluding system tables)
     const tablesResult = await pgliteClient.query<{ tablename: string }>(`
       SELECT tablename FROM pg_tables
@@ -204,6 +212,37 @@ beforeEach(async () => {
   // here cannot pre-load real modules ahead of a test file's mocks.
   clearRegisteredProcessLocalCaches();
 
+  if (rollbackMode) {
+    if (!testDb) throw new Error("Test database not initialized");
+    let signalReady: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      signalReady = resolve;
+    });
+    let release: () => void = () => {};
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    releaseTestTransaction = release;
+    let started = false;
+    testTransactionFinished = testDb
+      .transaction(async (tx) => {
+        const dbModule = await import("../database/index.js");
+        dbModule.__setTestDb(
+          tx as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+        );
+        started = true;
+        signalReady();
+        await hold;
+        throw rollbackSentinel;
+      })
+      .catch((error: unknown) => {
+        signalReady();
+        if (error !== rollbackSentinel) throw error;
+      });
+    await ready;
+    if (!started) await testTransactionFinished;
+  }
+
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.
   // This allows organization tests to test both with and without existing organizations.
@@ -225,6 +264,29 @@ beforeEach(async () => {
  */
 const realFetch = globalThis.fetch;
 afterEach(() => {
+  if (rollbackMode) {
+    return finishTestTransaction().finally(restoreTestGlobals);
+  }
+  restoreTestGlobals();
+});
+
+async function finishTestTransaction(): Promise<void> {
+  // Registered fire-and-forget work must finish while its test's transaction
+  // is still open. The ordinary project continues to drain at file teardown.
+  const { drainBackgroundWork } = await import("../utils/background-work.js");
+  await drainBackgroundWork();
+  releaseTestTransaction?.();
+  await testTransactionFinished;
+  const dbModule = await import("../database/index.js");
+  dbModule.__setTestDb(
+    testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+  );
+  releaseTestTransaction = null;
+  testTransactionFinished = null;
+  completedRollbackTests += 1;
+}
+
+function restoreTestGlobals(): void {
   globalThis.fetch = realFetch;
   vi.clearAllMocks();
   vi.useRealTimers();
@@ -238,7 +300,7 @@ afterEach(() => {
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
-});
+}
 
 /**
  * Clean up the PGlite client after all tests in the file complete.

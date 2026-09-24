@@ -85370,6 +85370,7 @@ export type OpenAiListModelsWithDefaultAgentResponses = {
         models?: Array<{
             slug: string;
             display_name: string;
+            [key: string]: unknown;
         }>;
     };
 };
@@ -85468,6 +85469,7 @@ export type OpenAiListModelsWithAgentResponses = {
         models?: Array<{
             slug: string;
             display_name: string;
+            [key: string]: unknown;
         }>;
     };
 };

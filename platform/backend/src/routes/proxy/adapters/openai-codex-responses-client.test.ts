@@ -281,12 +281,16 @@ describe("createOpenAiCodexResponsesClient", () => {
         ]);
       },
     );
-    for (const version of [undefined, "0.157.2"]) {
+    for (const { originator, version } of [
+      { originator: "codex_cli_rs", version: undefined },
+      { originator: "codex_exec", version: undefined },
+      { originator: "codex_exec", version: "0.157.2" },
+    ]) {
       const client = createOpenAiCodexPassthroughResponsesClient({
         credential: {
           ...PASSTHROUGH_CREDENTIAL,
-          originator: "codex_cli_rs",
-          userAgent: "codex_cli_rs/0.156.1",
+          originator,
+          userAgent: `${originator}/0.156.1`,
           version,
         },
         options: { source: "api" },
@@ -302,7 +306,7 @@ describe("createOpenAiCodexResponsesClient", () => {
       }
     }
 
-    expect(versions).toEqual(["0.156.1", "0.157.2"]);
+    expect(versions).toEqual(["0.156.1", "0.156.1", "0.157.2"]);
   });
 
   it("forwards native compact requests through request-local OAuth", async () => {

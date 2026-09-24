@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { isCodexOriginator, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -6,7 +6,6 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
-import { OPENAI_CODEX_MODELS } from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,
@@ -46,8 +45,16 @@ import { createProxyPreHandler } from "./proxy-prehandler";
 
 const OpenAiModelsWithCodexSchema = OpenAiModelsListResponseSchema.extend({
   models: z
-    .array(z.object({ slug: z.string(), display_name: z.string() }))
+    .array(
+      z.object({ slug: z.string(), display_name: z.string() }).passthrough(),
+    )
     .optional(),
+});
+
+const CodexModelsSchema = z.object({
+  models: z.array(
+    z.object({ slug: z.string(), display_name: z.string() }).passthrough(),
+  ),
 });
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -307,7 +314,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const headers = request.raw.headers;
     const bearer = extractBearerToken(headers.authorization);
-    if (headers.originator === "codex_cli_rs" && bearer && isJwtLike(bearer)) {
+    const originator =
+      typeof headers.originator === "string" ? headers.originator : undefined;
+    const isCodex = isCodexOriginator(originator);
+    if (isCodex && originator && bearer && isJwtLike(bearer)) {
       if (typeof headers["chatgpt-account-id"] !== "string") {
         throw new ApiError(400, "Codex ChatGPT login requires an account ID.");
       }
@@ -339,16 +349,44 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      const models = OPENAI_CODEX_MODELS.map((model) => ({
-        ...model,
+      const url = new URL(`${config.llm.openai.codex.apiBaseUrl}/models`);
+      const clientVersion = new URL(
+        request.url,
+        "http://localhost",
+      ).searchParams.get("client_version");
+      if (clientVersion) {
+        url.searchParams.set("client_version", clientVersion);
+      }
+      const upstream = await fetch(url, {
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          "chatgpt-account-id": headers["chatgpt-account-id"],
+          originator,
+        },
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => {
+        throw new ApiError(502, "Unable to fetch Codex subscription models.");
+      });
+      if (!upstream.ok) {
+        throw new ApiError(
+          upstream.status >= 500 ? 502 : upstream.status,
+          "Unable to fetch Codex subscription models.",
+        );
+      }
+      const result = CodexModelsSchema.safeParse(
+        await upstream.json().catch(() => null),
+      );
+      if (!result.success) {
+        throw new ApiError(502, "Invalid Codex subscription models response.");
+      }
+      const models = result.data.models.map((model) => ({
+        id: model.slug,
+        displayName: model.display_name,
         provider: "openai" as const,
       }));
       return {
         ...toOpenAiModelsList(models, "openai"),
-        models: models.map((model) => ({
-          slug: model.id,
-          display_name: model.displayName,
-        })),
+        models: result.data.models,
       };
     }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
@@ -359,7 +397,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
     const models = await fetchOpenAiModels(apiKey, baseUrl, extraHeaders);
     const list = toOpenAiModelsList(models, "openai");
-    return headers.originator === "codex_cli_rs"
+    return isCodex
       ? {
           ...list,
           models: models.map((model) => ({

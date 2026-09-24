@@ -565,13 +565,16 @@ export default function ServiceAccountDetailPage({
           {/* Only when something is actually wrong. A banner that is always
               present is one nobody reads. */}
           {healthExplanation && (
-            <InlineNotice variant="error">
-              <AlertTriangle />
-              <span className="font-medium">
-                This service account cannot authenticate
-              </span>
-              <InlineNoticeText>{healthExplanation}</InlineNoticeText>
-            </InlineNotice>
+            // Half the stack's gap: the notice is about the block below it.
+            <div className="-mb-4">
+              <InlineNotice variant="error">
+                <AlertTriangle />
+                <span className="font-medium">
+                  This service account cannot authenticate
+                </span>
+                <InlineNoticeText>{healthExplanation}</InlineNoticeText>
+              </InlineNotice>
+            </div>
           )}
 
           {activeTab === "keys" ? (

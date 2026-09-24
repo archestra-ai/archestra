@@ -10,26 +10,30 @@ const migrationSql = fs.readFileSync(
 );
 
 /**
- * Replays the data statements only. The DDL already exists in the shared test
- * schema (migrations run once when the PGlite snapshot is built), so replaying
- * it would fail. Each data statement is written to be idempotent, which the
- * tests below also pin by running the replay twice.
+ * The one migration of the scoped-permissions change. The shared test schema
+ * already holds its DDL (every test run migrates an empty PGlite database from
+ * the first migration, this one included), so the schema block reads the
+ * catalog and the other blocks replay the data statements only. Each data
+ * statement is idempotent: every test replays them twice.
  */
+const dataStatements = migrationSql
+  .split("--> statement-breakpoint")
+  .map((statement) => statement.trim())
+  .filter((statement) => /^(UPDATE|INSERT|DELETE)\b/.test(codeOf(statement)));
+
 async function runDataMigration() {
-  const statements = migrationSql
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter((statement) => {
-      const body = statement
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("--"))
-        .join("\n")
-        .trim();
-      return /^(UPDATE|INSERT|DELETE)\b/.test(body);
-    });
-  for (const statement of statements) {
+  for (const statement of dataStatements) {
     await db.execute(sql.raw(statement));
   }
+}
+
+/** The statement without its leading comment lines. */
+function codeOf(statement: string) {
+  return statement
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .trim();
 }
 
 async function insertProxy(params: {
@@ -81,6 +85,117 @@ async function findAgent(id: string) {
     .where(eq(schema.agentsTable.id, id));
   return row ?? null;
 }
+
+describe("0488 schema", () => {
+  test("creates the permission policy table, keyed per object and removed with its organization", async () => {
+    const columns = await db.execute<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_name = 'resource_permission_policies'
+      ORDER BY ordinal_position`);
+    expect(
+      columns.rows.map((column) => [
+        column.column_name,
+        column.data_type,
+        column.is_nullable,
+      ]),
+    ).toEqual([
+      ["organization_id", "text", "NO"],
+      ["resource", "text", "NO"],
+      ["scope", "text", "NO"],
+      ["grants", "jsonb", "NO"],
+      ["legacy_sharing_migrated", "boolean", "NO"],
+      ["legacy_organization_audience", "boolean", "NO"],
+      ["revision", "integer", "NO"],
+      ["updated_at", "timestamp without time zone", "NO"],
+    ]);
+
+    const constraints = await db.execute<{ definition: string }>(sql`
+      SELECT pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE conrelid = 'resource_permission_policies'::regclass
+      ORDER BY contype`);
+    expect(constraints.rows.map((row) => row.definition).sort()).toEqual(
+      [
+        "FOREIGN KEY (organization_id) REFERENCES organization(id) ON DELETE CASCADE",
+        "PRIMARY KEY (organization_id, resource, scope)",
+      ].sort(),
+    );
+  });
+
+  test("gives connectors a permission-sync switch that is off by default", async () => {
+    const [column] = (
+      await db.execute<{
+        data_type: string;
+        is_nullable: string;
+        column_default: string;
+      }>(sql`
+        SELECT data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'knowledge_base_connectors'
+          AND column_name = 'sync_permissions_from_source'`)
+    ).rows;
+    expect(column).toEqual({
+      data_type: "boolean",
+      is_nullable: "NO",
+      column_default: "false",
+    });
+  });
+
+  test("swaps the scope partitions of primary keys and skill names for owner and author partitions", async () => {
+    const indexes = await db.execute<{ indexname: string; indexdef: string }>(
+      sql`
+        SELECT indexname, indexdef FROM pg_indexes
+        WHERE tablename IN ('chat_api_keys', 'skills')`,
+    );
+    const byName = new Map(
+      indexes.rows.map((row) => [row.indexname, row.indexdef]),
+    );
+    for (const retired of [
+      "chat_api_keys_primary_personal_unique",
+      "chat_api_keys_primary_team_unique",
+      "chat_api_keys_primary_org_unique",
+      "skills_org_personal_name_idx",
+      "skills_org_shared_name_idx",
+    ]) {
+      expect(byName.has(retired)).toBe(false);
+    }
+    expect(byName.get("chat_api_keys_primary_owner_unique")).toMatch(
+      /UNIQUE INDEX .* \(organization_id, provider, user_id\) WHERE \(\(is_primary = true\) AND \(user_id IS NOT NULL\)\)/,
+    );
+    expect(byName.get("chat_api_keys_primary_shared_unique")).toMatch(
+      /UNIQUE INDEX .* \(organization_id, provider\) WHERE \(\(is_primary = true\) AND \(user_id IS NULL\)\)/,
+    );
+    expect(byName.get("skills_org_author_name_idx")).toMatch(
+      /UNIQUE INDEX .* \(organization_id, COALESCE\(author_id, \(created_by_service_account_id\)::text\), name\) WHERE \(deleted_at IS NULL\)/,
+    );
+  });
+
+  test("the blocks below cover every data statement, in this order", () => {
+    // A new data statement needs a test here; this list says which one.
+    expect(
+      dataStatements.map((statement) =>
+        codeOf(statement).split("\n")[0].trim(),
+      ),
+    ).toEqual([
+      'UPDATE "chat_api_keys" api_key', // primary provider keys by owner
+      'UPDATE "skills" skill', // skill names unique per author
+      'UPDATE "knowledge_base_connectors"', // connector sync switch
+      'UPDATE "connection_setups" setup', // retire non-default LLM proxy rows
+      'INSERT INTO "virtual_api_key_llm_proxy" ("virtual_api_key_id", "llm_proxy_id", "created_at")',
+      'UPDATE "interactions" interaction',
+      'UPDATE "organization" org',
+      'DELETE FROM "resource_permission_policies" policy',
+      'DELETE FROM "agents" agent',
+      'UPDATE "mcp_server" backing_server', // app backing install scope
+    ]);
+  });
+});
 
 describe("0488 connector sync switch", () => {
   test("turns the switch on exactly for auto-sync connectors", async ({
@@ -172,8 +287,31 @@ describe("0488 retire non-default LLM proxy rows", () => {
       .set({ connectionDefaultLlmProxyId: oldLive.id })
       .where(eq(schema.organizationsTable.id, org.id));
 
+    // Permission policies of the old rows go with them; the default keeps its.
+    await db.insert(schema.resourcePermissionPoliciesTable).values(
+      [defaultProxy, oldLive, oldDeleted].map((proxy) => ({
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: proxy.id,
+      })),
+    );
+
     await runDataMigration();
     await runDataMigration();
+
+    const policies = await db
+      .select({ scope: schema.resourcePermissionPoliciesTable.scope })
+      .from(schema.resourcePermissionPoliciesTable)
+      .where(
+        sql`${schema.resourcePermissionPoliciesTable.organizationId} = ${org.id} AND ${schema.resourcePermissionPoliciesTable.resource} = 'agent'`,
+      );
+    expect(
+      policies
+        .map((row) => row.scope)
+        .filter((scope) =>
+          [defaultProxy.id, oldLive.id, oldDeleted.id].includes(scope),
+        ),
+    ).toEqual([defaultProxy.id]);
 
     expect(await findAgent(oldLive.id)).toBeNull();
     expect(await findAgent(oldDeleted.id)).toBeNull();
@@ -251,6 +389,7 @@ describe("0488 retire non-default LLM proxy rows", () => {
     const interaction = await makeInteraction(oldRow.id);
 
     await runDataMigration();
+    await runDataMigration();
 
     expect(await findAgent(oldRow.id)).not.toBeNull();
     const [setupRow] = await db
@@ -290,6 +429,7 @@ describe("0488 retire non-default LLM proxy rows", () => {
       llmProxyId: oldB.id,
     });
 
+    await runDataMigration();
     await runDataMigration();
 
     const [setupRow] = await db
@@ -418,6 +558,84 @@ describe("0488 app backing install scope", () => {
     await setServer(orgApp.mcpServerId, { scope: "personal", teamId: null });
     await setServer(teamApp.mcpServerId, { scope: "team", teamId: team.id });
     await setServer(personalApp.mcpServerId, { scope: "org", teamId: null });
+
+    await runDataMigration();
+    await runDataMigration();
+
+    const servers = await db
+      .select({
+        id: schema.mcpServersTable.id,
+        scope: schema.mcpServersTable.scope,
+        teamId: schema.mcpServersTable.teamId,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        sql`${schema.mcpServersTable.id} IN (${orgApp.mcpServerId}, ${teamApp.mcpServerId}, ${personalApp.mcpServerId})`,
+      );
+    const byId = new Map(servers.map((row) => [row.id, row]));
+    expect(byId.get(orgApp.mcpServerId as string)).toMatchObject({
+      scope: "org",
+      teamId: null,
+    });
+    expect(byId.get(teamApp.mcpServerId as string)).toMatchObject({
+      scope: "personal",
+      teamId: null,
+    });
+    expect(byId.get(personalApp.mcpServerId as string)).toMatchObject({
+      scope: "personal",
+      teamId: null,
+    });
+  });
+});
+
+describe("0488 app backing install scope before the startup conversion", () => {
+  test("an app with no policy yet takes the audience the conversion will grant it", async ({
+    makeApp,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    // On the first upgrade this migration runs before the startup conversion
+    // writes any grant. Read from grants alone, every app would get per-user
+    // installs; the old audience of its backing catalog decides instead.
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const orgApp = await makeApp({
+      authorId: author.id,
+      organizationId: org.id,
+      legacy: { scope: "org" },
+    });
+    const teamApp = await makeApp({
+      authorId: author.id,
+      organizationId: org.id,
+      legacy: { scope: "team", teams: [team.id] },
+    });
+    const personalApp = await makeApp({
+      authorId: author.id,
+      organizationId: org.id,
+      legacy: { scope: "personal" },
+    });
+    const apps = [orgApp, teamApp, personalApp];
+    await db.delete(schema.resourcePermissionPoliciesTable).where(
+      sql`${schema.resourcePermissionPoliciesTable.resource} = 'app' AND ${schema.resourcePermissionPoliciesTable.scope} IN (${sql.join(
+        apps.map((app) => sql`${app.id}`),
+        sql`, `,
+      )})`,
+    );
+    // Invert what the migration should write, so each row must move.
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope: "personal", teamId: null })
+      .where(eq(schema.mcpServersTable.id, orgApp.mcpServerId as string));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope: "team", teamId: team.id })
+      .where(eq(schema.mcpServersTable.id, teamApp.mcpServerId as string));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope: "org", teamId: null })
+      .where(eq(schema.mcpServersTable.id, personalApp.mcpServerId as string));
 
     await runDataMigration();
     await runDataMigration();

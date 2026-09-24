@@ -192,22 +192,40 @@ WHERE agent."id" = retired."old_id";
 -- An app's backing server takes its install scope from the app's own grants:
 -- one shared install (`org`) when they grant read to the whole organization
 -- or to a role, per-user installs (`personal`) otherwise. The server kept a
--- copy of the retired app scope. Idempotent.
+-- copy of the retired app scope. An app that has no permission policy yet
+-- (every app on the first upgrade: the startup conversion writes the grants
+-- after this migration) takes the audience that conversion will give it: an
+-- app whose backing catalog is visible to the organization gets role grants,
+-- so `org`; any other app gets `personal`. Idempotent.
 UPDATE "mcp_server" backing_server
 SET "scope" = derived."scope", "team_id" = NULL
 FROM (
   SELECT app."mcp_server_id" AS "server_id",
-    CASE WHEN EXISTS (
-      SELECT 1
-      FROM "resource_permission_policies" app_policy,
-        jsonb_array_elements(app_policy."grants") app_grant
-      WHERE app_policy."organization_id" = app."organization_id"
-        AND app_policy."resource" = 'app'
-        AND app_policy."scope" = app."id"::text
-        AND (app_grant->'actions') ? 'read'
-        AND app_grant->'subject'->>'type' IN ('organization', 'role')
-    ) THEN 'org' ELSE 'personal' END AS "scope"
+    CASE
+      WHEN EXISTS (
+        SELECT 1
+        FROM "resource_permission_policies" app_policy
+        WHERE app_policy."organization_id" = app."organization_id"
+          AND app_policy."resource" = 'app'
+          AND app_policy."scope" = app."id"::text
+      ) THEN
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM "resource_permission_policies" app_policy,
+            jsonb_array_elements(app_policy."grants") app_grant
+          WHERE app_policy."organization_id" = app."organization_id"
+            AND app_policy."resource" = 'app'
+            AND app_policy."scope" = app."id"::text
+            AND (app_grant->'actions') ? 'read'
+            AND app_grant->'subject'->>'type' IN ('organization', 'role')
+        ) THEN 'org' ELSE 'personal' END
+      WHEN backing_catalog."scope" = 'org' THEN 'org'
+      ELSE 'personal'
+    END AS "scope"
   FROM "apps" app
+  JOIN "mcp_server" app_server ON app_server."id" = app."mcp_server_id"
+  LEFT JOIN "internal_mcp_catalog" backing_catalog
+    ON backing_catalog."id" = app_server."catalog_id"
   WHERE app."mcp_server_id" IS NOT NULL
 ) derived
 WHERE backing_server."id" = derived."server_id"

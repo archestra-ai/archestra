@@ -277,7 +277,7 @@ describe("upgrade access preservation", () => {
                   })
                 : await legacyVisible({
                     isAdmin: await isAdminFor("agent"),
-                    object: agent,
+                    object: await storedAudience(schema.agentsTable, agent.id),
                     userId: principal.id,
                     teamIds: await junctionIds(
                       schema.agentTeamsTable,
@@ -311,7 +311,7 @@ describe("upgrade access preservation", () => {
                 })
               : await legacyVisible({
                   isAdmin: await isAdminFor("skill"),
-                  object: skill,
+                  object: await storedAudience(schema.skillsTable, skill.id),
                   userId: principal.id,
                   teamIds: await junctionIds(
                     schema.skillTeamsTable,
@@ -344,7 +344,10 @@ describe("upgrade access preservation", () => {
                     resource: "mcpServerInstallation",
                     action: "admin",
                   }),
-                  object: catalog,
+                  object: await storedAudience(
+                    schema.internalMcpCatalogTable,
+                    catalog.id,
+                  ),
                   userId: principal.id,
                   teamIds: await junctionIds(
                     schema.mcpCatalogTeamsTable,
@@ -633,6 +636,24 @@ async function legacyVisible(params: {
     default:
       return false;
   }
+}
+
+/**
+ * The stored pre-upgrade `scope` and author. The models now derive `scope`
+ * from grants for display, so the "before" pass must read the column itself.
+ */
+async function storedAudience(
+  table:
+    | typeof schema.agentsTable
+    | typeof schema.skillsTable
+    | typeof schema.internalMcpCatalogTable,
+  id: string,
+): Promise<{ scope: string; authorId: string | null }> {
+  const [row] = await db
+    .select({ scope: table.scope, authorId: table.authorId })
+    .from(table as typeof schema.agentsTable)
+    .where(eq(table.id, id));
+  return { scope: String(row.scope), authorId: row.authorId };
 }
 
 /** One side of a junction table, for the object on the other side. */

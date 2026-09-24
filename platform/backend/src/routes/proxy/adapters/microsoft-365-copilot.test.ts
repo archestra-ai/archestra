@@ -1,6 +1,5 @@
 import { ArchestraInternalErrorCode, TimeInMs } from "@archestra/shared";
-import { vi } from "vitest";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { OpenAi } from "@/types";
 import { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 

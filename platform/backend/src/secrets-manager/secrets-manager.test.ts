@@ -1,8 +1,7 @@
 import { SecretsManagerType } from "@archestra/shared";
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import SecretModel from "@/models/secret";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { DbSecretsManager } from "./db";
 import {

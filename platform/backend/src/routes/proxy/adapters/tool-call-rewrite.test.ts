@@ -9,7 +9,7 @@
  * failure mode being a silently malformed stream rather than a thrown error.
  */
 
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { anthropicAdapterFactory } from "./anthropic";
 import { openaiAdapterFactory } from "./openai";
 import { zhipuaiAdapterFactory } from "./zhipuai";

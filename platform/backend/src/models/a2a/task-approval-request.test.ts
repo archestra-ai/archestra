@@ -1,8 +1,8 @@
+import { describe, expect, test } from "vitest";
 import {
   type A2AArchestraApprovalRequest,
   A2AProtocolTaskState,
 } from "@/agents/a2a/a2a-protocol";
-import { describe, expect, test } from "@/test";
 import A2AContextModel from "./context";
 import A2ATaskModel from "./task";
 import A2ATaskApprovalRequestModel from "./task-approval-request";

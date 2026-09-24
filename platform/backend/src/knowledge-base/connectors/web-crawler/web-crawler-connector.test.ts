@@ -4,7 +4,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
 import { WebCrawlerConnector } from "./web-crawler-connector";
 

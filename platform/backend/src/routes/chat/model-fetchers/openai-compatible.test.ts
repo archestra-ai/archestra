@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { beforeEach, describe, expect, test } from "@/test";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 
 const mockFetch = vi.fn();

@@ -4,9 +4,9 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import ollamaProxyRoutes, { rewriteOllamaProxyUrl } from "./ollama";
 
 const API_PREFIX = "/v1/ollama";

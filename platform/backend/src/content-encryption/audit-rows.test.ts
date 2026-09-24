@@ -10,9 +10,9 @@ import {
   LOCKED_CHAT_REDACTED_MARKER,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 import { isContentEnvelope } from "@/utils/crypto";
 import {

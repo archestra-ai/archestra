@@ -5,7 +5,7 @@ import {
   MCP_DEPLOYMENT_STATES,
   type McpDeploymentState,
 } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   ALLOWED_ACTION_TRANSITIONS,
   assertActionTransition,

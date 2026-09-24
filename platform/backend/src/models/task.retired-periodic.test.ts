@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
+import { expect, test } from "vitest";
 import db, { schema } from "@/database";
 import { TaskModel } from "@/models";
-import { expect, test } from "@/test";
 
 /**
  * Renaming or retiring a periodic task leaves its seeded row behind: the

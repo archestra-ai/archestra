@@ -12,7 +12,7 @@
 
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { Anthropic, Bedrock, Gemini, OpenAi } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 import { azureResponsesAdapterFactory } from "./azure-responses";

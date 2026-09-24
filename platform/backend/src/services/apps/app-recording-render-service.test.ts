@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { useRouteTestApp } from "@/test/route-test-app";
 import {
   INTERNAL_RENDER_BASE,

@@ -1,5 +1,5 @@
 import client from "prom-client";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 describe("database pool metrics", () => {
   beforeEach(() => {

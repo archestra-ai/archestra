@@ -1,9 +1,8 @@
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createGithubCopilotFetch,
   githubCopilotTokenManager,
 } from "@/services/github-copilot-token";
-import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
 /**

@@ -1,5 +1,5 @@
+import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { afterEach, describe, expect, test } from "@/test";
 import type { AgentRuntime } from "@/types";
 import { extractFinalAnswer, resolveAgentRuntime } from "./pod-run";
 

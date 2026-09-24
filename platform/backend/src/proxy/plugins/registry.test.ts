@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import {
   type LlmProxyPlugin,
   LlmProxyPluginInitializer,

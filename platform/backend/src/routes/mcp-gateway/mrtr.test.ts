@@ -8,7 +8,7 @@
  * them is a cross-user or cross-call authorisation bug, not a protocol nit.
  */
 
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   buildInputRequiredResult,
   clientSupportsInputRequest,

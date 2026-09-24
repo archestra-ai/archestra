@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
-import { afterEach, describe, expect, test } from "@/test";
 import { authPlugin } from "./plugin";
 
 describe("HEAD route authentication", () => {

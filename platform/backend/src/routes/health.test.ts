@@ -1,6 +1,6 @@
+import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
-import { afterEach, describe, expect, test } from "@/test";
 import healthRoutes, { mapSandboxStatus } from "./health";
 
 describe("mapSandboxStatus", () => {

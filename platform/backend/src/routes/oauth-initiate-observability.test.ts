@@ -5,8 +5,8 @@ import { useRouteTestApp } from "@/test/route-test-app";
 // suite mocks @/logging to observe the warn the initiate handler emits.
 vi.mock("@/logging");
 
+import { describe, expect, test } from "vitest";
 import logger from "@/logging";
-import { describe, expect, test } from "@/test";
 import oauthRoutes from "./oauth";
 
 /**

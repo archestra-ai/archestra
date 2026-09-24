@@ -1,6 +1,5 @@
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import { onTestFinished, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type { Gemini } from "@/types";
 import {
   type GeminiRequestWithModel,

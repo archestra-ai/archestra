@@ -1,5 +1,5 @@
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { Bedrock } from "@/types";
 import { makeBedrockOpenaiAdapterFactory } from "./bedrock-openai";
 import type { OpenaiContext } from "./bedrock-openai-translator";

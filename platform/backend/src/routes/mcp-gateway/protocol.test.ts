@@ -10,8 +10,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 
 import { MCP_SKILLS_EXTENSION_ID } from "@archestra/shared";
+import { describe, expect, test } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import {
   buildDiscoverResult,
   buildGatewayServerCapabilities,

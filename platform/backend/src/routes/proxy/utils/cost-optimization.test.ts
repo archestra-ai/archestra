@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
 import { TiktokenTokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
 import {

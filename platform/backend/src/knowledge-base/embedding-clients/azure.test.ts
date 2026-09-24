@@ -1,6 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { useMswServer } from "@/test/msw";
 
 interface CapturedRequest {

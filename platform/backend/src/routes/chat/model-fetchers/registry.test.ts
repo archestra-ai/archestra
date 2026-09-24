@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
-import { beforeEach, describe, expect, test } from "@/test";
 import { testProviderApiKey } from "./registry";
 
 const mockFetch = vi.fn();

@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import { OrganizationModel, SkillMarketplaceRepoModel } from "@/models";
-import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import skillMarketplaceRoutes from "./skill-marketplace.routes";
 

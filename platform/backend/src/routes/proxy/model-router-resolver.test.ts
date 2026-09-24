@@ -1,7 +1,6 @@
 import { ApiError } from "@archestra/shared";
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { ModelModel } from "@/models";
-import { afterEach, describe, expect, test } from "@/test";
 import {
   buildRoutableModelId,
   parseProviderQualifiedModel,

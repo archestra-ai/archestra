@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import { perplexityAdapterFactory } from "@/routes/proxy/adapters/perplexity";
-import { describe, expect, test } from "@/test";
 import type { Perplexity } from "@/types";
 
 /**

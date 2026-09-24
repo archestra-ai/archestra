@@ -1,6 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
 import { TaskTypeSchema } from "@/types";
 import TaskModel from "./task";
 

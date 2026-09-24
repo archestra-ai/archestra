@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import skillRoutes from "./skill.routes";
 import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 

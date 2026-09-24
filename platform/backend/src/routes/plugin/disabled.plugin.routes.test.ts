@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import { useRouteTestApp } from "@/test/route-test-app";
 import pluginRoutes from "./plugin.routes";
 

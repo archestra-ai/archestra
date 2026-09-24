@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { probeAnthropicCredit } from "./anthropic-credit-probe";
 
 function jsonResponse(status: number, body: unknown): Response {

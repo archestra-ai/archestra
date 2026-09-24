@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import type { ConnectorSyncBatch, PermissionSnapshotYield } from "@/types";
 import {

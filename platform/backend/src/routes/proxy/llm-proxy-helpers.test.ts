@@ -8,10 +8,9 @@ import { randomUUID } from "node:crypto";
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import { describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
 // Mock prom-client (required by metrics)

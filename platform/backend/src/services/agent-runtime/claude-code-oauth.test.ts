@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { expect, test } from "@/test";
+import { expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import { claudeCodeOAuth } from "./claude-code-oauth";
 

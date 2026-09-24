@@ -1,7 +1,6 @@
 import type OpenAIProvider from "openai";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 
 vi.mock("@/observability");
 

@@ -1,5 +1,5 @@
 import type { WithImplicitCoercion } from "node:buffer";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { buildAttachmentsMessageParts } from "./a2a-helper";
 
 describe("buildAttachmentsMessageParts", () => {

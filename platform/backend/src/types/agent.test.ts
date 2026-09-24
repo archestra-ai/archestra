@@ -1,5 +1,5 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   BuiltInAgentConfigSchema,
   InsertAgentSchemaBase,

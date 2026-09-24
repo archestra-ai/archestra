@@ -1,5 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
   getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
@@ -47,6 +48,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
@@ -105,7 +107,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
       const currentOrganization =
         await OrganizationModel.getById(organizationId);
       if (!currentOrganization) {
@@ -161,9 +163,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           currentOrganization.iconLogo !== organization.iconLogo;
 
         if (appNameChanged || iconChanged) {
-          await ToolModel.syncArchestraBuiltInCatalog({
+          const renamedTools = await ToolModel.syncArchestraBuiltInCatalog({
             organization: organization,
           });
+          // A saved policy's `archestra` alias spells the old prefix.
+          if (renamedTools.length > 0)
+            await openappaBatteriesService.onCatalogPrefixesRenamed({
+              catalogId: ARCHESTRA_MCP_CATALOG_ID,
+              organizationId,
+              userId: user.id,
+              renamedTools,
+            });
         }
 
         // appName is baked into the built-in skills' stored rows (name, body,

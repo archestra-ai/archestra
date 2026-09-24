@@ -378,6 +378,8 @@ describe("battery helper bridge", () => {
     await makeTeam(organizationId, userId, { name: "twin" });
     await makeTeam(organizationId, userId, { name: "twin" });
     const outsider = await makeUser({ email: "carol@example.com" });
+    // A team row outliving its user's membership reaches no audience.
+    await makeTeamMember(parent.id, outsider.id);
 
     const ask = async (artifact: Record<string, string>) => {
       const response = await consult({

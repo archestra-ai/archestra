@@ -1061,6 +1061,13 @@ class TeamModel {
         schema.usersTable,
         eq(schema.teamMembersTable.userId, schema.usersTable.id),
       )
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.usersTable.id),
+          eq(schema.membersTable.organizationId, params.organizationId),
+        ),
+      )
       .where(inArray(schema.teamMembersTable.teamId, subtree))
       .limit(params.limit);
     return { kind: "found", emails: rows.map((row) => row.email) };

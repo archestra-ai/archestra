@@ -1247,7 +1247,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     })
                   : unpinnedRows.length > 0 || pinnedRows.length === 0
                     ? renderAgentSection({
-                        title: "Agents",
                         sectionRows: unpinnedRows,
                         sectionPagination: {
                           pageIndex,

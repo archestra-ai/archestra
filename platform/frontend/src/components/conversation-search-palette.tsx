@@ -352,8 +352,18 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (pathname === `/chat/${conversationId}`) {
-        router.push("/chat");
+      const deletedConversation = conversations.find(
+        (conversation) => conversation.id === conversationId,
+      );
+      if (
+        deletedConversation &&
+        pathname === conversationHref(deletedConversation).split("?")[0]
+      ) {
+        router.push(
+          deletedConversation.origin === "openappa"
+            ? "/openappa/configure"
+            : "/chat",
+        );
       }
     },
     [deleteMutation, conversations, pathname, router],

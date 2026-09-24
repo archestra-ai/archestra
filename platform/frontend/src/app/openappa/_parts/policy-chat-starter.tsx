@@ -4,6 +4,7 @@ import { OPENAPPA_CONFIG_SUGGESTED_PROMPTS } from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   startTransition,
   useCallback,
@@ -22,28 +23,35 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConversation, useCreateConversation } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
+import {
+  setPendingProjectChatHandoff,
+  takePendingProjectChatHandoff,
+} from "@/lib/chat/pending-project-chat-handoff";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
 export function PolicyChatStarter({
   initialPrompt,
+  conversationId,
   onConversationStart,
 }: {
   initialPrompt?: string;
+  conversationId?: string;
   onConversationStart?: () => void;
 }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [suggestionPreview, setSuggestionPreview] = useState<string | null>(
     null,
   );
-  const [conversationId, setConversationId] = useState<string>();
   const pendingPrompt = useRef<string | null>(null);
   const autoStarted = useRef(false);
   const { hasAnyApiKey, isLoading, isLoadError, refetch } = useHasAnyApiKey();
   const models = useLlmModels({ enabled: hasAnyApiKey });
   const createConversation = useCreateConversation();
   const conversation = useConversation(conversationId);
+  const isPolicyConversation = conversation.data?.origin === "openappa";
   const selectedModel = conversation.data?.modelId ?? "";
   const modelName = models.data?.find(
     (model) => model.dbId === selectedModel,
@@ -51,8 +59,20 @@ export function PolicyChatStarter({
   const session = useChatSession({
     conversationId,
     initialMessages: conversation.data?.messages as UIMessage[] | undefined,
-    enabled: Boolean(conversation.data),
+    enabled: isPolicyConversation,
   });
+
+  useEffect(() => {
+    if (conversationId && conversation.data && !isPolicyConversation) {
+      router.replace(`/chat/${encodeURIComponent(conversationId)}`);
+    }
+  }, [conversationId, conversation.data, isPolicyConversation, router]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const handoff = takePendingProjectChatHandoff(conversationId);
+    if (handoff) pendingPrompt.current = handoff.prompt;
+  }, [conversationId]);
 
   useEffect(() => {
     if (!session || !pendingPrompt.current) return;
@@ -84,35 +104,44 @@ export function PolicyChatStarter({
         return;
       }
       try {
-        pendingPrompt.current = text;
         const created = await createConversation.mutateAsync({
           origin: "openappa",
         });
         if (!created)
           throw new Error("Could not start the policy conversation");
+        setPendingProjectChatHandoff({
+          conversationId: created.id,
+          prompt: text,
+        });
         onConversationStart?.();
-        startTransition(() => setConversationId(created.id));
+        router.push(`/openappa/${encodeURIComponent(created.id)}`);
       } catch (cause) {
-        pendingPrompt.current = null;
         setError(
           cause instanceof Error ? cause.message : "Could not start chat",
         );
       }
     },
-    [session, createConversation, onConversationStart],
+    [session, createConversation, onConversationStart, router],
   );
 
   useEffect(() => {
     if (
       autoStarted.current ||
       !initialPrompt ||
+      conversationId ||
       !hasAnyApiKey ||
       createConversation.isPending
     )
       return;
     autoStarted.current = true;
     void submit(initialPrompt);
-  }, [initialPrompt, hasAnyApiKey, createConversation.isPending, submit]);
+  }, [
+    initialPrompt,
+    conversationId,
+    hasAnyApiKey,
+    createConversation.isPending,
+    submit,
+  ]);
 
   const composer = (active: boolean) => (
     <ArchestraPromptInput

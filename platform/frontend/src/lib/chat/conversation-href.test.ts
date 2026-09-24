@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
 import { conversationHref } from "./conversation-href";
 
-test("policy configuration sessions reopen in chat", () => {
+test("policy configuration sessions reopen in the policy workspace", () => {
   expect(conversationHref({ id: "policy-1", origin: "openappa" })).toBe(
-    "/chat/policy-1",
+    "/openappa/policy-1",
   );
 });
 

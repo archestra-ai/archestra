@@ -8,7 +8,6 @@ import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-t
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
 import ToolModel from "@/models/tool";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import type { BatteryInstallStatus } from "@/types/openappa-batteries";
 import type {
   CoverageEntitiesPage,
@@ -21,7 +20,6 @@ import type {
   CoverageToolsQuery,
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
-import { openappaDeclarations } from "./declarations";
 
 /**
  * Which rule of the policy governs each tool reachable through a visible
@@ -46,12 +44,13 @@ class OpenAppaCoverageService {
       ...params,
       includeAutoModeTools: params.entityId !== undefined,
     });
+    const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
     const reachable = tools
       .map((row) => row.tool)
-      .filter(
-        (tool) =>
-          !params.entityId ||
-          tool.agents.some((agent) => agent.id === params.entityId),
+      .filter((tool) =>
+        params.entityId
+          ? tool.agents.some((agent) => agent.id === params.entityId)
+          : visibleCatalogIds.has(tool.catalogId),
       );
     const servers = [
       ...new Map(
@@ -107,7 +106,8 @@ class OpenAppaCoverageService {
   ): Promise<CoverageEntitiesPage> {
     const { entities } = await buildReport(params.organizationId, {
       ...params,
-      includeAutoModeTools: true,
+      // Server rows count inventory, not which Auto-mode agents can reach it.
+      includeAutoModeTools: params.type !== "mcp_server",
     });
     const search = params.search?.toLowerCase();
     return page(
@@ -137,7 +137,7 @@ type CoverageVisibility = {
   userId?: string;
   agentTypes?: Array<"agent" | "mcp_gateway">;
   excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
-  /** Registry entries this caller can see; only used for entity rows. */
+  /** Registry entries this caller can see directly. */
   visibleCatalogIds?: string[];
   /** Resolve the current viewer's dynamic Auto-mode tool access. */
   includeAutoModeTools?: boolean;
@@ -155,15 +155,8 @@ async function buildReport(
   organizationId: string,
   visibility?: CoverageVisibility,
 ): Promise<Report> {
-  // The declarations recompose a stale composition, so the effective row read
-  // after them answers the same root revision.
-  const declarations =
-    await openappaBatteriesService.policyDeclarations(organizationId);
-  const effective =
-    await openappaBatteriesService.getEffectivePolicy(organizationId);
-  const root = await guardrailsPolicyService.get(organizationId);
-  const [resolution, inventory] = await Promise.all([
-    openappaDeclarations.resolve({ organizationId, content: root.content }),
+  const [snapshot, inventory] = await Promise.all([
+    openappaBatteriesService.coverageSnapshot(organizationId),
     ToolModel.findCoverageInventory(
       organizationId,
       visibility?.userId
@@ -176,9 +169,10 @@ async function buildReport(
         : undefined,
     ),
   ]);
-  const refused = effective.lastError !== null;
+  const { resolution, rootContent } = snapshot;
+  const refused = snapshot.lastError !== null;
   const statusOf = new Map<string, BatteryInstallStatus>(
-    declarations.batteries.map((battery) => [
+    snapshot.batteries.map((battery) => [
       battery.name,
       refused ? "refused" : battery.status,
     ]),
@@ -186,8 +180,8 @@ async function buildReport(
 
   // Root rules in text order, then every battery's in include order.
   const candidates: Candidate[] = [];
-  const headerLines = toolHeaderLines(root.content);
-  const rootEntries = toolEntries(root.content);
+  const headerLines = toolHeaderLines(rootContent);
+  const rootEntries = toolEntries(rootContent);
   const rootLines =
     headerLines.length === rootEntries.length ? headerLines : [];
   const fallbackLine = refused
@@ -346,7 +340,7 @@ async function buildReport(
       : {
           ...base,
           kind: "unlisted",
-          policySource: effective.rootRevision === 0 ? "built_in" : "fallback",
+          policySource: snapshot.rootRevision === 0 ? "built_in" : "fallback",
           rule: null,
           fallbackLine,
           unlisted: true,

@@ -41,13 +41,14 @@ import {
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { batteryDisplayName } from "./_parts/battery-display-name";
 import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
+import { BATTERY_STATUS } from "./_parts/battery-status";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
 import {
   annotationDecorations,
-  BATTERY_STATUS_BADGES,
   focusPolicyLine,
   policyAnnotations,
 } from "./_parts/policy-decorations";
+import { POLICY_EDITOR_OPTIONS } from "./_parts/policy-editor-options";
 
 export function GuardrailsPolicyEditor({
   readOnly = false,
@@ -109,7 +110,7 @@ export function GuardrailsPolicyEditor({
                 value: battery.entry,
                 label: batteryDisplayName(battery.name),
                 description:
-                  BATTERY_STATUS_BADGES[
+                  BATTERY_STATUS[
                     declarations.data?.lastError ? "refused" : battery.status
                   ].label,
                 disabled: battery.status === "unavailable",
@@ -436,16 +437,10 @@ function AnnotatedEditor({
       onMount={setEditor}
       onChange={(value) => onChange(value ?? "")}
       options={{
+        ...POLICY_EDITOR_OPTIONS,
         readOnly,
         ariaLabel: "Organization guardrails policy",
-        minimap: { enabled: false },
-        fontSize: 14,
-        lineNumbers: "on",
         glyphMargin: true,
-        scrollBeyondLastLine: false,
-        wordWrap: "on",
-        padding: { top: 16, bottom: 16 },
-        automaticLayout: true,
       }}
     />
   );

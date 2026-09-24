@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import type { PolicyBattery } from "@/lib/openappa-batteries.query";
 import { cn } from "@/lib/utils";
 import { batteryDisplayName } from "./battery-display-name";
+import { BATTERY_STATUS } from "./battery-status";
 
 type BatteryStatus = PolicyBattery["status"];
 
@@ -19,16 +20,6 @@ type BatteryStatus = PolicyBattery["status"];
  * Policy source tone for the tool breakdown in an entity's Details dialog.
  */
 type CoverageTone = "critical" | "warning" | "ok";
-
-const BATTERY_STATUS_TONES: Record<BatteryStatus, CoverageTone> = {
-  active: "ok",
-  missing_credentials: "critical",
-  naming_conflict: "critical",
-  server_missing: "warning",
-  unrouted: "warning",
-  refused: "critical",
-  unavailable: "critical",
-};
 
 /**
  * The source of a tool's matching policy rule, or its fallback.
@@ -51,7 +42,7 @@ export function GovernedByPill({
 }) {
   const tone =
     governedBy.source === "battery"
-      ? BATTERY_STATUS_TONES[governedBy.status]
+      ? BATTERY_STATUS[governedBy.status].severity
       : null;
   const Icon =
     governedBy.source === "battery"

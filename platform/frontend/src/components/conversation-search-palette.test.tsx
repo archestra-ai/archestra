@@ -735,6 +735,26 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/conv-1");
   });
 
+  it("reopens a policy conversation in the policy workspace", () => {
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "policy-1",
+          title: "Review policy",
+          origin: "openappa",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.click(screen.getByTestId("cmd-item-conv-policy-1"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy-1");
+  });
+
   it("navigates to /chat when selecting new chat", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 

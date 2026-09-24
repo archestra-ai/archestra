@@ -6,5 +6,8 @@ export function conversationHref(conversation: {
   if (conversation.scheduledRun) {
     return `/chat/${conversation.id}?scheduleTriggerId=${conversation.scheduledRun.triggerId}&scheduleRunId=${conversation.scheduledRun.id}`;
   }
+  if (conversation.origin === "openappa") {
+    return `/openappa/${encodeURIComponent(conversation.id)}`;
+  }
   return `/chat/${conversation.id}`;
 }

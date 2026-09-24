@@ -152,6 +152,25 @@ class OpenAppaBatteriesService {
     };
   }
 
+  /** The one root and resolved composition used to classify coverage rows. */
+  async coverageSnapshot(organizationId: string): Promise<{
+    rootContent: string;
+    resolution: PolicyResolution;
+    batteries: PolicyBatteryView[];
+    rootRevision: number;
+    lastError: string | null;
+  }> {
+    const { root, resolution, batteries, policy } =
+      await this.current(organizationId);
+    return {
+      rootContent: root.content,
+      resolution,
+      batteries,
+      rootRevision: policy.rootRevision,
+      lastError: policy.lastError,
+    };
+  }
+
   /** Show the exact policy bytes an include currently resolves to. */
   async policySource(organizationId: string, entry: string) {
     const root = await guardrailsPolicyService.get(organizationId);
@@ -1035,6 +1054,7 @@ class OpenAppaBatteriesService {
       resolution.entries.flatMap((entry) => entry.battery?.namespaces ?? []),
     );
     return {
+      root,
       resolution,
       batteries,
       rows: [...rows.values()],
@@ -1509,6 +1529,7 @@ type CatalogPrefixes = {
 type PlannedBattery = PolicyBatteryView;
 
 type PlannedComposition = {
+  root: GuardrailsPolicy;
   resolution: PolicyResolution;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];

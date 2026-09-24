@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useBatteryPolicySource } from "@/lib/openappa-batteries.query";
 import { batteryDisplayName } from "./battery-display-name";
 import { focusPolicyLine } from "./policy-decorations";
+import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
 /** Read-only source for the exact battery include linked from a tool rule. */
 export function BatteryPolicySourceView({
@@ -60,15 +61,9 @@ export function BatteryPolicySourceView({
         value={source.data.content}
         onMount={onMount}
         options={{
+          ...POLICY_EDITOR_OPTIONS,
           readOnly: true,
           ariaLabel: `${name} battery policy TOML`,
-          minimap: { enabled: false },
-          fontSize: 14,
-          lineNumbers: "on",
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          padding: { top: 16, bottom: 16 },
-          automaticLayout: true,
         }}
       />
     </section>

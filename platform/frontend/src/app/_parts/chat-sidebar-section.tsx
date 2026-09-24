@@ -199,9 +199,13 @@ export function ChatSidebarSection({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const currentConversationId =
-    pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
+    conversations.find(
+      (conversation) =>
+        conversationHref(conversation).split("?")[0] === pathname,
+    )?.id ??
+    (pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
-      : null;
+      : null);
   const currentRunTaskId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
@@ -297,7 +301,9 @@ export function ChatSidebarSection({
   const handleDeleteConversation = async (id: string) => {
     // Navigate away before deleting to avoid "conversation not found" flash
     if (currentConversationId === id) {
-      router.push("/chat");
+      router.push(
+        pathname.startsWith("/openappa/") ? "/openappa/configure" : "/chat",
+      );
     }
 
     try {

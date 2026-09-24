@@ -32,21 +32,14 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const [{ success: isCatalogAdmin }, visibility] = await Promise.all([
-        hasPermission({ mcpServerInstallation: ["admin"] }, request.headers),
-        coverageVisibility(request.user.id, request.organizationId),
-      ]);
-      const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds(
-        {
-          userId: request.user.id,
-          isAdmin: isCatalogAdmin,
-          organizationId: request.organizationId,
-        },
+      const visibility = await coverageVisibility(
+        request.user.id,
+        request.organizationId,
+        request.headers,
       );
       return openappaCoverageService.entities({
         organizationId: request.organizationId,
         ...visibility,
-        visibleCatalogIds,
         ...request.query,
       });
     },
@@ -64,19 +57,33 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async (request) =>
       openappaCoverageService.tools({
         organizationId: request.organizationId,
-        ...(await coverageVisibility(request.user.id, request.organizationId)),
+        ...(await coverageVisibility(
+          request.user.id,
+          request.organizationId,
+          request.headers,
+        )),
         ...request.query,
       }),
   );
 };
 
-async function coverageVisibility(userId: string, organizationId: string) {
-  const checker = await getAgentTypePermissionChecker({
+async function coverageVisibility(
+  userId: string,
+  organizationId: string,
+  headers: Parameters<typeof hasPermission>[1],
+) {
+  const [checker, { success: isCatalogAdmin }] = await Promise.all([
+    getAgentTypePermissionChecker({ userId, organizationId }),
+    hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+  ]);
+  const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds({
     userId,
+    isAdmin: isCatalogAdmin,
     organizationId,
   });
   return {
     userId,
+    visibleCatalogIds,
     agentTypes: checker
       .getAgentTypesWithPermission("read")
       .filter(

@@ -335,6 +335,100 @@ test("filters tool policy sources and links each rule to its TOML line", async (
   });
 });
 
+test("renders repeated selectors from separate policy rules without duplicate row keys", async () => {
+  const base = {
+    toolId: "tool-shared",
+    catalogId: serverId,
+    catalogName: "GitHub",
+    catalogIcon: null,
+    prefix: "github",
+    name: "get_file_contents",
+    fullName: "github__get_file_contents",
+    kind: "read",
+    policySource: "root",
+    fallbackLine: null,
+    unlisted: false,
+    enforced: true,
+    agents: [],
+    rule: {
+      source: "root",
+      battery: null,
+      batteryEntry: null,
+      batteryStatus: null,
+      line: 3,
+      name: "github__get_file_contents",
+      selector: "trust >= verified",
+      delta: {},
+      requires: {},
+      annotator: null,
+      enforced: true,
+    },
+  };
+  const rows = [
+    base,
+    { ...base, rule: { ...base.rule, line: 8 } },
+    {
+      ...base,
+      policySource: "battery",
+      rule: {
+        ...base.rule,
+        source: "battery",
+        battery: "github",
+        batteryEntry: "batteries/github/appa.toml",
+        batteryStatus: "active",
+        line: 3,
+      },
+    },
+  ];
+  server.use(
+    http.get(`${origin}/api/openappa/coverage/tools`, () =>
+      HttpResponse.json({
+        data: rows,
+        servers: [{ id: serverId, name: "GitHub", icon: null }],
+        batteries: ["github"],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: rows.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      }),
+    ),
+  );
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ToolTable catalogId={serverId} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findAllByText("when trust >= verified")).toHaveLength(
+      3,
+    );
+    expect(
+      screen.getByRole("link", { name: "View source for Root rule at line 3" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "View source for Root rule at line 8" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "View source for GitHub at line 3" }),
+    ).toBeVisible();
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(
+      /same key|unique "key"/i,
+    );
+  } finally {
+    consoleError.mockRestore();
+  }
+});
+
 test("does not offer source links for a refused composition", async () => {
   server.use(
     http.get(`${origin}/api/openappa/coverage/tools`, () =>

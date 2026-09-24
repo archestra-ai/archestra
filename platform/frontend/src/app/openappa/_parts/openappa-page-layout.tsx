@@ -10,7 +10,12 @@ import { BatteriesUploadAction } from "./batteries-panel";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isChat = pathname === "/openappa/configure";
+  const isChat =
+    pathname === "/openappa/configure" ||
+    (pathname.startsWith("/openappa/") &&
+      !["/openappa/batteries", "/openappa/policy", "/openappa/chat"].includes(
+        pathname,
+      ));
 
   return (
     <PageLayout

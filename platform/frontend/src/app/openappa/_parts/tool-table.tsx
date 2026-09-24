@@ -29,6 +29,18 @@ type ToolTableProps = {
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 10 };
 
+/** Every policy row has its own table identity, including repeated selectors. */
+function coverageToolRowId(tool: CoverageTool, index: number): string {
+  return JSON.stringify([
+    tool.toolId,
+    tool.rule?.source ?? tool.policySource,
+    tool.rule?.batteryEntry,
+    tool.rule?.line,
+    tool.rule?.selector,
+    index,
+  ]);
+}
+
 /** Tools reachable through an entity, with the policy source for each rule. */
 export function ToolTable({
   catalogId,
@@ -174,7 +186,7 @@ export function ToolTable({
       <DataTable
         columns={columns}
         data={tools.data?.data ?? []}
-        getRowId={(tool) => `${tool.toolId}:${tool.rule?.selector ?? ""}`}
+        getRowId={coverageToolRowId}
         manualPagination
         pagination={{
           ...pagination,

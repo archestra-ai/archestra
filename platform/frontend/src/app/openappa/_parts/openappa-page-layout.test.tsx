@@ -41,8 +41,11 @@ test.each([
   }
 });
 
-test("configuration chat replaces the tabs and links back to policy", () => {
-  vi.mocked(usePathname).mockReturnValue("/openappa/configure");
+test.each([
+  "/openappa/configure",
+  "/openappa/conversation-1",
+])("configuration chat at %s replaces the tabs and links back to policy", (pathname) => {
+  vi.mocked(usePathname).mockReturnValue(pathname);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );

@@ -72,6 +72,69 @@ describe("GET /api/openappa/coverage/tools", () => {
     });
   });
 
+  test("hides another member's personal catalog unless a visible agent reaches its tool", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId, { role: "member" });
+    const privateCatalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      scope: "personal",
+      name: "Private server",
+    });
+    const privateTool = await makeTool({
+      catalogId: privateCatalog.id,
+      name: "private__lookup",
+      rawName: "lookup",
+    });
+    const visibleCatalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Shared server",
+    });
+    await makeTool({
+      catalogId: visibleCatalog.id,
+      name: "shared__lookup",
+      rawName: "lookup",
+    });
+
+    const viewer = await makeUser();
+    await makeMember(viewer.id, ctx.organizationId, { role: "member" });
+    ctx.user = viewer;
+
+    const initial = await tools();
+    expect(initial.data.map((tool) => tool.fullName)).toEqual([
+      "shared__lookup",
+    ]);
+    expect(initial.servers.map((server) => server.id)).toEqual([
+      visibleCatalog.id,
+    ]);
+    expect(initial.pagination).toMatchObject({ total: 1 });
+    expect(await tools(`?catalogId=${privateCatalog.id}`)).toMatchObject({
+      data: [],
+      servers: [{ id: visibleCatalog.id }],
+      pagination: { total: 0 },
+    });
+
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "Shared agent",
+    });
+    await makeAgentTool(agent.id, privateTool.id);
+    expect((await tools()).data.map((tool) => tool.fullName)).toEqual([
+      "shared__lookup",
+    ]);
+    expect((await tools(`?catalogId=${privateCatalog.id}`)).data).toEqual([]);
+    expect((await tools(`?entityId=${agent.id}`)).data).toEqual([
+      expect.objectContaining({ fullName: "private__lookup" }),
+    ]);
+  });
+
   test("lists unlisted tools first, then those not enforced, and pages them", async ({
     makeInternalMcpCatalog,
     makeTool,

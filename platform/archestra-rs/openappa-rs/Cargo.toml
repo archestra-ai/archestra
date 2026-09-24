@@ -8,15 +8,24 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = ["telemetry"]
+telemetry = ["dep:opentelemetry", "dep:opentelemetry-appender-tracing", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing", "dep:tracing-opentelemetry", "dep:tracing-subscriber"]
+
 [dependencies]
-# Pinned to OpenAPPA main after the merge of #402 and #401 (the consult
-# recorder and url diagnostics; on top of #394's annotator-only jev battery)
-# on top of v0.24.0. Re-pin to the first release that includes it. The embedded
-# reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7468837da348135cc018fc24cc82e3d18318e1e6" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7468837da348135cc018fc24cc82e3d18318e1e6" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7468837da348135cc018fc24cc82e3d18318e1e6", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7468837da348135cc018fc24cc82e3d18318e1e6" }
+# Includes #430's value-safe telemetry. The embedding host owns the exporters.
+# The embedded reporting helper still requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5555b90ba963ef968d0778637b77de53d0cb9a0c" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5555b90ba963ef968d0778637b77de53d0cb9a0c" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5555b90ba963ef968d0778637b77de53d0cb9a0c", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5555b90ba963ef968d0778637b77de53d0cb9a0c" }
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry-appender-tracing = { version = "0.32", optional = true }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["http-proto", "logs", "metrics", "reqwest-blocking-client", "trace"], optional = true }
+opentelemetry_sdk = { version = "0.32", features = ["logs", "metrics", "trace"], optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-opentelemetry = { version = "0.33", default-features = false, optional = true }
+tracing-subscriber = { version = "0.3", features = ["registry"], optional = true }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -31,6 +40,9 @@ tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
 
 [dev-dependencies]
+axum = "0.8"
+prost = "0.14"
+opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic-messages", "trace", "logs", "metrics"] }
 # A paused clock: the connection-wait test does not spend its thirty seconds.
 tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"

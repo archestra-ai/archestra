@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -174,6 +175,18 @@ type ChildEndOutcome =
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+
+/** Flush only an already-loaded addon after requests and workers drain. */
+export async function flushOpenappaTelemetry(): Promise<void> {
+  if (!native) return;
+  try {
+    await (await native).flushOpenappaTelemetry();
+  } catch {
+    // Export errors can contain endpoint credentials. Keep shutdown best-effort.
+    logger.warn("OpenAPPA telemetry flush failed");
+  }
+}
+
 export function openappaYellEnabled(): boolean {
   return config.openappa.enabled && config.openappa.yellEnabled;
 }
@@ -263,6 +276,13 @@ async function binding(content: string) {
         ? {
             endpoint: "https://appa-yell-wkjbuewj5a-ew.a.run.app",
             hostname: new URL(config.frontendBaseUrl).hostname,
+          }
+        : undefined,
+      config.observability.otel.openappaEnabled
+        ? {
+            tracesEndpoint: config.observability.otel.traceExporter.url,
+            headers: config.observability.otel.traceExporter.headers,
+            instanceId: `${hostname()}:${process.pid}`,
           }
         : undefined,
     );

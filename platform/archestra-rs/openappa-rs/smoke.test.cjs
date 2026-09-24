@@ -108,7 +108,23 @@ builtin = "hitl"
   const ledgerName = `openappa-smoke-${randomUUID()}`;
   const ledgerUrl = new URL(databaseUrl);
   ledgerUrl.searchParams.set('application_name', ledgerName);
-  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
+  const telemetry = [];
+  const collector = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', chunk => chunks.push(chunk));
+    request.on('end', () => {
+      telemetry.push({ path: request.url, auth: request.headers.authorization, body: Buffer.concat(chunks) });
+      response.writeHead(200, { 'content-type': 'application/x-protobuf' });
+      response.end();
+    });
+  });
+  await new Promise(resolve => collector.listen(0, '127.0.0.1', resolve));
+  t.after(() => collector.close());
+  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'), undefined, {
+    tracesEndpoint: `http://127.0.0.1:${collector.address().port}/v1/traces`,
+    headers: { Authorization: 'Bearer native-test-only' },
+    instanceId: 'native-smoke:1',
+  });
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
@@ -885,5 +901,23 @@ builtin = "hitl"
       () => restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }),
       /interrupted processing/,
     );
+  });
+
+  await t.test('native initialization and flush export all three signals without raw values', async () => {
+    const session = scope();
+    const marker = 'native-raw-value-must-not-leave';
+    assert.equal((await call(session, 'telemetry-call', 'read_plain', { secret: marker })).decision, 'allow_call');
+    await result(session, 'telemetry-call', marker);
+    await native.flushOpenappaTelemetry();
+    assert.deepEqual([...new Set(telemetry.map(record => record.path))].sort(), ['/v1/logs', '/v1/metrics', '/v1/traces']);
+    for (const record of telemetry) {
+      assert.equal(record.auth, 'Bearer native-test-only');
+      assert.equal(record.body.includes(marker), false);
+      assert.equal(record.body.includes('native-smoke:1'), true);
+    }
+    // The Rust collector test decodes these payloads and checks exact values.
+    assert.ok(telemetry.some(record => record.path === '/v1/metrics' && record.body.includes('appa.policy.decisions')));
+    assert.ok(telemetry.some(record => record.path === '/v1/traces' && record.body.includes('appa.policy.check')));
+    assert.ok(telemetry.some(record => record.path === '/v1/logs' && record.body.includes('appa.policy.decision')));
   });
 });

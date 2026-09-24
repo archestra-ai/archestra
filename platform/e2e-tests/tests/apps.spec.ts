@@ -1,4 +1,8 @@
-import { DEFAULT_TEAM_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "../consts";
+import {
+  ADMIN_EMAIL,
+  DEFAULT_TEAM_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "../consts";
 import { goToPage } from "../fixtures";
 import {
   APP_SDK_JSON_SERVER_TASK_COUNT,
@@ -22,6 +26,7 @@ const SDK_PROBE_HTML = `<!DOCTYPE html>
 <head><meta charset="UTF-8" /><title>e2e SDK probe</title></head>
 <body>
   <h1 id="greeting">Connecting…</h1>
+  <p id="viewer-email">Waiting for viewer email…</p>
   <p id="status">Waiting for the runtime bridge…</p>
   <script>
     (async () => {
@@ -31,6 +36,7 @@ const SDK_PROBE_HTML = `<!DOCTYPE html>
         if (window.archestra && window.archestra.user && window.archestra.user.name) {
           greeting.textContent = "Hello, " + window.archestra.user.name;
         }
+        document.getElementById("viewer-email").textContent = window.archestra.user.email || "Email missing";
         await window.archestra.storage.user.get("e2e-probe");
         status.textContent = "Ready.";
       } catch (err) {
@@ -100,6 +106,7 @@ test("create an app from a template and run it standalone", async ({
     await expect(
       appFrame.getByRole("heading", { name: /^Hello, / }),
     ).toBeVisible();
+    await expect(appFrame.locator("#viewer-email")).toHaveText(ADMIN_EMAIL);
 
     const diagnostics = await page.evaluate(
       () =>

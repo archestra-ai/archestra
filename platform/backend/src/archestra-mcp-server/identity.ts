@@ -1,10 +1,10 @@
 import { TOOL_WHOAMI_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
+import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   defineArchestraTool,
   defineArchestraTools,
-  EmptyToolArgsSchema,
   structuredSuccessResult,
 } from "./helpers";
 

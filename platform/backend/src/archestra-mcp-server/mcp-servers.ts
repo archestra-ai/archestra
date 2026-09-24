@@ -63,12 +63,12 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
+import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
   deduplicateLabels,
   defineArchestraTool,
   defineArchestraTools,
-  EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
   successResult,

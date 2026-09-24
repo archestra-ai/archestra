@@ -87,8 +87,6 @@ type ArchestraToolDefinitionInput<
   TSchema extends ZodType = ZodType,
 > = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
-export const EmptyToolArgsSchema = z.strictObject({});
-
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],

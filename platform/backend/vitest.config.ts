@@ -120,7 +120,7 @@ export default defineConfig({
      *
      * DB state stays per-file either way (setup.ts):
      * - beforeAll: creates PGlite from the migrated snapshot ONCE per file
-     * - beforeEach: truncates tables (fast) instead of recreating DB
+     * - beforeEach: truncates after DB access, skipping pure tests
      */
 
     // Forks (child processes), not threads. PGlite is a WASM module; running

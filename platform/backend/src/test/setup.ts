@@ -3,7 +3,7 @@
  *
  * Performance Optimizations Applied:
  * 1. Database and migrations created ONCE per test file (beforeAll), not per test
- * 2. Tables are truncated between tests (beforeEach), much faster than recreating DB
+ * 2. Tables are truncated after tests that accessed the DB; pure tests skip it
  * 3. PGlite instance is reused across all tests in a file
  * 4. Sentry is disabled to prevent data transmission during tests
  *
@@ -60,6 +60,9 @@ process.setMaxListeners(20);
 
 // Module-level variables to persist across tests within a file
 let pgliteClient: PGlite | null = null;
+// Tests that never issue SQL leave the database unchanged, so the next test
+// can skip truncating hundreds of tables.
+let databaseTouched = false;
 // Pristine config snapshot for the per-test restore (see beforeEach).
 // Captured HERE at setup-module scope — setup files evaluate before any test
 // file's module code in the worker, so a test file that mutates config (or
@@ -120,10 +123,8 @@ beforeAll(async () => {
       loadDataDir: snapshot,
       extensions: { vector },
     });
-    testDb = drizzle({ client: pgliteClient });
   } else {
     pgliteClient = new PGlite("memory://", { extensions: { vector } });
-    testDb = drizzle({ client: pgliteClient });
     for (const migrationSql of getMigrationsSql()) {
       await pgliteClient.exec(migrationSql);
     }
@@ -134,6 +135,8 @@ beforeAll(async () => {
   // (e.g. a `window` for the app SDK) would otherwise race the detection and
   // send PGlite down the browser path mid-init.
   await pgliteClient.waitReady;
+  trackDatabaseAccess(pgliteClient);
+  testDb = drizzle({ client: pgliteClient });
 
   // Set the test database via the internal setter. The module's default
   // export is a forwarding Proxy over getDb(), so consumers — including
@@ -147,12 +150,12 @@ beforeAll(async () => {
   dbModule.__setTestDb(
     testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
   );
+  // Preserve the existing first-test reset: migrations may leave seed rows in
+  // the snapshot, and a file-level hook may access the database before tests.
+  databaseTouched = true;
 });
 
-/**
- * Clean up tables before each test to ensure test isolation.
- * Using TRUNCATE CASCADE is the fastest way to clear all data.
- */
+/** Reset the database only after a test (or file-level hook) accessed it. */
 beforeEach(async () => {
   if (!pgliteClient) {
     throw new Error("Database not initialized. Did beforeAll run?");
@@ -175,24 +178,27 @@ beforeEach(async () => {
     enterpriseTier.setUserCountForTesting(0);
   }
 
-  // Get all user tables from the database (excluding system tables)
-  const tablesResult = await pgliteClient.query<{ tablename: string }>(`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public'
-    AND tablename NOT LIKE 'drizzle_%'
-  `);
+  if (databaseTouched) {
+    // Get all user tables from the database (excluding system tables)
+    const tablesResult = await pgliteClient.query<{ tablename: string }>(`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public'
+      AND tablename NOT LIKE 'drizzle_%'
+    `);
 
-  const tables = tablesResult.rows.map((row) => row.tablename);
+    const tables = tablesResult.rows.map((row) => row.tablename);
 
-  if (tables.length > 0) {
-    // Use TRUNCATE ... CASCADE for all tables at once
-    // This is the fastest way to clear all data while respecting FK constraints
-    const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
-    await pgliteClient.exec(truncateSql);
+    if (tables.length > 0) {
+      // CASCADE also clears dependent tables, and RESTART IDENTITY resets
+      // sequences used by fixtures.
+      const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
+      await pgliteClient.exec(truncateSql);
+    }
   }
+  databaseTouched = false;
 
   // Process-local caches (e.g. the agent id/slug resolve cache) outlive the
-  // per-test truncation above — clear every registered one so a mapping cached
+  // database reset above — clear every registered one so a mapping cached
   // by one test (fixture slugs are name-derived and can repeat) can't leak
   // into the next. The registry module is dependency-free, so importing it
   // here cannot pre-load real modules ahead of a test file's mocks.
@@ -264,7 +270,27 @@ afterAll(async () => {
     pgliteClient = null;
   }
   testDb = null;
+  databaseTouched = false;
 });
+
+function trackDatabaseAccess(client: PGlite): void {
+  // Drizzle's PGlite adapter calls query/exec on this same client. Count reads
+  // too: a conservative extra reset is safer than inferring which SQL writes.
+  const sqlClient = client as unknown as {
+    query: (...args: unknown[]) => Promise<unknown>;
+    exec: (...args: unknown[]) => Promise<unknown>;
+  };
+  const query = sqlClient.query.bind(client);
+  const exec = sqlClient.exec.bind(client);
+  sqlClient.query = (...args) => {
+    databaseTouched = true;
+    return query(...args);
+  };
+  sqlClient.exec = (...args) => {
+    databaseTouched = true;
+    return exec(...args);
+  };
+}
 
 /**
  * Overwrite `live`'s contents with `snapshot`'s, in place (the config module

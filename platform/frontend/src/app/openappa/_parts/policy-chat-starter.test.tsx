@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
+import type { SuggestedPrompt } from "@/app/chat/suggested-prompt-pills";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
@@ -66,12 +67,18 @@ const create = vi.fn();
 const sendMessage = vi.fn();
 const push = vi.fn();
 const replace = vi.fn();
-const renderStarter = (initialPrompt?: string, conversationId?: string) =>
+const renderStarter = (
+  initialPrompt?: string,
+  conversationId?: string,
+  options?: { title?: string; suggestedPrompts?: readonly SuggestedPrompt[] },
+) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <PolicyChatStarter
         initialPrompt={initialPrompt}
         conversationId={conversationId}
+        title={options?.title}
+        suggestedPrompts={options?.suggestedPrompts}
       />
     </QueryClientProvider>,
   );
@@ -225,6 +232,71 @@ test("starts with a policy-specific suggested prompt", async () => {
           expect.objectContaining({
             text: expect.stringContaining("Do not change it"),
           }),
+        ],
+      }),
+    ),
+  );
+});
+
+test("shows a target-scoped title and suggested prompts", async () => {
+  const view = renderStarter(undefined, undefined, {
+    title: "What should the policy do for Research assistant?",
+    suggestedPrompts: [
+      {
+        summaryTitle: "Explain the policy for Research assistant",
+        prompt: "Explain the policy for the agent Research assistant.",
+      },
+    ],
+  });
+  expect(
+    screen.getByText("What should the policy do for Research assistant?"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("What should the policy do?"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Explain the policy for Research assistant",
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+  );
+  view.unmount();
+  renderStarter(undefined, "conversation-1");
+  await vi.waitFor(() =>
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          {
+            type: "text",
+            text: "Explain the policy for the agent Research assistant.",
+          },
+        ],
+      }),
+    ),
+  );
+});
+
+test("auto-sends a target-scoped initial prompt", async () => {
+  const view = renderStarter(
+    'Focus this conversation on the agent "Research assistant".',
+    undefined,
+    { title: "What should the policy do for Research assistant?" },
+  );
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith("/openappa/conversation-1"),
+  );
+  view.unmount();
+  renderStarter(undefined, "conversation-1");
+  await vi.waitFor(() =>
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          {
+            type: "text",
+            text: 'Focus this conversation on the agent "Research assistant".',
+          },
         ],
       }),
     ),

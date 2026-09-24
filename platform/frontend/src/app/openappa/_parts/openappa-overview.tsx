@@ -3,6 +3,7 @@
 import { CircleHelp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import type { SuggestedPrompt } from "@/app/chat/suggested-prompt-pills";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { GithubSyncNotice } from "./github-sync-notice";
 import { PolicyChatStarter } from "./policy-chat-starter";
@@ -10,9 +11,13 @@ import { PolicyChatStarter } from "./policy-chat-starter";
 export function OpenAppaOverview({
   initialPrompt,
   conversationId,
+  title,
+  suggestedPrompts,
 }: {
   initialPrompt?: string;
   conversationId?: string;
+  title?: string;
+  suggestedPrompts?: readonly SuggestedPrompt[];
 }) {
   const [chatStarted, setChatStarted] = useState(false);
   const showChat = chatStarted || Boolean(conversationId);
@@ -51,6 +56,8 @@ export function OpenAppaOverview({
         initialPrompt={initialPrompt}
         conversationId={conversationId}
         onConversationStart={() => setChatStarted(true)}
+        title={title}
+        suggestedPrompts={suggestedPrompts}
       />
     </div>
   );

@@ -167,7 +167,7 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   expect(screen.getByText("Includes your Auto mode access")).toBeVisible();
   expect(screen.getByText("4 of 19 with tool rules")).toBeVisible();
   fireEvent.click(
-    screen.getByRole("button", { name: "Details for Research assistant" }),
+    screen.getByRole("button", { name: "Details Research assistant" }),
   );
   const researchSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
@@ -199,13 +199,41 @@ test("shows agents and registry servers with combined tool coverage and scoped d
     expect(within(dialog).queryByText("search_tools")).not.toBeInTheDocument();
   });
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  fireEvent.click(screen.getByRole("button", { name: "Details for GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Details GitHub" }));
   const githubSummary = within(await screen.findByRole("dialog"));
   expect(
     githubSummary.getByText("synced tools").parentElement,
   ).toHaveTextContent("19synced tools");
   expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
+});
+
+test("links the configure-with-chat action to the selected policy target", async () => {
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <OverviewTab />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("Research assistant")).toBeVisible();
+  expect(
+    screen.getByRole("link", {
+      name: "Configure with chat Research assistant",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "/openappa/configure?targetType=agent&targetName=Research%20assistant",
+  );
+  expect(
+    screen.getByRole("link", { name: "Configure with chat GitHub" }),
+  ).toHaveAttribute(
+    "href",
+    "/openappa/configure?targetType=mcp_server&targetName=GitHub",
+  );
 });
 
 test("filters tool policy sources and links each rule to its TOML line", async () => {

@@ -39,6 +39,66 @@ export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   },
 ] as const;
 
+/** One row of the OpenAPPA policy target table: an agent, MCP gateway, or MCP server. */
+export type OpenAppaPolicyTargetKind = "agent" | "mcp_gateway" | "mcp_server";
+
+const OPENAPPA_POLICY_TARGET_KIND_LABELS: Record<
+  OpenAppaPolicyTargetKind,
+  string
+> = {
+  agent: "agent",
+  mcp_gateway: "MCP gateway",
+  mcp_server: "MCP server",
+};
+
+/** How a policy target reads inline in a sentence, e.g. `the agent "Foo"`. */
+function describeOpenAppaPolicyTarget(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+): string {
+  return `the ${OPENAPPA_POLICY_TARGET_KIND_LABELS[kind]} "${name}"`;
+}
+
+/** Chat landing title for an OpenAPPA conversation scoped to one policy target. */
+export function openAppaTargetChatTitle(name: string): string {
+  return `What should the policy do for ${name}?`;
+}
+
+/**
+ * Auto-sent as the first message when a policy target's row action opens the
+ * configuration agent, so its first turn already knows the scope instead of
+ * the user having to state it.
+ */
+export function openAppaTargetInitialPrompt(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+): string {
+  const target = describeOpenAppaPolicyTarget(kind, name);
+  return `Focus this conversation on ${target}. Explain what its current OpenAPPA policy rules allow, deny, or require approval for, then help me with any changes — keep them scoped to this target unless I say otherwise.`;
+}
+
+/** {@link OPENAPPA_CONFIG_SUGGESTED_PROMPTS}, reworded to name the policy target. */
+export function openAppaTargetSuggestedPrompts(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+) {
+  const target = describeOpenAppaPolicyTarget(kind, name);
+  return [
+    {
+      summaryTitle: `Explain the policy for ${name}`,
+      prompt: `Explain the current OpenAPPA policy for ${target} in plain language. What do its rules allow, deny, or require approval for? Do not change it.`,
+    },
+    {
+      summaryTitle: `Review risky calls for ${name}`,
+      prompt: `Review the current OpenAPPA policy for ${target} for risky tool calls and gaps. Suggest specific changes, but do not publish anything yet.`,
+    },
+    {
+      summaryTitle: `Change the policy for ${name}`,
+      prompt: `Help me change the OpenAPPA policy for ${target}. Ask what I want to protect, inspect its current rules, and show me the proposed diff before publishing.`,
+    },
+  ];
+}
+
 /**
  * Default question rounds per dual LLM analysis. Three rounds capture what
  * the transcripts show matters (content type, dominant topics, overall

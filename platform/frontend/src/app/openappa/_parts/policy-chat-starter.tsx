@@ -14,7 +14,10 @@ import {
 } from "react";
 import { ChatLandingLayout } from "@/app/chat/chat-landing-layout";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { SuggestedPromptPills } from "@/app/chat/suggested-prompt-pills";
+import {
+  type SuggestedPrompt,
+  SuggestedPromptPills,
+} from "@/app/chat/suggested-prompt-pills";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
@@ -35,10 +38,14 @@ export function PolicyChatStarter({
   initialPrompt,
   conversationId,
   onConversationStart,
+  title = "What should the policy do?",
+  suggestedPrompts = OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
 }: {
   initialPrompt?: string;
   conversationId?: string;
   onConversationStart?: () => void;
+  title?: string;
+  suggestedPrompts?: readonly SuggestedPrompt[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -225,7 +232,7 @@ export function PolicyChatStarter({
         </>
       ) : (
         <ChatLandingLayout
-          title="What should the policy do?"
+          title={title}
           description={
             <>
               Describe a change. The agent will show you a diff before it{" "}
@@ -234,7 +241,7 @@ export function PolicyChatStarter({
           }
           suggestions={
             <SuggestedPromptPills
-              prompts={[...OPENAPPA_CONFIG_SUGGESTED_PROMPTS]}
+              prompts={[...suggestedPrompts]}
               align="start"
               disabled={createConversation.isPending}
               onPreviewChange={setSuggestionPreview}

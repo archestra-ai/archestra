@@ -1202,6 +1202,7 @@ describe("OpenAI Responses proxy", () => {
         "x-archestra-virtual-key": passthroughToken,
         "chatgpt-account-id": "account_123",
         originator: "codex_cli_rs",
+        version: "0.156.1",
         "user-agent": "codex_cli_rs/0.156.1",
       },
       payload: { model: "gpt-5.6-sol", input: "Hello!" },
@@ -1212,6 +1213,7 @@ describe("OpenAI Responses proxy", () => {
       accessToken,
       accountId: "account_123",
       originator: "codex_cli_rs",
+      version: "0.156.1",
     });
     const interactions = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
@@ -1289,6 +1291,14 @@ describe("OpenAI Responses proxy", () => {
     expect(allowed.json().data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ object: "model", owned_by: "openai" }),
+      ]),
+    );
+    expect(allowed.json().models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: expect.any(String),
+          display_name: expect.any(String),
+        }),
       ]),
     );
   });

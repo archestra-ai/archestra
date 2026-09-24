@@ -403,6 +403,7 @@ function resolveOpenAiCodexPassthrough(params: {
       64,
     ),
     originator: optionalBoundedHeader(headers, "originator", 128),
+    version: optionalBoundedHeader(headers, "version", 32),
     sessionId: optionalBoundedHeader(headers, "session-id", 256),
     userAgent: optionalBoundedHeader(headers, "user-agent", 1024),
   };
@@ -884,7 +885,7 @@ export async function handleLLMProxy<
   ) {
     throw new ApiError(
       401,
-      "Codex ChatGPT login requires an Archestra passthrough virtual key.",
+      "Codex ChatGPT login requires a passthrough virtual key.",
     );
   }
 

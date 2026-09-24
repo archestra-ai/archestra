@@ -44,6 +44,12 @@ import {
 } from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
+const OpenAiModelsWithCodexSchema = OpenAiModelsListResponseSchema.extend({
+  models: z
+    .array(z.object({ slug: z.string(), display_name: z.string() }))
+    .optional(),
+});
+
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
 
@@ -309,7 +315,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (typeof passthroughToken !== "string") {
         throw new ApiError(
           401,
-          "Codex ChatGPT login requires an Archestra passthrough virtual key.",
+          "Codex ChatGPT login requires a passthrough virtual key.",
         );
       }
       await virtualKeyRateLimiter.check({
@@ -333,10 +339,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      return toOpenAiModelsList(
-        OPENAI_CODEX_MODELS.map((model) => ({ ...model, provider: "openai" })),
-        "openai",
-      );
+      const models = OPENAI_CODEX_MODELS.map((model) => ({
+        ...model,
+        provider: "openai" as const,
+      }));
+      return {
+        ...toOpenAiModelsList(models, "openai"),
+        models: models.map((model) => ({
+          slug: model.id,
+          display_name: model.displayName,
+        })),
+      };
     }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
@@ -344,10 +357,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       token: extractBearerToken(request.headers.authorization),
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
-    return toOpenAiModelsList(
-      await fetchOpenAiModels(apiKey, baseUrl, extraHeaders),
-      "openai",
-    );
+    const models = await fetchOpenAiModels(apiKey, baseUrl, extraHeaders);
+    const list = toOpenAiModelsList(models, "openai");
+    return headers.originator === "codex_cli_rs"
+      ? {
+          ...list,
+          models: models.map((model) => ({
+            slug: model.id,
+            display_name: model.displayName,
+          })),
+        }
+      : list;
   }
 
   fastify.get(
@@ -358,7 +378,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List OpenAI models (default agent)",
         tags: ["LLM Proxy"],
         headers: OpenAiModelsHeadersSchema,
-        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+        response: constructResponseSchema(OpenAiModelsWithCodexSchema),
       },
     },
     async (request) => handleListModels(request, undefined),
@@ -373,7 +393,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         params: z.object({ agentId: UuidIdSchema }),
         headers: OpenAiModelsHeadersSchema,
-        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+        response: constructResponseSchema(OpenAiModelsWithCodexSchema),
       },
     },
     async (request) => handleListModels(request, request.params.agentId),

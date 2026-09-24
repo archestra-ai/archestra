@@ -26,7 +26,7 @@ describe("vLLM proxy response serialization", () => {
     { name: "omitted", toolCalls: undefined },
     { name: "empty", toolCalls: [] },
     { name: "populated", toolCalls: [toolCall] },
-  ])("preserves $name tool calls", async ({ toolCalls }, { makeAgent }) => {
+  ])("round-trips $name tool calls", async ({ toolCalls }, { makeAgent }) => {
     config.llm.vllm.enabled = true;
     config.llm.vllm.baseUrl = upstreamUrl;
     const agent = await makeAgent({ agentType: "llm_proxy" });
@@ -40,9 +40,12 @@ describe("vLLM proxy response serialization", () => {
       content: toolCalls?.length ? null : "Hello from a synthetic model.",
       ...(toolCalls === undefined ? {} : { tool_calls: toolCalls }),
     };
+    let upstreamMessages: unknown;
     server.use(
-      http.post(`${upstreamUrl}/chat/completions`, () =>
-        HttpResponse.json({
+      http.post(`${upstreamUrl}/chat/completions`, async ({ request }) => {
+        upstreamMessages = ((await request.json()) as { messages: unknown })
+          .messages;
+        return HttpResponse.json({
           id: "chatcmpl-synthetic",
           object: "chat.completion",
           created: 1700000000,
@@ -56,18 +59,21 @@ describe("vLLM proxy response serialization", () => {
             },
           ],
           usage: { prompt_tokens: 5, completion_tokens: 4, total_tokens: 9 },
-        }),
-      ),
+        });
+      }),
     );
 
     try {
-      const response = await app.inject({
+      const messages: Record<string, unknown>[] = [
+        { role: "user", content: "Say hello." },
+      ];
+      const request = {
         method: "POST",
         url: `/v1/vllm/${agent.id}/chat/completions`,
         headers: { authorization: "Bearer synthetic-test-key" },
         payload: {
           model: "synthetic-model",
-          messages: [{ role: "user", content: "Say hello." }],
+          messages,
           ...(toolCalls?.length
             ? {
                 tools: [
@@ -85,11 +91,27 @@ describe("vLLM proxy response serialization", () => {
               }
             : {}),
         },
-      });
+      } as const;
+      const response = await app.inject(request);
 
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json().choices[0].message).toEqual(message);
       expect(response.json().usage.total_tokens).toBe(9);
+      expect(upstreamMessages).toEqual(messages);
+
+      messages.push(response.json().choices[0].message);
+      if (toolCalls?.length) {
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: "Sunny.",
+        });
+      }
+      messages.push({ role: "user", content: "Please continue." });
+      const followUp = await app.inject(request);
+      expect(followUp.statusCode, followUp.body).toBe(200);
+      expect(upstreamMessages).toEqual(messages);
+      expect(followUp.json().choices[0].message).toEqual(message);
     } finally {
       await app.close();
     }

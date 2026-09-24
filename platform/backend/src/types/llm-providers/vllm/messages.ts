@@ -146,7 +146,7 @@ const AssistantMessageParamSchema = z
       .optional(),
     name: z.string().optional(),
     refusal: z.string().nullable().optional(),
-    tool_calls: z.array(ToolCallSchema).optional(),
+    tool_calls: z.array(ToolCallSchema).nullable().optional(),
     // vLLM-specific: reasoning field for models that support it
     reasoning: z.string().nullable().optional(),
     // DeepSeek-style reasoning models require the assistant's `reasoning_content`

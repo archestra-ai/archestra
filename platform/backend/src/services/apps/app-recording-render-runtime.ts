@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import config from "@/config";
 import logger from "@/logging";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 const exec = promisify(execFile);
 

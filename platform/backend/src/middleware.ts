@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
 import { enterpriseTier } from "@/enterprise-tier";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 // Pattern to match team external groups routes: /api/teams/:id/external-groups
 const TEAM_EXTERNAL_GROUPS_PATTERN = /^\/api\/teams\/[^/]+\/external-groups/;

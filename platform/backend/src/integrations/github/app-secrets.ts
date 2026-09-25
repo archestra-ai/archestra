@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 /** Legacy installation-only connections contain a PEM; OAuth-enabled Apps also hold a client secret. */
 export function parseGitHubAppSecrets(value: string) {

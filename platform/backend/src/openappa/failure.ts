@@ -1,5 +1,5 @@
 import { trace } from "@opentelemetry/api";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 /**
  * The error every OpenAPPA operation throws when it cannot decide safely.

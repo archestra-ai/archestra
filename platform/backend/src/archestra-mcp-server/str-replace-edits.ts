@@ -1,4 +1,4 @@
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 import { fencedBlock } from "./fenced-block";
 
 /**

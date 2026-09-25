@@ -255,26 +255,45 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
 """
         subprocess.run(["node", "-e", program, condition], check=True)
 
-    def test_backport_prs_run_checks_while_release_bot_prs_remain_exempt(self):
+    def test_expensive_checks_run_in_merge_queue_with_release_codegen_exception(self):
         workflow = Path(__file__).parents[1] / "workflows/on-pull-requests.yml"
-        conditions = [line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()
-                      if "if: " in line and "archestra-ci[bot]" in line]
-        self.assertTrue(conditions)
+        lines = workflow.read_text().splitlines()
+        jobs = [
+            "migration-kit-checks",
+            "platform-lint-and-unit-tests",
+            "platform-rust-checks",
+            "openappa-native-tests",
+            "ai-labs-rust-checks",
+            "backend-unit-tests",
+            "backend-unit-tests-gate",
+            "frontend-integration-tests",
+            "frontend-integration-tests-gate",
+            "helm-chart-linting-and-tests",
+        ]
+        conditions = {}
+        for job in jobs:
+            start = lines.index(f"  {job}:") + 1
+            end = next((i for i in range(start, len(lines))
+                        if re.match(r"^  [\w-]+:$", lines[i])), len(lines))
+            condition = next((line.split("if: ", 1)[1] for line in lines[start:end]
+                              if line.startswith("    if: ")), None)
+            self.assertIsNotNone(condition, job)
+            conditions[job] = condition
         program = r"""
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const conditions = JSON.parse(process.argv[1]);
-for (const condition of conditions) {
+for (const [job, condition] of Object.entries(conditions)) {
   for (const [login, ref, expected] of [
-    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', true],
-    ['archestra-ci[bot]', 'release-please--branches--main', false],
-    ['contributor', 'fix/example', true],
+    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', false],
+    ['archestra-ci[bot]', 'release-please--branches--main', job === 'platform-lint-and-unit-tests'],
+    ['contributor', 'fix/example', false],
   ]) {
     const context = {github: {event_name: 'pull_request', event: {pull_request: {user: {login}, head: {ref}}}},
       startsWith: (value, prefix) => value.startsWith(prefix), always: () => true};
-    assert.equal(vm.runInNewContext(condition, context), expected, condition);
+    assert.equal(vm.runInNewContext(condition, context), expected, job);
   }
-  assert.equal(vm.runInNewContext(condition, {github: {event_name:'merge_group'}, always: () => true}), true);
+  assert.equal(vm.runInNewContext(condition, {github: {event_name:'merge_group'}, always: () => true}), true, job);
 }
 """
         subprocess.run(["node", "-e", program, json.dumps(conditions)], check=True)

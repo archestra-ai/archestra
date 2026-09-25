@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { usePermissionMap } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { LogsSectionLayout } from "./logs-section-layout";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 describe("LogsSectionLayout", () => {
@@ -63,5 +66,21 @@ describe("LogsSectionLayout", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
+  });
+
+  it("shows the Guardrail consults tab when OpenAPPA is enabled and permitted", () => {
+    vi.mocked(usePathname).mockReturnValue("/llm/logs");
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(usePermissionMap).mockReturnValue({ "/consults/logs": true });
+
+    render(
+      <LogsSectionLayout listPath="/llm/logs">
+        <div>list content</div>
+      </LogsSectionLayout>,
+    );
+
+    expect(
+      screen.getAllByRole("link", { name: "Guardrail consults" }).length,
+    ).toBeGreaterThan(0);
   });
 });

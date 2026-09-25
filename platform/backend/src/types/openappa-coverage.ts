@@ -131,6 +131,7 @@ export type CoverageToolsQuery = z.infer<typeof CoverageToolsQuerySchema>;
 
 export const CoverageEntitiesQuerySchema = PaginationQuerySchema.extend({
   search: SearchSchema,
+  /** Agents are never listed, so `agent` matches nothing. */
   type: CoverageEntitySchema.shape.type.optional(),
   /** Resolve one visible target by its stable row ID. */
   entityId: z.uuid().optional(),

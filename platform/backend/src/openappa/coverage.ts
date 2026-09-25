@@ -123,6 +123,7 @@ class OpenAppaCoverageService {
     return page(
       entities.filter(
         (entity) =>
+          isListedTarget(entity) &&
           (!params.entityId || entity.id === params.entityId) &&
           (!search || entity.name.toLowerCase().includes(search)) &&
           (!params.type || entity.type === params.type) &&
@@ -460,6 +461,11 @@ async function buildReport(
   return { tools: rows, entities };
 }
 
+/** Agents are not policy targets; only gateways and registry servers are listed. */
+function isListedTarget(entity: { type: string }): boolean {
+  return entity.type !== "agent";
+}
+
 /** Compute the visible page before resolving each Auto-mode agent's tool access. */
 function autoModePageEntityIds(
   inventory: Awaited<ReturnType<typeof ToolModel.findCoverageInventory>>,
@@ -488,6 +494,7 @@ function autoModePageEntityIds(
   const matching = candidates
     .filter(
       (entity) =>
+        isListedTarget(entity) &&
         (!autoModePage.entityId || entity.id === autoModePage.entityId) &&
         (!autoModePage.type || entity.type === autoModePage.type) &&
         (!autoModePage.search ||

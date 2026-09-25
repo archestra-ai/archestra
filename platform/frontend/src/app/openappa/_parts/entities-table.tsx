@@ -35,7 +35,6 @@ const PARAM_NAMES = {
 
 const TYPE_OPTIONS = [
   { value: DEFAULT_FILTER_ALL, label: "All types" },
-  { value: "agent", label: "Agent" },
   { value: "mcp_gateway", label: "MCP gateway" },
   { value: "mcp_server", label: "MCP server" },
 ] as const;
@@ -54,9 +53,7 @@ export function EntitiesTable() {
   const search = searchParams.get("search") || undefined;
   const rawType = searchParams.get("type");
   const type =
-    rawType === "agent" || rawType === "mcp_gateway" || rawType === "mcp_server"
-      ? rawType
-      : undefined;
+    rawType === "mcp_gateway" || rawType === "mcp_server" ? rawType : undefined;
   const entities = useCoverageEntities({
     search,
     type,
@@ -194,7 +191,7 @@ export function EntitiesTable() {
           isLoading={entities.isFetching}
           emptyIcon={Bot}
           emptyMessage="No policy targets"
-          emptyDescription="Agents, MCP gateways, and MCP servers appear here when available."
+          emptyDescription="MCP gateways and MCP servers appear here when available."
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No policy target matches these filters."
           onClearFilters={clearFilters}
@@ -229,7 +226,7 @@ export function EntitiesTable() {
   );
 }
 
-export function entityTypeLabel(type: CoverageEntity["type"]): string {
+function entityTypeLabel(type: CoverageEntity["type"]): string {
   switch (type) {
     case "agent":
       return "Agent";

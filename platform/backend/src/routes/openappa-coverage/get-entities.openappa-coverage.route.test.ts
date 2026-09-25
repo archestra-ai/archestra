@@ -15,7 +15,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
-  test("matches the active lists: shows unassigned agents and every gateway the caller's wildcard grant reads", async ({
+  test("matches the active lists: shows every gateway the caller's wildcard grant reads and never lists agents", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -59,27 +59,16 @@ describe("GET /api/openappa/coverage/entities", () => {
     );
     expect(gateways.json().data).toHaveLength(2);
 
-    const agents = await ctx.app.inject({
-      method: "GET",
-      url: "/api/openappa/coverage/entities?type=agent&search=Unassigned",
-    });
-    expect(agents.statusCode).toBe(200);
-    expect(agents.json().data).toEqual([
-      expect.objectContaining({
-        id: unassigned.id,
-        scope: "org",
-        toolCount: 0,
-      }),
-    ]);
-
-    const byId = await ctx.app.inject({
-      method: "GET",
-      url: `/api/openappa/coverage/entities?entityId=${unassigned.id}&limit=1`,
-    });
-    expect(byId.statusCode).toBe(200);
-    expect(byId.json().data).toEqual([
-      expect.objectContaining({ id: unassigned.id, name: unassigned.name }),
-    ]);
+    // Agents are not policy targets, however they are asked for.
+    for (const url of [
+      "/api/openappa/coverage/entities?search=Unassigned",
+      "/api/openappa/coverage/entities?type=agent&search=Unassigned",
+      `/api/openappa/coverage/entities?entityId=${unassigned.id}&limit=1`,
+    ]) {
+      const response = await ctx.app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual([]);
+    }
 
     await expect(
       ToolModel.findCoverageInventory(ctx.organizationId, {
@@ -173,6 +162,13 @@ describe("GET /api/openappa/coverage/entities", () => {
       agentType: "mcp_gateway",
       accessAllTools: true,
     });
+    // Sorts between the gateways, so it would shift the page if it counted.
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "A paged gateway agent",
+      agentType: "agent",
+      accessAllTools: true,
+    });
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       name: "Paged tools",
@@ -196,14 +192,14 @@ describe("GET /api/openappa/coverage/entities", () => {
     try {
       const firstPage = await ctx.app.inject({
         method: "GET",
-        url: "/api/openappa/coverage/entities?type=mcp_gateway&search=paged%20gateway&limit=1&offset=0",
+        url: "/api/openappa/coverage/entities?search=paged%20gateway&limit=1&offset=0",
       });
       expect(resolveAutoTools.mock.calls.map(([agentId]) => agentId)).toEqual([
         first.id,
       ]);
       const secondPage = await ctx.app.inject({
         method: "GET",
-        url: "/api/openappa/coverage/entities?type=mcp_gateway&search=paged%20gateway&limit=1&offset=1",
+        url: "/api/openappa/coverage/entities?search=paged%20gateway&limit=1&offset=1",
       });
       expect(resolveAutoTools.mock.calls.map(([agentId]) => agentId)).toEqual([
         first.id,
@@ -270,7 +266,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("lists agents, gateways, and registry servers by policy coverage while omitting apps", async ({
+  test("reports gateways and registry servers by policy coverage while omitting apps", async ({
     makeInternalMcpCatalog,
     makeTool,
     makeAgent,
@@ -284,7 +280,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     const agent = await makeAgent({
       organizationId: ctx.organizationId,
       name: "Analyst",
-      agentType: "agent",
+      agentType: "mcp_gateway",
     });
     const gateway = await makeAgent({
       organizationId: ctx.organizationId,
@@ -329,7 +325,7 @@ describe("GET /api/openappa/coverage/entities", () => {
       expect.objectContaining({
         id: agent.id,
         name: "Analyst",
-        type: "agent",
+        type: "mcp_gateway",
         toolCount: 4,
         governedCount: 2,
         fallbackCount: 2,
@@ -424,7 +420,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("narrows to the targets that reach one tool", async ({
+  test("narrows to the gateways and servers that reach one tool", async ({
     makeInternalMcpCatalog,
     makeTool,
     makeAgent,
@@ -460,9 +456,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     });
     expect(response.statusCode).toBe(200);
     const ids = response.json().data.map((entity: { id: string }) => entity.id);
-    expect(ids).toEqual(
-      expect.arrayContaining([caller.id, gateway.id, catalogIds.acme]),
-    );
-    expect(ids).toHaveLength(3);
+    expect(ids).toEqual(expect.arrayContaining([gateway.id, catalogIds.acme]));
+    expect(ids).toHaveLength(2);
   });
 });

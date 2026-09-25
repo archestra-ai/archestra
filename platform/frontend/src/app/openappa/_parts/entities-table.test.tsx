@@ -58,8 +58,8 @@ beforeEach(() => {
         data: [
           {
             id: entityId,
-            name: "Research assistant",
-            type: "agent",
+            name: "Research gateway",
+            type: "mcp_gateway",
             scope: "org",
             icon: null,
             toolCount: 3,
@@ -153,7 +153,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("shows agents and registry servers with combined tool coverage and scoped details", async () => {
+test("shows gateways and registry servers with combined tool coverage and scoped details", async () => {
   render(
     <QueryClientProvider
       client={
@@ -164,14 +164,14 @@ test("shows agents and registry servers with combined tool coverage and scoped d
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText("Research assistant")).toBeVisible();
+  expect(await screen.findByText("Research gateway")).toBeVisible();
   expect(
     screen.getByRole("link", {
-      name: "Configure with chat Research assistant",
+      name: "Configure with chat Research gateway",
     }),
   ).toHaveAttribute(
     "href",
-    `/openappa/configure?targetType=agent&targetId=${entityId}`,
+    `/openappa/configure?targetType=mcp_gateway&targetId=${entityId}`,
   );
   expect(
     screen.getByRole("link", { name: "Configure with chat GitHub" }),
@@ -189,7 +189,7 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   expect(screen.getByText("Includes your Auto mode access")).toBeVisible();
   expect(screen.getByText("4 of 19 with tool rules")).toBeVisible();
   fireEvent.click(
-    screen.getByRole("button", { name: "Details Research assistant" }),
+    screen.getByRole("button", { name: "Details Research gateway" }),
   );
   const researchSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [

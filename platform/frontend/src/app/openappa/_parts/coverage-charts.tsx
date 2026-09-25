@@ -24,7 +24,7 @@ import {
   useCoverageSummary,
 } from "@/lib/openappa-coverage.query";
 import { openAppaChatHref } from "@/lib/openappa-routes";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { BatteriesCard, hasBatteries } from "./batteries-card";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 

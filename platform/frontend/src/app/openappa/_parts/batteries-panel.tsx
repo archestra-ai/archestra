@@ -101,7 +101,7 @@ import {
   type RuntimeCredentialDefinition,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,

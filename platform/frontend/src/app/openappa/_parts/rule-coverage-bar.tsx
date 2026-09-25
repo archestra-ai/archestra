@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { CoverageRuleCounts } from "@/lib/openappa-coverage.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * What judges a tool, in a fixed order, name, and color so the same bucket

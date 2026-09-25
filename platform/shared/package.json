@@ -24,6 +24,7 @@
     "./sso-template-helpers": "./sso-template-helpers.ts",
     "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts",
+    "./types": "./types.ts",
     "./websocket": "./websocket.ts"
   },
   "scripts": {

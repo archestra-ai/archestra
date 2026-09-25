@@ -3,7 +3,7 @@ import {
   createGithubCopilotFetch,
   githubCopilotTokenManager,
 } from "@/services/github-copilot-token";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 /**
  * The token manager is a singleton with an internal cache, so every test uses

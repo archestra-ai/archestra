@@ -10,10 +10,9 @@ import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 export type GuardrailsPolicy =
   archestraApiTypes.GetGuardrailsPolicyResponses["200"];
 
-export function useGuardrailsPolicy({ enabled = true } = {}) {
+export function useGuardrailsPolicy() {
   return useQuery({
     queryKey: guardrailsPolicyQueryKey,
-    enabled,
     refetchInterval: 10000,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getGuardrailsPolicy();

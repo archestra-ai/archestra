@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   OpenAppaAlertIcon,
   OpenAppaSolidIcon,
@@ -16,49 +15,14 @@ import {
   useGuardrailsDeployment,
   useUpdateGuardrailsDeployment,
 } from "@/lib/guardrails-deployment.query";
-import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import { cn } from "@/lib/utils/tailwind";
-
-/**
- * OpenAPPA is off and its policy was never saved, so it was never set up: an
- * administrator's way in is the setup wizard rather than the switch or the
- * empty OpenAPPA page.
- */
-export function useOpenAppaNeedsSetup(): boolean | undefined {
-  const query = useGuardrailsDeployment();
-  const { data: canManage } = useHasPermissions({ organization: ["update"] });
-  const candidate = Boolean(
-    canManage && query.data?.enabled === false && query.data.featureEnabled,
-  );
-  const policy = useGuardrailsPolicy({ enabled: candidate });
-  if (!candidate) return false;
-  // Unknown until the policy answers; a failed read falls back to the switch.
-  if (!policy.data) return policy.isError ? false : undefined;
-  return policy.data.revision === 0;
-}
 
 export function GuardrailsDeploymentToggle() {
   const query = useGuardrailsDeployment();
   const update = useUpdateGuardrailsDeployment();
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
-  const needsSetup = useOpenAppaNeedsSetup();
-  // Waiting on the policy keeps the switch from showing before the setup link.
-  if (!query.data || query.isError || needsSetup === undefined) return null;
+  if (!query.data || query.isError) return null;
   const { enabled, featureEnabled } = query.data;
-  if (needsSetup)
-    return (
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          className="text-destructive hover:text-destructive"
-        >
-          <Link href="/openappa/setup">
-            <OpenAppaAlertIcon className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Set up OpenAPPA</span>
-          </Link>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    );
   const canToggle = Boolean(canManage && featureEnabled && !update.isPending);
   const action = enabled ? "Disable OpenAPPA" : "Enable OpenAPPA";
   return (

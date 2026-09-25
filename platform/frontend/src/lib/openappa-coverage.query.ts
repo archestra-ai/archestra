@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import {
-  keepPreviousData,
-  queryOptions,
-  useQueries,
-  useQuery,
-} from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { coverageQueryPrefix } from "@/lib/openappa-policy-views";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -21,10 +16,15 @@ export type CoverageEntitiesParams = NonNullable<
   archestraApiTypes.GetOpenappaCoverageEntitiesData["query"]
 >;
 
-/** Share one cache key and error path for both entity views. */
-function coverageEntitiesQueryOptions(params: CoverageEntitiesParams) {
-  return queryOptions({
+/**
+ * What the policy covers, read from the coverage endpoints: every key sits
+ * under one prefix so a save, a pull or a tool sync refetches them all.
+ */
+/** One page of visible agents, gateways, and registry servers with tool counts. */
+export function useCoverageEntities(params: CoverageEntitiesParams) {
+  return useQuery({
     queryKey: [coverageQueryPrefix, "entities", params],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOpenappaCoverageEntities(
         {
@@ -33,46 +33,6 @@ function coverageEntitiesQueryOptions(params: CoverageEntitiesParams) {
       );
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
-    },
-  });
-}
-
-/** One page of visible agents, gateways, and registry servers with tool counts. */
-export function useCoverageEntities(params: CoverageEntitiesParams) {
-  return useQuery({
-    ...coverageEntitiesQueryOptions(params),
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * The policy targets that reach any of these tools, each with the tools it
- * reaches: one entities request per tool, merged by target.
- */
-export function useCoverageEntitiesForTools(toolIds: string[]) {
-  return useQueries({
-    queries: toolIds.map((toolId) => {
-      const params: CoverageEntitiesParams = { toolId, limit: 100, offset: 0 };
-      return coverageEntitiesQueryOptions(params);
-    }),
-    combine: (results) => {
-      const byId = new Map<
-        string,
-        { entity: CoverageEntity; toolIds: string[] }
-      >();
-      results.forEach((result, index) => {
-        for (const entity of result.data?.data ?? []) {
-          const entry = byId.get(entity.id) ?? { entity, toolIds: [] };
-          entry.toolIds.push(toolIds[index]);
-          byId.set(entity.id, entry);
-        }
-      });
-      return {
-        targets: [...byId.values()],
-        isPending: results.some((result) => result.isPending),
-        isError: results.some((result) => result.isError),
-        refetch: () => results.forEach((result) => void result.refetch()),
-      };
     },
   });
 }
@@ -89,48 +49,5 @@ export function useCoverageTools(params: CoverageToolsParams) {
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
-  });
-}
-
-/** Every tool of one catalog, read page by page, for pickers that search them all. */
-export function useAllCoverageTools(catalogId: string) {
-  return useQuery(allCoverageToolsQueryOptions(catalogId));
-}
-
-function allCoverageToolsQueryOptions(catalogId: string, enabled = true) {
-  return queryOptions({
-    queryKey: [coverageQueryPrefix, "tools", "all", catalogId],
-    enabled,
-    queryFn: async () => {
-      const rows: CoverageTool[] = [];
-      for (let offset = 0; ; offset += 100) {
-        const { data, error } = await archestraApiSdk.getOpenappaCoverageTools({
-          query: { catalogId, limit: 100, offset },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        if (!data) break;
-        rows.push(...data.data);
-        if (!data.pagination.hasNext) break;
-      }
-      return rows;
-    },
-  });
-}
-
-/** All tool rows from the selected catalogs, sharing cached all-tools results. */
-export function useAllCoverageToolsForCatalogs(
-  catalogIds: string[],
-  { enabled = true }: { enabled?: boolean } = {},
-) {
-  return useQueries({
-    queries: catalogIds.map((catalogId) =>
-      allCoverageToolsQueryOptions(catalogId, enabled),
-    ),
-    combine: (results) => ({
-      tools: results.flatMap((result) => result.data ?? []),
-      isPending: results.some((result) => result.isPending),
-      isError: results.some((result) => result.isError),
-      refetch: () => results.forEach((result) => void result.refetch()),
-    }),
   });
 }

@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noConsole: standalone dev CLI — console for TTY UX
 /**
- * Put OpenAPPA back to its first-run state so the setup wizard can be replayed.
+ * Put OpenAPPA back to its first-run state so the Overview setup cards can be checked.
  *
  * Turns the deployment switch off and deletes, for every organization, the
  * policy revisions (the policy reads as the built-in default again), the

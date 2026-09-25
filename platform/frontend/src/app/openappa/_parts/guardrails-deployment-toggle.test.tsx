@@ -21,7 +21,6 @@ vi.mock("sonner");
 const url = "http://localhost:9000/api/guardrails-deployment";
 const server = setupServer();
 let enabled: boolean;
-let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   vi.stubGlobal(
@@ -38,7 +37,6 @@ beforeEach(() => {
     })),
   );
   enabled = false;
-  revision = 3;
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -46,16 +44,6 @@ beforeEach(() => {
   server.use(
     http.get(url, () =>
       HttpResponse.json({ enabled, active: enabled, featureEnabled: true }),
-    ),
-    http.get("http://localhost:9000/api/guardrails-policy", () =>
-      HttpResponse.json({
-        organizationId: "org",
-        revision,
-        content: "",
-        contentHash: "",
-        updatedAt: null,
-        updatedBy: null,
-      }),
     ),
   );
 });
@@ -143,13 +131,4 @@ test.each([
   expect(
     await screen.findByRole("switch", { name: "OpenAPPA is disabled" }),
   ).toBeDisabled();
-});
-
-test("sends a never-configured deployment to the setup wizard instead of switching", async () => {
-  revision = 0;
-  show();
-  expect(
-    await screen.findByRole("link", { name: "Set up OpenAPPA" }),
-  ).toHaveAttribute("href", "/openappa/setup");
-  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 });

@@ -33,7 +33,6 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
-import { useOpenAppaNeedsSetup } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { AppLogo } from "@/components/app-logo";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
@@ -502,7 +501,6 @@ export function AppSidebar() {
   const pluginsEnabled = useFeature("plugins");
   const openappaEnabled = useFeature("openappaEnabled");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const openappaNeedsSetup = useOpenAppaNeedsSetup();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -550,10 +548,6 @@ export function AppSidebar() {
             if (item.url === "/settings") {
               return { ...item, url: getSettingsNavigationUrl(permissionMap) };
             }
-            // Never set up: the page would be empty, so the row starts setup.
-            if (item.url === "/openappa" && openappaNeedsSetup) {
-              return { ...item, url: "/openappa/setup" };
-            }
             return item;
           }),
       })),
@@ -561,7 +555,6 @@ export function AppSidebar() {
       pluginsEnabled,
       openappaEnabled,
       guardrailsDeployment?.enabled,
-      openappaNeedsSetup,
       permissionMap,
     ],
   );

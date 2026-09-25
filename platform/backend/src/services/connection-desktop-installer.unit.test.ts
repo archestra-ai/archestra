@@ -272,6 +272,11 @@ test.each([
       expect(profile.inferenceGatewayBaseUrl).toBe(
         withProxy ? "https://proxy.example/v1/anthropic" : undefined,
       );
+      // Third-party mode keeps its own history, so proxy setups enable the
+      // Claude.ai import. Tools-only setups stay in standard mode.
+      expect(profile.claudeAiImport).toEqual(
+        withProxy ? { enabled: true, bannerBehavior: "show" } : undefined,
+      );
       expect(profile.managedMcpServers?.[0]?.oauth).toEqual(
         withMcp ? { mode: "dcr" } : undefined,
       );
@@ -303,6 +308,7 @@ test.each([
         expect(html.includes("+ → Connectors")).toBe(withMcp);
         expect(html.includes("Ask Claude to list the tools")).toBe(withMcp);
         expect(html.includes("Anthropic sign-in")).toBe(withProxy);
+        expect(html.includes("Settings → Import")).toBe(withProxy);
         if (!withProxy) expect(html).not.toContain("LLM Proxy Logs");
       }
       // A rerun reuses a verified subscription without a second browser sign-in.

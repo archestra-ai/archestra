@@ -459,7 +459,9 @@ describe("ConnectCommandPanel", () => {
     const revertLink = screen.queryByRole("link", {
       name: /How to return to standard Claude Desktop/,
     });
+    const importGuidance = screen.queryByText(/open Settings → Import/);
     if (clientId === "claude-desktop" && proxy) {
+      expect(importGuidance).toBeVisible();
       expect(revertLink).toBeVisible();
       expect(revertLink).toHaveAttribute(
         "href",
@@ -467,9 +469,7 @@ describe("ConnectCommandPanel", () => {
       );
     } else {
       expect(revertLink).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(/existing Claude conversations/),
-      ).not.toBeInTheDocument();
+      expect(importGuidance).not.toBeInTheDocument();
     }
 
     const gatewayStep = screen.queryByRole("heading", {

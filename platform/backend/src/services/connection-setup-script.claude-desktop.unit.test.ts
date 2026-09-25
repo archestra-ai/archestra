@@ -120,9 +120,11 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
             assert profile['inferenceGatewayApiKey'] == token
             assert profile['modelDiscoveryEnabled'] is True
             assert 'inferenceModels' not in profile
+            assert profile['claudeAiImport'] == {'enabled': True, 'bannerBehavior': 'show'}
             assert profile['inferenceCustomHeaders'].get('X-Archestra-Virtual-Key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
         else:
             assert 'inferenceProvider' not in profile
+            assert 'claudeAiImport' not in profile
         assert 'source' not in profile['managedMcpServers'][0]
         assert profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert profile['managedMcpServers'][0]['url'] == 'https://proxy.example/v1/mcp/test'
@@ -194,6 +196,9 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
     if (quotaFailure) expect(result.stderr).toContain("HTTP 429");
     else {
       expect(result.stdout).toContain("Desktop is configured");
+      expect(result.stdout.includes("Desktop Settings > Import")).toBe(
+        auth !== "none",
+      );
       if (os === "darwin") {
         expect(result.stdout).toContain(
           "Quit Claude Desktop from its app menu",

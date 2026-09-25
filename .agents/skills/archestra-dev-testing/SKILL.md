@@ -18,7 +18,10 @@ Frontend Vitest defaults to jsdom. For a test of pure logic whose runtime
 imports do not need browser APIs, put `// @vitest-environment node` at the top
 of the file. Check its dependency graph and run the file under Node before
 adding the directive; a `.test.ts` suffix alone does not establish that it is
-browser-free. Keep UI, storage, canvas, and browser binary API tests on jsdom.
+browser-free. This opt-in uses a shared worker module cache, so do not use
+`vi.mock` or leak mutable module/global state across files; the config rejects
+module mocks in this project. Keep UI, storage, canvas, and browser binary API
+tests on jsdom.
 
 ## The one rule
 

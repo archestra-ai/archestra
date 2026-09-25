@@ -38,7 +38,7 @@ jobs:
       contents: read # Required to resolve the currently deployed platform image from staging.
       id-token: write # Required for Workload Identity Federation and GKE credential retrieval.
     outputs:
-      previous_image: ${{ steps.previous-platform-image.outputs.previous-image }}
+      previous_image: ${{ steps.previous-main-image.outputs.previous-image || steps.deployed-platform-image.outputs.previous-image }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,16 +52,33 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+      # The previous main image already contains older static chunks. Fall back
+      # to the deployed image when that commit did not publish an image.
+      - name: Check previous main image
+        id: previous-main-image
+        if: ${{ github.event_name == 'push' && github.event.before != '' }}
+        env:
+          PREVIOUS_SHA: ${{ github.event.before }}
+          IMAGE_VERSION: ${{ inputs.version || github.sha }}
+        run: |
+          candidate="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREVIOUS_SHA}"
+          if [ "$PREVIOUS_SHA" != "$IMAGE_VERSION" ] && docker buildx imagetools inspect "$candidate" >/dev/null 2>&1; then
+            echo "previous-image=$candidate" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install gke-gcloud-auth-plugin
+        if: ${{ steps.previous-main-image.outputs.previous-image == '' }}
         run: gcloud components install gke-gcloud-auth-plugin
 
       - name: Configure kubectl
+        if: ${{ steps.previous-main-image.outputs.previous-image == '' }}
         run: |
           gcloud container clusters get-credentials archestra-staging \
             --zone us-central1-a --project friendly-path-465518-r6
 
-      - name: Resolve previous platform image
-        id: previous-platform-image
+      - name: Resolve deployed platform image
+        id: deployed-platform-image
+        if: ${{ steps.previous-main-image.outputs.previous-image == '' }}
         run: |
           PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
             -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \

@@ -57,7 +57,9 @@ jobs:
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_image }}
       auth_provider: dockerhub
-      checkout_fetch_depth: 0
+      # Docker contexts exclude .git, and release builds use an explicit tag.
+      # Fetching the full repository history adds ~30s to each native build.
+      checkout_fetch_depth: 1
       checkout_ref: ${{ inputs.checkout_ref }}
       # This reusable workflow currently publishes the compile-bound Platform
       # image; keep release builds on the same measured native runners as dev.

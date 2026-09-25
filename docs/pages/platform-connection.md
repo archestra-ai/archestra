@@ -8,19 +8,23 @@ lastUpdated: 2026-09-25
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
+![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
 Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot CLI, and OpenCode show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
-The page prompt downloads a Node.js installer before browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
+On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
 ## Connect From Your Coding Client
 
-Copy the prompt for your client from the Connection page. Claude Code reads `/connect.md` and runs the installer after browser approval. Other coding clients receive the installer command directly in the prompt.
+The terminal on the Connection page provides a prompt for your deployment.
+You can also give your coding agent this prompt, replacing the example hostname:
 
-The prompt supports Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
+> Read https://ai.example.com/connect.md and connect this client.
+
+The public instructions need no installed skill or platform login.
+They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
 The agent downloads a public bootstrap installer and starts a connection request.
@@ -28,6 +32,7 @@ Your browser opens a compact approval page for the requested client and operatin
 The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
 Sign in using your deployment's usual login or SSO.
 Review the configuration and confirm that the browser code matches your terminal.
+![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
 Approval releases the setup script to the waiting installer.
 Denying the request prevents installation.
@@ -68,7 +73,7 @@ Only approve a request you started with a matching terminal code.
 Never paste passwords, cookies, polling secrets, or setup scripts into a chat.
 
 Deployments expose `/llms.txt` with a link to `/connect.md`.
-Automatic discovery varies by client; the page prompt does not rely on discovery.
+Automatic discovery varies by client; the explicit prompt above avoids relying on discovery.
 Both public documents must remain reachable without application authentication.
 An upstream proxy that requires login for every URL must allow these documents and bootstrap endpoints.
 

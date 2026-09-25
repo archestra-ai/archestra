@@ -16,19 +16,7 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
     const timeout = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timeout);
   }, [copied]);
-  // Other clients can avoid a guarded WebFetch during bootstrap.
-  const prompt =
-    client.id === "claude-code"
-      ? `Read ${origin}/connect.md and connect Claude Code.`
-      : `Connect ${client.label} to ${origin}. Do not fetch setup instructions. Run the command for your terminal (Node.js 18+ required):
-
-macOS/Linux:
-p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client.id}
-
-Windows PowerShell:
-$p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client.id} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
-
-Allow at least 10 minutes for the command while the user approves the matching code in their browser. If the browser does not open, show the approval URL and code. Do not start another installer or replace this flow with manual API calls. After it finishes, follow its client-specific restart and MCP sign-in instructions. Verify the gateway and proxy in a new session before reporting success.`;
+  const prompt = `Read ${origin}/connect.md and connect ${client.label}.`;
 
   return (
     <div className="space-y-4">
@@ -37,7 +25,7 @@ Allow at least 10 minutes for the command while the user approves the matching c
         your browser.
       </p>
       <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
-        <code className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm leading-6">
+        <code className="min-w-0 flex-1 break-words font-mono text-sm leading-6">
           {origin ? prompt : "Loading your connection prompt…"}
         </code>
         <Button

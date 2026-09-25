@@ -646,12 +646,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Children named by this trajectory mint under this request's own id: the
     // minted parent:child id for a child turn, the root id for a parent.
     const rootId = session.session_id;
+    const blockedTranscriptCalls = new Set<string>();
     if (binding.adapter) {
       for (const call of calls) {
         // Native transcript files contain unchecked intermediate output, not
         // the child's admitted return. A correctly prefixed id is not proof
         // that reading those bytes is safe.
         if (
+          !handbackIds.has(call.id) &&
           !binding.adapter.isSpawnTool(call.name, call.namespace) &&
           binding.adapter.childTranscriptPaths &&
           referencesChildTranscriptPath({
@@ -659,10 +661,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             pathPatterns: binding.adapter.childTranscriptPaths,
           })
         ) {
-          throw new ApiError(
-            409,
-            "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
-          );
+          blockedTranscriptCalls.add(call.id);
+          continue;
         }
         protectNamedChildren({
           children: binding.adapter.namesChildren({
@@ -674,7 +674,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
     }
-    const rest = calls.filter((call) => !handbackIds.has(call.id));
+    const rest = calls.filter(
+      (call) =>
+        !handbackIds.has(call.id) && !blockedTranscriptCalls.has(call.id),
+    );
     const policy = sharedPolicy(session.organization_id);
     const decisions = rest.length
       ? await evaluateToolCalls(
@@ -712,6 +715,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const id of blockedTranscriptCalls) {
+      decisionById.set(id, {
+        kind: "deny",
+        feedback:
+          "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+      });
+    }
 
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];

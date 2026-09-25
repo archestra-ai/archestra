@@ -3631,11 +3631,74 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ["Bash", { command: "cat /tmp/tasks/[a-z]*.output" }],
       ["Bash", { command: "cat /tmp/tasks/unused/../a1.output" }],
     ])("withholds native child transcript access through %s", async (name, input) => {
-      options = { nonStreamingToolUse: { name, input } };
+      for (const stream of [false, true]) {
+        options = stream
+          ? {
+              includeToolUse: true,
+              streamStopReason: "tool_use",
+              streamingToolUse: { name, input },
+            }
+          : { nonStreamingToolUse: { name, input } };
+        const body = payload(stream);
+        body.tools.push({
+          name,
+          description: "Local file access",
+          input_schema: { type: "object", properties: {} },
+        });
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": `raw-transcript-parent-${stream}`,
+          },
+          payload: body,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const notice = noticeFrom(response.body, stream);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        expect(JSON.stringify(notice.input)).toContain(
+          "withheld raw child transcript access",
+        );
+        expect(response.body).not.toContain("event: error");
+        expect(events.filter((event) => event.event === "tool_call")).toEqual(
+          [],
+        );
+      }
+    });
+
+    test("withholds only the transcript call when another call is allowed", async () => {
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () => {
+          const client = createAnthropicTestClient({
+            nonStreamingToolUse: {
+              name: "Bash",
+              input: { command: "cat /tmp/tasks/a1.output" },
+            },
+          });
+          const create = client.messages.create;
+          client.messages.create = async (params) => {
+            const response = await create(params);
+            if ("content" in response) {
+              response.content.push({
+                type: "tool_use",
+                id: "toolu_allowed_weather",
+                name: "get_weather",
+                input: { location: "SF" },
+                caller: { type: "direct" },
+              });
+            }
+            return response;
+          };
+          return client as never;
+        },
+      );
       const body = payload(false);
       body.tools.push({
-        name,
-        description: "Local file access",
+        name: "Bash",
+        description: "Run a local command",
         input_schema: { type: "object", properties: {} },
       });
       const response = await app.inject({
@@ -3645,13 +3708,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: {
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
-          "x-claude-code-session-id": "raw-transcript-parent",
+          "x-claude-code-session-id": "mixed-transcript-parent",
         },
         payload: body,
       });
-      expect(response.statusCode, response.body).toBe(409);
-      expect(response.body).toContain("withheld raw child transcript access");
-      expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      const calls = response
+        .json()
+        .content.filter((block: { type: string }) => block.type === "tool_use");
+      expect(calls.map((call: { name: string }) => call.name)).toEqual([
+        "archestra__get_remedy_plans",
+        "get_weather",
+      ]);
+      expect(events.filter((event) => event.event === "tool_call")).toEqual([
+        expect.objectContaining({ tool: "get_weather" }),
+      ]);
     });
 
     test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {
@@ -3833,7 +3905,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ])("a Claude child return crosses as exact runtime bytes before the parent sees it (stream=%s)", async (stream) => {
       config.openappa.offerSigningSecret = secret;
       const session = `child-return-${stream ? "stream" : "buffered"}`;
-      const rawMarker = "REPORT-RAW-KOALA-0831";
+      const rawMarker = "REPORT-RAW-KOALA-0831 /tmp/subagents/agent-a1.jsonl";
       const admitted = "SUMMARY(24 characters): safe";
       const spawn = {
         description: "Read the report",

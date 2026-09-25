@@ -571,6 +571,7 @@ jobs:
           workspaces: platform/archestra-rs
           targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
           cache: ${{ runner.os == 'Linux' }}
+          toolchain-before-cache: "true"
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
@@ -716,6 +717,7 @@ jobs:
         with:
           workspaces: ai-labs
           cache: ${{ runner.os == 'Linux' }}
+          toolchain-before-cache: "true"
 
       - name: Install uv
         uses: ./.github/actions/setup-uv

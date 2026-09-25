@@ -21,10 +21,22 @@ inputs:
     description: Whether to restore or save Cargo artifacts
     required: false
     default: "true"
+  toolchain-before-cache:
+    description: Sync Rust before cache lookup for jobs whose existing cache uses that order
+    required: false
+    default: "false"
 
 runs:
   using: composite
   steps:
+    - name: Install pinned Rust toolchain before cache
+      if: inputs.toolchain-before-cache == 'true'
+      shell: bash
+      working-directory: ${{ inputs.workspaces }}
+      run: bash "$GITHUB_ACTION_PATH/install-toolchain.sh"
+      env:
+        RUST_TARGETS: ${{ inputs.targets }}
+
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       if: inputs.cache == 'true'
       with:
@@ -32,16 +44,12 @@ runs:
         shared-key: ${{ inputs.shared-key }}
         save-if: ${{ inputs.save-if }}
 
-    # The cache key includes installed Rust versions. Restore before syncing
-    # the pinned toolchain so this matches the existing main/shard cache key.
-    - name: Install pinned Rust toolchain
+    # The cache key includes installed Rust versions. Shared backend caches
+    # restore before syncing; Rust check jobs use their existing after-sync key.
+    - name: Install pinned Rust toolchain after cache
+      if: inputs.toolchain-before-cache != 'true'
       shell: bash
       working-directory: ${{ inputs.workspaces }}
-      run: |
-        rustup show
-        if [[ -n "$RUST_TARGETS" ]]; then
-          read -ra targets <<< "$RUST_TARGETS"
-          rustup target add "${targets[@]}"
-        fi
+      run: bash "$GITHUB_ACTION_PATH/install-toolchain.sh"
       env:
         RUST_TARGETS: ${{ inputs.targets }}

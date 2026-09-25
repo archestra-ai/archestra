@@ -63,9 +63,8 @@ let pgliteClient: PGlite | null = null;
 // Tests that never issue SQL leave the database unchanged, so the next test
 // can skip truncating hundreds of tables.
 let databaseTouched = false;
-// The rollback project opts in explicitly; all ordinary database tests keep
-// the table reset, including tests of commit and schema-change behavior.
-const rollbackMode = process.env.ARCHESTRA_TEST_SHARED_WORKERS === "rollback";
+// The filename opts a suite into rollback; ordinary database suites retain
+// table resets, including tests of commit and schema-change behavior.
 let completedRollbackTests = 0;
 let releaseTestTransaction: (() => void) | null = null;
 let testTransactionFinished: Promise<void> | null = null;
@@ -85,7 +84,7 @@ let pristineConfig: Record<string, unknown> | null = null;
 // would pull config.ts before the env above is set.
 type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
 let enterpriseTier: EnterpriseTierRef | null = null;
-if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true" || rollbackMode) {
+if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
     unknown
@@ -164,7 +163,11 @@ beforeAll(async () => {
 });
 
 /** Reset the database only after a test (or file-level hook) accessed it. */
-beforeEach(async () => {
+beforeEach(async ({ task }) => {
+  // Vitest exposes the current file on its typed hook context. This keeps
+  // rollback suites in the clean project's shared module cache without
+  // relying on process-global mode or internal runner state.
+  const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (!pgliteClient) {
     throw new Error("Database not initialized. Did beforeAll run?");
   }
@@ -263,7 +266,8 @@ beforeEach(async () => {
  * unrelated files. useRealTimers is a no-op when timers are already real.
  */
 const realFetch = globalThis.fetch;
-afterEach(() => {
+afterEach(({ task }) => {
+  const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (rollbackMode) {
     return finishTestTransaction().finally(restoreTestGlobals);
   }

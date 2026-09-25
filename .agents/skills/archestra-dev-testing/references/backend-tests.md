@@ -15,11 +15,16 @@ the suite does not need a real commit, run schema changes, or leave untracked
 background database work running. Production `db.transaction` calls become
 nested savepoints, which can change commit-sensitive behavior. Postgres
 sequence increments do not roll back, so the suite must not rely on sequence
-values resetting. Benchmark the full file in ordinary and rollback projects,
+values resetting. Benchmark the full file with ordinary table resets and with
+the rollback filename suffix,
 run shuffled order with several seeds, and run it alongside ordinary database
 suites before opting in. Keep
 ordinary `*.test.ts` for uncertain cases; a passing suite alone is insufficient
 evidence because fire-and-forget writes can fail after assertions finish.
+
+Rollback files share the `clean` project's workers and module cache with
+ordinary mock-free database files. The setup hooks use Vitest's current test
+file context to select transaction rollback only for `*.rollback.test.ts`.
 
 For values or types from `@archestra/shared`, import a narrow exported subpath (for example `@archestra/shared/consts`) in database-free tests. Its root barrel re-exports a large graph, including generated clients. Biome rejects the root import in `*.unit.test.ts`; when a subpath is missing, add a focused export to `shared/package.json` rather than importing the root. When converting an ordinary test to a database-free test, inspect imports of the code under test as well: a light test file can still load an expensive graph through the module it exercises.
 

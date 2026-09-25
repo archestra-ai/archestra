@@ -43,7 +43,9 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
  * while everything else can share each worker's module cache and skip
  * re-importing the whole backend graph per file (~6s/file saved).
  *
- * Routing is computed from file CONTENT at config-load time, so a new test
+ * Rollback-eligible files join the clean project and select transaction
+ * teardown through their filename in setup hooks, retaining its shared module
+ * cache. Routing is computed from file CONTENT at config-load time, so a new test
  * that adds `vi.mock` is automatically placed in the isolated project — no
  * manual list to maintain.
  */
@@ -204,8 +206,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: "clean",
-          include: testFiles.clean,
+          include: [...testFiles.clean, ...testFiles.rollback],
           isolate: false,
+          // The setup hooks select rollback for *.rollback.test.ts through
+          // Vitest's current test-file context. Both variants share workers.
           // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
           setupFiles: ["./src/test/setup.ts"],
@@ -214,19 +218,6 @@ export default defineConfig({
           // isolated project skips that — its per-file registries can't leak,
           // and exotic config mocks (getter-only properties) would break it.
           env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: "rollback",
-          include: testFiles.rollback,
-          isolate: false,
-          globalSetup: ["./src/test/global-setup.ts"],
-          setupFiles: ["./src/test/setup.ts"],
-          // Only suites explicitly named *.rollback.test.ts use per-test
-          // transactions; ordinary database-backed suites keep table resets.
-          env: { ARCHESTRA_TEST_SHARED_WORKERS: "rollback" },
         },
       },
       {

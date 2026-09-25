@@ -1582,11 +1582,15 @@ jobs:
 
   # Temporary opt-in measurement; remove after the consolidated run.
   platform-e2e-consolidation-benchmark:
-    name: Platform E2E Consolidation Benchmark (one 16-vCPU runner)
+    name: Platform E2E Consolidation Benchmark (two 8-vCPU shards ${{ matrix.shard }}/2)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'benchmark-consolidation' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -1673,8 +1677,8 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: chromium
-          shard: ""
-          extra_args: "--grep-invert '@quickstart' --workers=6"
+          shard: ${{ format('--shard={0}/2', matrix.shard) }}
+          extra_args: "--grep-invert '@quickstart' --workers=2"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
@@ -1685,7 +1689,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-lite-consolidation
+          name: blob-report-lite-consolidation-${{ matrix.shard }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 

@@ -9,9 +9,9 @@ permissions:
 
 jobs:
   frontend-consolidated:
-    name: Frontend Integration Tests (one 16-vCPU job)
+    name: Frontend Integration Tests (one 8-vCPU job)
     if: github.event.label.name == 'benchmark-consolidation'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
     defaults:
@@ -89,9 +89,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*
-          key: frontend-integration-next-${{ runner.os }}-group-one-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
+          key: frontend-integration-next-${{ runner.os }}-group-one-8vcpu-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
           restore-keys: |
-            frontend-integration-next-${{ runner.os }}-group-one-
+            frontend-integration-next-${{ runner.os }}-group-one-8vcpu-
             frontend-integration-next-${{ runner.os }}-group-
 
       - name: Reap stale MSW webServers
@@ -140,7 +140,7 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-report-group-one
+          name: playwright-integration-report-group-one-8vcpu
           path: platform/frontend/playwright-report-shard-*/
           retention-days: "7"
 
@@ -148,6 +148,6 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-traces-group-one
+          name: playwright-integration-traces-group-one-8vcpu
           path: platform/frontend/test-results-shard-*/
           retention-days: "7"

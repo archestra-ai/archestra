@@ -14,6 +14,7 @@ import db, { schema } from "@/database";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction, InteractionResponse } from "@/types";
 import { SelectInteractionSchema } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationModel from "./conversation";
@@ -3906,9 +3907,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
       expect(usage).toHaveLength(1);
@@ -3950,9 +3949,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       // Subscription usage costs the org $0 and must not burn down the limit
       let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
@@ -3979,7 +3976,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
       expect(usage).toHaveLength(1);
@@ -4021,9 +4018,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
       expect(usage).toHaveLength(1);
@@ -4079,9 +4074,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const userUsage = await LimitModel.getModelUsageBreakdown(userLimit.id);
       expect(userUsage).toHaveLength(1);
@@ -4149,9 +4142,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const agentUsage = await LimitModel.getModelUsageBreakdown(agentLimit.id);
       expect(agentUsage).toHaveLength(1);
@@ -4207,8 +4198,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to let background update run
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
       expect(teamUsage).toHaveLength(1);
@@ -4269,8 +4259,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to let background update run
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       // team1 all-models limit should be updated
       const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
@@ -4341,9 +4330,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to the task queue effectively draining the microtask queue
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
       expect(usage).toHaveLength(1);
@@ -4383,9 +4370,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to let background update run
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
       expect(usage).toHaveLength(1);
@@ -4428,9 +4413,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to let background update run
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
       expect(usage).toHaveLength(1);
@@ -4481,9 +4464,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Tick to let background update run
-      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await drainBackgroundWork();
 
       const usage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
       expect(usage).toHaveLength(1);

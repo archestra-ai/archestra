@@ -53,7 +53,7 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { fileStore } from "@/skills-sandbox/file-store";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { CommonToolResult } from "@/types";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
@@ -2610,6 +2610,8 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
 describe("get_app_diagnostics", () => {
   let context: ArchestraContext;
 
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
     const agent = await makeAgent({ name: "Diag Agent" });
     const user = await makeUser();
@@ -3569,6 +3571,8 @@ describe("refine_app", () => {
 describe("validate_app", () => {
   let context: ArchestraContext;
   let organizationId: string;
+
+  afterEach(() => vi.useRealTimers());
 
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
     const agent = await makeAgent({ name: "Validating Agent" });

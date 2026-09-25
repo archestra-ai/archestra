@@ -132,7 +132,7 @@ jobs:
 
       # shared-key must stay identical to the shard job's.
       - name: Cache cargo registry and target
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

@@ -1,0 +1,45 @@
+name: Setup Rust build
+description: Install the pinned Rust toolchain and restore or save Cargo build artifacts
+
+inputs:
+  workspaces:
+    description: Cargo workspace whose target directory is cached
+    required: true
+  shared-key:
+    description: Cache key shared between jobs that build the same workspace
+    required: false
+    default: ""
+  save-if:
+    description: Whether this job may save an updated cache
+    required: false
+    default: "true"
+  targets:
+    description: Additional Rust target triples to install
+    required: false
+    default: ""
+  cache:
+    description: Whether to restore or save Cargo artifacts
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Rust toolchain
+      shell: bash
+      working-directory: ${{ inputs.workspaces }}
+      run: |
+        rustup show
+        if [[ -n "$RUST_TARGETS" ]]; then
+          read -ra targets <<< "$RUST_TARGETS"
+          rustup target add "${targets[@]}"
+        fi
+      env:
+        RUST_TARGETS: ${{ inputs.targets }}
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: inputs.cache == 'true'
+      with:
+        workspaces: ${{ inputs.workspaces }}
+        shared-key: ${{ inputs.shared-key }}
+        save-if: ${{ inputs.save-if }}

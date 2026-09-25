@@ -351,15 +351,12 @@ jobs:
       # turbo's parallel crate builds each trigger a concurrent rustup
       # download of the same components, which races and fails with
       # "could not rename downloaded file".
-      - name: Setup Rust
-        run: rustup show
-
       # Reuse the warm release target restored by backend test shards. The
       # native addons are intentionally uncached in Turbo because its remote
       # cache is shared across architectures, but Cargo artifacts here are
       # scoped to this CI runner and Rust toolchain.
       - name: Restore Rust build cache
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -566,18 +563,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup Rust
-        run: |
-          rustup show
-          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
       # The mac mini keeps its cargo caches on the persistent disk; only the
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
+          targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          cache: ${{ runner.os == 'Linux' }}
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
@@ -673,7 +666,7 @@ jobs:
       # workspace, same shared-key, so the crate build is an incremental no-op
       # without this job racing the shards to save.
       - name: Cache cargo registry and target
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -717,15 +710,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup Rust
-        run: rustup show
-
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
+          cache: ${{ runner.os == 'Linux' }}
 
       - name: Install uv
         uses: ./.github/actions/setup-uv
@@ -817,7 +807,7 @@ jobs:
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
-        uses: ./.github/actions/cache-rust-build
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

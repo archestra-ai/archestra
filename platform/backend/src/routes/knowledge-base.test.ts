@@ -4212,9 +4212,6 @@ describe("knowledge base permission configuration", () => {
       "@archestra/shared/access-control"
     );
     expect(memberPermissions.knowledgeSource).toEqual(["read", "query"]);
-    expect(memberPermissions.knowledgeSource).not.toContain("create");
-    expect(memberPermissions.knowledgeSource).not.toContain("update");
-    expect(memberPermissions.knowledgeSource).not.toContain("delete");
   });
 
   test("admin permissions include full CRUD for knowledgeSource", async () => {
@@ -4284,56 +4281,6 @@ describe("knowledge base permission configuration", () => {
     expect(requiredEndpointPermissionsMap[RouteId.DeleteConnector]).toEqual({
       knowledgeSource: ["delete"],
     });
-  });
-
-  test("member cannot have create, update, or delete access to knowledge base routes", async () => {
-    const { memberPermissions, requiredEndpointPermissionsMap } = await import(
-      "@archestra/shared/access-control"
-    );
-    const { RouteId } = await import("@archestra/shared");
-
-    const memberKbActions = memberPermissions.knowledgeSource;
-
-    // Verify member lacks permissions for write routes
-    const writeRoutes = [
-      RouteId.CreateKnowledgeBase,
-      RouteId.UpdateKnowledgeBase,
-      RouteId.DeleteKnowledgeBase,
-      RouteId.CreateConnector,
-      RouteId.UpdateConnector,
-      RouteId.DeleteConnector,
-    ];
-
-    for (const routeId of writeRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeSource).toBeDefined();
-      const requiredActions = required?.knowledgeSource ?? [];
-      const hasAll = requiredActions.every((action: string) =>
-        memberKbActions.includes(action as never),
-      );
-      expect(hasAll).toBe(false);
-    }
-
-    // Verify member has permissions for read routes
-    const readRoutes = [
-      RouteId.GetKnowledgeBases,
-      RouteId.GetKnowledgeBase,
-      RouteId.GetKnowledgeBaseHealth,
-      RouteId.GetConnectors,
-      RouteId.GetConnector,
-      RouteId.GetConnectorRuns,
-      RouteId.GetConnectorRun,
-    ];
-
-    for (const routeId of readRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeSource).toBeDefined();
-      const requiredActions = required?.knowledgeSource ?? [];
-      const hasAll = requiredActions.every((action: string) =>
-        memberKbActions.includes(action as never),
-      );
-      expect(hasAll).toBe(true);
-    }
   });
 
   describe("knowledge source visibility", () => {

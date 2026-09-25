@@ -262,10 +262,8 @@ describe("ConnectCommandPanel", () => {
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
         expect(
-          screen.getByText(
-            `Read ${window.location.origin}/connect.md and connect ${label}.`,
-          ),
-        ).toBeVisible();
+          screen.getByText(/Do not fetch setup instructions/),
+        ).toHaveTextContent(`Connect ${label} to ${window.location.origin}.`);
       }
       expect(createSetupMock).not.toHaveBeenCalled();
       await user.click(

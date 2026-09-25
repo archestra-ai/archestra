@@ -1,4 +1,4 @@
-name: Frontend Runner Cost Trial
+name: Backend ARM Cost Trial
 
 on:
   pull_request:
@@ -8,10 +8,11 @@ permissions:
   contents: read
 
 jobs:
-  frontend-eight-vcpu-trial:
-    name: Frontend Integration Tests (one 8-vCPU job)
+  backend-arm-trial:
+    name: Backend Unit Tests (16-vCPU ARM trial, shard 7/8)
     if: github.event.pull_request.head.ref == 'perf/one-shard-backend-tests'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    timeout-minutes: 15
     permissions:
       contents: read
     defaults:
@@ -32,122 +33,71 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Resolve Playwright version
-        id: pw-version
+      - name: Ensure Zsh for shell startup tests
         run: |
-          version=$(pnpm --filter @frontend exec playwright --version | awk '{print $2}')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
 
-      - name: Cache Playwright browsers
-        # The mac mini keeps its browser cache on the persistent disk instead.
-        if: runner.os == 'Linux'
-        id: playwright-cache
+      # The NAPI package builds are deliberately uncacheable in turbo
+      # (turbo.json sets cache:false on them — the .node artifacts are
+      # platform-specific and the remote cache is shared with dev machines),
+      # so every shard really compiles the three Rust crates: measured at
+      # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
+      # dir turns that into an incremental no-op. All eight shards restore
+      # the same entry (shared-key); only shard 1 saves. Fresh PR branches
+      # restore the entry maintained by the warm-backend-build-cache job on
+      # main pushes (Actions caches only flow down from the default branch).
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      # Vitest uses its results cache to schedule historically slow files
+      # first. Persist one cache per shard so fresh runners keep that balancing
+      # data without mixing partial result sets across the matrix.
+      - name: Cache Vitest timing data
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
-
-      # apt mirror outages must not fail the job when the runner image already
-      # carries Chromium's system libraries: retry install-deps, then prove the
-      # browser launches instead of trusting apt's exit code.
-      - name: Install Chromium for Playwright
-        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          pnpm --filter @frontend exec playwright install chromium
-          for attempt in 1 2 3; do
-            if pnpm --filter @frontend exec playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "install-deps attempt ${attempt} failed; retrying in 20s"
-            sleep 20
-          done
-          echo "install-deps failed; verifying Chromium launches with existing system libraries"
-          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
-
-      - name: Install Chromium system dependencies
-        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: |
-          for attempt in 1 2 3; do
-            if pnpm --filter @frontend exec playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "install-deps attempt ${attempt} failed; retrying in 20s"
-            sleep 20
-          done
-          echo "install-deps failed; verifying Chromium launches with existing system libraries"
-          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
-
-      - name: Install Chromium (macOS)
-        # No system deps to install on macOS; a version already present in
-        # ~/Library/Caches/ms-playwright makes this a fast no-op.
-        if: runner.os == 'macOS'
-        run: pnpm --filter @frontend exec playwright install chromium
-
-      # Next validates its compiler cache against the current source tree. A
-      # One job owns all four isolated Next dist dirs.
-      - name: Restore integration test compiler output
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: platform/frontend/.next-pw-shard-*
-          key: frontend-integration-next-${{ runner.os }}-group-one-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
+          path: platform/backend/node_modules/.vite/vitest
+          key: backend-vitest-${{ runner.os }}-node24-shard-7-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
           restore-keys: |
-            frontend-integration-next-${{ runner.os }}-group-one-
-            frontend-integration-next-${{ runner.os }}-group-
+            backend-vitest-${{ runner.os }}-node24-shard-7-
 
-      - name: Reap stale MSW webServers
-        # Three runner slots share this machine (mac-mini-1, -1-2, -1-3), so
-        # cancelled merge-queue runs can leave `next dev` processes behind.
-        # Each shard below picks its own free port, so stale servers cannot
-        # collide, but reaping old ones keeps the shared host's memory bounded.
-        if: runner.os == 'macOS'
-        run: |
-          for pid in $(pgrep -f "next dev -H 127.0.0.1" || true); do
-            age=$(ps -o etime= -p "$pid" | tr -d ' ') || continue
-            case "$age" in
-              *-*|*:*:*) echo "Reaping orphaned webServer $pid (age $age)"; kill -9 "$pid" || true ;;
-            esac
-          done
-
-      - name: Run integration tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          shard_count=4
-          first_shard=1
-          last_shard=4
-          pids=()
-          for shard in $(seq "$first_shard" "$last_shard"); do
-            # Keep each server on a distinct port. Derive non-overlapping
-            # ports from the run/attempt/shard instead of discovering a free
-            # port and racing another process to bind it after the probe closes.
-            port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 7000) * shard_count + shard))
-            echo "Starting frontend integration shard ${shard}/${shard_count} on port ${port}"
-            ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
-              ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \
-              pnpm --filter @frontend exec playwright test --shard="${shard}/${shard_count}" &
-            pids+=("$!")
-          done
-
-          status=0
-          for pid in "${pids[@]}"; do
-            if ! wait "$pid"; then
-              status=1
-            fi
-          done
-          exit "$status"
-
-      - name: Upload Playwright report
-        if: failure()
-        uses: ./.github/actions/github-upload-artifact
+      # Node's compile cache persists V8 bytecode for the large module graph
+      # that every Vitest fork imports. A same-host 2,616-test shard improved
+      # from 312.95s cold to 278.36s warm (-11%). Node validates cached code by
+      # content; the source hash bounds stale entries and the restore prefix
+      # lets the next commit reuse bytecode for unchanged modules.
+      - name: Cache Node compile data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: playwright-integration-report-group-one
-          path: platform/frontend/playwright-report-shard-*/
-          retention-days: "7"
+          path: ${{ runner.temp }}/node-compile-cache
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-7-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          restore-keys: |
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-7-
 
-      - name: Upload traces
-        if: failure()
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: playwright-integration-traces-group-one
-          path: platform/frontend/test-results-shard-*/
-          retention-days: "7"
+      # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
+      # which `turbo check:ci` builds implicitly via the task graph. Running
+      # vitest directly skips that, so build backend's workspace deps here.
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same pinned toolchain on a cold runner, which races
+      # and fails with "could not rename downloaded file" — so on failure,
+      # sync the toolchain serially and retry once.
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+
+      - name: Run backend unit tests (shard 7 of 8)
+        working-directory: ./platform/backend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
+          SHARD: "7"
+        run: pnpm exec vitest run --shard="${SHARD}/8"

@@ -53,6 +53,7 @@ import {
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
 import { appaWireFamily } from "@/openappa/wire";
+import { rememberYellSession } from "@/openappa/yell-session";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyBufferedModelResponseContext,
@@ -771,6 +772,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         released.push(delegated?.call ?? call);
         if (delegated) annotated.push(delegated.annotation);
+        await rememberYellSession({
+          session,
+          call,
+          resolution: this.resolution(binding),
+        });
         continue;
       }
       // The registry pins `blocked` to the wire batch: the entry names the

@@ -132,7 +132,7 @@ jobs:
 
       # shared-key must stay identical to the shard job's.
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

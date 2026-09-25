@@ -359,11 +359,11 @@ jobs:
       # cache is shared across architectures, but Cargo artifacts here are
       # scoped to this CI runner and Rust toolchain.
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
-          save-if: false
+          save-if: "false"
 
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
@@ -575,7 +575,7 @@ jobs:
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: platform/archestra-rs
 
@@ -673,7 +673,7 @@ jobs:
       # workspace, same shared-key, so the crate build is an incremental no-op
       # without this job racing the shards to save.
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -723,7 +723,7 @@ jobs:
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: ai-labs
 
@@ -817,7 +817,7 @@ jobs:
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/cache-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

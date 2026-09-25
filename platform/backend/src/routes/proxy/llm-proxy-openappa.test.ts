@@ -3631,27 +3631,42 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ["Bash", { command: "cat /tmp/tasks/[a-z]*.output" }],
       ["Bash", { command: "cat /tmp/tasks/unused/../a1.output" }],
     ])("withholds native child transcript access through %s", async (name, input) => {
-      options = { nonStreamingToolUse: { name, input } };
-      const body = payload(false);
-      body.tools.push({
-        name,
-        description: "Local file access",
-        input_schema: { type: "object", properties: {} },
-      });
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: {
-          ...externalClientHeaders(),
-          "user-agent": "claude-cli/2.1.0 (external, cli)",
-          "x-claude-code-session-id": "raw-transcript-parent",
-        },
-        payload: body,
-      });
-      expect(response.statusCode, response.body).toBe(409);
-      expect(response.body).toContain("withheld raw child transcript access");
-      expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+      for (const stream of [false, true]) {
+        options = stream
+          ? {
+              includeToolUse: true,
+              streamStopReason: "tool_use",
+              streamingToolUse: { name, input },
+            }
+          : { nonStreamingToolUse: { name, input } };
+        const body = payload(stream);
+        body.tools.push({
+          name,
+          description: "Local file access",
+          input_schema: { type: "object", properties: {} },
+        });
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": `raw-transcript-parent-${stream}`,
+          },
+          payload: body,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const notice = noticeFrom(response.body, stream);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        expect(JSON.stringify(notice.input)).toContain(
+          "withheld raw child transcript access",
+        );
+        expect(response.body).not.toContain("event: error");
+        expect(events.filter((event) => event.event === "tool_call")).toEqual(
+          [],
+        );
+      }
     });
 
     test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {

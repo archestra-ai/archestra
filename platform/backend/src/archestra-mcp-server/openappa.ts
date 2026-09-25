@@ -94,7 +94,11 @@ const registry = defineArchestraTools([
             : undefined;
       if (!identity) {
         logger.warn(
-          { agentId: context.agentId, hasSession: Boolean(known) },
+          {
+            agentId: context.agentId,
+            hasSession: Boolean(known),
+            hasToolCallId: Boolean(context.currentToolCallId),
+          },
           "OpenAPPA yell refused: no session or tool-call identity",
         );
         throw new ApiError(

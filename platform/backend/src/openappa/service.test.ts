@@ -333,6 +333,44 @@ describe("APPA feature boundary", () => {
     });
   });
 
+  test("a yell takes its session and call from one source", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: false };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
+    );
+    const proxySession = { ...session, session_id: "proxy-session" };
+    await rememberYellSession({
+      session: proxySession,
+      call: { id: "cached", name: "archestra__yell", arguments: args },
+      resolution: {
+        canonicalize: (name) => name,
+        looseRunToolDispatch: false,
+      },
+    });
+    const chat = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+      userId: "alice",
+      sessionId: "conversation",
+    };
+    await executeArchestraTool("archestra__yell", args, {
+      ...chat,
+      currentToolCallId: "report",
+    });
+    // A session without its call id does not borrow the cached call.
+    await executeArchestraTool("archestra__yell", args, chat);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const { session_id, operation_id } = JSON.parse(raw);
+        return { session_id, operation_id };
+      }),
+    ).toEqual([
+      { session_id: "conversation", operation_id: "yell:report" },
+      { session_id: "proxy-session", operation_id: "yell:cached" },
+    ]);
+  });
+
   test("reporting refuses missing identity and unprotected child calls", async () => {
     config.openappa.yellEnabled = true;
     const args = { message: "Confusing feedback", with_trajectory: false };

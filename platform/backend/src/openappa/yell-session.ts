@@ -6,6 +6,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
+import { ApiError } from "@/types";
 import type { OpenAppaSession } from "./service";
 
 export const YellArgumentsSchema = z.strictObject({
@@ -62,10 +63,18 @@ export async function recallYellSession(params: {
   organizationId: string;
   args: YellArguments;
 }): Promise<YellSession | undefined> {
-  return cacheManager.getAndDelete<YellSession>(
-    yellSessionKey(params.organizationId, params.args),
-    { throwOnError: true },
-  );
+  try {
+    return await cacheManager.getAndDelete<YellSession>(
+      yellSessionKey(params.organizationId, params.args),
+      { throwOnError: true },
+    );
+  } catch (error) {
+    logger.warn({ err: error }, "Could not recall the OpenAPPA yell session");
+    throw new ApiError(
+      503,
+      "OpenAPPA reporting is temporarily unavailable; retry the same yell call",
+    );
+  }
 }
 
 function yellSessionKey(

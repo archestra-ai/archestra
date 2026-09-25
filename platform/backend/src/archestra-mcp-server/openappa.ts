@@ -14,6 +14,10 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
+  coverageVisibility,
+  openappaCoverageService,
+} from "@/openappa/coverage";
+import {
   clearHitlReview,
   consumeHitlRuling,
   stageHitlReview,
@@ -40,7 +44,7 @@ import {
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
 } from "@/services/openappa-policy-change";
-import { ApiError } from "@/types";
+import { ApiError, UuidIdSchema } from "@/types";
 import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
@@ -150,6 +154,32 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "list_guardrails_battery_fits",
+    title: "List OpenAPPA batteries that fit",
+    description:
+      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is given. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables `[credentials]` must bind to a runtime credential key, `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
+    schema: z.strictObject({
+      mcpServerId: UuidIdSchema.optional().describe(
+        "The catalog ID of one MCP server; omit for every server you can see.",
+      ),
+    }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(401, "Organization and user context are required");
+      const visibility = await coverageVisibility(
+        context.userId,
+        context.organizationId,
+      );
+      return result({
+        fits: await openappaCoverageService.batteryFits({
+          organizationId: context.organizationId,
+          catalogId: args.mcpServerId,
+          ...visibility,
+        }),
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "validate_guardrails_policy",
     title: "Validate OpenAPPA policy",
     description:
@@ -169,7 +199,7 @@ const registry = defineArchestraTools([
     shortName: "preview_guardrails_policy_change",
     title: "Preview OpenAPPA policy change",
     description:
-      "Validate and show a reviewable diff for a proposed organization.appa.toml. Read the current policy and pass its revision. This changes nothing. Show the diff and warnings to the user before publishing with update_guardrails_policy.",
+      "Validate and show a reviewable diff for a proposed organization.appa.toml. Read the current policy and pass its revision. This changes nothing. Explain what the change does and its warnings to the user before publishing with update_guardrails_policy; show the diff when the user asks.",
     schema: UpdateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId)
@@ -199,7 +229,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain its diff and warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only, and turns OpenAPPA enforcement on when it was off and the caller is an administrator: report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only, and turns OpenAPPA enforcement on when it was off and the caller is an administrator: report `enforcement` to the user. Report any inactive effective battery.",
     schema: UpdateGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -686,6 +716,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
     shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
     shortName === "get_guardrails_policy" ||
+    shortName === "list_guardrails_battery_fits" ||
     shortName === "validate_guardrails_policy" ||
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||

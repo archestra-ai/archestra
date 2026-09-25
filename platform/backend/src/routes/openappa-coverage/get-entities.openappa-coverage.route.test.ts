@@ -230,6 +230,110 @@ describe("GET /api/openappa/coverage/entities", () => {
     }
   });
 
+  test("sorts by the most tools with no enforced rule, counting every target's Auto mode tools", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const covered = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "A sorted gateway",
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const uncovered = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "B sorted gateway",
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Sorted tools",
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "sorted__list",
+      rawName: "list",
+    });
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: covered.id,
+      organizationId: ctx.organizationId,
+      excludedToolIds: [tool.id],
+    });
+
+    // The first page by name holds only the gateway with nothing uncovered.
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?search=sorted%20gateway&sortBy=uncovered&limit=1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().pagination.total).toBe(2);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        id: uncovered.id,
+        toolCount: 1,
+        governedCount: 0,
+      }),
+    ]);
+  });
+
+  test("sorts by name, by type with MCP servers first, or by tool count, either way", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "Alpha ordered",
+      agentType: "mcp_gateway",
+    });
+    const small = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Beta ordered",
+    });
+    await makeTool({ catalogId: small.id, name: "beta__a", rawName: "a" });
+    const large = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Gamma ordered",
+    });
+    await makeTool({ catalogId: large.id, name: "gamma__a", rawName: "a" });
+    await makeTool({ catalogId: large.id, name: "gamma__b", rawName: "b" });
+
+    const order = async (sort: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/openappa/coverage/entities?search=ordered${sort}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().data.map((row: { id: string }) => row.id);
+    };
+
+    expect(await order("")).toEqual([gateway.id, small.id, large.id]);
+    expect(await order("&sortBy=name&sortDirection=desc")).toEqual([
+      large.id,
+      small.id,
+      gateway.id,
+    ]);
+    // Ties stay by name, whichever way the type goes.
+    expect(await order("&sortBy=type")).toEqual([
+      small.id,
+      large.id,
+      gateway.id,
+    ]);
+    expect(await order("&sortBy=type&sortDirection=desc")).toEqual([
+      gateway.id,
+      small.id,
+      large.id,
+    ]);
+    expect(await order("&sortBy=tools&sortDirection=desc")).toEqual([
+      large.id,
+      small.id,
+      gateway.id,
+    ]);
+  });
+
   test("identifies the built-in default fallback for an assigned tool", async ({
     makeAgent,
     makeAgentTool,
@@ -330,6 +434,13 @@ describe("GET /api/openappa/coverage/entities", () => {
         governedCount: 2,
         fallbackCount: 2,
         builtInCount: 1,
+        rules: {
+          root: 1,
+          battery: 1,
+          notEnforced: 0,
+          catchAll: 2,
+          builtInFallback: 0,
+        },
         autoMode: false,
       }),
     ]);
@@ -362,6 +473,13 @@ describe("GET /api/openappa/coverage/entities", () => {
         toolCount: 3,
         governedCount: 2,
         fallbackCount: 1,
+        rules: {
+          root: 0,
+          battery: 2,
+          notEnforced: 0,
+          catchAll: 1,
+          builtInFallback: 0,
+        },
       }),
     ]);
 

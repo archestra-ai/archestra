@@ -9,6 +9,9 @@ export type CoverageTool = CoverageToolsPage["data"][number];
 type CoverageEntitiesPage =
   archestraApiTypes.GetOpenappaCoverageEntitiesResponses["200"];
 export type CoverageEntity = CoverageEntitiesPage["data"][number];
+export type CoverageRuleCounts = CoverageEntity["rules"];
+export type CoverageSummary =
+  archestraApiTypes.GetOpenappaCoverageSummaryResponses["200"];
 export type CoverageToolsParams = NonNullable<
   archestraApiTypes.GetOpenappaCoverageToolsData["query"]
 >;
@@ -21,9 +24,13 @@ export type CoverageEntitiesParams = NonNullable<
  * under one prefix so a save, a pull or a tool sync refetches them all.
  */
 /** One page of visible agents, gateways, and registry servers with tool counts. */
-export function useCoverageEntities(params: CoverageEntitiesParams) {
+export function useCoverageEntities(
+  params: CoverageEntitiesParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: [coverageQueryPrefix, "entities", params],
+    enabled,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOpenappaCoverageEntities(
@@ -46,6 +53,19 @@ export function useCoverageTools(params: CoverageToolsParams) {
       const { data, error } = await archestraApiSdk.getOpenappaCoverageTools({
         query: params,
       });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+/** The whole visible tool inventory in aggregate, for the Overview charts. */
+export function useCoverageSummary() {
+  return useQuery({
+    queryKey: [coverageQueryPrefix, "summary"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaCoverageSummary();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },

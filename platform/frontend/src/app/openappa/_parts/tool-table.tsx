@@ -171,13 +171,13 @@ export function ToolTable({
             showSearch={false}
             items={[
               { value: DEFAULT_FILTER_ALL, label: "All policy sources" },
-              { value: "root", label: "Root rule" },
+              { value: "root", label: "Custom rule" },
               { value: "battery", label: "Battery" },
               ...(tools.data?.batteries ?? []).map((name) => ({
                 value: `battery:${name}`,
                 label: `${name} battery`,
               })),
-              { value: "catchall", label: "Catch-all" },
+              { value: "catchall", label: "No rule" },
               { value: "built_in", label: "Built-in fallback" },
             ]}
           />

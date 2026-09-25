@@ -24,9 +24,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { openAppaChatHref } from "@/lib/openappa-routes";
 import { OpenAppaSourceForm } from "./appa-github-sync-panel";
+import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /**
  * The first things to do on OpenAPPA, each with where it stands: turn it on
@@ -44,8 +45,12 @@ export function OverviewSetupCards() {
 }
 
 function EnforcementCard() {
-  const deployment = useGuardrailsDeployment();
-  const enabled = deployment.data?.enabled;
+  const { enabled, hasPolicy } = useOpenAppaSetupState();
+  const promptKey = enabled
+    ? "reviewPolicy"
+    : hasPolicy
+      ? "resumePolicy"
+      : "setUpPolicy";
   return (
     <SetupCard
       icon={<ShieldCheck />}
@@ -60,17 +65,13 @@ function EnforcementCard() {
       description={
         enabled
           ? "Tool calls through the LLM Proxy and MCP Gateway are checked against your policy. Ask the policy agent to review or change it."
-          : "Tool calls are not checked yet. Tell the policy agent what to protect: it drafts your first rules, and saving them turns OpenAPPA on."
+          : hasPolicy
+            ? "Tool calls are not checked: enforcement is off. The policy agent can review your saved policy with you before you turn it back on."
+            : "Tool calls are not checked yet. Tell the policy agent what to protect: it drafts your first rules, and saving them turns OpenAPPA on."
       }
       action={
         <Button size="sm" variant={enabled ? "outline" : "default"} asChild>
-          <Link
-            href={
-              enabled
-                ? "/openappa/configure"
-                : "/openappa/configure?start=first"
-            }
-          >
+          <Link href={openAppaChatHref({ promptKey })}>
             <MessageCircle />
             <span>{enabled ? "Configure with chat" : "Set up with chat"}</span>
           </Link>
@@ -119,7 +120,7 @@ function GithubSyncCard() {
           href: openAppaUrl(
             "/validation#make-policy-tests-a-required-ci-check",
           ),
-          label: "Test policy changes in CI",
+          label: "Test changes in CI",
         }}
         action={
           connected ? (
@@ -155,11 +156,12 @@ function LearnMoreCard() {
       title="How it works"
       description="OpenAPPA tracks what each conversation has read and checks every tool call against your policy. A blocked call comes back with a way forward, such as asking a person to approve it."
       action={
-        <Button size="sm" variant="outline" asChild>
-          <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
-            Read how it works
-          </ExternalDocsLink>
-        </Button>
+        <ExternalDocsLink
+          href={openAppaUrl("/how-it-works")}
+          className="text-sm"
+        >
+          Read how it works
+        </ExternalDocsLink>
       }
     />
   );
@@ -182,26 +184,28 @@ function SetupCard({
 }) {
   return (
     <Card className="gap-4 py-5">
-      <CardHeader className="flex items-center gap-3 px-5">
+      <CardHeader className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
           {icon}
         </span>
-        <div className="min-w-0 space-y-1">
-          <CardTitle className="text-sm">{title}</CardTitle>
-          {status}
-        </div>
+        <CardTitle className="flex-1 text-sm whitespace-nowrap">
+          {title}
+        </CardTitle>
+        {status}
       </CardHeader>
-      <CardContent className="flex-1 space-y-2 px-5">
+      <CardContent className="flex-1 px-5">
         <CardDescription className="leading-relaxed">
           {description}
         </CardDescription>
+      </CardContent>
+      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5">
+        {action}
         {learnMore && (
           <ExternalDocsLink href={learnMore.href} className="text-sm">
             {learnMore.label}
           </ExternalDocsLink>
         )}
-      </CardContent>
-      <CardFooter className="px-5">{action}</CardFooter>
+      </CardFooter>
     </Card>
   );
 }
@@ -230,6 +234,6 @@ function Status({
 }
 
 /** A page of the OpenAPPA site, where the concepts behind a card are explained. */
-function openAppaUrl(path: string): string {
+export function openAppaUrl(path: string): string {
   return `https://www.openappa.com${path}`;
 }

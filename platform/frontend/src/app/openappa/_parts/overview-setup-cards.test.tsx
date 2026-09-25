@@ -20,6 +20,7 @@ vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer();
 let enabled: boolean;
+let revision: number;
 let sync: archestraApiTypes.GetAppaGithubSyncResponses["200"];
 const source = {
   organizationId: "org",
@@ -45,10 +46,21 @@ beforeEach(() => {
     typeof useHasPermissions
   >);
   enabled = false;
+  revision = 0;
   sync = { enabled: true, hasPolicy: false, source: null };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
       HttpResponse.json({ enabled, featureEnabled: true, active: enabled }),
+    ),
+    http.get(`${api}/guardrails-policy`, () =>
+      HttpResponse.json({
+        organizationId: "org",
+        revision,
+        content: "",
+        contentHash: "hash",
+        updatedBy: null,
+        updatedAt: null,
+      }),
     ),
     http.get(`${api}/openappa/github-sync`, () => HttpResponse.json(sync)),
     http.get(`${api}/credentials`, () => HttpResponse.json([])),
@@ -80,7 +92,12 @@ test("a fresh instance starts the first-policy chat and offers GitHub setup", as
     within(card("Enforcement")).getByRole("link", {
       name: "Set up with chat",
     }),
-  ).toHaveAttribute("href", "/openappa/configure?start=first");
+  ).toHaveAttribute(
+    "href",
+    expect.stringMatching(
+      /^\/chat\?openappa=1&openappaPrompt=setUpPolicy&from=openappa$/,
+    ),
+  );
   expect(await screen.findByText("Not connected")).toBeInTheDocument();
   expect(
     within(card("How it works")).getByRole("link", {
@@ -89,6 +106,24 @@ test("a fresh instance starts the first-policy chat and offers GitHub setup", as
   ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
   fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
+});
+
+test("a saved policy with enforcement off starts a chat that reviews it", async () => {
+  revision = 3;
+  show();
+  expect(
+    await screen.findByText(/review your saved policy/),
+  ).toBeInTheDocument();
+  expect(
+    within(card("Enforcement")).getByRole("link", {
+      name: "Set up with chat",
+    }),
+  ).toHaveAttribute(
+    "href",
+    expect.stringMatching(
+      /^\/chat\?openappa=1&openappaPrompt=resumePolicy&from=openappa$/,
+    ),
+  );
 });
 
 test("a configured instance shows both steps done", async () => {
@@ -100,7 +135,12 @@ test("a configured instance shows both steps done", async () => {
     within(card("Enforcement")).getByRole("link", {
       name: "Configure with chat",
     }),
-  ).toHaveAttribute("href", "/openappa/configure");
+  ).toHaveAttribute(
+    "href",
+    expect.stringMatching(
+      /^\/chat\?openappa=1&openappaPrompt=reviewPolicy&from=openappa$/,
+    ),
+  );
   expect(await screen.findByText("Connected")).toBeInTheDocument();
   expect(screen.getByText("example/policies")).toBeInTheDocument();
   expect(

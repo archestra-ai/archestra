@@ -162,38 +162,58 @@ export function useSetBatteryEnabled(catalogId: string) {
   );
 }
 
-/** Include a battery for a catalog entry, spelling the package the policy governs. */
-export function useCreateBatteryInstall() {
+/**
+ * Apply one battery dialog's edits in a single save: attach first, so a
+ * battery joining the policy has an install to bind credentials on, then bind,
+ * then detach, so the binding lands before a last detach can drop the entry.
+ */
+export function useSaveBattery() {
   const client = useQueryClient();
   return useBatteryMutation(
-    async (params: CreateInstallParams) =>
-      settled(await createInstall(client, params)),
-    (battery) => toast.success(`Battery "${battery.name}" attached`),
-  );
-}
-
-export function useUpdateBatteryInstall() {
-  return useBatteryMutation(
     async (params: {
-      id: string;
-      body: archestraApiTypes.UpdateOpenappaBatteryInstallData["body"];
-    }) =>
-      settled(
-        await archestraApiSdk.updateOpenappaBatteryInstall({
-          path: { id: params.id },
-          body: params.body,
-        }),
-      ),
-  );
-}
-
-export function useDeleteBatteryInstall() {
-  return useBatteryMutation(
-    async (id: string) =>
-      settled(
-        await archestraApiSdk.deleteOpenappaBatteryInstall({ path: { id } }),
-      ),
-    () => toast.success("Battery removed"),
+      batteryName: string;
+      /** Catalogs to attach; `null` includes an organization-wide battery. */
+      attach: (string | null)[];
+      detach: string[];
+      credentialBindings: Record<string, string> | null;
+      exclude: boolean;
+    }) => {
+      const { batteryName } = params;
+      for (const catalogId of params.attach)
+        settled(
+          await createInstall(client, {
+            batteryName,
+            ...(catalogId === null ? {} : { catalogId }),
+          }),
+        );
+      if (params.credentialBindings !== null) {
+        const batteries = await client.fetchQuery({
+          ...batteriesQuery,
+          staleTime: 0,
+        });
+        const install = batteries
+          .find((battery) => battery.name === batteryName)
+          ?.installs.find(({ id }) => !params.detach.includes(id));
+        if (install)
+          settled(
+            await archestraApiSdk.updateOpenappaBatteryInstall({
+              path: { id: install.id },
+              body: { credentialBindings: params.credentialBindings },
+            }),
+          );
+      }
+      for (const id of params.detach)
+        settled(
+          await archestraApiSdk.deleteOpenappaBatteryInstall({ path: { id } }),
+        );
+      if (params.exclude)
+        settled(
+          await archestraApiSdk.deleteOpenappaBatteryInclude({
+            path: { name: batteryName },
+          }),
+        );
+    },
+    (_, params) => toast.success(`Battery "${params.batteryName}" saved`),
   );
 }
 

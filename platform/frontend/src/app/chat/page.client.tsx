@@ -5,6 +5,7 @@ import {
   type ChatExternalMcpSkillMetadata,
   ChatExternalMcpSkillMetadataSchema,
   type ChatMessageFeedback,
+  type ChatOpenAppaPolicyTargetMetadata,
   type ChatSkillMetadata,
   type ThinkingEffortSetting,
   toPlaceholderTitle,
@@ -164,6 +165,7 @@ import {
   generateLockedChatKey,
   isActionAvailableForConversation,
 } from "@/lib/chat/locked-chat";
+import { findOpenAppaPolicyTarget } from "@/lib/chat/openappa-policy-target";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -201,6 +203,12 @@ import {
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import {
+  isOpenAppaLaunch,
+  newConversationPath,
+  OPENAPPA_PROMPT_PARAM,
+  resolveOpenAppaPolicyTarget,
+} from "@/lib/openappa-routes";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
@@ -215,6 +223,7 @@ import {
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
+import { OpenAppaSuggestedPrompts } from "./openappa-suggested-prompts";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
   type ChatSubmitOptions,
@@ -229,6 +238,7 @@ import {
   resolveSuggestionPreview,
   SuggestedPromptPills,
 } from "./suggested-prompt-pills";
+import { useOpenAppaLaunchPrompt } from "./use-openappa-launch-prompt";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -310,6 +320,11 @@ export function ChatPageContent({
   // Sandbox-command marker (`!` prefix) on the first message of a new chat,
   // held the same way so the deferred send stamps metadata.sandboxCommand.
   const pendingSandboxCommandRef = useRef<true | undefined>(undefined);
+  // Policy target of a new OpenAPPA chat, held for its first message: the
+  // create navigates to /chat/<id>, which drops the target query params.
+  const pendingOpenAppaTargetRef = useRef<
+    ChatOpenAppaPolicyTargetMetadata | undefined
+  >(undefined);
   // Composer prefill from a Skill deep link; handed to the composer once and
   // cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
@@ -428,6 +443,18 @@ export function ChatPageContent({
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const startAgentRunMutation = useStartAgentRun();
+  // `/chat?openappa=1` drafts an OpenAPPA policy chat: the server picks the
+  // built-in agent and model from the conversation origin, so the new-chat
+  // paths below skip the agent/model resolution they otherwise require. An
+  // optional `targetType`/`targetId` scopes the chat to one policy target.
+  const requestsOpenAppaDraft = searchParams.get("openappa") === "1";
+  const isOpenAppaDraft =
+    useFeature("openappaEnabled") === true && requestsOpenAppaDraft;
+  const openAppaDraftTarget = useMemo(
+    () =>
+      isOpenAppaDraft ? resolveOpenAppaPolicyTarget(searchParams) : undefined,
+    [isOpenAppaDraft, searchParams],
+  );
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -488,7 +515,7 @@ export function ChatPageContent({
         (agent) => agent.id === initialAgentId && agent.runtime !== null,
       )
     : undefined;
-  const isInitialRuntimeMode = !!initialRuntimeAgent;
+  const isInitialRuntimeMode = !!initialRuntimeAgent && !isOpenAppaDraft;
   const runtimePreflight = useAgentRuntimePreflight(
     initialAgentId ?? "",
     isInitialRuntimeMode,
@@ -549,10 +576,17 @@ export function ChatPageContent({
     });
   }, [routeConversationId]);
 
+  // An OpenAPPA launch link names its prompt by key instead of carrying the
+  // text; it auto-sends like user_prompt once resolved.
+  const openAppaLaunchPrompt = useOpenAppaLaunchPrompt({
+    promptKey: isOpenAppaDraft ? searchParams.get(OPENAPPA_PROMPT_PARAM) : null,
+    target: openAppaDraftTarget,
+  });
+
   // Get user_prompt from URL for auto-sending
   const initialUserPrompt = useMemo(() => {
-    return searchParams.get("user_prompt") || undefined;
-  }, [searchParams]);
+    return searchParams.get("user_prompt") || openAppaLaunchPrompt;
+  }, [searchParams, openAppaLaunchPrompt]);
 
   // Hackathon submission review, seeded from the chat deep link the Slack
   // "Replay" button points at:
@@ -792,7 +826,11 @@ export function ChatPageContent({
         // keyed page and remount everything mid-stream (visible flicker).
         // Refresh, deep links, and back/forward still resolve through the
         // /chat/[conversationId] route.
-        window.history.pushState(null, "", `/chat/${id}`);
+        window.history.pushState(
+          null,
+          "",
+          newConversationPath(id, new URLSearchParams(window.location.search)),
+        );
       } else {
         router.push("/chat");
       }
@@ -822,7 +860,13 @@ export function ChatPageContent({
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
-  const isPolicyConversation = conversation?.origin === "openappa";
+  const isPolicyConversation =
+    conversation?.origin === "openappa" || (isOpenAppaDraft && !conversationId);
+  // A chat opened from the OpenAPPA pages links back to them from its title.
+  const backLink =
+    isPolicyConversation && isOpenAppaLaunch(searchParams)
+      ? { href: "/openappa", label: "Back to OpenAPPA" }
+      : undefined;
   usePageTitle(
     conversation
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
@@ -2071,11 +2115,13 @@ export function ChatPageContent({
     const skillToSend = pendingSkillRef.current;
     const externalMcpSkillToSend = pendingExternalMcpSkillRef.current;
     const sandboxCommandToSend = pendingSandboxCommandRef.current;
+    const openAppaTargetToSend = pendingOpenAppaTargetRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
     pendingExternalMcpSkillRef.current = null;
     pendingSandboxCommandRef.current = undefined;
+    pendingOpenAppaTargetRef.current = undefined;
 
     const parts: ChatMessagePart[] = [];
 
@@ -2109,6 +2155,9 @@ export function ChatPageContent({
             ? { externalMcpSkill: externalMcpSkillToSend }
             : {}),
           ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
+          ...(openAppaTargetToSend
+            ? { openAppaPolicyTarget: openAppaTargetToSend }
+            : {}),
           ...(initialAppDiagnostics.length > 0
             ? { appDiagnostics: initialAppDiagnostics }
             : {}),
@@ -2208,6 +2257,14 @@ export function ChatPageContent({
     }
   };
 
+  // The server reads an OpenAPPA conversation's policy target off its latest
+  // user message, so every follow-up re-sends the one the chat started with.
+  const openAppaPolicyTarget =
+    isPolicyConversation && conversationId
+      ? (findOpenAppaPolicyTarget(messages) ??
+        findOpenAppaPolicyTarget((conversation?.messages ?? []) as UIMessage[]))
+      : undefined;
+
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
     message,
     e,
@@ -2239,6 +2296,7 @@ export function ChatPageContent({
           ? { externalMcpSkill: options.externalMcpSkill }
           : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+        ...(openAppaPolicyTarget ? { openAppaPolicyTarget } : {}),
       });
       trackEvent("message_queued", {
         conversationId,
@@ -2363,6 +2421,7 @@ export function ChatPageContent({
           ? { externalMcpSkill: externalMcpSkillToAttach }
           : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+        ...(openAppaPolicyTarget ? { openAppaPolicyTarget } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
         ...(openedAppMetadata
           ? {
@@ -2599,50 +2658,66 @@ export function ChatPageContent({
         return false;
       }
 
-      const input = buildCreateConversationInput({
-        agentId: initialAgentId,
-        modelId: initialModel,
-        chatApiKeyId: initialApiKeyId,
-        title,
-        projectId: searchParams.get("project"),
-        thinkingEffort: initialThinkingEffort,
-      });
+      // An OpenAPPA chat sends only its origin: the server picks the agent
+      // and model, and rejects everything else.
+      const input = isOpenAppaDraft
+        ? { origin: "openappa" as const }
+        : buildCreateConversationInput({
+            agentId: initialAgentId,
+            modelId: initialModel,
+            chatApiKeyId: initialApiKeyId,
+            title,
+            projectId: searchParams.get("project"),
+            thinkingEffort: initialThinkingEffort,
+          });
       if (!input) {
         return false;
       }
+      pendingOpenAppaTargetRef.current = isOpenAppaDraft
+        ? openAppaDraftTarget
+        : undefined;
 
       // LockedChat: the conversation DEK is generated here, in the browser,
       // BEFORE the create request. It rides along as a header; the mutation's
       // onSuccess stores it under the fresh conversation id before any
       // navigation or stream start reads it.
-      const lockedChatKey = isLockedChatDraft ? generateLockedChatKey() : null;
+      const lockedChatKey =
+        isLockedChatDraft && !isOpenAppaDraft ? generateLockedChatKey() : null;
 
-      createConversationMutation.mutate(
-        lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
-        {
-          onSuccess: (newConversation) => {
-            if (newConversation) {
-              setIsLockedChatDraft(false);
-              // A recording started from scratch (before this chat had an id)
-              // becomes this conversation's recording now that its id exists,
-              // so the timer and buffered capture carry across the transition.
-              appSessionRecorder.adoptConversation(newConversation.id);
-              // A review deep link (/chat/new -> /chat with reviewSrc) adopts
-              // the submission under the fresh id here, so the replay panel
-              // survives the navigation to /chat/<id> (which drops the URL
-              // params).
-              const pendingReview = pendingReviewContextRef.current;
-              if (pendingReview) {
-                setReviewContext(newConversation.id, pendingReview);
-              }
-              void onSuccess?.(newConversation);
+      // Chained off the promise, not mutate's per-call onSuccess: an auto-send
+      // can fire from the mount effect, and StrictMode's effect replay then
+      // detaches the mutation observer, which silently drops per-call
+      // callbacks (the conversation is created but never opened). Errors are
+      // already reported by the hook.
+      createConversationMutation
+        .mutateAsync(
+          lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
+        )
+        .then(
+          (newConversation) => {
+            if (!newConversation) return;
+            setIsLockedChatDraft(false);
+            // A recording started from scratch (before this chat had an id)
+            // becomes this conversation's recording now that its id exists,
+            // so the timer and buffered capture carry across the transition.
+            appSessionRecorder.adoptConversation(newConversation.id);
+            // A review deep link (/chat/new -> /chat with reviewSrc) adopts
+            // the submission under the fresh id here, so the replay panel
+            // survives the navigation to /chat/<id> (which drops the URL
+            // params).
+            const pendingReview = pendingReviewContextRef.current;
+            if (pendingReview) {
+              setReviewContext(newConversation.id, pendingReview);
             }
+            void onSuccess?.(newConversation);
           },
-        },
-      );
+          () => {},
+        );
       return true;
     },
     [
+      isOpenAppaDraft,
+      openAppaDraftTarget,
       initialAgentId,
       initialModel,
       initialApiKeyId,
@@ -2720,8 +2795,7 @@ export function ChatPageContent({
           !hasFiles &&
           !options?.skill &&
           !options?.externalMcpSkill) ||
-        isLoadingAgents ||
-        !initialAgentId ||
+        (!isOpenAppaDraft && (isLoadingAgents || !initialAgentId)) ||
         createConversationMutation.isPending
       ) {
         return;
@@ -2735,8 +2809,12 @@ export function ChatPageContent({
       pendingExternalMcpSkillRef.current = options?.externalMcpSkill ?? null;
       pendingSandboxCommandRef.current = options?.sandboxCommand;
 
-      // Check if there are pending tool actions to apply
-      const pendingActions = getPendingActions(initialAgentId);
+      // Check if there are pending tool actions to apply. They belong to the
+      // user's agent, not the built-in OpenAPPA one.
+      const pendingActions =
+        !isOpenAppaDraft && initialAgentId
+          ? getPendingActions(initialAgentId)
+          : [];
 
       // The sidebar shows this until the server generates a real title — and
       // keeps it if generation fails.
@@ -2745,7 +2823,7 @@ export function ChatPageContent({
 
       createInitialConversation(async (newConversation) => {
         // Apply pending tool actions if any
-        if (pendingActions.length > 0) {
+        if (pendingActions.length > 0 && initialAgentId) {
           // Get the default enabled tools from the conversation (backend sets these)
           // We need to fetch them first to apply our pending actions on top
           try {
@@ -2823,6 +2901,7 @@ export function ChatPageContent({
       }, placeholderTitle);
     },
     [
+      isOpenAppaDraft,
       initialAgentId,
       createInitialConversation,
       isLoadingAgents,
@@ -2908,8 +2987,10 @@ export function ChatPageContent({
     // Skip if conversation already exists
     if (conversationId) return;
 
-    // Wait for agent to be ready.
-    if (!initialAgentId) return;
+    // Wait for the config to tell whether an OpenAPPA draft applies, else for
+    // the agent to be ready (an OpenAPPA chat needs no agent).
+    if (requestsOpenAppaDraft && isLoadingFeatures) return;
+    if (!isOpenAppaDraft && !initialAgentId) return;
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -2942,6 +3023,9 @@ export function ChatPageContent({
   }, [
     initialUserPrompt,
     conversationId,
+    requestsOpenAppaDraft,
+    isLoadingFeatures,
+    isOpenAppaDraft,
     initialAgentId,
     createInitialConversation,
     selectConversation,
@@ -3260,6 +3344,7 @@ export function ChatPageContent({
           isShared={isShared}
           canCreateProject={canCreateProjectFromThisChat}
           isPolicyConversation={isPolicyConversation}
+          backLink={backLink}
           scheduleTriggerId={scheduledRunTriggerId}
           onShare={() => setIsShareDialogOpen(true)}
           onExportMarkdown={handleExportMarkdown}
@@ -3695,6 +3780,20 @@ export function ChatPageContent({
                         <AppLogo />
                       </div>
                       {(() => {
+                        if (isOpenAppaDraft)
+                          return (
+                            <OpenAppaSuggestedPrompts
+                              target={openAppaDraftTarget}
+                              disabled={createConversationMutation.isPending}
+                              onPreviewChange={setHoveredSuggestionPrompt}
+                              onSelect={(sp) =>
+                                submitInitialMessage({
+                                  text: sp.prompt,
+                                  files: [],
+                                })
+                              }
+                            />
+                          );
                         if (isInitialRuntimeMode) return null;
                         const prompts = initialAgent?.suggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
@@ -3736,6 +3835,24 @@ export function ChatPageContent({
                                    rather than the model-dependent composer. */
                               <ReviewChatNoKeyNotice
                                 onKeyAdded={handleFirstKeyAdded}
+                              />
+                            ) : isOpenAppaDraft ? (
+                              <ArchestraPromptInput
+                                minimalMode
+                                fixedAgentName="OpenAPPA Configuration Agent"
+                                fixedModelName="Selected automatically"
+                                placeholderOverride="Ask about or change your policy…"
+                                placeholderPreview={hoveredSuggestionPrompt}
+                                onSubmit={handleInitialSubmit}
+                                status={
+                                  createConversationMutation.isPending
+                                    ? "submitted"
+                                    : "ready"
+                                }
+                                selectedModel=""
+                                onModelChange={() => {}}
+                                agentId={null}
+                                textareaRef={textareaRef}
                               />
                             ) : (
                               <>
@@ -3985,6 +4102,7 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  nextSearchParams.delete(OPENAPPA_PROMPT_PARAM);
   // The attachments marker is one-shot too: drop it once consumed so a remount
   // can't re-trigger a drain (which would now find an empty store).
   nextSearchParams.delete("attachments");

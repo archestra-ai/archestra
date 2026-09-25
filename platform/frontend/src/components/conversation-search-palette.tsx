@@ -359,11 +359,7 @@ export function ConversationSearchPalette({
         deletedConversation &&
         pathname === conversationHref(deletedConversation).split("?")[0]
       ) {
-        router.push(
-          deletedConversation.origin === "openappa"
-            ? "/openappa/configure"
-            : "/chat",
-        );
+        router.push("/chat");
       }
     },
     [deleteMutation, conversations, pathname, router],

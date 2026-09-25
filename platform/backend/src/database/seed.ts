@@ -409,6 +409,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "get_agent",
     "get_mcp_gateway",
     "get_guardrails_policy",
+    "list_guardrails_battery_fits",
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",
     "update_guardrails_policy",

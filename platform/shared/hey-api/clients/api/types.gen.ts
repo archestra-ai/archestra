@@ -85556,6 +85556,8 @@ export type GetOpenappaCoverageEntitiesData = {
         type?: 'agent' | 'mcp_gateway' | 'mcp_server';
         entityId?: string;
         toolId?: string;
+        sortBy?: 'name' | 'type' | 'tools' | 'uncovered';
+        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/openappa/coverage/entities';
 };
@@ -85640,6 +85642,13 @@ export type GetOpenappaCoverageEntitiesResponses = {
             governedCount: number;
             fallbackCount: number;
             builtInCount: number;
+            rules: {
+                root: number;
+                battery: number;
+                notEnforced: number;
+                catchAll: number;
+                builtInFallback: number;
+            };
             autoMode: boolean;
         }>;
         pagination: {
@@ -85798,6 +85807,112 @@ export type GetOpenappaCoverageToolsResponses = {
 };
 
 export type GetOpenappaCoverageToolsResponse = GetOpenappaCoverageToolsResponses[keyof GetOpenappaCoverageToolsResponses];
+
+export type GetOpenappaCoverageSummaryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/coverage/summary';
+};
+
+export type GetOpenappaCoverageSummaryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaCoverageSummaryError = GetOpenappaCoverageSummaryErrors[keyof GetOpenappaCoverageSummaryErrors];
+
+export type GetOpenappaCoverageSummaryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totals: {
+            root: number;
+            battery: number;
+            notEnforced: number;
+            catchAll: number;
+            builtInFallback: number;
+            tools: number;
+        };
+        batteries: {
+            active: Array<{
+                name: string;
+                tools: number;
+            }>;
+            broken: Array<{
+                name: string;
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused';
+                tools: number;
+            }>;
+            available: Array<{
+                name: string;
+                servers: Array<string>;
+                tools: number;
+            }>;
+        };
+    };
+};
+
+export type GetOpenappaCoverageSummaryResponse = GetOpenappaCoverageSummaryResponses[keyof GetOpenappaCoverageSummaryResponses];
 
 export type GetOpenappaExternalConsultsData = {
     body?: never;

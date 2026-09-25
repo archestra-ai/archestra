@@ -54,8 +54,8 @@ export function GovernedByPill({
     governedBy.source === "battery"
       ? batteryDisplayName(governedBy.name)
       : governedBy.source === "root"
-        ? "Root rule"
-        : "Catch-all";
+        ? "Custom rule"
+        : "No rule";
   const content = (
     <>
       <Icon aria-hidden="true" />

@@ -185,7 +185,7 @@ export async function buildChatContext(params: {
     canAskUser: true,
   });
   const systemPrompt = isPolicyChat
-    ? `${baseSystemPrompt ?? ""}\n\nThis conversation is dedicated to configuring this deployment's OpenAPPA policy. Your normal agent role does not apply here. Load the built-in appa-guide skill with archestra__load_skill before policy work, then follow its current workflow. Use the built-in OpenAPPA tools to read the current policy and relevant MCP tools, preview proposed changes and explain the diff, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.${openAppaPolicyTargetContext ? `\n\n${openAppaPolicyTargetContext}` : ""}`
+    ? `${baseSystemPrompt ?? ""}\n\nThis conversation is dedicated to configuring this deployment's OpenAPPA policy. Your normal agent role does not apply here. Load the built-in appa-guide skill with archestra__load_skill before policy work, then follow its current workflow. Use the built-in OpenAPPA tools to read the current policy and relevant MCP tools, preview proposed changes and explain what they do, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.${openAppaPolicyTargetContext ? `\n\n${openAppaPolicyTargetContext}` : ""}`
     : baseSystemPrompt;
 
   return {
@@ -204,6 +204,7 @@ const POLICY_CHAT_TOOL_SHORT_NAMES = new Set([
   "get_agent",
   "get_mcp_gateway",
   "get_guardrails_policy",
+  "list_guardrails_battery_fits",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
   "update_guardrails_policy",

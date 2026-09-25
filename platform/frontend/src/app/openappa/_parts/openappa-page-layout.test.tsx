@@ -35,26 +35,13 @@ test.each([
     name: "Configure with chat",
   });
   if (pathname === "/openappa/policy") {
-    expect(configureLink).toHaveAttribute("href", "/openappa/configure");
+    expect(configureLink).toHaveAttribute(
+      "href",
+      expect.stringMatching(
+        /^\/chat\?openappa=1&openappaPrompt=explainPolicy&from=openappa$/,
+      ),
+    );
   } else {
     expect(configureLink).not.toBeInTheDocument();
   }
-});
-
-test.each([
-  "/openappa/configure",
-  "/openappa/conversation-1",
-])("configuration chat at %s replaces the tabs and links back to policy", (pathname) => {
-  vi.mocked(usePathname).mockReturnValue(pathname);
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams() as ReturnType<typeof useSearchParams>,
-  );
-  render(<OpenAppaPageLayout>Chat</OpenAppaPageLayout>);
-  expect(
-    screen.queryByRole("link", { name: "Batteries" }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Policy" })).toHaveAttribute(
-    "href",
-    "/openappa/policy",
-  );
 });

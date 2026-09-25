@@ -118,12 +118,11 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   await parked(fresh);
   // A request that read the text just before the save carries that text.
   const staleStart = hook(stale, { event: 'session_start' }, allow);
-  await delay(250);
-  await release(fresh);
-  // The stale dispatch is parked on its ledger lock, and the fresh session
-  // cannot open while that lock query holds the connection.
+  // Wait until the stale dispatch has pinned its deployment and reached its
+  // ledger lock. A fixed delay cannot establish that ordering on a busy CI host.
   await parked(stale);
   assert.equal(await opened(fresh), false, 'the stale dispatch pinned its text before the fresh session opened');
+  await release(fresh);
   await release(stale);
   assert.equal((await freshStart).decision, 'ack');
   assert.equal((await staleStart).decision, 'ack');

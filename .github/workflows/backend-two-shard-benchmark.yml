@@ -1,0 +1,76 @@
+name: Backend Two-Shard Benchmark
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Two shards (${{ matrix.runner }}) shard ${{ matrix.shard }}/2
+    if: github.event.label.name == 'benchmark-backend-two-shards'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-16vcpu-ubuntu-2404, blacksmith-32vcpu-ubuntu-2404]
+        shard: [1, 2]
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+      - name: Ensure Zsh for shell startup tests
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
+      - name: Cache Vitest timing data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: platform/backend/node_modules/.vite/vitest
+          key: backend-vitest-${{ runner.os }}-node24-two-${{ matrix.runner }}-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
+          restore-keys: |
+            backend-vitest-${{ runner.os }}-node24-two-${{ matrix.runner }}-${{ matrix.shard }}-
+            backend-vitest-${{ runner.os }}-node24-shard-
+      - name: Cache Node compile data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/node-compile-cache
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-two-${{ matrix.runner }}-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          restore-keys: |
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-two-${{ matrix.runner }}-${{ matrix.shard }}-
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+      - name: Run backend tests
+        working-directory: ./platform/backend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec vitest run --shard="${SHARD}/2"

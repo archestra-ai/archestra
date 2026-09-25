@@ -35,10 +35,10 @@ export function useDateTimeRangePicker({
   onDateRangeChange,
 }: UseDateTimeRangePickerOptions): UseDateTimeRangePickerReturn {
   const [startDate, setStartDate] = useState<Date | undefined>(() =>
-    startDateFromUrl ? new Date(startDateFromUrl) : undefined,
+    parseUrlDate(startDateFromUrl),
   );
   const [endDate, setEndDate] = useState<Date | undefined>(() =>
-    endDateFromUrl ? new Date(endDateFromUrl) : undefined,
+    parseUrlDate(endDateFromUrl),
   );
   const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
   const [tempStartDate, setTempStartDate] = useState<Date | undefined>(
@@ -115,4 +115,11 @@ export function useDateTimeRangePicker({
     startDateParam: startDate?.toISOString(),
     endDateParam: endDate?.toISOString(),
   };
+}
+
+// A malformed URL value would make toISOString() throw during render.
+function parseUrlDate(value: string | null): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }

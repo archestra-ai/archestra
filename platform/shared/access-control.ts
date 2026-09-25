@@ -2080,6 +2080,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
+  "/consults/logs": { log: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },

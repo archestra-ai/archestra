@@ -366,6 +366,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             variant="ghost"
             size="sm"
             className="h-8 px-2"
+            aria-label="Change model or provider"
             onClick={expandModelSelector}
           >
             <ModelSelectorLogo provider={logoProvider} className="size-4" />
@@ -666,6 +667,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               variant="ghost"
               size="sm"
               className="h-8 px-2"
+              aria-label="Change model or provider"
               onClick={expandModelSelector}
             >
               <ModelSelectorLogo provider={logoProvider} className="size-4" />

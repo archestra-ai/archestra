@@ -172,7 +172,14 @@ test("delegates from a parent agent to an external A2A agent", async ({
     await expectChatReady(page);
     // A saved user model override can take precedence over the agent's model.
     // Pin this conversation to the provider backed by the mappings above.
+    const expandModelControls = page.getByRole("button", {
+      name: "Change model or provider",
+    });
+    if (await expandModelControls.isVisible())
+      await expandModelControls.click();
     await selectApiKeyById(page, apiKeyId);
+    if (await expandModelControls.isVisible())
+      await expandModelControls.click();
     await page.getByTestId(E2eTestId.ChatModelSelectorTrigger).click();
     await selectRuntimeModelFromDialog(page, runtimeModel);
 

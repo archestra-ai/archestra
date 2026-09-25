@@ -3,7 +3,7 @@ import {
   PLUGIN_MAX_FILE_BYTES,
   PLUGIN_MAX_FILES,
   PLUGIN_MAX_TOTAL_BYTES,
-} from "@/types";
+} from "@/types/plugin-file-constraints";
 import type { GithubTreeItem } from "./github-tree";
 
 interface PluginTreeFileCandidate {

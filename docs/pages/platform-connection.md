@@ -14,7 +14,7 @@ Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot C
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
-The page prompt downloads a Node.js installer before requesting browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
+For clients other than Claude Code, the page prompt downloads a Node.js installer before browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
 
 ## Connect From Your Coding Client
 

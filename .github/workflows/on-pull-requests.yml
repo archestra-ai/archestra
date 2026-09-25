@@ -850,7 +850,28 @@ jobs:
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/2"
+        run: |
+          # Temporary profiling: sample fork count, aggregate RSS, and CPU
+          # during the full suite. Keep only summary numbers in the log.
+          samples=$(mktemp)
+          (
+            while true; do
+              ps -eo rss=,%cpu=,comm=,args= |
+                awk '$NF ~ /\/vitest\/dist\/workers\/forks\.js$/ { workers++; rss += $1; cpu += $2 } END { print workers + 0, rss + 0, cpu + 0 }' >> "$samples"
+              sleep 1
+            done
+          ) &
+          sampler_pid=$!
+          if pnpm exec vitest run --shard="${SHARD}/2"; then
+            test_status=0
+          else
+            test_status=$?
+          fi
+          kill "$sampler_pid" 2>/dev/null || true
+          wait "$sampler_pid" 2>/dev/null || true
+          awk '$1 > 0 { samples++; if ($1 > workers) workers = $1; if ($2 > rss) rss = $2; if ($3 > cpu) cpu = $3 } END { printf "Vitest worker telemetry: sampled_seconds=%d peak_forks=%d peak_aggregate_rss_gib=%.2f peak_aggregate_cpu_cores=%.1f\n", samples, workers, rss / 1048576, cpu / 100 }' "$samples"
+          rm "$samples"
+          exit "$test_status"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

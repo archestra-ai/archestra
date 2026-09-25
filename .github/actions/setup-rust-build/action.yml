@@ -25,6 +25,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: inputs.cache == 'true'
+      with:
+        workspaces: ${{ inputs.workspaces }}
+        shared-key: ${{ inputs.shared-key }}
+        save-if: ${{ inputs.save-if }}
+
+    # The cache key includes installed Rust versions. Restore before syncing
+    # the pinned toolchain so this matches the existing main/shard cache key.
     - name: Install pinned Rust toolchain
       shell: bash
       working-directory: ${{ inputs.workspaces }}
@@ -36,10 +45,3 @@ runs:
         fi
       env:
         RUST_TARGETS: ${{ inputs.targets }}
-
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      if: inputs.cache == 'true'
-      with:
-        workspaces: ${{ inputs.workspaces }}
-        shared-key: ${{ inputs.shared-key }}
-        save-if: ${{ inputs.save-if }}

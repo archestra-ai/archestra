@@ -83,22 +83,18 @@ const registry = defineArchestraTools([
         (context.organizationId && context.userId && id
           ? chatOpenAppaSession(context.organizationId, context.userId, id)
           : undefined);
-      const recalled =
-        (!known || !context.currentToolCallId) && context.organizationId
-          ? await recallYellSession({
-              organizationId: context.organizationId,
-              args,
-            })
-          : undefined;
-      const session = known ?? recalled?.session;
-      const toolCallId = context.currentToolCallId ?? recalled?.callId;
-      if (!session || !toolCallId) {
+      const identity =
+        known && context.currentToolCallId
+          ? { session: known, callId: context.currentToolCallId }
+          : context.organizationId
+            ? await recallYellSession({
+                organizationId: context.organizationId,
+                args,
+              })
+            : undefined;
+      if (!identity) {
         logger.warn(
-          {
-            agentId: context.agentId,
-            hasSession: Boolean(session),
-            hasToolCallId: Boolean(toolCallId),
-          },
+          { agentId: context.agentId, hasSession: Boolean(known) },
           "OpenAPPA yell refused: no session or tool-call identity",
         );
         throw new ApiError(
@@ -106,7 +102,11 @@ const registry = defineArchestraTools([
           "OpenAPPA reporting requires an authenticated session and tool-call identity",
         );
       }
-      return executeYell({ session, toolCallId, args });
+      return executeYell({
+        session: identity.session,
+        toolCallId: identity.callId,
+        args,
+      });
     },
   }),
   defineArchestraTool({

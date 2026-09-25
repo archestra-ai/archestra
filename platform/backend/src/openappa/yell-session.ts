@@ -64,6 +64,7 @@ export async function recallYellSession(params: {
 }): Promise<YellSession | undefined> {
   return cacheManager.getAndDelete<YellSession>(
     yellSessionKey(params.organizationId, params.args),
+    { throwOnError: true },
   );
 }
 

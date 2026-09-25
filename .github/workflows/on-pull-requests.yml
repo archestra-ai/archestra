@@ -354,6 +354,17 @@ jobs:
       - name: Setup Rust
         run: rustup show
 
+      # Reuse the warm release target restored by backend test shards. The
+      # native addons are intentionally uncached in Turbo because its remote
+      # cache is shared across architectures, but Cargo artifacts here are
+      # scoped to this CI runner and Rust toolchain.
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: false
+
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
       # persist-credentials: false, so that ref is absent AND git holds no

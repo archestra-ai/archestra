@@ -33,8 +33,8 @@ export function useUpdateGuardrailsDeployment() {
       client.invalidateQueries({ queryKey });
       toast.success(
         data?.active
-          ? "OpenAPPA enabled"
-          : "OpenAPPA disabled. Existing guardrails remain active.",
+          ? "OpenAPPA enforcement is on"
+          : "OpenAPPA enforcement is off. Existing guardrails remain active.",
       );
     },
   });

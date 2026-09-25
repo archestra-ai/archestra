@@ -417,6 +417,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "list_mcp_server_deployments",
     "get_mcp_server_tools",
     "load_skill",
+    "ask_user",
   ] as const;
 
   for (const organization of await getOrganizationsForBuiltInAgentSync()) {

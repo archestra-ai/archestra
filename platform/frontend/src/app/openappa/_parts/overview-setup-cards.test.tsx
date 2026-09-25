@@ -1,6 +1,6 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -16,6 +16,9 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OverviewSetupCards } from "./overview-setup-cards";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
+}));
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer();
@@ -75,80 +78,97 @@ function show() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <OverviewSetupCards />
     </QueryClientProvider>,
   );
 }
-function card(title: string) {
-  return screen.getByText(title).closest("[data-slot=card]") as HTMLElement;
-}
-
-test("a fresh instance starts the first-policy chat and offers GitHub setup", async () => {
+test("a fresh instance shows only the policy step", async () => {
   show();
-  expect(await screen.findByText("Off")).toBeInTheDocument();
+  expect(await screen.findByText("Turn on the guardrail")).toBeInTheDocument();
   expect(
-    within(card("Enforcement")).getByRole("link", {
-      name: "Set up with chat",
-    }),
+    screen.getByRole("link", { name: "Create my policy" }),
   ).toHaveAttribute(
     "href",
     expect.stringMatching(
       /^\/chat\?openappa=1&openappaPrompt=setUpPolicy&from=openappa$/,
     ),
   );
-  expect(await screen.findByText("Not connected")).toBeInTheDocument();
   expect(
-    within(card("How it works")).getByRole("link", {
-      name: /Read how it works/,
-    }),
-  ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
-  fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
-  expect(await screen.findByRole("dialog")).toBeInTheDocument();
-});
-
-test("a saved policy with enforcement off starts a chat that reviews it", async () => {
-  revision = 3;
-  show();
-  expect(
-    await screen.findByText(/review your saved policy/),
+    screen.getByText(/Archestra's guardrail uses OpenAPPA/),
   ).toBeInTheDocument();
   expect(
-    within(card("Enforcement")).getByRole("link", {
-      name: "Set up with chat",
-    }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringMatching(
-      /^\/chat\?openappa=1&openappaPrompt=resumePolicy&from=openappa$/,
-    ),
-  );
+    screen.getByText("You review it. Nothing changes until you approve."),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: /How OpenAPPA works/ }),
+  ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
+  expect(screen.queryByText("Connect GitHub")).not.toBeInTheDocument();
 });
 
-test("a configured instance shows both steps done", async () => {
-  enabled = true;
-  sync = { enabled: true, hasPolicy: true, source };
+test("members who cannot edit the policy are told who can", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+    typeof useHasPermissions
+  >);
   show();
-  expect(await screen.findByText("On")).toBeInTheDocument();
   expect(
-    within(card("Enforcement")).getByRole("link", {
-      name: "Configure with chat",
-    }),
+    await screen.findByText("Ask an administrator to turn on the guardrail."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Create my policy" }),
+  ).not.toBeInTheDocument();
+});
+
+function nextStep(container: HTMLElement) {
+  return container.querySelector("[data-next-step]");
+}
+
+test("a saved policy with enforcement off makes enforcement the next step", async () => {
+  revision = 3;
+  const { container } = show();
+  const open = await screen.findByRole("link", { name: "Open the policy" });
+  expect(open).toHaveAttribute("href", "/openappa/policy");
+  expect(nextStep(container)).toHaveTextContent("Enforcement");
+  expect(
+    screen.queryByRole("link", { name: "Ask about the policy" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("How it works")).toBeInTheDocument();
+  expect(screen.queryByText("Turn on the guardrail")).not.toBeInTheDocument();
+});
+
+test("an enforced policy makes GitHub step 2 of 2", async () => {
+  revision = 1;
+  enabled = true;
+  const { container } = show();
+  const connect = await screen.findByRole("button", {
+    name: "Connect GitHub",
+  });
+  expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
+  expect(nextStep(container)).toHaveTextContent("GitHub sync");
+  expect(screen.getByText("On")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Ask about the policy" }),
   ).toHaveAttribute(
     "href",
     expect.stringMatching(
-      /^\/chat\?openappa=1&openappaPrompt=reviewPolicy&from=openappa$/,
+      /^\/chat\?openappa=1&openappaPrompt=explainPolicy&from=openappa$/,
     ),
   );
-  expect(await screen.findByText("Connected")).toBeInTheDocument();
-  expect(screen.getByText("example/policies")).toBeInTheDocument();
   expect(
-    screen.getByRole("link", { name: "Open sync settings" }),
-  ).toHaveAttribute("href", "/settings/openappa");
+    screen.queryByRole("link", { name: "Open the policy" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: /Read about OpenAPPA/ }),
+  ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
+  fireEvent.click(connect);
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByText("Copy current policy")).toBeInTheDocument();
 });
 
 test("members who cannot manage sync are told who can connect it", async () => {
+  revision = 1;
+  enabled = true;
   vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
     typeof useHasPermissions
   >);
@@ -159,4 +179,37 @@ test("members who cannot manage sync are told who can connect it", async () => {
   expect(
     screen.queryByRole("button", { name: "Connect GitHub" }),
   ).not.toBeInTheDocument();
+});
+
+test("a failed sync shows its error", async () => {
+  revision = 1;
+  enabled = true;
+  sync = {
+    enabled: true,
+    hasPolicy: true,
+    source: { ...source, lastSyncError: "appa.toml was not found" },
+  };
+  show();
+  expect(
+    await screen.findByText("appa.toml was not found"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Sync failed")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Edit connection" }),
+  ).toBeInTheDocument();
+});
+
+test("once sync is connected the cards stay as status with no next step", async () => {
+  revision = 1;
+  enabled = true;
+  sync = { enabled: true, hasPolicy: true, source };
+  const { container } = show();
+  expect(await screen.findByText("Connected")).toBeInTheDocument();
+  expect(screen.getByText("example/policies")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
+    "href",
+    "/settings/openappa",
+  );
+  expect(nextStep(container)).toBeNull();
+  expect(screen.queryByText("Step 2 of 2")).not.toBeInTheDocument();
 });

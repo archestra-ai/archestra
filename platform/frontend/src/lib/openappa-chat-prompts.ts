@@ -17,15 +17,9 @@ import {
  * published.
  */
 const POLICY_LAUNCH_PROMPTS = {
-  /** Enforcement card: off, and no policy has been saved yet. */
+  /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
     "Set up OpenAPPA for me. Look at the MCP servers and tools my organization uses, pick batteries that cover them, and draft a complete policy with sensible defaults. Show me the proposed policy and what it would block or send for approval, then ask me whether to apply it.",
-  /** Enforcement card: off, but a policy exists. */
-  resumePolicy:
-    "OpenAPPA enforcement is off, but I already have a policy. Explain what it would enforce and suggest anything worth changing before it is back on. Tell me what each change would do and ask me whether to apply it. When we are done, remind me that an administrator can turn enforcement back on using the OpenAPPA switch in the sidebar.",
-  /** Enforcement card: on. */
-  reviewPolicy:
-    "Review my OpenAPPA policy and suggest improvements. Summarize what it enforces today, point out tools that only the catch-all covers, and propose up to three changes ranked by impact. Don't change anything until I pick one, then tell me what the change would do and ask me whether to apply it.",
   /** Tool coverage card: how to bring more tools under a rule. */
   improveCoverage:
     "Help me improve my OpenAPPA tool coverage. Open with a one-line summary of how many of my MCP server tools a rule covers, how many have a rule that is not enforced, and how many only the catch-all decides. Then name the biggest gaps: the servers with the most tools no rule covers, and the riskiest of those tools: ones that send data out, change or delete data, or read private data. End with up to three numbered changes ranked by how many tools they would cover, such as fixing a broken battery, including a battery that fits, or adding rules, so I can reply with a number. Don't change anything until I pick one, then tell me what it would do and ask me whether to apply it.",

@@ -24,96 +24,166 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { openAppaChatHref } from "@/lib/openappa-routes";
+import { cn } from "@/lib/utils/tailwind";
 import { OpenAppaSourceForm } from "./appa-github-sync-panel";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /**
- * The first things to do on OpenAPPA, each with where it stands: turn it on
- * with a policy the agent writes, keep that policy in GitHub, and learn the
- * model behind it.
+ * Where OpenAPPA setup stands. A fresh organization sees only the first step,
+ * saving a policy in the policy chat (which turns enforcement on). After that,
+ * three compact cards report enforcement and GitHub sync and link to the
+ * docs, and the first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
+  const { enabled, isFresh } = useOpenAppaSetupState();
+  const sync = useAppaGithubSync();
+  if (isFresh === undefined) return null;
+  if (isFresh) return <PolicyStep />;
+  const source = sync.data?.source;
+  const synced = Boolean(source?.interval && !source.lastSyncError);
+  const next = !enabled
+    ? "enforcement"
+    : sync.data?.enabled && !synced
+      ? "github"
+      : null;
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <EnforcementCard />
-      <GithubSyncCard />
+      <EnforcementCard next={next === "enforcement"} />
+      <GithubSyncCard next={next === "github"} />
       <LearnMoreCard />
     </div>
   );
 }
 
-function EnforcementCard() {
-  const { enabled, hasPolicy } = useOpenAppaSetupState();
-  const promptKey = enabled
-    ? "reviewPolicy"
-    : hasPolicy
-      ? "resumePolicy"
-      : "setUpPolicy";
+function PolicyStep() {
+  const { data: canEdit } = useHasPermissions({ toolPolicy: ["update"] });
+  const appName = useAppName();
   return (
-    <SetupCard
+    <Card className="max-w-2xl gap-4 py-5">
+      <CardHeader className="flex items-center gap-3 px-5">
+        <CardIcon>
+          <ShieldCheck />
+        </CardIcon>
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground">Step 1 of 2</p>
+          <CardTitle className="text-sm">Turn on the guardrail</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 px-5">
+        <CardDescription className="leading-relaxed">
+          {appName}&apos;s guardrail uses OpenAPPA to control where your
+          agents&apos; data can go.
+        </CardDescription>
+        <ol className="list-decimal space-y-1 border-t pt-4 pl-5 text-sm text-muted-foreground">
+          <li>The policy chat looks at your tools and drafts a policy.</li>
+          <li>You review it. Nothing changes until you approve.</li>
+          <li>Approving turns the guardrail on.</li>
+        </ol>
+      </CardContent>
+      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5">
+        {canEdit ? (
+          <Button size="sm" asChild>
+            <Link href={openAppaChatHref({ promptKey: "setUpPolicy" })}>
+              <MessageCircle />
+              <span>Create my policy</span>
+            </Link>
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ask an administrator to turn on the guardrail.
+          </p>
+        )}
+        <ExternalDocsLink
+          href={openAppaUrl("/how-it-works")}
+          className="text-sm"
+        >
+          How OpenAPPA works
+        </ExternalDocsLink>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function EnforcementCard({ next }: { next: boolean }) {
+  const { enabled } = useOpenAppaSetupState();
+  const appName = useAppName();
+  return (
+    <StatusCard
+      next={next}
       icon={<ShieldCheck />}
       title="Enforcement"
-      status={
-        enabled === undefined ? null : enabled ? (
-          <Status done>On</Status>
-        ) : (
-          <Status>Off</Status>
-        )
-      }
+      status={enabled ? <Status done>On</Status> : <Status>Off</Status>}
       description={
         enabled
-          ? "Tool calls through the LLM Proxy and MCP Gateway are checked against your policy. Ask the policy agent to review or change it."
-          : hasPolicy
-            ? "Tool calls are not checked: enforcement is off. The policy agent can review your saved policy with you before an administrator turns it back on using the OpenAPPA switch in the sidebar."
-            : "Tool calls are not checked yet. Tell the policy agent what to protect: it drafts your first rules. After saving, an administrator can turn OpenAPPA on using the switch in the sidebar."
+          ? `${appName} checks every tool call against your policy before it runs.`
+          : "Tool calls run unchecked. Turn the guardrail on from the Policy tab."
       }
       action={
-        <Button size="sm" variant={enabled ? "outline" : "default"} asChild>
-          <Link href={openAppaChatHref({ promptKey })}>
-            <MessageCircle />
-            <span>{enabled ? "Configure with chat" : "Set up with chat"}</span>
-          </Link>
-        </Button>
+        enabled ? (
+          <Button size="sm" variant="outline" asChild>
+            <Link href={openAppaChatHref({ promptKey: "explainPolicy" })}>
+              <MessageCircle />
+              <span>Ask about the policy</span>
+            </Link>
+          </Button>
+        ) : (
+          <Button size="sm" variant={next ? "default" : "outline"} asChild>
+            <Link href="/openappa/policy">
+              <span>Open the policy</span>
+              <ArrowRight />
+            </Link>
+          </Button>
+        )
       }
     />
   );
 }
 
-function GithubSyncCard() {
+function GithubSyncCard({ next }: { next: boolean }) {
   const sync = useAppaGithubSync();
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
+  const appName = useAppName();
   const [editing, setEditing] = useState(false);
   const source = sync.data?.source ?? null;
   const connected = Boolean(source?.interval);
+  const failed = source?.lastSyncError;
   return (
     <>
-      <SetupCard
+      <StatusCard
+        next={next}
         icon={<Github />}
         title="GitHub sync"
         status={
-          !sync.data ? null : source?.lastSyncError ? (
+          !sync.data ? null : failed ? (
             <Status failed>Sync failed</Status>
+          ) : next ? (
+            <Badge>Step 2 of 2</Badge>
           ) : connected ? (
             <Status done>Connected</Status>
+          ) : !sync.data.enabled ? (
+            <Status>Not available</Status>
           ) : (
             <Status>Not connected</Status>
           )
         }
         description={
-          connected && source?.repo ? (
+          failed ? (
+            <span title={failed} className="line-clamp-3">
+              {failed}
+            </span>
+          ) : connected && source?.repo ? (
             <span>
-              The policy is pulled from{" "}
+              {appName} pulls the policy from{" "}
               <span className="font-mono text-foreground">{source.repo}</span>.
-              Changes go through pull requests, so each one is reviewed and can
-              be rolled back.
+              Every change is a reviewed pull request.
             </span>
+          ) : sync.data && !sync.data.enabled ? (
+            "GitHub sync is turned off on this server."
           ) : (
-            <span>
-              Keep the policy in a repository. Changes go through pull requests,
-              so each one is reviewed and has a history you can roll back.
-            </span>
+            "Keep your guardrail policy in a repository, so every change is a reviewed pull request."
           )
         }
         learnMore={{
@@ -123,23 +193,34 @@ function GithubSyncCard() {
           label: "Test changes in CI",
         }}
         action={
-          connected ? (
+          !sync.data?.enabled ? null : !canManage ? (
+            connected ? null : (
+              <p className="text-sm text-muted-foreground">
+                Ask an administrator to connect a repository.
+              </p>
+            )
+          ) : failed ? (
+            <Button size="sm" onClick={() => setEditing(true)}>
+              <Github />
+              <span>Edit connection</span>
+            </Button>
+          ) : connected ? (
             <Button size="sm" variant="outline" asChild>
               <Link href="/settings/openappa">
-                <span>Open sync settings</span>
+                <span>Sync settings</span>
                 <ArrowRight />
               </Link>
             </Button>
-          ) : canManage && sync.data?.enabled ? (
-            <Button size="sm" onClick={() => setEditing(true)}>
+          ) : (
+            <Button
+              size="sm"
+              variant={next ? "default" : "outline"}
+              onClick={() => setEditing(true)}
+            >
               <Github />
               <span>Connect GitHub</span>
             </Button>
-          ) : sync.data ? (
-            <p className="text-sm text-muted-foreground">
-              Ask an administrator to connect a repository.
-            </p>
-          ) : null
+          )
         }
       />
       {editing && (
@@ -150,24 +231,26 @@ function GithubSyncCard() {
 }
 
 function LearnMoreCard() {
+  const appName = useAppName();
   return (
-    <SetupCard
+    <StatusCard
       icon={<BookOpen />}
       title="How it works"
-      description="OpenAPPA tracks what each conversation has read and checks every tool call against your policy. A blocked call comes back with a way forward, such as asking a person to approve it."
+      description={`${appName}'s guardrail uses OpenAPPA to check that data only goes to people allowed to see it.`}
       action={
         <ExternalDocsLink
           href={openAppaUrl("/how-it-works")}
           className="text-sm"
         >
-          Read how it works
+          Read about OpenAPPA
         </ExternalDocsLink>
       }
     />
   );
 }
 
-function SetupCard({
+function StatusCard({
+  next,
   icon,
   title,
   status,
@@ -175,6 +258,7 @@ function SetupCard({
   learnMore,
   action,
 }: {
+  next?: boolean;
   icon: ReactNode;
   title: string;
   status?: ReactNode;
@@ -183,22 +267,23 @@ function SetupCard({
   action: ReactNode;
 }) {
   return (
-    <Card className="gap-4 py-5">
-      <CardHeader className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
-          {icon}
-        </span>
+    <Card
+      className={cn("gap-3 py-4", next && "border-primary")}
+      data-next-step={next || undefined}
+    >
+      <CardHeader className="flex items-center gap-3 px-4">
+        <CardIcon>{icon}</CardIcon>
         <CardTitle className="flex-1 text-sm whitespace-nowrap">
           {title}
         </CardTitle>
         {status}
       </CardHeader>
-      <CardContent className="flex-1 px-5">
+      <CardContent className="flex-1 px-4">
         <CardDescription className="leading-relaxed">
           {description}
         </CardDescription>
       </CardContent>
-      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5">
+      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
         {action}
         {learnMore && (
           <ExternalDocsLink href={learnMore.href} className="text-sm">
@@ -207,6 +292,14 @@ function SetupCard({
         )}
       </CardFooter>
     </Card>
+  );
+}
+
+function CardIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
+      {children}
+    </span>
   );
 }
 

@@ -14,7 +14,10 @@ import {
 } from "vitest";
 import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { GuardrailsDeploymentToggle } from "./guardrails-deployment-toggle";
+import {
+  EnforcementSwitch,
+  GuardrailsDeploymentToggle,
+} from "./guardrails-deployment-toggle";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
@@ -52,22 +55,33 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
-function show() {
+function show(ui: "sidebar" | "switch" = "switch") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
       <SidebarProvider>
-        <SidebarMenu>
-          <GuardrailsDeploymentToggle />
-        </SidebarMenu>
+        {ui === "sidebar" ? (
+          <SidebarMenu>
+            <GuardrailsDeploymentToggle />
+          </SidebarMenu>
+        ) : (
+          <EnforcementSwitch />
+        )}
       </SidebarProvider>
     </QueryClientProvider>,
   );
 }
 
-test("enables both engines deployment-wide and disables only APPA", async () => {
+test("the sidebar shows the enforcement state and links to the Policy page", async () => {
+  show("sidebar");
+  const link = await screen.findByRole("link", { name: /OpenAPPA off/ });
+  expect(link).toHaveAttribute("href", "/openappa/policy");
+  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+});
+
+test("an administrator turns enforcement on and off", async () => {
   server.use(
     http.put(url, async ({ request }) => {
       const body = (await request.json()) as { enabled: boolean };
@@ -80,39 +94,29 @@ test("enables both engines deployment-wide and disables only APPA", async () => 
     }),
   );
   show();
-  const toggle = await screen.findByRole("switch", {
-    name: "OpenAPPA is disabled",
-  });
-  expect(toggle).not.toBeChecked();
-  expect(toggle).toHaveClass("text-destructive");
+  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
   fireEvent.click(toggle);
-  expect(await screen.findByText("OpenAPPA enabled")).toBeVisible();
-  expect(toggle).toHaveAccessibleName("OpenAPPA is enabled");
-  expect(toggle).not.toHaveClass("text-destructive");
+  expect(await screen.findByText(/Every tool call is checked/)).toBeVisible();
+  expect(toggle).toBeChecked();
   await waitFor(() => expect(toggle).toBeEnabled());
   fireEvent.click(toggle);
-  expect(await screen.findByText("OpenAPPA disabled")).toBeVisible();
+  expect(await screen.findByText(/Tool calls run without/)).toBeVisible();
   expect(toggle).not.toBeChecked();
-  expect(toggle).toHaveAccessibleName("OpenAPPA is disabled");
-  expect(toggle).toHaveClass("text-destructive");
 });
 
 test("a rejected update keeps the accepted deployment state", async () => {
   server.use(http.put(url, () => new HttpResponse(null, { status: 403 })));
   show();
-  const toggle = await screen.findByRole("switch", {
-    name: "OpenAPPA is disabled",
-  });
+  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toBeEnabled());
   expect(toggle).not.toBeChecked();
-  expect(screen.getByText("OpenAPPA disabled")).toBeVisible();
 });
 
 test.each([
   "permission",
   "feature flag",
-])("cannot enable APPA without the %s", async (missing) => {
+])("cannot turn enforcement on without the %s", async (missing) => {
   if (missing === "permission")
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
       typeof useHasPermissions
@@ -128,7 +132,6 @@ test.each([
       ),
     );
   show();
-  expect(
-    await screen.findByRole("switch", { name: "OpenAPPA is disabled" }),
-  ).toBeDisabled();
+  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
+  expect(toggle).toBeDisabled();
 });

@@ -221,7 +221,7 @@ test("a launch that is ready on mount still opens the conversation under StrictM
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       openappa: "1",
-      openappaPrompt: "reviewPolicy",
+      openappaPrompt: "explainPolicy",
       from: "openappa",
     }) as unknown as ReturnType<typeof useSearchParams>,
   );
@@ -249,7 +249,7 @@ test("a launch that is ready on mount still opens the conversation under StrictM
   );
   expect(sent[0]).toMatchObject({
     parts: [
-      { type: "text", text: resolveOpenAppaLaunchPrompt("reviewPolicy") },
+      { type: "text", text: resolveOpenAppaLaunchPrompt("explainPolicy") },
     ],
   });
 });

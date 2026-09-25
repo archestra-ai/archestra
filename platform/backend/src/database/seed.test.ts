@@ -104,6 +104,7 @@ describe("syncBuiltInAgents", () => {
         archestraMcpBranding.getToolName("get_guardrails_policy"),
         archestraMcpBranding.getToolName("get_agent"),
         archestraMcpBranding.getToolName("get_mcp_gateway"),
+        archestraMcpBranding.getToolName("ask_user"),
       ]);
       expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
       expect(

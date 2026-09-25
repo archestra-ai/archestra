@@ -21,6 +21,7 @@ import routes from "./guardrails-policy.routes";
 
 const content =
   '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
+const agent = { id: "test-agent", name: "Test assistant" };
 
 describe("guardrails policy authoring", () => {
   let app: FastifyInstanceWithZod;
@@ -202,26 +203,72 @@ describe("guardrails policy authoring", () => {
     );
   });
 
-  test.each([
-    false,
-    true,
-  ])("an administrator's policy save preserves enforcement=%s", async (enabled) => {
-    await GuardrailsDeploymentModel.setEnabled(enabled);
+  test("an administrator's first saved policy turns enforcement on, later saves leave it alone", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const context = { organizationId: orgId, userId, agent };
+    const preview = await executeArchestraTool(
+      "archestra__preview_guardrails_policy_change",
+      { content, expectedRevision: 0 },
+      context,
+    );
+    expect(preview.structuredContent?.turnsOnEnforcement).toBe(true);
+
+    const first = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      context,
+    );
+    expect(first.structuredContent?.enforcement).toEqual({
+      enabled: true,
+      turnedOn: true,
+    });
+    const rows = await AuditLogModel.findPaginated({
+      organizationId: orgId,
+      limit: 20,
+      offset: 0,
+    });
+    expect(
+      rows.data.some(
+        (row) =>
+          row.action === "organization.updated" &&
+          row.actorId === userId &&
+          row.after?.enabled === true,
+      ),
+    ).toBe(true);
+
+    const later = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content: `${content}# later\n`, expectedRevision: 1 },
+      context,
+    );
+    expect(later.structuredContent?.enforcement).toEqual({
+      enabled: true,
+      turnedOn: false,
+    });
+  });
+
+  test("a non-administrator's first saved policy leaves enforcement off and says why", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { toolPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    await GuardrailsDeploymentModel.setEnabled(false);
     const saved = await executeArchestraTool(
       "archestra__update_guardrails_policy",
       { content, expectedRevision: 0 },
-      {
-        organizationId: orgId,
-        userId,
-        agent: { id: "test-agent", name: "Test assistant" },
-      },
+      { organizationId: orgId, userId: author.id, agent },
     );
-    expect(saved.isError).not.toBe(true);
-    expect(await GuardrailsPolicyModel.findLatest(orgId)).toMatchObject({
-      content,
-      revision: 1,
+    expect(saved.structuredContent?.enforcement).toMatchObject({
+      enabled: false,
+      turnedOn: false,
+      reason: expect.stringContaining("administrator"),
     });
-    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(enabled);
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
   });
 
   test("granting a battery a credential needs credential update, removing it does not", async ({

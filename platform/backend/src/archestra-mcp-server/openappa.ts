@@ -30,6 +30,10 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
+import {
+  firstPolicyRefusal,
+  turnOnForFirstPolicy,
+} from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { getAppaGithubSync } from "@/services/openappa-github-sync";
 import {
@@ -207,9 +211,19 @@ const registry = defineArchestraTools([
         previous: before.content,
       });
       const sync = await getAppaGithubSync(context.organizationId);
+      const delivery = sync.source?.interval ? "pull_request" : "revision";
       return result({
         stage: "preview",
-        delivery: sync.source?.interval ? "pull_request" : "revision",
+        delivery,
+        // Whether publishing this turns enforcement on: only the first saved
+        // policy does, and only for an administrator (see turnOnForFirstPolicy).
+        turnsOnEnforcement:
+          delivery === "revision" &&
+          !(await firstPolicyRefusal(
+            context.organizationId,
+            context.userId,
+            before.revision + 1,
+          )),
         path: sync.source?.path ?? "organization.appa.toml",
         before: before.content,
         after: args.content,
@@ -221,7 +235,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only and leaves enforcement unchanged. An administrator can enable enforcement with the OpenAPPA switch in the sidebar. Report any inactive effective battery.",
+      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
     schema: UpdateGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -250,6 +264,11 @@ const registry = defineArchestraTools([
       return result({
         ...saved,
         effective: await enforced(context.organizationId),
+        enforcement: await turnOnForFirstPolicy({
+          organizationId: context.organizationId,
+          userId: context.userId,
+          revision: saved.revision,
+        }),
       });
     },
   }),

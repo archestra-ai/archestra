@@ -18,7 +18,7 @@ The lethal trifecta is the combination of private data access, untrusted content
 
 ## Enable OpenAPPA
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. **Set up with chat** opens the policy agent to draft your first rules. Saving a policy leaves enforcement unchanged. Administrators turn enforcement on or off with the **OpenAPPA** switch in the sidebar. The current policy must pass validation before enforcement turns on. **Connect GitHub** keeps the policy in a repository for review through pull requests.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. **Create my policy** opens the policy chat to draft your first policy. When an administrator approves it, the policy is saved and enforcement turns on. Later saves leave enforcement unchanged. Administrators turn enforcement on or off with the switch on the **Policy** tab. The current policy must pass validation before enforcement turns on. Once enforcement is on, **Connect GitHub** keeps the policy in a repository for review through pull requests.
 
 The feature makes the workspace available; the switch controls enforcement. Administrators can turn enforcement off at any time. The starting policy includes the `archestra` battery for built-in tools. Its catch-all rule adds no restrictions to other tools.
 

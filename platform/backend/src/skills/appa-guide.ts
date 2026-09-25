@@ -64,7 +64,7 @@ An explicit \`init\` authorizes the complete read-only inspection and the propos
 
 Starting inspection now..."
 
-Do not execute tool calls before you send this plan message to the user. Call only the \`appa-guide\` skill name. Never make up a mode-specific skill name.
+Send this plan, then run the inspection in the same response. Do not end your turn after the plan: the operator's next message should not be needed to start. Call only the \`appa-guide\` skill name. Never make up a mode-specific skill name.
 
 ## Rules that apply on every host
 
@@ -74,7 +74,7 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - A battery is declared in this same policy document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
 - A battery is available when it exists in the bundled or organization battery layer. It is declared by \`include\` and governs calls only when \`effective.batteries\` marks it \`active\`. Say "include" rather than "install" when you propose that change.
 - Read and preview before you propose. Explain in plain English what the change does, with any warnings. Wait for approval before you publish. Ask for approval again if a correction changes that behavior.
-- An initial request for a change is not approval to execute it. End the first turn with the proposal. Act only after a later message approves that exact proposal.
+- An initial request for a change is not approval to execute it. Show the proposal, then ask for approval (see **Ask for approval**). Act only after the operator approves that exact proposal.
 - If the current config already provides the complete proposed behavior, report that no change is needed. Do not ask for approval or update an unchanged config.
 - Make the smallest change that meets the request. Keep unrelated entries, comments, reader names, and batteries.
 - Use short sentences. Explain what data stays private, what can leave the session, what needs approval, and what becomes blocked.
@@ -90,18 +90,22 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Do not restrict the configuring actor: propose no rule that limits the agent that runs this skill or the runtime control tools \`execute_remedy_plan\` and \`get_remedy_plans\`.
 - Some tools keep agents working: \`archestra__load_skill\` loads skills, \`archestra__search_tools\` finds tools, and this assistant needs \`archestra__get_guardrails_policy\`, \`archestra__list_guardrails_battery_fits\`, \`archestra__validate_guardrails_policy\`, \`archestra__preview_guardrails_policy_change\`, \`archestra__update_guardrails_policy\`, \`archestra__get_guardrails_policy_change_status\`, \`archestra__list_mcp_server_deployments\`, \`archestra__get_mcp_server_tools\`, \`archestra__get_agent\`, and \`archestra__get_mcp_gateway\`. A request for a strict or restrictive policy does not cover these tools. Restrict them only when the operator names them.
 - Without the catch-all, declare \`archestra__search_tools\` with \`delta = {}\` so agents can find tools, and declare \`archestra__load_skill\` and this assistant's tools the same way so skills and policy changes keep working. Say so in the proposal. \`archestra__run_tool\` requires no rule. The policy evaluates each call using the target tool that runs.
-- A change that removes the catch-all, or restricts any of the tools above, changes how agents work. Flag it once in the proposal under **Effect on agents**: what stops working and for whom, whether you can still read or change the policy afterwards, and how to undo it (an administrator turns OpenAPPA off with its sidebar switch, then fixes the policy in a new policy chat). If the operator still approves, apply it.
+- A change that removes the catch-all, or restricts any of the tools above, changes how agents work. Flag it once in the proposal under **Effect on agents**: what stops working and for whom, whether you can still read or change the policy afterwards, and how to undo it (an administrator turns enforcement off on the OpenAPPA Policy page, then fixes the policy in a new policy chat). If the operator still approves, apply it.
 - If a request is unusual for what the operator says they want, say once why it is unusual, then propose it as asked.
 - If one of the tools above is refused, tell the operator that the policy blocks it and how to undo that. Never read a refusal as proof that a change worked.
 - Call \`execute_remedy_plan\` only when the previous tool result quoted \`offer_id: "<hex>"\`. Copy that hex string exactly. Never invent an offer id. Never ask the operator for an offer id.
-- When the operator sends approval (such as "Approve", "Approved", or "yes"), apply the waiting proposal immediately. If the operator approves when no proposal is waiting, state that nothing needs applying.
+- When the operator approves (by picking **Approve**, or by sending "Approve", "Approved", or "yes"), apply the waiting proposal immediately. If the operator approves when no proposal is waiting, state that nothing needs applying.
 - Inspection and proposal drafting never require approval.
 - Keep user-facing replies compact. Group tools by server and behavior. Use one short sentence or bullet per outcome.
 
 After a local revision, summarize the saved policy behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
 > Saved policies apply to new conversations. This conversation keeps the policy it started with.
 
-Saving a policy leaves enforcement unchanged. Do not claim that saving enables OpenAPPA. To enable enforcement, an administrator uses the OpenAPPA switch in the sidebar.
+The organization's first saved policy turns enforcement on when an administrator saves it. Later saves leave enforcement unchanged. The preview's \`turnsOnEnforcement\` says which applies; the publish result's \`enforcement\` says what happened. Report it in one sentence:
+- \`turnedOn\`: "Enforcement is on. Next, connect GitHub on the OpenAPPA overview page so policy changes are reviewed as pull requests."
+- \`enabled\` without \`turnedOn\`: enforcement was already on.
+- a \`reason\`: enforcement stays off; give the reason.
+Never claim enforcement changed otherwise. An administrator turns it on or off on the OpenAPPA Policy page.
 
 If publishing opens a GitHub PR, give its link and state that the proposed policy is not enforced until merge and a successful repository sync. Do not claim it is active or tell the operator to start a new conversation yet.
 
@@ -177,7 +181,7 @@ Group the proposal by server. Show:
 - tools left undeclared (covered by \`name = "*"\` if present, refused otherwise)
 - every configured MCP server whose tools could not be detected
 - any requested subagent return boundary that the connected host cannot support or verify
-- whether approval will save a local revision or open a GitHub PR
+- whether approval will save a local revision or open a GitHub PR. When the preview's \`turnsOnEnforcement\` is true, say: "Approving saves this policy and turns on enforcement."
 
 If an MCP server could not be inspected, state: "<server> is configured, but I could not inspect its tools in this session."
 
@@ -185,7 +189,15 @@ At the end of the proposal, add **Needed for this to work** if any required supp
 
 Add one short \`OpenAPPA pieces: <primitives>\` line.
 
-End with: **Approve, or tell me what to change.** Wait for the reply.
+Then ask for approval.
+
+### Ask for approval
+
+Call \`archestra__ask_user\` with the question "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR) and two options: "Approve" and "Change something". Without that tool, use the client's own question tool with the same options. With neither, end with: **Approve, or tell me what to change.** Wait for the reply.
+
+- **Approve** approves the proposal. Continue with the steps below in the same response.
+- **Change something**: ask in one sentence what to change, then wait.
+- Declined, dismissed, or unanswered: stop and wait for the operator's next message.
 
 After approval:
 
@@ -194,7 +206,7 @@ After approval:
 3. If the draft is unchanged, report that no update is needed. Otherwise call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the revision from the re-read. Use a clear \`title\` and \`summary\` when publishing a GitHub PR.
 4. On a conflict, re-read, combine your change with the new text, preview, and ask for approval again if the proposed behavior changes. Never just increase N and retry the old draft.
 5. If publish returns \`pull_request\`, give its URL. Use \`archestra__get_guardrails_policy_change_status\` with its number when asked about progress. State that the proposal is not enforced until the PR merges and repository sync succeeds. Do not say the policy changed yet.
-6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim that a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations. This conversation keeps the policy it started with. Remind the operator that saving leaves enforcement unchanged and an administrator can enable it with the OpenAPPA switch in the sidebar.
+6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim that a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations. This conversation keeps the policy it started with. Report \`enforcement\` as described above.
 
 ## Adjust the current config (\`adjust\`)
 
@@ -207,11 +219,11 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to the draft \`include\` list. Explain it with the one-sentence rule used in \`init\` mode. Existing root rules keep priority.
 4. Preview the complete proposed policy with \`archestra__preview_guardrails_policy_change\` and the current \`revision\`. Fix errors and preview again. If it produces no change, report that without approval language.
 5. Summarize what changes, what stays the same, and any warnings. State whether approval will save locally or open a GitHub PR. Add one short \`OpenAPPA pieces: <primitives>\` line.
-6. End with: **Approve, or tell me what to change.** Wait for the reply.
+6. Ask for approval as described in **Ask for approval**.
 7. Re-read the policy and its \`revision\` and \`delivery\`. If either changed, revise the proposal and ask for approval again. Otherwise preview the exact approved draft again. If the diff or warnings changed, ask for approval again. Do not publish an invalid or unchanged preview.
 8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the latest revision. Give a GitHub PR a clear \`title\` and \`summary\`.
 9. On a conflict, re-read, merge, preview, and request approval again if the proposed behavior changes.
-10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations. This conversation keeps the policy it started with. Remind the operator that saving leaves enforcement unchanged and an administrator can enable it with the OpenAPPA switch in the sidebar.
+10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations. This conversation keeps the policy it started with. Report \`enforcement\` as described above.
 
 ## Boundaries
 

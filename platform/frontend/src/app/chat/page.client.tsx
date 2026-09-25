@@ -3114,16 +3114,20 @@ export function ChatPageContent({
   // the replay docked in the right panel. `urlReviewContext` covers the brief
   // pre-conversation window on /chat/new before the store is keyed by an id.
   const hasReviewContext = !!reviewContext || !!urlReviewContext;
+  const firstRunReturnPath = isOpenAppaDraft
+    ? `/chat?${searchParams.toString()}`
+    : "/chat";
   const handleFirstKeyAdded = useCallback(() => {
     setFirstKeyAdded(true);
     // Reset to a clean /chat URL after a key is added so no stale conversation
-    // param lingers; the keys query refetch reveals the composer.
-    router.push("/chat");
-  }, [router]);
+    // param lingers; the keys query refetch reveals the composer. An OpenAPPA
+    // launch keeps its params so its prompt is still sent.
+    router.push(firstRunReturnPath);
+  }, [router, firstRunReturnPath]);
   const finishFirstRunOnboarding = useCallback(() => {
     setFirstKeyAdded(false);
-    router.push("/chat");
-  }, [router]);
+    router.push(firstRunReturnPath);
+  }, [router, firstRunReturnPath]);
 
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state

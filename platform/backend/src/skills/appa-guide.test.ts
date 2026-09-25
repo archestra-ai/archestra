@@ -319,22 +319,6 @@ describe("APPA Guide feature availability", () => {
       "Without the catch-all, declare `archestra__search_tools` with `delta = {}`",
     );
 
-    // Strict policies keep the tools agents depend on, and say what a change breaks.
-    expect(content).toContain(
-      "A request for a strict or restrictive policy does not cover these tools.",
-    );
-    expect(content).toContain(
-      "declare `archestra__load_skill` and this assistant's tools the same way",
-    );
-    expect(content).toContain(
-      "Flag it once in the proposal under **Effect on agents**",
-    );
-    expect(content).toContain(
-      "Never read a refusal as proof that a change worked.",
-    );
-    expect(content).toContain(
-      "Show TOML or the diff only when the operator asks for it.",
-    );
     expect(content).toContain(
       "every proxied request fails closed without retry",
     );

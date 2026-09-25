@@ -330079,8 +330079,7 @@
               "enum": [
                 "name",
                 "type",
-                "tools",
-                "uncovered"
+                "tools"
               ]
             },
             "in": "query",

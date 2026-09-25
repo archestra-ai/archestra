@@ -22,7 +22,7 @@ const POLICY_LAUNCH_PROMPTS = {
     "Set up OpenAPPA for me. Look at the MCP servers and tools my organization uses, pick batteries that cover them, and draft a complete policy with sensible defaults. Show me the proposed policy and what it would block or send for approval, then ask me whether to apply it.",
   /** Enforcement card: off, but a policy exists. */
   resumePolicy:
-    "OpenAPPA enforcement is off, but I already have a policy. Explain what it would enforce and suggest anything worth changing before it is back on. Tell me what each change would do and ask me whether to apply it. If enforcement is still off when we are done, tell me how to turn it back on.",
+    "OpenAPPA enforcement is off, but I already have a policy. Explain what it would enforce and suggest anything worth changing before it is back on. Tell me what each change would do and ask me whether to apply it. When we are done, remind me that an administrator can turn enforcement back on using the OpenAPPA switch in the sidebar.",
   /** Enforcement card: on. */
   reviewPolicy:
     "Review my OpenAPPA policy and suggest improvements. Summarize what it enforces today, point out tools that only the catch-all covers, and propose up to three changes ranked by impact. Don't change anything until I pick one, then tell me what the change would do and ask me whether to apply it.",

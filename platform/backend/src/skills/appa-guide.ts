@@ -98,10 +98,10 @@ Do not execute tool calls before you send this plan message to the user. Call on
 - Inspection and proposal drafting never require approval.
 - Keep user-facing replies compact. Group tools by server and behavior. Use one short sentence or bullet per outcome.
 
-After a local revision, summarize the active behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
+After a local revision, summarize the saved policy behavior in one to three short sentences. Explain what data is private or suspicious, and where private data can go. Add:
 > Saved policies apply to new conversations. This conversation keeps the policy it started with.
 
-A local revision also returns \`enforcement\`. If \`turnedOn\` is true, say that OpenAPPA was off and is now on, so tool calls in new conversations are checked. If \`enabled\` is false, say OpenAPPA is still off and give its \`reason\`.
+Saving a policy leaves enforcement unchanged. Do not claim that saving enables OpenAPPA. To enable enforcement, an administrator uses the OpenAPPA switch in the sidebar.
 
 If publishing opens a GitHub PR, give its link and state that the proposed policy is not enforced until merge and a successful repository sync. Do not claim it is active or tell the operator to start a new conversation yet.
 
@@ -194,7 +194,7 @@ After approval:
 3. If the draft is unchanged, report that no update is needed. Otherwise call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the revision from the re-read. Use a clear \`title\` and \`summary\` when publishing a GitHub PR.
 4. On a conflict, re-read, combine your change with the new text, preview, and ask for approval again if the proposed behavior changes. Never just increase N and retry the old draft.
 5. If publish returns \`pull_request\`, give its URL. Use \`archestra__get_guardrails_policy_change_status\` with its number when asked about progress. State that the proposal is not enforced until the PR merges and repository sync succeeds. Do not say the policy changed yet.
-6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim that a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations. This conversation keeps the policy it started with. Report \`enforcement\` as described above.
+6. If publish returns \`revision\`, read back the effective policy. Report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused while Guardrails v2 is on, proxied requests fail closed. Do not claim that a previous policy still protects them. Otherwise summarize what the new revision protects. Say that saved policies apply to new conversations. This conversation keeps the policy it started with. Remind the operator that saving leaves enforcement unchanged and an administrator can enable it with the OpenAPPA switch in the sidebar.
 
 ## Adjust the current config (\`adjust\`)
 
@@ -211,7 +211,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 7. Re-read the policy and its \`revision\` and \`delivery\`. If either changed, revise the proposal and ask for approval again. Otherwise preview the exact approved draft again. If the diff or warnings changed, ask for approval again. Do not publish an invalid or unchanged preview.
 8. Call \`archestra__update_guardrails_policy\` with \`{ "content": "<complete previewed TOML>", "expectedRevision": N }\`, where N is the latest revision. Give a GitHub PR a clear \`title\` and \`summary\`.
 9. On a conflict, re-read, merge, preview, and request approval again if the proposed behavior changes.
-10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations. This conversation keeps the policy it started with. Report \`enforcement\` as described above.
+10. If publish returns \`pull_request\`, give its URL and say the proposal takes effect only after merge and repository sync. Check its status with \`archestra__get_guardrails_policy_change_status\` when asked. If publish returns \`revision\`, read back \`effective.error\` and \`effective.batteries\` and report any problem. Otherwise, summarize the change and say that saved policies apply to new conversations. This conversation keeps the policy it started with. Remind the operator that saving leaves enforcement unchanged and an administrator can enable it with the OpenAPPA switch in the sidebar.
 
 ## Boundaries
 

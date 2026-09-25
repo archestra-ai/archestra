@@ -117,11 +117,7 @@ class OpenAppaCoverageService {
       includeAutoModeTools: params.type !== "mcp_server",
       // Sorting by a count needs every target's Auto-mode tools, not a page's.
       autoModePage:
-        params.toolId ||
-        params.sortBy === "tools" ||
-        params.sortBy === "uncovered"
-          ? undefined
-          : params,
+        params.toolId || params.sortBy === "tools" ? undefined : params,
     });
     const tool = params.toolId
       ? tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
@@ -778,25 +774,21 @@ const TARGET_TYPE_ORDER: Record<CoverageEntity["type"], number> = {
 
 /** A target as far as sorting reads it; a page is sorted before its counts exist. */
 type SortableTarget = Pick<CoverageEntity, "id" | "name" | "type"> &
-  Partial<Pick<CoverageEntity, "toolCount" | "governedCount">>;
+  Partial<Pick<CoverageEntity, "toolCount">>;
 
 /** How an entities query orders its targets; see `sortBy`. */
 function compareTargets(
   query: Pick<CoverageEntitiesQuery, "sortBy" | "sortDirection">,
 ): (a: SortableTarget, b: SortableTarget) => number {
   const sortBy = query.sortBy ?? "name";
-  const direction =
-    query.sortDirection ?? (sortBy === "uncovered" ? "desc" : "asc");
-  const sign = direction === "desc" ? -1 : 1;
+  const sign = query.sortDirection === "desc" ? -1 : 1;
   const alphabetical = (a: SortableTarget, b: SortableTarget) =>
     a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
   if (sortBy === "name") return (a, b) => sign * alphabetical(a, b);
   const key = (target: SortableTarget) =>
     sortBy === "type"
       ? TARGET_TYPE_ORDER[target.type]
-      : sortBy === "tools"
-        ? (target.toolCount ?? 0)
-        : (target.toolCount ?? 0) - (target.governedCount ?? 0);
+      : (target.toolCount ?? 0);
   return (a, b) => sign * (key(a) - key(b)) || alphabetical(a, b);
 }
 

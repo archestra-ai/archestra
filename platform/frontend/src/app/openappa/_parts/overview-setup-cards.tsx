@@ -66,8 +66,8 @@ function EnforcementCard() {
         enabled
           ? "Tool calls through the LLM Proxy and MCP Gateway are checked against your policy. Ask the policy agent to review or change it."
           : hasPolicy
-            ? "Tool calls are not checked: enforcement is off. The policy agent can review your saved policy with you before you turn it back on."
-            : "Tool calls are not checked yet. Tell the policy agent what to protect: it drafts your first rules, and saving them turns OpenAPPA on."
+            ? "Tool calls are not checked: enforcement is off. The policy agent can review your saved policy with you before an administrator turns it back on using the OpenAPPA switch in the sidebar."
+            : "Tool calls are not checked yet. Tell the policy agent what to protect: it drafts your first rules. After saving, an administrator can turn OpenAPPA on using the switch in the sidebar."
       }
       action={
         <Button size="sm" variant={enabled ? "outline" : "default"} asChild>

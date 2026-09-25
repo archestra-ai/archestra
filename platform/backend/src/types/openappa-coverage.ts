@@ -160,10 +160,10 @@ export const CoverageEntitiesQuerySchema = PaginationQuerySchema.extend({
   toolId: z.uuid().optional(),
   /**
    * By name when unset. `type` puts MCP servers before gateways, `tools` is the
-   * tool count, and `uncovered` the tools with no enforced rule; ties by name.
+   * tool count; ties by name.
    */
-  sortBy: z.enum(["name", "type", "tools", "uncovered"]).optional(),
-  /** Ascending when unset, except `uncovered`, which puts the most first. */
+  sortBy: z.enum(["name", "type", "tools"]).optional(),
+  /** Ascending when unset. */
   sortDirection: SortDirectionSchema.optional(),
 });
 export type CoverageEntitiesQuery = z.infer<typeof CoverageEntitiesQuerySchema>;

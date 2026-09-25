@@ -16,10 +16,8 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Undo2,
   Unlink,
   Upload,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -50,7 +48,10 @@ import {
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,10 +88,12 @@ import {
   useAcceptHeldPull,
   useBatteries,
   useBatteryMatches,
+  useCreateBatteryInstall,
+  useDeleteBatteryInstall,
   useDeleteBatteryPackage,
   usePolicyDeclarations,
   useRemoveBatteryInclude,
-  useSaveBattery,
+  useUpdateBatteryInstall,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
@@ -519,12 +522,6 @@ const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
 
 const UNBOUND = "__unbound__";
 
-/**
- * A battery install as this panel needs it: the row id behind one catalog, or
- * behind the organization for a battery made of annotators alone.
- */
-type InstallRef = { id: string; catalogId: string | null };
-
 type BatteryCredential = PolicyBattery["credentials"][number];
 
 type CatalogEntry = { id: string; name: string; icon?: string | null };
@@ -612,8 +609,7 @@ function sourceLabel(row: BatteryTableRow) {
 
 /**
  * Everything one battery lets you change, in one place: where it applies and
- * which keys its helpers read. Edits stay in the dialog until Save, which
- * writes them as one change to the policy text.
+ * which keys its helpers read. Each action writes directly to the policy.
  */
 function BatteryDialog({
   row,
@@ -637,34 +633,26 @@ function BatteryDialog({
   onClose: () => void;
 }) {
   const { summary, included } = row;
-  const save = useSaveBattery();
-  const [detached, setDetached] = useState<string[]>([]);
-  const [added, setAdded] = useState<string[]>([]);
-  const [includeDraft, setIncludeDraft] = useState(included !== null);
-  const [keys, setKeys] = useState<Record<string, string>>({});
+  const create = useCreateBatteryInstall();
+  const update = useUpdateBatteryInstall();
+  const detach = useDeleteBatteryInstall();
+  const remove = useRemoveBatteryInclude();
+  const pending =
+    create.isPending ||
+    update.isPending ||
+    detach.isPending ||
+    remove.isPending;
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
   const status = included ? (enforced ? included.status : "refused") : null;
   const badge = status ? batteryStatusBadge(status) : null;
-  const installs: InstallRef[] =
-    summary?.installs.map(({ id, catalogId }) => ({ id, catalogId })) ?? [];
+  const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
   const governed = new Set(
     servers
       .map((server) => server.catalogId)
       .filter((id): id is string => id !== null),
   );
-  // Compared with what the policy says now, so a refetch after a failed
-  // save leaves only the edits that did not land.
-  const toAttach = added.filter((id) => !governed.has(id));
-  const toDetach = detached.filter((id) => governed.has(id));
-  const keptServers = servers.filter(
-    (server) =>
-      server.catalogId === null || !toDetach.includes(server.catalogId),
-  );
-  const willBeIncluded = organizationWide
-    ? includeDraft
-    : keptServers.length + toAttach.length > 0;
   // An entry not in the policy yet reads the organization's credential table
   // like any other: a variable another battery binds already has its key.
   const credentials: BatteryCredential[] =
@@ -673,29 +661,13 @@ function BatteryDialog({
       (variable) =>
         boundCredentials.get(variable) ?? { variable, key: null, readers: [] },
     );
-  const keyOf = (credential: BatteryCredential) =>
-    keys[credential.variable] ?? credential.key ?? UNBOUND;
-  const rebound =
-    willBeIncluded &&
-    credentials.some(
-      (credential) => keyOf(credential) !== (credential.key ?? UNBOUND),
-    );
-  const includeChanged =
-    organizationWide && includeDraft !== (included !== null);
-  const dirty =
-    toAttach.length > 0 || toDetach.length > 0 || rebound || includeChanged;
-  const editable = writable || bindable;
-  const stageAttach = (catalogId: string) =>
-    governed.has(catalogId)
-      ? setDetached((ids) => ids.filter((id) => id !== catalogId))
-      : setAdded((ids) => [...ids, catalogId]);
+  const bindingInstall = installs[0];
   return (
-    <StandardFormDialog
+    <StandardDialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      isDirty={dirty}
       size="medium"
       title={
         <span className="flex items-center gap-2.5">
@@ -717,46 +689,7 @@ function BatteryDialog({
         </span>
       }
       bodyClassName="space-y-6"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!summary || !dirty) return;
-        save.mutate(
-          {
-            batteryName: summary.name,
-            attach:
-              organizationWide && includeDraft && !included ? [null] : toAttach,
-            detach: toDetach
-              .map((id) => installs.find(({ catalogId }) => catalogId === id))
-              .filter((install) => install !== undefined)
-              .map(({ id }) => id),
-            credentialBindings: rebound
-              ? Object.fromEntries(
-                  credentials
-                    .map((credential) => [
-                      credential.variable,
-                      keyOf(credential),
-                    ])
-                    .filter(([, key]) => key !== UNBOUND),
-                )
-              : null,
-            exclude: organizationWide && !includeDraft && included !== null,
-          },
-          { onSuccess: onClose },
-        );
-      }}
-      footer={
-        editable ? (
-          <>
-            <DialogCancelButton disabled={save.isPending} />
-            <Button type="submit" disabled={!dirty || save.isPending}>
-              {save.isPending && <Loader2 className="size-4 animate-spin" />}
-              <span>{save.isPending ? "Saving…" : "Save"}</span>
-            </Button>
-          </>
-        ) : (
-          <DialogCancelButton>Close</DialogCancelButton>
-        )
-      }
+      footer={<DialogCancelButton>Close</DialogCancelButton>}
     >
       {organizationWide ? (
         <DialogSection title="Scope">
@@ -771,9 +704,13 @@ function BatteryDialog({
             </div>
             <Switch
               id={`battery-include-${row.name}`}
-              checked={includeDraft}
-              disabled={!writable || !summary}
-              onCheckedChange={setIncludeDraft}
+              checked={included !== null}
+              disabled={!writable || !summary || pending}
+              onCheckedChange={(enabled) =>
+                enabled
+                  ? create.mutate({ batteryName: row.name })
+                  : remove.mutate(row.name)
+              }
             />
           </div>
           {status === "unrouted" && (
@@ -790,7 +727,7 @@ function BatteryDialog({
           title="Servers"
           description="Its rules check tool calls on these servers."
         >
-          {servers.length === 0 && toAttach.length === 0 ? (
+          {servers.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
               Not attached to a server yet.
             </p>
@@ -805,9 +742,6 @@ function BatteryDialog({
                   server.catalogId === null
                     ? "Removed server"
                     : catalogName(server.catalogId);
-                const leaving =
-                  server.catalogId !== null &&
-                  toDetach.includes(server.catalogId);
                 return (
                   <ServerRow
                     key={server.target}
@@ -816,70 +750,21 @@ function BatteryDialog({
                       null
                     }
                     name={name}
-                    detail={
-                      leaving ? "Detached on save" : `${server.target}__*`
-                    }
-                    leaving={leaving}
+                    detail={`${server.target}__*`}
                     action={
                       writable && install !== null && server.catalogId ? (
-                        leaving ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Keep ${row.name} on ${name}`}
-                            onClick={() => stageAttach(server.catalogId ?? "")}
-                          >
-                            <Undo2 className="size-4" />
-                            <span>Undo</span>
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Detach ${row.name} from ${name}`}
-                            onClick={() =>
-                              setDetached((ids) => [
-                                ...ids,
-                                server.catalogId ?? "",
-                              ])
-                            }
-                          >
-                            <Unlink className="size-4" />
-                            <span>Detach</span>
-                          </Button>
-                        )
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={pending}
+                          aria-label={`Detach ${row.name} from ${name}`}
+                          onClick={() => detach.mutate(install.id)}
+                        >
+                          <Unlink className="size-4" />
+                          <span>Detach</span>
+                        </Button>
                       ) : null
-                    }
-                  />
-                );
-              })}
-              {toAttach.map((catalogId) => {
-                const name = catalogName(catalogId);
-                return (
-                  <ServerRow
-                    key={catalogId}
-                    catalogEntry={
-                      catalog.find((entry) => entry.id === catalogId) ?? null
-                    }
-                    name={name}
-                    detail="Attached on save"
-                    action={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Don't attach ${row.name} to ${name}`}
-                        onClick={() =>
-                          setAdded((ids) =>
-                            ids.filter((id) => id !== catalogId),
-                          )
-                        }
-                      >
-                        <X className="size-4" />
-                        <span>Remove</span>
-                      </Button>
                     }
                   />
                 );
@@ -891,13 +776,14 @@ function BatteryDialog({
               batteryName={summary.name}
               catalog={catalog}
               installedCatalogIds={installedCatalogIds}
-              taken={
-                new Set([
-                  ...[...governed].filter((id) => !toDetach.includes(id)),
-                  ...toAttach,
-                ])
+              taken={governed}
+              pending={pending}
+              onAttach={(catalogId, onSuccess) =>
+                create.mutate(
+                  { batteryName: row.name, catalogId },
+                  { onSuccess },
+                )
               }
-              onAttach={stageAttach}
             />
           )}
         </DialogSection>
@@ -906,21 +792,34 @@ function BatteryDialog({
         <CredentialsSection
           batteryName={row.name}
           credentials={credentials}
-          keyOf={keyOf}
-          onChange={(variable, key) =>
-            setKeys((current) => ({ ...current, [variable]: key }))
-          }
+          onChange={(variable, key) => {
+            if (!bindingInstall) return;
+            update.mutate({
+              id: bindingInstall.id,
+              body: {
+                credentialBindings: Object.fromEntries(
+                  credentials
+                    .map((credential) => [
+                      credential.variable,
+                      credential.variable === variable ? key : credential.key,
+                    ])
+                    .filter(([, value]) => value !== null && value !== UNBOUND),
+                ),
+              },
+            });
+          }}
           disabledReason={
-            willBeIncluded
+            bindingInstall
               ? null
               : organizationWide
                 ? "Include the battery to bind the keys its helpers read."
                 : "Attach the battery to a server to bind the keys its helpers read."
           }
           bindable={bindable}
+          pending={pending}
         />
       )}
-    </StandardFormDialog>
+    </StandardDialog>
   );
 }
 
@@ -951,27 +850,20 @@ function DialogSection({
   );
 }
 
-/** One server in the battery's list: its catalog entry, then what it governs or what Save does to it. */
+/** One server in the battery's list and the tools it governs. */
 function ServerRow({
   catalogEntry,
   name,
   detail,
-  leaving = false,
   action,
 }: {
   catalogEntry: CatalogEntry | null;
   name: string;
   detail: string;
-  leaving?: boolean;
   action: ReactNode;
 }) {
   return (
-    <li
-      className={cn(
-        "flex min-h-12 items-center gap-3 px-3 py-2 text-sm",
-        leaving && "text-muted-foreground",
-      )}
-    >
+    <li className="flex min-h-12 items-center gap-3 px-3 py-2 text-sm">
       {catalogEntry ? (
         <McpCatalogIcon
           icon={catalogEntry.icon}
@@ -979,13 +871,11 @@ function ServerRow({
           size={16}
         />
       ) : null}
-      <span className={cn("font-medium", leaving && "line-through")}>
-        {name}
-      </span>
+      <span className="font-medium">{name}</span>
       <span
         className={cn(
           "truncate text-xs text-muted-foreground",
-          !leaving && detail.endsWith("__*") && "font-mono",
+          detail.endsWith("__*") && "font-mono",
         )}
       >
         {detail}
@@ -1001,13 +891,15 @@ function AttachServerPicker({
   catalog,
   installedCatalogIds,
   taken,
+  pending,
   onAttach,
 }: {
   batteryName: string;
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
   taken: Set<string>;
-  onAttach: (catalogId: string) => void;
+  pending: boolean;
+  onAttach: (catalogId: string, onSuccess: () => void) => void;
 }) {
   const [catalogId, setCatalogId] = useState("");
   const readiness = useBatteryMatches(catalogId, catalogId !== "");
@@ -1054,10 +946,9 @@ function AttachServerPicker({
         <Button
           type="button"
           variant="outline"
-          disabled={!catalogId || attach !== "ready"}
+          disabled={pending || !catalogId || attach !== "ready"}
           onClick={() => {
-            onAttach(catalogId);
-            setCatalogId("");
+            onAttach(catalogId, () => setCatalogId(""));
           }}
         >
           {catalogId && readiness.isFetching ? (
@@ -1065,7 +956,7 @@ function AttachServerPicker({
           ) : (
             <Plus className="size-4" />
           )}
-          <span>Add</span>
+          <span>Attach</span>
         </Button>
       </div>
       {attach !== null && attach !== "ready" && (
@@ -1112,17 +1003,17 @@ function ServerOption({ entry }: { entry: CatalogEntry }) {
 function CredentialsSection({
   batteryName,
   credentials,
-  keyOf,
   onChange,
   disabledReason,
   bindable,
+  pending,
 }: {
   batteryName: string;
   credentials: BatteryCredential[];
-  keyOf: (credential: BatteryCredential) => string;
   onChange: (variable: string, key: string) => void;
   disabledReason: string | null;
   bindable: boolean;
+  pending: boolean;
 }) {
   const available = useRuntimeCredentials(bindable);
   const { refetch } = available;
@@ -1161,9 +1052,9 @@ function CredentialsSection({
             key={credential.variable}
             batteryName={batteryName}
             credential={credential}
-            value={keyOf(credential)}
+            value={credential.key ?? UNBOUND}
             options={options}
-            disabled={!bindable || disabledReason !== null}
+            disabled={!bindable || pending || disabledReason !== null}
             onChange={(key) => onChange(credential.variable, key)}
           />
         ))}
@@ -1209,7 +1100,7 @@ function CredentialRow({
         onValueChange={(next) => {
           // The table is one per organization: letting go of a variable the
           // other entries read would take the key from them too, so the
-          // unset is never staged and the row says why.
+          // unset is refused and the row says why.
           if (next === UNBOUND && others.length > 0) return setKept(true);
           setKept(false);
           onChange(next);

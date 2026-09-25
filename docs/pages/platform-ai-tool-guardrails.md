@@ -18,7 +18,7 @@ The lethal trifecta is the combination of private data access, untrusted content
 
 ## Enable OpenAPPA
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. On first use, open **OpenAPPA**: a welcome dialog explains how it works, and the cards at the top of the Overview show whether enforcement is on and whether GitHub sync is connected. Policy coverage and policy targets appear once a policy is saved or enforcement is on. **Set up with chat** opens the policy agent to draft your first rules. When an administrator saves a policy in that chat while enforcement is off, OpenAPPA turns on. **Connect GitHub** keeps the policy in a repository; a policy proposed as a pull request does not turn enforcement on. The **OpenAPPA** switch in the sidebar also turns enforcement on or off. The current policy must pass validation before enforcement turns on.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. **Set up with chat** opens the policy agent to draft your first rules. Saving a policy leaves enforcement unchanged. Administrators turn enforcement on or off with the **OpenAPPA** switch in the sidebar. The current policy must pass validation before enforcement turns on. **Connect GitHub** keeps the policy in a repository for review through pull requests.
 
 The feature makes the workspace available; the switch controls enforcement. Administrators can turn enforcement off at any time. The starting policy includes the `archestra` battery for built-in tools. Its catch-all rule adds no restrictions to other tools.
 
@@ -30,17 +30,17 @@ Each session acts for the signed-in user, identified by their email. Sessions st
 
 ## Policy Targets
 
-Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. Filter by server or policy source, then follow a source link to the rule in the organization policy or included battery.
+Open **OpenAPPA → Overview** to see MCP gateways and MCP servers with tools. Coverage counts tools with an enforced rule that applies without an argument condition. Conditional rules remain visible in the tool details. Follow a source link to the rule in your policy or an included battery.
 
-Choose **Configure with chat** on a target to open a conversation focused on that agent, gateway, or server. The chat waits for your first message or suggested prompt.
+Choose a target's chat action to start a review focused on that gateway or server. Reopen a saved chat to continue with the same target.
 
 ## Configure with the Agent
 
-Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
+Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in agent reads the current policy and explains proposed changes before publishing. Ask for the diff when you want to inspect the policy text. You can also ask it to explain the policy without changing anything.
 
 The agent needs an available LLM provider key. If none is configured, the configuration chat offers provider setup. Configuration sessions appear in AI chat history. Reopen one there to continue the conversation with its agent and model fixed.
 
-Ask the agent to identify the tools and data flows you want to govern. Review its proposed diff and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
+Ask the agent to identify the tools and data flows you want to govern. Review the proposed changes and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
 
 The agent can save a validated local revision. If you [connect GitHub sync](#github-policy-review), it opens a pull request instead. Local revisions apply to new conversations; existing conversations keep the policy they started with.
 
@@ -92,4 +92,4 @@ The proxy can add a two-line mark to a protected session's first reply and to co
 
 At fictional Example Co, `support-assistant` searches public troubleshooting pages and updates internal tickets. Its administrator asks the OpenAPPA Configuration Agent to mark web search results as suspicious and require trusted context before ticket updates.
 
-The agent identifies the installed tool names, shows a policy diff, and validates it. The administrator reviews the change before publishing. After a public page enters a conversation, OpenAPPA refuses a ticket update that requires trusted context. A new conversation starts with the updated policy; an existing one keeps its original revision.
+The agent identifies installed tool names, explains a policy change, and validates it. The administrator reviews the change before publishing. After a public page enters a conversation, OpenAPPA refuses a ticket update that requires trusted context. A new conversation starts with the updated policy; an existing one keeps its original revision.

@@ -216,6 +216,16 @@ describe("GET /api/openappa/coverage/entities", () => {
         expect.objectContaining({ id: second.id, toolCount: 1 }),
       ]);
 
+      // Sorting by count resolves both gateways before taking the page.
+      resolveAutoTools.mockClear();
+      const byCount = await ctx.app.inject({
+        method: "GET",
+        url: "/api/openappa/coverage/entities?search=paged%20gateway&sortBy=tools&sortDirection=desc&limit=1",
+      });
+      expect(byCount.statusCode).toBe(200);
+      expect(byCount.json().data).toEqual([
+        expect.objectContaining({ id: second.id, toolCount: 1 }),
+      ]);
       resolveAutoTools.mockClear();
       const details = await ctx.app.inject({
         method: "GET",
@@ -228,55 +238,6 @@ describe("GET /api/openappa/coverage/entities", () => {
     } finally {
       resolveAutoTools.mockRestore();
     }
-  });
-
-  test("sorts by the most tools with no enforced rule, counting every target's Auto mode tools", async ({
-    makeAgent,
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const covered = await makeAgent({
-      organizationId: ctx.organizationId,
-      name: "A sorted gateway",
-      agentType: "mcp_gateway",
-      accessAllTools: true,
-    });
-    const uncovered = await makeAgent({
-      organizationId: ctx.organizationId,
-      name: "B sorted gateway",
-      agentType: "mcp_gateway",
-      accessAllTools: true,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: ctx.organizationId,
-      name: "Sorted tools",
-    });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: "sorted__list",
-      rawName: "list",
-    });
-    await agentToolExclusionsService.replaceExclusions({
-      agentId: covered.id,
-      organizationId: ctx.organizationId,
-      excludedToolIds: [tool.id],
-    });
-
-    // The first page by name holds only the gateway with nothing uncovered.
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: "/api/openappa/coverage/entities?search=sorted%20gateway&sortBy=uncovered&limit=1",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().pagination.total).toBe(2);
-    expect(response.json().data).toEqual([
-      expect.objectContaining({
-        id: uncovered.id,
-        toolCount: 1,
-        governedCount: 0,
-      }),
-    ]);
   });
 
   test("sorts by name, by type with MCP servers first, or by tool count, either way", async ({

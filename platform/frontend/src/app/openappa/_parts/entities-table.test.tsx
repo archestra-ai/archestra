@@ -67,7 +67,9 @@ beforeEach(() => {
             scope: "org",
             icon: null,
             toolCount: 3,
-            governedCount: 2,
+            // The third tool has only a selector rule; coverage counts the
+            // unconditional rules, consistently with the bar and overview.
+            governedCount: 3,
             fallbackCount: 1,
             builtInCount: 1,
             rules: {

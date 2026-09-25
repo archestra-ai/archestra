@@ -6,12 +6,8 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import AuditLogModel from "@/models/audit-log";
-import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   coverageVisibility,
@@ -34,10 +30,6 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
-import {
-  getGuardrailsDeployment,
-  setGuardrailsDeployment,
-} from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { getAppaGithubSync } from "@/services/openappa-github-sync";
 import {
@@ -229,7 +221,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only, and turns OpenAPPA enforcement on when it was off and the caller is an administrator: report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only and leaves enforcement unchanged. An administrator can enable enforcement with the OpenAPPA switch in the sidebar. Report any inactive effective battery.",
     schema: UpdateGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -258,10 +250,6 @@ const registry = defineArchestraTools([
       return result({
         ...saved,
         effective: await enforced(context.organizationId),
-        enforcement: await turnOnAfterPolicySave({
-          organizationId: context.organizationId,
-          userId: context.userId,
-        }),
       });
     },
   }),
@@ -622,67 +610,6 @@ function parseArgumentsRecord(
   } catch {
     return undefined;
   }
-}
-
-/**
- * A policy saved in chat is what the operator wanted enforced, so it turns
- * OpenAPPA on when it was off. Only someone who may flip the switch turns it
- * on, and a refusal keeps the saved policy and says why, for the agent to
- * report. The switch is audited as the HTTP route audits it.
- */
-async function turnOnAfterPolicySave({
-  organizationId,
-  userId,
-}: {
-  organizationId: string;
-  userId: string;
-}): Promise<{ enabled: boolean; turnedOn: boolean; reason?: string }> {
-  const current = await getGuardrailsDeployment();
-  if (current.enabled || !current.featureEnabled)
-    return { enabled: current.active, turnedOn: false };
-  if (
-    !(await userHasPermission(userId, organizationId, "organization", "update"))
-  )
-    return {
-      enabled: false,
-      turnedOn: false,
-      reason:
-        "Only an administrator can turn OpenAPPA on, from the OpenAPPA switch in the sidebar.",
-    };
-  const before = await GuardrailsDeploymentModel.findByIdForAudit();
-  try {
-    await setGuardrailsDeployment(true);
-  } catch (error) {
-    if (error instanceof ApiError)
-      return { enabled: false, turnedOn: false, reason: error.message };
-    throw error;
-  }
-  const actor = await UserModel.getById(userId);
-  await AuditLogModel.create({
-    organizationId,
-    actorId: userId,
-    actorType: "user",
-    actorName: actor?.name ?? null,
-    actorEmail: actor?.email ?? null,
-    action: "organization.updated",
-    outcome: "success",
-    resourceType: "organization",
-    resourceId: organizationId,
-    resourceName: null,
-    before,
-    after: await GuardrailsDeploymentModel.findByIdForAudit(),
-    httpMethod: null,
-    httpPath: "mcp-tool:update_guardrails_policy",
-    httpRoute: null,
-    httpStatus: null,
-    requestId: null,
-    sourceIp: null,
-    userAgent: null,
-    occurredAt: new Date(),
-  }).catch((err) =>
-    logger.error({ err }, "audit: failed to record OpenAPPA turning on"),
-  );
-  return { enabled: true, turnedOn: true };
 }
 
 /**

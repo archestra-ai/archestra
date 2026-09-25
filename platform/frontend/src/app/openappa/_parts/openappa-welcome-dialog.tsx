@@ -39,7 +39,7 @@ export function useOpenAppaWelcome(isFresh: boolean | undefined) {
 
 /**
  * Introduces the guardrail in three short steps and points a new user at the
- * policy chat, which drafts the first policy and turns enforcement on.
+ * policy chat, which drafts the first policy before an administrator enables it.
  */
 export function OpenAppaWelcomeDialog({
   open,
@@ -87,8 +87,9 @@ export function OpenAppaWelcomeDialog({
         </Step>
       </ol>
       <p className="text-sm text-muted-foreground">
-        Setup is a short chat. The agent drafts rules for your tools, and saving
-        them turns the guardrail on.
+        Setup starts with a short chat. The agent drafts rules for your tools.
+        After saving, an administrator can turn the guardrail on using the
+        OpenAPPA switch in the sidebar.
       </p>
     </StandardDialog>
   );

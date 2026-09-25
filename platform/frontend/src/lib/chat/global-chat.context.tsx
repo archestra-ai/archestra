@@ -1366,9 +1366,6 @@ function ChatSessionHook({
           ? { externalMcpSkill: next.externalMcpSkill }
           : {}),
         ...(next.sandboxCommand ? { sandboxCommand: true as const } : {}),
-        ...(next.openAppaPolicyTarget
-          ? { openAppaPolicyTarget: next.openAppaPolicyTarget }
-          : {}),
       },
     });
   }, [

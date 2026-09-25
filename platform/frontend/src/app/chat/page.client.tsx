@@ -165,7 +165,6 @@ import {
   generateLockedChatKey,
   isActionAvailableForConversation,
 } from "@/lib/chat/locked-chat";
-import { findOpenAppaPolicyTarget } from "@/lib/chat/openappa-policy-target";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -2257,14 +2256,6 @@ export function ChatPageContent({
     }
   };
 
-  // The server reads an OpenAPPA conversation's policy target off its latest
-  // user message, so every follow-up re-sends the one the chat started with.
-  const openAppaPolicyTarget =
-    isPolicyConversation && conversationId
-      ? (findOpenAppaPolicyTarget(messages) ??
-        findOpenAppaPolicyTarget((conversation?.messages ?? []) as UIMessage[]))
-      : undefined;
-
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
     message,
     e,
@@ -2296,7 +2287,6 @@ export function ChatPageContent({
           ? { externalMcpSkill: options.externalMcpSkill }
           : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
-        ...(openAppaPolicyTarget ? { openAppaPolicyTarget } : {}),
       });
       trackEvent("message_queued", {
         conversationId,
@@ -2421,7 +2411,6 @@ export function ChatPageContent({
           ? { externalMcpSkill: externalMcpSkillToAttach }
           : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
-        ...(openAppaPolicyTarget ? { openAppaPolicyTarget } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
         ...(openedAppMetadata
           ? {

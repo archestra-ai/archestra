@@ -202,65 +202,26 @@ describe("guardrails policy authoring", () => {
     );
   });
 
-  test("a policy saved in chat turns OpenAPPA on, and only for someone who may flip the switch", async ({
-    makeUser,
-    makeCustomRole,
-    makeMember,
-  }) => {
-    const author = await makeUser();
-    const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
-    });
-    await makeMember(author.id, orgId, { role: role.role });
-    await GuardrailsDeploymentModel.setEnabled(false);
-    const agent = { id: "test-agent", name: "Test assistant" };
-
-    const byAuthor = await executeArchestraTool(
+  test.each([
+    false,
+    true,
+  ])("an administrator's policy save preserves enforcement=%s", async (enabled) => {
+    await GuardrailsDeploymentModel.setEnabled(enabled);
+    const saved = await executeArchestraTool(
       "archestra__update_guardrails_policy",
       { content, expectedRevision: 0 },
-      { organizationId: orgId, userId: author.id, agent },
+      {
+        organizationId: orgId,
+        userId,
+        agent: { id: "test-agent", name: "Test assistant" },
+      },
     );
-    expect(byAuthor.structuredContent?.enforcement).toMatchObject({
-      enabled: false,
-      turnedOn: false,
-      reason: expect.stringContaining("administrator"),
+    expect(saved.isError).not.toBe(true);
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toMatchObject({
+      content,
+      revision: 1,
     });
-    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
-
-    const byAdmin = await executeArchestraTool(
-      "archestra__update_guardrails_policy",
-      { content: `${content}# first rules\n`, expectedRevision: 1 },
-      { organizationId: orgId, userId, agent },
-    );
-    expect(byAdmin.structuredContent?.enforcement).toEqual({
-      enabled: true,
-      turnedOn: true,
-    });
-    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
-    const rows = await AuditLogModel.findPaginated({
-      organizationId: orgId,
-      limit: 20,
-      offset: 0,
-    });
-    expect(
-      rows.data.some(
-        (row) =>
-          row.action === "organization.updated" &&
-          row.actorId === userId &&
-          row.after?.enabled === true,
-      ),
-    ).toBe(true);
-
-    // Already on: a later save leaves the switch alone.
-    const later = await executeArchestraTool(
-      "archestra__update_guardrails_policy",
-      { content, expectedRevision: 2 },
-      { organizationId: orgId, userId, agent },
-    );
-    expect(later.structuredContent?.enforcement).toEqual({
-      enabled: true,
-      turnedOn: false,
-    });
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(enabled);
   });
 
   test("granting a battery a credential needs credential update, removing it does not", async ({

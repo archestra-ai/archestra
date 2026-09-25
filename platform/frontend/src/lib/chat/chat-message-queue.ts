@@ -11,7 +11,6 @@
 
 import type {
   ChatExternalMcpSkillMetadata,
-  ChatOpenAppaPolicyTargetMetadata,
   ChatSkillMetadata,
 } from "@archestra/shared";
 import { useSyncExternalStore } from "react";
@@ -29,8 +28,6 @@ export interface QueuedChatMessage {
   externalMcpSkill?: ChatExternalMcpSkillMetadata;
   /** Marks a `!`-prefixed message for direct sandbox execution. */
   sandboxCommand?: true;
-  /** Policy target an OpenAPPA conversation re-sends on every user turn. */
-  openAppaPolicyTarget?: ChatOpenAppaPolicyTargetMetadata;
 }
 
 export type EnqueueChatMessageInput = Omit<

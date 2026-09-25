@@ -38,12 +38,27 @@ for (const file of testFiles(sourceRoot)) {
       ts.isStringLiteral(statement.moduleSpecifier) &&
       statement.moduleSpecifier.text === "@/test",
   );
-  const usesRouteFixtures = source.statements.some(
-    (statement) =>
-      ts.isImportDeclaration(statement) &&
-      ts.isStringLiteral(statement.moduleSpecifier) &&
-      statement.moduleSpecifier.text === "@/test/route-test-app",
-  );
+  const usesRouteFixtures = source.statements.some((statement) => {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      return false;
+    }
+    const moduleName = statement.moduleSpecifier.text;
+    const bindings = statement.importClause?.namedBindings;
+    return (
+      bindings !== undefined &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.some(
+        (element) =>
+          (moduleName === "@/test/route-test-app" &&
+            element.name.text === "useRouteTestApp") ||
+          (moduleName === "./skill.test-helpers" &&
+            element.name.text === "useSkillRouteTestApp"),
+      )
+    );
+  });
   if (importsFixtureTest && !usesFixture(source) && !usesRouteFixtures) {
     unnecessaryImports.push(path.relative(sourceRoot, file));
   }

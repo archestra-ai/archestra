@@ -211,8 +211,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         results,
       }),
     );
-    // Requests with results submit them to runtime even if current request declares no tools.
-    if (!binding.request.tools && context.toolResults.length === 0) return;
+    // Requests with results submit them to runtime even if current request
+    // declares no tools. Proxy-only sessions declared local tools, so their
+    // session still starts; a session that declared nothing has nothing to do.
+    if (
+      !binding.request.tools &&
+      context.toolResults.length === 0 &&
+      binding.request.declaredTools.length === 0
+    ) {
+      return;
+    }
     assertUniqueNativeQuestionResultIds({
       binding,
       results: context.toolResults,

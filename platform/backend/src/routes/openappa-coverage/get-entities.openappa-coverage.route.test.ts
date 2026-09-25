@@ -1,4 +1,5 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import ToolModel from "@/models/tool";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -153,6 +154,84 @@ describe("GET /api/openappa/coverage/entities", () => {
       fullName: "projects__list",
     });
     expect(tools.json().data[0].toolId).not.toBe(excluded.id);
+  });
+
+  test("resolves Auto mode counts only for the requested entity page", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const first = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "A paged gateway",
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const second = await makeAgent({
+      organizationId: ctx.organizationId,
+      name: "B paged gateway",
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Paged tools",
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "paged__list",
+      rawName: "list",
+    });
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: first.id,
+      organizationId: ctx.organizationId,
+      excludedToolIds: [tool.id],
+    });
+
+    const resolveAutoTools = vi.spyOn(
+      agentToolExclusionsService,
+      "getFilteredMcpToolsByAgent",
+    );
+
+    try {
+      const firstPage = await ctx.app.inject({
+        method: "GET",
+        url: "/api/openappa/coverage/entities?type=mcp_gateway&search=paged%20gateway&limit=1&offset=0",
+      });
+      expect(resolveAutoTools.mock.calls.map(([agentId]) => agentId)).toEqual([
+        first.id,
+      ]);
+      const secondPage = await ctx.app.inject({
+        method: "GET",
+        url: "/api/openappa/coverage/entities?type=mcp_gateway&search=paged%20gateway&limit=1&offset=1",
+      });
+      expect(resolveAutoTools.mock.calls.map(([agentId]) => agentId)).toEqual([
+        first.id,
+        second.id,
+      ]);
+      expect(firstPage.statusCode).toBe(200);
+      expect(secondPage.statusCode).toBe(200);
+      expect(firstPage.json().pagination.total).toBe(2);
+      expect(secondPage.json().pagination.total).toBe(2);
+      expect(firstPage.json().data).toEqual([
+        expect.objectContaining({ id: first.id, toolCount: 0 }),
+      ]);
+      expect(secondPage.json().data).toEqual([
+        expect.objectContaining({ id: second.id, toolCount: 1 }),
+      ]);
+
+      resolveAutoTools.mockClear();
+      const details = await ctx.app.inject({
+        method: "GET",
+        url: `/api/openappa/coverage/tools?entityId=${second.id}`,
+      });
+      expect(details.statusCode).toBe(200);
+      expect(resolveAutoTools.mock.calls.map(([agentId]) => agentId)).toEqual([
+        second.id,
+      ]);
+    } finally {
+      resolveAutoTools.mockRestore();
+    }
   });
 
   test("identifies the built-in default fallback for an assigned tool", async ({

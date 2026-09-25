@@ -148,18 +148,22 @@ for (const viewport of [
         },
       ]);
       await page.goto("/openappa/policy");
-      const policySource = page.getByRole("heading", { name: "Policy source" });
+      const policySource = page.getByText("Revision 1", { exact: true });
       await expect(policySource).toBeInViewport();
-      await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("switch", { name: "Enforcement" }),
+      ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Save & apply" }),
       ).toHaveCount(0);
-      const effective = page.getByRole("heading", { name: "Effective policy" });
+      const effective = page.getByText(
+        "What the runtime enforces, batteries included.",
+      );
       await expect(effective).toBeHidden();
-      await page.getByRole("tab", { name: "Effective policy" }).click();
+      await page.getByRole("tab", { name: "Effective", exact: true }).click();
       await expect(effective).toBeVisible();
       await expect(policySource).toBeHidden();
-      await page.getByRole("tab", { name: "Policy", exact: true }).click();
+      await page.getByRole("tab", { name: "Source", exact: true }).click();
       await expect(policySource).toBeVisible();
       await expect(effective).toBeHidden();
       await page.screenshot({
@@ -169,7 +173,7 @@ for (const viewport of [
       await page.goto("/openappa");
       await page.getByRole("button", { name: "Connect GitHub" }).click();
       const dialog = page.getByRole("dialog", {
-        name: "Connect APPA to GitHub",
+        name: "Connect OpenAPPA to GitHub",
       });
       await expect(dialog).toBeVisible();
       await dialog

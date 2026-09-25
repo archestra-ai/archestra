@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-24
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,20 +14,16 @@ Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot C
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
-On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
+For clients other than Claude Code, the page prompt downloads a Node.js installer before browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
 
 ## Connect From Your Coding Client
 
-The terminal on the Connection page provides a prompt for your deployment.
-You can also give your coding agent this prompt, replacing the example hostname:
+Copy the prompt for your client from the Connection page. Claude Code gives you a browser setup page, where you review and run the installer yourself. Other coding clients receive the installer command in the prompt. Neither prompt needs the agent to fetch setup instructions before connecting to the gateway.
 
-> Read https://ai.example.com/connect.md and connect this client.
-
-The public instructions need no installed skill or platform login.
-They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
+The prompt supports Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
-The agent downloads a public bootstrap installer and starts a connection request.
+For clients other than Claude Code, the agent downloads a public bootstrap installer and starts a connection request.
 Your browser opens a compact approval page for the requested client and operating system.
 The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
 Sign in using your deployment's usual login or SSO.
@@ -73,7 +69,7 @@ Only approve a request you started with a matching terminal code.
 Never paste passwords, cookies, polling secrets, or setup scripts into a chat.
 
 Deployments expose `/llms.txt` with a link to `/connect.md`.
-Automatic discovery varies by client; the explicit prompt above avoids relying on discovery.
+Automatic discovery varies by client; the page prompt does not rely on discovery.
 Both public documents must remain reachable without application authentication.
 An upstream proxy that requires login for every URL must allow these documents and bootstrap endpoints.
 
@@ -165,7 +161,7 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
-- **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
+- **Plugins** — installs the selected Claude Code plugins. You can import OpenAPPA from the Plugins catalog, then select it here.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.

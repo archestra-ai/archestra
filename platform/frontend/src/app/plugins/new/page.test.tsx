@@ -241,7 +241,7 @@ describe("NewPluginPage", () => {
     });
   });
 
-  it("shows the preinstalled OpenAPPA marketplace entry as imported", async () => {
+  it("shows an already imported OpenAPPA marketplace entry", async () => {
     vi.mocked(usePlugins).mockReturnValue({
       data: [
         {

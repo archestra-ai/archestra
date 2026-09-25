@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1091,7 +1091,7 @@ On GKE, custom Sandbox controllers can produce a â€œnot backed by a controllerâ€
 
 ### Skills Marketplace
 
-- **`ARCHESTRA_PLUGINS_ENABLED`** - Enables the Plugins catalog, an initial OpenAPPA import, and delivery through connection setup commands. Plugin files execute on connected developer machines, so this gate is off by default.
+- **`ARCHESTRA_PLUGINS_ENABLED`** - Enables the Plugins catalog and delivery through connection setup commands. Plugin files execute on connected developer machines, so this gate is off by default.
   - Default: unset (falls back to the `ARCHESTRA_BETA` master switch)
   - Values: `true`, `false`
   - An explicit `false` keeps the feature off even when `ARCHESTRA_BETA=true`.

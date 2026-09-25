@@ -57,7 +57,6 @@ import {
   UserModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
-import { seedDefaultPlugins } from "@/plugins/default-plugins";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -1125,11 +1124,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
   await syncBuiltInSkills();
-  // Release defaults are best-effort and must not hold backend readiness on
-  // GitHub availability. Once seeded, organizations own plugin lifecycle.
-  void seedDefaultPlugins().catch((error) => {
-    logger.warn({ err: error }, "Default plugin seeding failed");
-  });
   await seedArchestraCatalogAndTools();
   await syncOpenAppaConfigAgentCapabilities();
   await enableSkillToolsForExistingOrgs();

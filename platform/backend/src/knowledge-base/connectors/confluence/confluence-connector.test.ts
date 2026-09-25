@@ -43,7 +43,7 @@ describe("ConfluenceConnector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedConfluenceConfigs.length = 0;
-    connector = new ConfluenceConnector();
+    connector = new ConfluenceConnector(0);
   });
 
   afterEach(() => {
@@ -821,7 +821,7 @@ describe("ConfluenceConnector permission sync", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    connector = new ConfluenceConnector();
+    connector = new ConfluenceConnector(0);
     // The Cloud permission pass arms the Atlassian admin-API email fallback,
     // which calls global fetch. Deny it by default (plain-API-token behavior)
     // so no test ever reaches the live network; the fallback test below
@@ -1188,7 +1188,7 @@ describe("ConfluenceConnector permission sync", () => {
     });
 
     const runPass = async () => {
-      const fresh = new ConfluenceConnector();
+      const fresh = new ConfluenceConnector(0);
       return collectSnapshot(
         fresh.syncPermissionSnapshot?.({
           config,

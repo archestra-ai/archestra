@@ -186,7 +186,8 @@ describe("GitlabConnector", () => {
     groupProjectsRequests.length = 0;
     treeRequests.length = 0;
     fileRequests.length = 0;
-    connector = new GitlabConnector();
+    // Network responses are mocked; keep the production request spacing out of these tests.
+    connector = new GitlabConnector(0);
   });
 
   describe("validateConfig", () => {

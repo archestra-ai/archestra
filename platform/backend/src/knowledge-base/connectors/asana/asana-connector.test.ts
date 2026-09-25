@@ -95,7 +95,8 @@ describe("AsanaConnector", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    connector = new AsanaConnector();
+    // Network responses are mocked; keep the production request spacing out of these tests.
+    connector = new AsanaConnector(0);
   });
 
   afterEach(() => {

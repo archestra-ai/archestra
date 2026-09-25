@@ -287,7 +287,10 @@ describe("APPA Guide feature availability", () => {
       "Inspection and proposal drafting never require approval",
     );
     expect(content).toContain(
-      "End with: **Approve, or tell me what to change.**",
+      'Call `archestra__ask_user` with the question "Apply this policy?"',
+    );
+    expect(content).toContain(
+      "With neither, end with: **Approve, or tell me what to change.**",
     );
 
     // P07: Approval applies only to exact pending proposal; never invent offer id
@@ -318,6 +321,7 @@ describe("APPA Guide feature availability", () => {
     expect(content).toContain(
       "Without the catch-all, declare `archestra__search_tools` with `delta = {}`",
     );
+
     expect(content).toContain(
       "every proxied request fails closed without retry",
     );

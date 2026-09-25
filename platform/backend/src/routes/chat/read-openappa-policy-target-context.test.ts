@@ -10,12 +10,17 @@ const userMessage = (metadata?: unknown): ChatMessage => ({
   metadata,
 });
 
-test("uses the scope on the latest user message", () => {
+test("keeps the latest user scope through follow-ups in conversation history", () => {
   const context = readOpenAppaPolicyTargetContext([
     userMessage({ openAppaPolicyTarget: { kind: "agent", id: targetId } }),
     userMessage({
       openAppaPolicyTarget: { kind: "mcp_gateway", id: targetId },
     }),
+    {
+      ...userMessage({ openAppaPolicyTarget: { kind: "agent", id: targetId } }),
+      role: "assistant",
+    },
+    userMessage(),
   ]);
   expect(context).toContain(`the MCP gateway with ID ${targetId}`);
   expect(readOpenAppaPolicyTargetContext([userMessage()])).toBeUndefined();

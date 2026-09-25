@@ -31,6 +31,7 @@ import type {
   BatteryInstall,
   BatteryInstallRow,
   BatteryInstallStatus,
+  BatteryMatchEvidence,
   BatteryMatches,
   BatteryPackageFile,
   BatteryScope,
@@ -97,6 +98,62 @@ class OpenAppaBatteriesService {
         installs: installsByBattery.get(battery.name) ?? [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * The battery each catalog has, or could have: its install when one exists
+   * (an active one first), otherwise the strongest available match, as
+   * `available` with the policy text it would include. Catalogs with neither
+   * are left out.
+   */
+  async batteriesForCatalogs(params: {
+    organizationId: string;
+    catalogIds: string[];
+  }): Promise<Map<string, CatalogBattery>> {
+    const { organizationId, catalogIds } = params;
+    const [{ installs }, available, catalogs] = await Promise.all([
+      this.current(organizationId),
+      this.availableBatteries(organizationId),
+      InternalMcpCatalogModel.getByIds(catalogIds),
+    ]);
+    const availableNames = new Set(available.keys());
+    const result = new Map<string, CatalogBattery>();
+    for (const catalogId of catalogIds) {
+      const installed = installs
+        .filter((install) => install.catalogId === catalogId)
+        .sort(
+          (a, b) =>
+            Number(b.status === "active") - Number(a.status === "active"),
+        )[0];
+      if (installed) {
+        result.set(catalogId, {
+          battery: installed.batteryName,
+          status: installed.status,
+        });
+        continue;
+      }
+      const catalog = catalogs.get(catalogId);
+      const match = catalog && matchBatteries(catalog, availableNames)[0];
+      const found = match && available.get(match.battery);
+      if (match && found)
+        result.set(catalogId, {
+          battery: match.battery,
+          status: "available",
+          evidence: match.evidence,
+          include:
+            found.contentHash === null
+              ? bundledEntry(match.battery)
+              : uploadedEntry({
+                  name: match.battery,
+                  contentHash: found.contentHash,
+                }),
+          description: found.package.description,
+          namespaces: found.package.namespaces,
+          credentials: found.package.credentials,
+          policy: found.package.policy,
+        });
+    }
+    return result;
   }
 
   /** The batteries a catalog entry stands for and the rows it already has. */
@@ -1528,6 +1585,22 @@ type AvailableBatteries = Map<
     package: NativeBatteryPackage;
   }
 >;
+
+/** A catalog's battery: its install, or the match it could install. */
+type CatalogBattery =
+  | { battery: string; status: BatteryInstallStatus }
+  | {
+      battery: string;
+      status: "available";
+      evidence: BatteryMatchEvidence;
+      /** The `include` entry that declares it. */
+      include: string;
+      description: string;
+      namespaces: string[];
+      /** Credential variables `[credentials]` must bind to a runtime credential key. */
+      credentials: string[];
+      policy: string;
+    };
 
 type CatalogPrefixes = {
   byCatalog: Map<string, Set<string>>;

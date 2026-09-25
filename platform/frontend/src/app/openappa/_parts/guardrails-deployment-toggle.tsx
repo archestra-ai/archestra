@@ -5,92 +5,85 @@ import {
   OpenAppaAlertIcon,
   OpenAppaSolidIcon,
 } from "@/components/openappa-icon";
+import { Label } from "@/components/ui/label";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useGuardrailsDeployment,
   useUpdateGuardrailsDeployment,
 } from "@/lib/guardrails-deployment.query";
-import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * OpenAPPA is off and its policy was never saved, so it was never set up: an
- * administrator's way in is the setup wizard rather than the switch or the
- * empty OpenAPPA page.
+ * Sidebar status: whether OpenAPPA enforcement is on, linking to the Policy
+ * page where an administrator switches it.
  */
-export function useOpenAppaNeedsSetup(): boolean | undefined {
+export function GuardrailsDeploymentToggle() {
   const query = useGuardrailsDeployment();
-  const { data: canManage } = useHasPermissions({ organization: ["update"] });
-  const candidate = Boolean(
-    canManage && query.data?.enabled === false && query.data.featureEnabled,
+  if (!query.data || query.isError) return null;
+  const { enabled } = query.data;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        tooltip={`OpenAPPA enforcement is ${enabled ? "on" : "off"}`}
+        className={cn(!enabled && "text-destructive hover:text-destructive")}
+      >
+        <Link href="/openappa/policy">
+          {enabled ? (
+            <OpenAppaSolidIcon className="size-4 shrink-0" />
+          ) : (
+            <OpenAppaAlertIcon className="size-4 shrink-0" />
+          )}
+          <span className="min-w-0 flex-1 truncate">
+            OpenAPPA {enabled ? "on" : "off"}
+          </span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
-  const policy = useGuardrailsPolicy({ enabled: candidate });
-  if (!candidate) return false;
-  // Unknown until the policy answers; a failed read falls back to the switch.
-  if (!policy.data) return policy.isError ? false : undefined;
-  return policy.data.revision === 0;
 }
 
-export function GuardrailsDeploymentToggle() {
+/**
+ * The enforcement section on the Policy page. Turning it off is the way out of
+ * a policy that locks agents out.
+ */
+export function EnforcementSwitch() {
   const query = useGuardrailsDeployment();
   const update = useUpdateGuardrailsDeployment();
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
-  const needsSetup = useOpenAppaNeedsSetup();
-  // Waiting on the policy keeps the switch from showing before the setup link.
-  if (!query.data || query.isError || needsSetup === undefined) return null;
+  if (!query.data || query.isError) return null;
   const { enabled, featureEnabled } = query.data;
-  if (needsSetup)
-    return (
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          className="text-destructive hover:text-destructive"
-        >
-          <Link href="/openappa/setup">
-            <OpenAppaAlertIcon className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Set up OpenAPPA</span>
-          </Link>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    );
-  const canToggle = Boolean(canManage && featureEnabled && !update.isPending);
-  const action = enabled ? "Disable OpenAPPA" : "Enable OpenAPPA";
   return (
-    <SidebarMenuItem>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <SidebarMenuButton
-            role="switch"
-            aria-label={`OpenAPPA is ${enabled ? "enabled" : "disabled"}`}
-            aria-checked={enabled}
-            disabled={!canToggle}
-            onClick={() => update.mutate(!enabled)}
-            className={cn(
-              !enabled && "text-destructive hover:text-destructive",
-            )}
-          >
-            {enabled ? (
-              <OpenAppaSolidIcon className="size-4 shrink-0" />
-            ) : (
-              <OpenAppaAlertIcon className="size-4 shrink-0" />
-            )}
-            <span className="min-w-0 flex-1 truncate">
-              OpenAPPA {enabled ? "enabled" : "disabled"}
+    <section className="flex items-center justify-between gap-4 rounded-lg border p-4">
+      <div className="space-y-0.5">
+        <Label htmlFor="openappa-enforcement" className="text-sm font-medium">
+          Enforcement
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          {enabled ? (
+            <span>
+              Every tool call is checked against this policy before it runs.
+              Turn it off if the policy locks agents out.
             </span>
-          </SidebarMenuButton>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {canToggle
-            ? action
-            : "Only administrators can change OpenAPPA enforcement"}
-        </TooltipContent>
-      </Tooltip>
-    </SidebarMenuItem>
+          ) : (
+            <span>
+              Tool calls run without policy checks. Turn it on to apply this
+              policy.
+            </span>
+          )}{" "}
+          {!canManage && (
+            <span>Only administrators can turn enforcement on or off.</span>
+          )}
+        </p>
+      </div>
+      <Switch
+        id="openappa-enforcement"
+        checked={enabled}
+        disabled={!canManage || !featureEnabled || update.isPending}
+        onCheckedChange={(checked) => update.mutate(checked)}
+      />
+    </section>
   );
 }

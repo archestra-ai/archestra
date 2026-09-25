@@ -6,7 +6,7 @@ import {
 
 /**
  * Hidden scope reminder for an OpenAPPA policy-target conversation, read off
- * the turn's last user message. Returns undefined when the conversation
+ * its latest scoped user message. Returns undefined when the conversation
  * carries no target scope, so the turn's system prompt is unaffected.
  *
  * The target is an untrusted client hint. Only a validated kind and UUID enter
@@ -15,9 +15,12 @@ import {
 export function readOpenAppaPolicyTargetContext(
   messages: ChatMessage[],
 ): string | undefined {
-  const lastUser = messages.findLast((message) => message.role === "user");
-  const target = ChatMessageMetadataSchema.safeParse(lastUser?.metadata).data
-    ?.openAppaPolicyTarget;
-  if (!target) return undefined;
-  return openAppaTargetScopeContext(target.kind, target.id);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    const target = ChatMessageMetadataSchema.safeParse(message.metadata).data
+      ?.openAppaPolicyTarget;
+    if (target) return openAppaTargetScopeContext(target.kind, target.id);
+  }
+  return undefined;
 }

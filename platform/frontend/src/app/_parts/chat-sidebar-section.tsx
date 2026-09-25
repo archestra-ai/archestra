@@ -301,9 +301,7 @@ export function ChatSidebarSection({
   const handleDeleteConversation = async (id: string) => {
     // Navigate away before deleting to avoid "conversation not found" flash
     if (currentConversationId === id) {
-      router.push(
-        pathname.startsWith("/openappa/") ? "/openappa/configure" : "/chat",
-      );
+      router.push("/chat");
     }
 
     try {

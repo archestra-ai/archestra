@@ -24,7 +24,8 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { OverviewTab } from "./overview-tab";
+import { openAppaChatHref } from "@/lib/openappa-routes";
+import { EntitiesTable } from "./entities-table";
 import { ToolTable } from "./tool-table";
 
 vi.mock("next/navigation");
@@ -35,6 +36,7 @@ const origin = "http://localhost:9000";
 const entityId = "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0";
 const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer();
+const entityRequests: URLSearchParams[] = [];
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
@@ -44,6 +46,7 @@ beforeEach(() => {
     data: { user: { id: "test-user" } },
   } as ReturnType<typeof useSession>);
   archestraApiClient.setConfig({ baseUrl: origin });
+  entityRequests.length = 0;
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
     replace: vi.fn(),
@@ -53,19 +56,29 @@ beforeEach(() => {
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
   server.use(
-    http.get(`${origin}/api/openappa/coverage/entities`, () =>
-      HttpResponse.json({
+    http.get(`${origin}/api/openappa/coverage/entities`, ({ request }) => {
+      entityRequests.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
         data: [
           {
             id: entityId,
-            name: "Research assistant",
-            type: "agent",
+            name: "Research gateway",
+            type: "mcp_gateway",
             scope: "org",
             icon: null,
             toolCount: 3,
-            governedCount: 2,
+            // The third tool has only a selector rule; coverage counts the
+            // unconditional rules, consistently with the bar and overview.
+            governedCount: 3,
             fallbackCount: 1,
             builtInCount: 1,
+            rules: {
+              root: 1,
+              battery: 1,
+              notEnforced: 0,
+              catchAll: 1,
+              builtInFallback: 0,
+            },
             autoMode: true,
           },
           {
@@ -78,6 +91,13 @@ beforeEach(() => {
             governedCount: 4,
             fallbackCount: 15,
             builtInCount: 0,
+            rules: {
+              root: 0,
+              battery: 4,
+              notEnforced: 0,
+              catchAll: 15,
+              builtInFallback: 0,
+            },
             autoMode: false,
           },
         ],
@@ -89,8 +109,8 @@ beforeEach(() => {
           hasNext: false,
           hasPrev: false,
         },
-      }),
-    ),
+      });
+    }),
     http.get(`${origin}/api/openappa/coverage/tools`, ({ request }) => {
       const catalogId = new URL(request.url).searchParams.get("catalogId");
       const data = [
@@ -153,49 +173,59 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("shows agents and registry servers with combined tool coverage and scoped details", async () => {
+test("lists registry servers and gateways, servers first, each with a chat and scoped details", async () => {
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <OverviewTab />
+      <EntitiesTable />
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText("Research assistant")).toBeVisible();
+  const targets = screen;
+  expect(await targets.findByText("Research gateway")).toBeVisible();
+  expect(entityRequests[0]?.get("sortBy")).toBe("type");
+  expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
+  // One chat for every target, whatever its coverage.
   expect(
-    screen.getByRole("link", {
-      name: "Configure with chat Research assistant",
+    targets.getByRole("link", { name: "Ask in chat: Research gateway" }),
+  ).toHaveAttribute(
+    "href",
+    openAppaChatHref({
+      promptKey: "reviewCoverage",
+      target: { kind: "mcp_gateway", id: entityId },
     }),
-  ).toHaveAttribute(
-    "href",
-    `/openappa/configure?targetType=agent&targetId=${entityId}`,
   );
   expect(
-    screen.getByRole("link", { name: "Configure with chat GitHub" }),
+    targets.getByRole("link", { name: "Ask in chat: GitHub" }),
   ).toHaveAttribute(
     "href",
-    `/openappa/configure?targetType=mcp_server&targetId=${serverId}`,
+    expect.stringContaining(
+      `targetType=mcp_server&targetId=${serverId}&openappaPrompt=reviewCoverage&from=openappa`,
+    ),
   );
-  expect(screen.getByRole("heading", { name: "Policy targets" })).toBeVisible();
-  expect(screen.getByRole("columnheader", { name: "Type" })).toBeVisible();
+  expect(targets.getByText("2 of 3 covered")).toBeVisible();
   expect(
-    screen.queryByRole("columnheader", { name: "Visibility" }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole("columnheader", { name: "Tools" })).toBeVisible();
-  expect(screen.getByText("2 of 3 with tool rules")).toBeVisible();
-  expect(screen.getByText("Includes your Auto mode access")).toBeVisible();
-  expect(screen.getByText("4 of 19 with tool rules")).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Details Research assistant" }),
+    targets.getByRole("img", {
+      name: "Custom rule: 1, Battery rule: 1, No rule: 1",
+    }),
+  ).toBeVisible();
+  for (const header of ["Name", "Type", "Tool coverage", "Actions"])
+    expect(targets.getByRole("columnheader", { name: header })).toBeVisible();
+  expect(targets.getByRole("columnheader", { name: "Type" })).toHaveAttribute(
+    "aria-sort",
+    "ascending",
   );
+  expect(targets.getByText("Auto mode")).toBeVisible();
+  expect(targets.getByText("4 of 19 covered")).toBeVisible();
+  fireEvent.click(targets.getByRole("button", { name: /Research gateway/ }));
   const researchSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
     ["3", "tools reachable for you"],
-    ["2", "with explicit rules"],
-    ["1", "may use the catch-all"],
+    ["2", "with a rule"],
+    ["1", "with no rule"],
     ["1", "built-in tool"],
   ]) {
     expect(researchSummary.getByText(label).parentElement).toHaveTextContent(
@@ -221,7 +251,7 @@ test("shows agents and registry servers with combined tool coverage and scoped d
     expect(within(dialog).queryByText("search_tools")).not.toBeInTheDocument();
   });
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  fireEvent.click(screen.getByRole("button", { name: "Details GitHub" }));
+  fireEvent.click(targets.getByRole("button", { name: /GitHub/ }));
   const githubSummary = within(await screen.findByRole("dialog"));
   expect(
     githubSummary.getByText("synced tools").parentElement,
@@ -236,16 +266,16 @@ test("disables server chat when registry read access is missing", async () => {
   } as ReturnType<typeof useHasPermissions>);
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <OverviewTab />
+      <EntitiesTable />
     </QueryClientProvider>,
   );
 
   expect(await screen.findByText("GitHub")).toBeVisible();
   expect(
-    screen.queryByRole("link", { name: "Configure with chat GitHub" }),
+    screen.queryByRole("link", { name: "Ask in chat: GitHub" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Configure with chat GitHub" }),
+    screen.getByRole("button", { name: "Ask in chat: GitHub" }),
   ).toHaveAttribute("aria-disabled", "true");
 });
 
@@ -355,7 +385,7 @@ test("filters tool policy sources and links each rule to its TOML line", async (
   expect(await screen.findByText("get_commit")).toBeVisible();
   expect(
     screen.getByRole("link", {
-      name: "View source for Root rule at line 12",
+      name: "View source for Custom rule at line 12",
     }),
   ).toHaveAttribute("href", "/openappa/policy?line=12");
   const batterySource = screen.getByRole("link", {
@@ -371,7 +401,7 @@ test("filters tool policy sources and links each rule to its TOML line", async (
   );
   expect(
     screen.getByRole("link", {
-      name: "View source for Catch-all at line 23",
+      name: "View source for No rule at line 23",
     }),
   ).toHaveAttribute("href", "/openappa/policy?line=23");
 
@@ -464,10 +494,14 @@ test("renders repeated selectors from separate policy rules without duplicate ro
       3,
     );
     expect(
-      screen.getByRole("link", { name: "View source for Root rule at line 3" }),
+      screen.getByRole("link", {
+        name: "View source for Custom rule at line 3",
+      }),
     ).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "View source for Root rule at line 8" }),
+      screen.getByRole("link", {
+        name: "View source for Custom rule at line 8",
+      }),
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "View source for GitHub at line 3" }),
@@ -583,4 +617,50 @@ test("does not offer source links for a refused composition", async () => {
   expect(await screen.findByText("get_commit")).toBeVisible();
   expect(screen.queryByRole("link", { name: /View source for/ })).toBeNull();
   expect(screen.getAllByText("Not enforced")).toHaveLength(2);
+});
+
+test("sorts by name, type, or tool count from the headers, kept in the URL", async () => {
+  const push = vi.fn();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(
+      "entitiesSortBy=tools&entitiesSortDirection=asc&entitiesPage=2",
+    ) as unknown as ReturnType<typeof useSearchParams>,
+  );
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <EntitiesTable />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("Research gateway")).toBeVisible();
+  expect(entityRequests[0]?.get("sortBy")).toBe("tools");
+  expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
+  expect(
+    screen.getByRole("columnheader", { name: "Tool coverage" }),
+  ).toHaveAttribute("aria-sort", "ascending");
+  expect(
+    screen.getByRole("columnheader", { name: "Actions" }),
+  ).not.toHaveAttribute("aria-sort");
+
+  // Sorting again reverses it, and sorting another column starts ascending.
+  await userEvent.click(screen.getByRole("button", { name: "Tool coverage" }));
+  expect(push).toHaveBeenLastCalledWith(
+    expect.stringContaining(
+      "entitiesSortBy=tools&entitiesSortDirection=desc&entitiesPage=1",
+    ),
+    { scroll: false },
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Name" }));
+  expect(push).toHaveBeenLastCalledWith(
+    expect.stringContaining("entitiesSortBy=name&entitiesSortDirection=asc"),
+    { scroll: false },
+  );
 });

@@ -27,14 +27,30 @@ tests on jsdom.
 
 **A test earns its place by being able to fail for a reason you'd want to hear about.**
 
-CI time is a real budget. Every test runs on every push, forever, and every test
-is code someone has to keep working during unrelated refactors. A test that can
-only fail when someone edits the literal it is compared against costs that
-budget and returns nothing.
+CI time is a real budget. Every test runs on merge-queue attempts, and every
+test is code someone has to keep working during unrelated refactors. A test
+that can only fail when someone edits the literal it is compared against costs
+that budget and returns nothing.
 
 Before writing a test, answer: *what plausible mistake does this catch?* If the
 answer is "someone deliberately changing this exact line", don't write it. If
 you cannot name the bug, there is no test to write.
+
+## Local checks and merge queue
+
+Ordinary PR pushes run the PR policy checks; the expensive build, lint, test,
+and E2E jobs run on `merge_group`. Their skipped PR status is a queue-entry
+signal, not evidence that the code passed those checks. Before marking a PR
+ready, run the relevant checks locally from `platform/` with `pnpm` (including
+focused tests for changed behavior) and review the PR policy results. Use the
+`run-e2e` label when browser coverage is worth getting before queue entry.
+
+When the PR is ready, add it to the merge queue. If a queue check fails, read
+the failure, reproduce it locally, fix it, run the affected local checks, push
+the fix, and requeue. Keep the full failure picture from the queue run; do not
+blindly rerun until it passes. Release-please PRs are an exception: their
+platform lint/build job also runs before queue entry so generated release files
+can be committed.
 
 ## Pick the level
 

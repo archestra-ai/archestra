@@ -5,7 +5,7 @@
  * the threshold answers with a durable task handle, and the eventual result is
  * exactly what a synchronous caller would have received; everyone else keeps
  * the blocking behavior they always had. Threshold is dropped to 60ms via the
- * config mock so slow-vs-fast is deterministic without ten-second sleeps.
+ * per-test config setup so slow-vs-fast is deterministic without ten-second sleeps.
  */
 
 import Fastify, { type FastifyInstance } from "fastify";
@@ -16,15 +16,8 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    // The task threshold derives from the one timeout knob: min(10s,
-    // timeout/2). 120ms ⇒ a 60ms threshold, so slow-vs-fast is deterministic.
-    mcpGateway: { toolCallTimeoutMs: 120 },
-  }),
-);
-
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import { McpGatewayTaskModel, TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
@@ -42,6 +35,9 @@ describe("MCP Gateway - Tasks extension", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    // The threshold derives from the one timeout knob: min(10s, timeout/2).
+    // 120ms ⇒ a 60ms threshold.
+    config.mcpGateway.toolCallTimeoutMs = 120;
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -234,7 +230,6 @@ describe("MCP Gateway - Tasks extension", () => {
     // finishes, flipping this test's result into a task. Give this test
     // alone a threshold no loaded runner can cross; taskSyncThresholdMs()
     // reads config live, so the override takes effect immediately.
-    const config = (await import("@/config")).default;
     const previousTimeoutMs = config.mcpGateway.toolCallTimeoutMs;
     config.mcpGateway.toolCallTimeoutMs = 20 * 60 * 1000; // threshold caps at 10s
     try {

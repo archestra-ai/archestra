@@ -17,21 +17,21 @@ test.each([
   const client = CONNECT_CLIENTS.find((entry) => entry.id === id);
   if (!client) throw new Error("Missing client");
   render(<ConnectWithAi client={client} />);
-  const prompt = screen.getByText(
-    /Do not fetch setup instructions/,
-  ).textContent;
-  expect(prompt).toContain(
-    `Connect ${client.label} to ${window.location.origin}.`,
-  );
-  expect(prompt).not.toContain("/connect.md");
+  const prompt =
+    id === "claude-code"
+      ? screen.getByText(
+          `Read ${window.location.origin}/connect.md and connect Claude Code.`,
+        ).textContent
+      : screen.getByText(/Do not fetch setup instructions/).textContent;
   if (id === "claude-code") {
-    expect(prompt).toContain(
-      `${window.location.origin}/connection?clientId=claude-code`,
+    expect(prompt).toBe(
+      `Read ${window.location.origin}/connect.md and connect Claude Code.`,
     );
-    expect(prompt).toContain("run the installer myself");
-    expect(prompt).toContain("open /mcp in a new session");
-    expect(prompt).not.toContain("/api/client-connections/installer");
   } else {
+    expect(prompt).toContain(
+      `Connect ${client.label} to ${window.location.origin}.`,
+    );
+    expect(prompt).not.toContain("/connect.md");
     expect(prompt).toContain(
       `node "$p" --url ${window.location.origin} --client ${id}`,
     );

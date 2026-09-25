@@ -8,27 +8,26 @@ lastUpdated: 2026-09-25
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
+![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
 Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot CLI, and OpenCode show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
-For clients other than Claude Code, the page prompt downloads a Node.js installer before browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
+The page prompt downloads a Node.js installer before browser approval. After approval, setup runs through `curl -fsSL <url> | bash` on macOS and Linux or `irm <url> | iex` on Windows. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only compatible plugins and names those that were skipped.
 
 ## Connect From Your Coding Client
 
-Copy the prompt for your client from the Connection page. Claude Code gives you a browser setup page, where you review and run the installer yourself. Other coding clients receive the installer command in the prompt. Neither prompt needs the agent to fetch setup instructions before connecting to the gateway.
+Copy the prompt for your client from the Connection page. Claude Code reads `/connect.md` and runs the installer after browser approval. Other coding clients receive the installer command directly in the prompt.
 
 The prompt supports Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
-For clients other than Claude Code, the agent downloads a public bootstrap installer and starts a connection request.
+The agent downloads a public bootstrap installer and starts a connection request.
 Your browser opens a compact approval page for the requested client and operating system.
 The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
 Sign in using your deployment's usual login or SSO.
 Review the configuration and confirm that the browser code matches your terminal.
-![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
 Approval releases the setup script to the waiting installer.
 Denying the request prevents installation.

@@ -2,28 +2,6 @@ import { requestOrigin } from "@/lib/request-origin";
 
 export function GET(request: Request) {
   const origin = requestOrigin(request);
-  if (new URL(request.url).searchParams.get("client") === "claude-code") {
-    return new Response(
-      `# Connect Claude Code
-
-Open ${origin}/connection?clientId=claude-code in your browser. This is the setup page for this deployment.
-
-1. Review the configuration and installation command on the page.
-2. Run the command yourself in a terminal on the computer where Claude Code is installed. The browser will ask you to approve the setup. Keep the command running until it finishes.
-3. Restart Claude Code. In a new session, open /mcp, select the configured server, and authenticate in your browser.
-
-The installer changes the local Claude Code configuration. Do not download or run it from this agent session or retry a denied action through another tool. Guide the user through the browser setup instead. Do not claim the connection works until the new session can list gateway tools.
-
-Never ask the user to paste passwords, session cookies, or tokens into this conversation.
-`,
-      {
-        headers: {
-          "Content-Type": "text/markdown; charset=utf-8",
-          "Cache-Control": "no-store",
-        },
-      },
-    );
-  }
   return new Response(
     `# Connect This Client
 
@@ -36,10 +14,6 @@ The terminal needs Node.js 18 or newer and access to this deployment.
 Supported clients: claude-code, claude-desktop, cursor, codex, copilot-cli, opencode.
 Supported operating systems: macOS, Linux, Windows.
 Ask which client to configure only if the current client is unknown.
-
-## Claude Code
-
-If this is Claude Code, open ${origin}/connection?clientId=claude-code instead of running the command below. The user reviews and runs the installer on their own computer, then restarts Claude Code and signs in through /mcp in a new session. Do not download or run the installer from this agent session or retry a denied action through another tool.
 
 ## Claude Desktop
 
@@ -63,7 +37,7 @@ do not run cleanup, polling, or verification while waiting for Desktop to restar
 After installation, authorize the gateway under Settings > Connectors and install shared skills
 under Settings > Plugins. Send a message to make sure that inference works.
 
-## Agent-Run Setup (Other Clients)
+## Setup
 
 1. Run exactly one command below in the terminal. Replace CLIENT_ID with the
    current client ID.

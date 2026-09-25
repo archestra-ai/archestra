@@ -16,11 +16,10 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
     const timeout = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timeout);
   }, [copied]);
-  // The gateway remedy tools are unavailable before setup, so do not make
-  // bootstrap depend on a guarded WebFetch result.
+  // Other clients can avoid a guarded WebFetch during bootstrap.
   const prompt =
     client.id === "claude-code"
-      ? `Connect Claude Code to ${origin}. Do not fetch setup instructions or run an installer in this agent session. Ask me to open ${origin}/connection?clientId=claude-code in my browser, review the setup, and run the installer myself in a terminal on the computer where Claude Code is installed. I will approve the matching browser code and wait for it to finish. Then ask me to restart Claude Code, open /mcp in a new session, select the gateway, and authenticate in my browser. Do not claim success until the new session can list gateway tools. Never request passwords, cookies, or tokens in this conversation.`
+      ? `Read ${origin}/connect.md and connect Claude Code.`
       : `Connect ${client.label} to ${origin}. Do not fetch setup instructions. Run the command for your terminal (Node.js 18+ required):
 
 macOS/Linux:
@@ -67,9 +66,7 @@ Allow at least 10 minutes for the command while the user approves the matching c
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        {client.id === "claude-code"
-          ? "Requires Node.js 18+ on the computer running Claude Code."
-          : `Requires Node.js 18+ and terminal access in ${client.label}.`}
+        Requires Node.js 18+ and terminal access in {client.label}.
       </p>
     </div>
   );

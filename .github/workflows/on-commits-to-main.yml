@@ -99,14 +99,9 @@ jobs:
       AUTH_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_DEMO_AUTH_ADMIN_PASSWORD }}
       MFILES_VAF_ADD_ON_GITHUB_TOKEN: ${{ secrets.ARCHESTRA_STAGING_MFILES_VAF_ADD_ON_GITHUB_TOKEN }}
 
-  # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
-  # branches: Actions caches are only shared downward from the default
-  # branch, and the shards themselves never run on main. The NAPI crate
-  # builds are uncacheable in turbo (cache:false, platform-specific .node
-  # artifacts), so the shards depend on a warm cargo target dir instead —
-  # this job compiles the crates on main and saves the target dir under the
-  # same shared-key the shards restore. With a warm restore the build is an
-  # incremental no-op and the job takes ~1-2 min.
+  # Publishes an exact-source cache of backend NAPI binaries on main so fresh
+  # PR and merge-group runs can skip the much larger Cargo target restore.
+  # On a miss, the existing Cargo cache and build remain the fallback.
   # See the shard job in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
@@ -130,20 +125,26 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # shared-key must stay identical to the shard job's.
-      - name: Cache cargo registry and target
-        uses: ./.github/actions/setup-rust-build
-        with:
-          workspaces: platform/archestra-rs
-          shared-key: backend-unit-tests
-
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
 
+      - name: Restore backend NAPI binaries
+        id: native-cache
+        uses: ./.github/actions/cache-backend-napi
+
+      # shared-key must stay identical to the shard job's.
+      - name: Cache cargo registry and target on native cache miss
+        if: steps.native-cache.outputs.usable != 'true'
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+
       # Retry pattern mirrors the shard job (rustup race on cold cargo builds).
       - name: Build backend workspace dependencies
+        if: steps.native-cache.outputs.usable != 'true'
         run: |
           pnpm exec turbo build --filter="@backend^..." || {
             echo "Build failed — syncing pinned Rust toolchain and retrying once..."

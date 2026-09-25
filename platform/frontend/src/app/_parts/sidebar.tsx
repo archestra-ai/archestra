@@ -65,7 +65,7 @@ import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { getSettingsNavigationUrl } from "./settings-navigation";
 
 type SidebarMode = "chats" | "studio";

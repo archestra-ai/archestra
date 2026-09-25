@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useAttachmentContentUrl } from "@/lib/chat/locked-chat-attachment";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Renderers for a chat attachment's bytes.

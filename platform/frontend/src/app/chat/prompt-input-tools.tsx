@@ -51,7 +51,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;

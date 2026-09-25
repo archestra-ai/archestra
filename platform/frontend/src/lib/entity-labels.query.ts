@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type LabelKeysFn = () => Promise<{
   data?: string[];

@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SHORTCUT_SIDEBAR } from "@/consts";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;

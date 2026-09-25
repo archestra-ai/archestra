@@ -10,7 +10,7 @@ import type { UserSelectOption } from "@/components/user-select-option";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import { organizationKeys, useActiveOrganization } from "./organization.query";
 
 const { bulkDeleteMembers, getMembers } = archestraApiSdk;

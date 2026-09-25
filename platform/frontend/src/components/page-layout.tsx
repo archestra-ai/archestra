@@ -12,7 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // Helper to determine if a tab's href matches the current URL
 // Sort tabs by href length descending so we match the most specific first

@@ -1,7 +1,7 @@
 import { Inbox, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The one panel the app draws when a list has nothing to show — whether that

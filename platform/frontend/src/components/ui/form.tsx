@@ -14,7 +14,7 @@ import {
 } from "react-hook-form";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const Form = FormProvider;
 

@@ -26,7 +26,7 @@ import {
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
 import { attachmentIdFromUrl } from "@/lib/chat/conversation-files";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface FileAttachment {
   url: string;

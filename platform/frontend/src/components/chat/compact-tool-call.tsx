@@ -33,7 +33,7 @@ import {
   getToolHeaderState,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useApps } from "./apps-context";
 import {
   type AppEntryRender,

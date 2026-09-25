@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { copyToClipboard } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Obviously-fake token used in "copy with placeholder" output, so a pasted

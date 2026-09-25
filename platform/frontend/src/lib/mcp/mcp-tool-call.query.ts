@@ -4,7 +4,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import type { CallerIdentity } from "@/components/executed-as-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type MCPGatewayAuthMethod =
   archestraApiTypes.GetMcpToolCallResponses["200"]["authMethod"];

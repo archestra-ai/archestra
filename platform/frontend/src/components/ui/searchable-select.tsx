@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/popover";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { matchesSearchTokens } from "@/lib/search-tokens";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface SearchableSelectItem {
   value: string;

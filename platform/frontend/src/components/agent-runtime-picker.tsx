@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type AgentRuntimeSelection = "chat" | "custom" | AgentCatalogId;
 

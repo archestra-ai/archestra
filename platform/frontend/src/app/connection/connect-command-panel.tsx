@@ -58,7 +58,7 @@ import {
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {

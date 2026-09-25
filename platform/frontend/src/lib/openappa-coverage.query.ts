@@ -6,7 +6,7 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { coverageQueryPrefix } from "@/lib/openappa-policy-views";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type CoverageToolsPage =
   archestraApiTypes.GetOpenappaCoverageToolsResponses["200"];

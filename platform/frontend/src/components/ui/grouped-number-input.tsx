@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { formatThousands } from "@/lib/utils";
+import { formatThousands } from "@/lib/utils/format-thousands";
 
 /**
  * Index just past the `count`-th digit of `text`, used to put the caret back

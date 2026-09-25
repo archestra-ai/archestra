@@ -31,7 +31,7 @@ import {
   registerTableRangeSelection,
   useBulkRangeSelectionController,
 } from "@/lib/bulk-range-selection-context";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 import {
   type CursorPaginationState,

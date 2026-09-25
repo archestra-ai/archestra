@@ -26,7 +26,7 @@ import {
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];

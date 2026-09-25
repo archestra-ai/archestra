@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_FILTER_ALL } from "@/consts";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * A filter a page is willing to tuck away behind "More filters" while nobody is

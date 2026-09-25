@@ -34,7 +34,7 @@ import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { isOpenAppaChatPath } from "@/lib/openappa-routes";
 import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";

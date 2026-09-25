@@ -204,7 +204,8 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
-import { cn, isReportedApiError } from "@/lib/utils";
+import { isReportedApiError } from "@/lib/utils/api";
+import { cn } from "@/lib/utils/tailwind";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
   assignedSubagentsSummary,

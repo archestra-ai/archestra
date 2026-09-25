@@ -110,7 +110,7 @@ import {
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorRunItem =

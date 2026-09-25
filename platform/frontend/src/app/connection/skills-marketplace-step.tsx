@@ -40,7 +40,8 @@ import {
   useSkillMarketplace,
 } from "@/lib/skills/skill-share.query";
 import { useFetchUserTokenValue } from "@/lib/user-token.query";
-import { cn, handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { cn } from "@/lib/utils/tailwind";
 import type { ConnectClient } from "./clients";
 import {
   computeSkillMarketplaceExpiresAt,

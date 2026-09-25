@@ -5,7 +5,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface OverlappedIconsProps {
   /** Icons to render in the overlapped layout */

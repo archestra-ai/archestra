@@ -101,7 +101,7 @@ import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;

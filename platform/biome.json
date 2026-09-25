@@ -81,12 +81,40 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
+                },
                 "patterns": [
                   {
                     "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
                     "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
                   }
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "frontend/**/*.ee.ts",
+        "frontend/**/*.ee.tsx",
+        "frontend/**/*.ee.test.ts",
+        "frontend/**/*.ee.test.tsx",
+        "frontend/**/*.ee.spec.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
+                }
               }
             }
           }

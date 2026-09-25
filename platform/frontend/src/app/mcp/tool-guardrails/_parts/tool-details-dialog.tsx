@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { ToolWithAssignmentsData } from "@/lib/tools/tool.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 import {
   APP_TOOL_SOURCE_DESCRIPTION,
   APP_TOOL_SOURCE_LABEL,

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import type * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface DisabledEnterpriseSectionProps {
   /**

@@ -207,7 +207,7 @@ import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ViewTransition } from "@/lib/view-transition";
 import {
   buildCreateConversationInput,

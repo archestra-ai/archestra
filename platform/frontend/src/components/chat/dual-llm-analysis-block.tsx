@@ -12,7 +12,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The dual LLM guardrail's analysis of one tool result, rendered as its own

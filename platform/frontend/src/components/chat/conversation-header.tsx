@@ -30,8 +30,8 @@ import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useProject } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
+import { cn } from "@/lib/utils/tailwind";
 import type { RightPanelTab } from "./right-side-panel";
 
 type Conversation = archestraApiTypes.GetChatConversationResponses["200"];

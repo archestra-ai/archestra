@@ -82,7 +82,7 @@ import {
   resolveSpeechRecognitionLocale,
 } from "@/lib/chat/speech-locale";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // ============================================================================
 // Provider Context & Types

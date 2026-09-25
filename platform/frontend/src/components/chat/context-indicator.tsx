@@ -6,7 +6,7 @@ import {
   usageStrokeColor,
   usageTextColor,
 } from "@/lib/chat/context-window-status";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // ============================================================================
 // Progress ring — the shared circular gauge

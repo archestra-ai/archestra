@@ -11,7 +11,7 @@ import {
 } from "@/consts";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
 

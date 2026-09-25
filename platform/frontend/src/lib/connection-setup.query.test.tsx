@@ -29,8 +29,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/utils")>();
+vi.mock("@/lib/utils/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/api")>();
   return { ...actual, handleApiError: handleApiErrorMock };
 });
 

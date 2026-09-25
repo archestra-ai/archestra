@@ -16,7 +16,7 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";

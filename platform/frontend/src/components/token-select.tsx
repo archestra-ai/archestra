@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import Divider from "./divider";
 import { LoadingState } from "./loading";
 

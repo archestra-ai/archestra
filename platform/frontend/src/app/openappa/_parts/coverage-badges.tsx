@@ -10,7 +10,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { PolicyBattery } from "@/lib/openappa-batteries.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { batteryDisplayName } from "./battery-display-name";
 import { BATTERY_STATUS } from "./battery-status";
 

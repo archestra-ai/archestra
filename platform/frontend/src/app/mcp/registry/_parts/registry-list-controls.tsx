@@ -22,7 +22,7 @@ import {
   MCP_SERVER_ISSUE_KINDS,
   type McpServerAttentionFacet,
 } from "@/lib/mcp/mcp-server-issues";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type SortKey =
   | "attention"

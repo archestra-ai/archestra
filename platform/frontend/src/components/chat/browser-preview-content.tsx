@@ -38,7 +38,7 @@ import {
   useConversation,
   useHasPlaywrightMcpTools,
 } from "@/lib/chat/chat.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { LoadingState } from "../loading";
 
 interface BrowserPreviewContentProps {

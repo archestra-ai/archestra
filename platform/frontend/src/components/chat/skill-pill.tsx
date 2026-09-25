@@ -4,7 +4,7 @@ import Link from "next/link";
 import type React from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useExternalMcpSkills } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function getSkillPillDisplay(skillName: string | null): {
   name: string | null;

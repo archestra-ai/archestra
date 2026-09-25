@@ -29,7 +29,7 @@ import type {
 } from "@/lib/a2a-remote-agents.query";
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { getApiErrorMessage } from "@/lib/utils";
+import { getApiErrorMessage } from "@/lib/utils/api";
 
 type AuthType = "none" | "bearer" | "api_key";
 type AccessChoice = ResourceVisibilityScope | "user";

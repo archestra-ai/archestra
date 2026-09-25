@@ -46,7 +46,7 @@ import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
-import { formatThousands } from "@/lib/utils";
+import { formatThousands } from "@/lib/utils/format-thousands";
 import {
   buildConfiguredParameters,
   type ConfiguredParametersFormValues,

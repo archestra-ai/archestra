@@ -44,7 +44,7 @@ import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { providerSearchHaystack } from "@/lib/provider-search";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { LlmProviderOptionLabel } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";

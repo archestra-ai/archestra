@@ -107,7 +107,7 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";
 import { getAskUserOutcome } from "./ask-user-outcome";
 import {

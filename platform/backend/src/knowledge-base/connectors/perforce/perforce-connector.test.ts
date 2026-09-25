@@ -369,7 +369,7 @@ describe("PerforceConnector", () => {
     });
 
     test("splits large sweeps into batches with a resumable in-flight cursor", async () => {
-      const manyFiles = Array.from({ length: 60 }, (_, i) =>
+      const manyFiles = Array.from({ length: 51 }, (_, i) =>
         revisionRecord(`//depot/docs/file-${String(i).padStart(3, "0")}.md`),
       );
       fakeP4({ latestChange: 200, files: manyFiles });
@@ -390,7 +390,7 @@ describe("PerforceConnector", () => {
         filesOffset: 50,
       });
 
-      expect(batches[1].documents).toHaveLength(10);
+      expect(batches[1].documents).toHaveLength(1);
       expect(batches[1].hasMore).toBe(false);
       expect(batches[1].checkpoint).toEqual({
         type: "perforce",
@@ -400,7 +400,7 @@ describe("PerforceConnector", () => {
     });
 
     test("resumes an interrupted sweep from the persisted offset without re-resolving the target", async () => {
-      const manyFiles = Array.from({ length: 60 }, (_, i) =>
+      const manyFiles = Array.from({ length: 51 }, (_, i) =>
         revisionRecord(`//depot/docs/file-${String(i).padStart(3, "0")}.md`),
       );
       fakeP4({ latestChange: 999, files: manyFiles });
@@ -426,7 +426,7 @@ describe("PerforceConnector", () => {
       expect(listingFilespecs()).toContain("//depot/docs/....md@200");
 
       expect(batches).toHaveLength(1);
-      expect(batches[0].documents).toHaveLength(10);
+      expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].id).toBe("//depot/docs/file-050.md");
       expect(batches[0].checkpoint).toEqual({
         type: "perforce",

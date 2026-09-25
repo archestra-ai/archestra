@@ -105,7 +105,7 @@ dependencies = [
 [[package]]
 name = "appa"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
@@ -157,7 +157,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-claude-code"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -168,7 +168,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-kagent"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-runtime-api",
 ]
@@ -176,7 +176,7 @@ dependencies = [
 [[package]]
 name = "appa-builtin"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "serde",
  "serde_json",
@@ -186,7 +186,7 @@ dependencies = [
 [[package]]
 name = "appa-engine"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "serde",
  "serde_json",
@@ -199,7 +199,7 @@ dependencies = [
 [[package]]
 name = "appa-eventlog"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -216,7 +216,7 @@ dependencies = [
 [[package]]
 name = "appa-package"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -229,7 +229,7 @@ dependencies = [
 [[package]]
 name = "appa-policy"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "appa-runtime-api"
 version = "0.24.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c5381b07eb2833f2ed31716e11d6fcf65b4e54#c7c5381b07eb2833f2ed31716e11d6fcf65b4e54"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=70e0ad33f8312af528f88271314df79f92f0ac08#70e0ad33f8312af528f88271314df79f92f0ac08"
 dependencies = [
  "serde",
  "serde_json",
@@ -1540,7 +1540,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "system-configuration 0.7.0",
  "tokio",
  "tower-service",
@@ -2585,7 +2585,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.45",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2623,7 +2623,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -4338,7 +4338,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

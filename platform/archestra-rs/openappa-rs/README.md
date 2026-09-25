@@ -24,10 +24,10 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`c7c5381b07eb2833f2ed31716e11d6fcf65b4e54`, after the merge of
+`70e0ad33f8312af528f88271314df79f92f0ac08`, after the merge of
 archestra-ai/OpenAPPA#423 (the native `jev` annotator), #433 (per-dispatch
-pinned deployments and the host credential lookup) and #424 (the shared label
-guide), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
+pinned deployments and the host credential lookup), #424 (the shared label
+guide) and #440 (jev labels settle on argmax), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.

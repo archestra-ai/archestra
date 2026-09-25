@@ -9,14 +9,14 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main after the merge of #424 (the shared label guide), on
-# top of #433 (pinned deployments and the host credential lookup) and #423 (the
-# native jev annotator). Re-pin to the first release that includes it. The embedded
+# Pinned to OpenAPPA main after the merge of #440 (jev labels settle on argmax),
+# on top of #424 (the shared label guide), #433 (pinned deployments and the host
+# credential lookup) and #423 (the native jev annotator). Re-pin to the first release that includes it. The embedded
 # reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c5381b07eb2833f2ed31716e11d6fcf65b4e54" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c5381b07eb2833f2ed31716e11d6fcf65b4e54" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c5381b07eb2833f2ed31716e11d6fcf65b4e54", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c5381b07eb2833f2ed31716e11d6fcf65b4e54" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

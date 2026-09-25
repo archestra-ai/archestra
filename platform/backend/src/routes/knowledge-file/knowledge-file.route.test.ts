@@ -516,6 +516,40 @@ describe("knowledge file routes", () => {
   });
 
   describe("indexing", () => {
+    test("deleting a file removes its indexed documents and chunks", async () => {
+      const deletedFileId = (await upload()).json().id;
+      const retainedFileId = (await upload({ filename: "retained.txt" })).json()
+        .id;
+      const indexed = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: {
+          fileIds: [deletedFileId, retainedFileId],
+          newKnowledgeBaseName: "Deletion check",
+        },
+      });
+      expect(indexed.json()).toMatchObject({ indexed: 2, failures: [] });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-files/${deletedFileId}`,
+      });
+      expect(deleted.statusCode).toBe(200);
+      expect(
+        (await db.select().from(schema.kbFilesTable)).map((row) => row.id),
+      ).toEqual([retainedFileId]);
+      const documents = await db.select().from(schema.kbDocumentsTable);
+      expect(documents.map((row) => row.sourceId)).toEqual([retainedFileId]);
+      const chunks = await db.select().from(schema.kbChunksTable);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks.every((row) => row.documentId === documents[0].id)).toBe(
+        true,
+      );
+      expect((await db.select().from(schema.kbFileDocumentsTable)).length).toBe(
+        1,
+      );
+    });
+
     test("hides restricted knowledge bases on readable files and denies indexing into them", async ({
       makeTeam,
       makeUser,

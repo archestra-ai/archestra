@@ -1,5 +1,5 @@
 import { siApple, siLinux } from "simple-icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import type { ConnectPlatformOption } from "./platform.utils";
 
 // simple-icons omits the Windows mark (trademark), so the classic four-pane

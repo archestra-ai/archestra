@@ -1,7 +1,7 @@
 import config from "@/config";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpToolCallModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -11,6 +11,7 @@ describe("GET /api/onboarding/feedback-popup-activation", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    config.enterpriseFeatures.core = false;
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();

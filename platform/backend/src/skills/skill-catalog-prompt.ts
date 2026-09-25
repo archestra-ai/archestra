@@ -4,7 +4,6 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
 import type { Skill } from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
@@ -95,17 +94,10 @@ export async function listAccessibleCatalogSkills(
 ): Promise<Skill[]> {
   const { organizationId, userId, agentId } = params;
 
-  const checker =
-    userId !== undefined
-      ? await getSkillPermissionChecker({ userId, organizationId })
-      : null;
-  const isSkillAdmin = checker?.isAdmin ?? false;
-  const accessibleSkillIds = isSkillAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId,
-        userId,
-      });
+  const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
+    organizationId,
+    userId,
+  });
 
   // Skills are environment-scoped like tools and connectors: the catalog only
   // shows skills in the agent's environment (null = Default; built-ins exempt).
@@ -117,11 +109,15 @@ export async function listAccessibleCatalogSkills(
         ? await AgentModel.findEnvironmentId(agentId)
         : undefined;
 
-  return SkillModel.findByOrganization({
-    organizationId,
-    accessibleSkillIds,
-    environmentId,
-  });
+  // `scope` from the grants: name precedence ranks the caller's own skill,
+  // then team, then organization skills by who each skill reaches.
+  return SkillModel.withGrantedScope(
+    await SkillModel.findByOrganization({
+      organizationId,
+      accessibleSkillIds,
+      environmentId,
+    }),
+  );
 }
 
 /**

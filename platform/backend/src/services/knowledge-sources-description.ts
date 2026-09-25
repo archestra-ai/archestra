@@ -42,6 +42,7 @@ export async function buildKnowledgeSourcesDescription(
         organizationId,
         canReadAll: access.canReadAll,
         viewerTeamIds: access.teamIds,
+        viewerUserId: access.userId,
         visibilityScope: "query",
         environmentId: agent.environmentId,
         // Enough rows to detect overflow even if every excluded source is first.
@@ -56,22 +57,30 @@ export async function buildKnowledgeSourcesDescription(
     const assignedBases = await KnowledgeBaseModel.findByIds(
       assignments.map((a) => a.knowledgeBaseId),
     );
-    knowledgeBases = assignedBases.filter(
-      (kb) =>
-        kb.organizationId === organizationId &&
-        (access
-          ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+    knowledgeBases = access
+      ? assignedBases.filter(
+          (kb) =>
+            kb.organizationId === organizationId &&
+            knowledgeSourceAccessControlService.canQueryKnowledgeBase(
               access,
               kb,
-            )
-          : kb.visibility === "org-wide"),
-    );
+            ),
+        )
+      : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+          {
+            organizationId,
+            resource: "knowledgeBase",
+            sources: assignedBases,
+            action: "use",
+          },
+        );
     const [kbConnectors, directConnectors] = await Promise.all([
       KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
         knowledgeBases.map((kb) => kb.id),
         {
           canReadAll: access?.canReadAll,
           viewerTeamIds: access?.teamIds,
+          viewerUserId: access?.userId,
           visibilityScope: "query",
         },
       ),
@@ -82,8 +91,13 @@ export async function buildKnowledgeSourcesDescription(
           access,
           directConnectors,
         )
-      : directConnectors.filter(
-          (connector) => connector.visibility === "org-wide",
+      : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+          {
+            organizationId,
+            resource: "knowledgeConnector",
+            sources: directConnectors,
+            action: "use",
+          },
         );
     connectors = [
       ...new Map(

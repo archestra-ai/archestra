@@ -3,9 +3,9 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 vi.mock("@/auth");

@@ -4,7 +4,6 @@ import { Check, ChevronDown, ExternalLink, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
-import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +20,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The dialog a selector is rendered in, or null outside one.
@@ -73,7 +72,7 @@ type AgentSelectorProps =
        */
       flat?: boolean;
       /**
-       * Keep the trigger to a single line: the agent's name and scope badge,
+       * Keep the trigger to a single line: the agent's name,
        * without the owner email that otherwise wraps underneath. For filter
        * bars, where every control is one compact row height and the owner is
        * still there to read in the open dropdown.
@@ -202,7 +201,7 @@ function SingleAgentSelector({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        // Rows carry a scope badge, a description and an owner email, so the
+        // Rows carry a description and an owner email, so the
         // list keeps a readable floor even when the trigger is a narrow filter
         // control — capped to the viewport so it can't overflow a phone.
         className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
@@ -382,7 +381,7 @@ function MultiAgentSelector({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        // Rows carry a scope badge, a description and an owner email, so the
+        // Rows carry a description and an owner email, so the
         // list keeps a readable floor even when the trigger is a narrow filter
         // control — capped to the viewport so it can't overflow a phone.
         className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
@@ -566,24 +565,12 @@ function AgentSelectorItem({
       className="justify-between"
     >
       <AgentSelectorRow agent={agent} variant="option" />
-      {/* Badge last, so it — not the check — owns the row's right edge. The
-          check always occupies its 16px whether or not it is visible, so
-          trailing it stranded every badge 22px short of the edge that the
-          badge-less sentinel row's own check defined. With the badge outermost,
-          the last rendered glyph of every row (a badge here, a bare check on
-          the sentinel) lands on one column. ScopeBadge is fixed-width, so the
-          checks that tuck inside a badge stay a column of their own too. */}
-      <span className="flex shrink-0 items-center gap-1.5">
-        <Check
-          className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
-        />
-        {agent.scope ? (
-          <ScopeBadge
-            scope={agent.scope}
-            teamNames={agent.teams?.map((team) => team.name)}
-          />
-        ) : null}
-      </span>
+      <Check
+        className={cn(
+          "h-4 w-4 shrink-0",
+          selected ? "opacity-100" : "opacity-0",
+        )}
+      />
     </CommandItem>
   );
 }
@@ -595,8 +582,8 @@ function AgentSelectorRow({
   agent: AgentSelectorAgent;
   /**
    * "option" is a dropdown row: it has room for the description, and stretches
-   * to the full row width so the text stays left-aligned while the row's own
-   * scope badge sits in {@link AgentSelectorItem}'s right-hand cluster.
+   * to the full row width so the text stays left-aligned beside the row's
+   * check in {@link AgentSelectorItem}.
    * "trigger" is the compact button showing the current value — no
    * description, and its capability/scope indicators center against the whole
    * name + owner block rather than hanging off the first line.
@@ -642,14 +629,6 @@ function AgentSelectorRow({
           className="self-center"
         />
       ) : null}
-      {!isOption && agent.scope ? (
-        <span className="shrink-0 self-center">
-          <ScopeBadge
-            scope={agent.scope}
-            teamNames={agent.teams?.map((team) => team.name)}
-          />
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -684,8 +663,7 @@ function agentSearchText(agent: AgentSelectorAgent) {
     .join(" ");
 }
 
-// Identity only — scope (personal/team/org, with the team names in its tooltip)
-// is carried by the ScopeBadge beside the name. The email still disambiguates
+// Identity only. The email disambiguates
 // other users' personal gateways/proxies, which an admin genuinely sees in the
 // connect settings picker.
 function getOwnerLabel(agent: AgentSelectorAgent) {

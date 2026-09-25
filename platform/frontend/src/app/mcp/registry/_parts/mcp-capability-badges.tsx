@@ -3,7 +3,7 @@
 import { BookOpen, PanelsTopLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFeature } from "@/lib/config/config.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function McpCapabilityBadges({
   providesUi,

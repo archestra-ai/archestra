@@ -46,14 +46,14 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
-const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
+export const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   openai: "https://api.openai.com/v1/",
   anthropic: "https://api.anthropic.com/v1/",
   gemini: "https://generativelanguage.googleapis.com/",

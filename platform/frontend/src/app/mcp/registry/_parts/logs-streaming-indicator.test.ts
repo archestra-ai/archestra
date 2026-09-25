@@ -1,3 +1,4 @@
+// @vitest-environment node
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 

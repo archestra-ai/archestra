@@ -26,11 +26,16 @@ const llmProviderApiKeysTable = pgTable(
     secretId: uuid("secret_id").references(() => secretsTable.id, {
       onDelete: "set null",
     }),
-    // Visibility scope for this LLM provider API key.
+    // Retired visibility scope. Access comes from grants, ownership from
+    // `userId`, and the primary partition from `userId`.
     scope: text("scope")
       .$type<ResourceVisibilityScope>()
       .notNull()
       .default("personal"),
+    /**
+     * The owner of an own ("just for me") key: only this user uses it. Null on
+     * a shared key, whose audience is its grants.
+     */
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
@@ -59,7 +64,10 @@ const llmProviderApiKeysTable = pgTable(
     extraHeaders: jsonb("extra_headers").$type<Record<string, string>>(),
     /** System keys are auto-managed for keyless LLM providers (Vertex AI, vLLM, etc.) */
     isSystem: boolean("is_system").notNull().default(false),
-    /** When multiple LLM provider API keys exist for the same provider+scope, the primary key is preferred */
+    /**
+     * The preferred key for its provider among the owner's own keys, or among
+     * the organization's shared keys when `userId` is null.
+     */
     isPrimary: boolean("is_primary").notNull().default(false),
     /** A provider rejected this credential; cleared after successful validation. */
     requiresReauthentication: boolean("requires_reauthentication")
@@ -88,16 +96,15 @@ const llmProviderApiKeysTable = pgTable(
     uniqueIndex("chat_api_keys_system_unique")
       .on(table.provider)
       .where(sql`${table.isSystem} = true`),
-    // Partial unique indexes: at most one primary key per provider+scope combination
-    uniqueIndex("chat_api_keys_primary_personal_unique")
-      .on(table.organizationId, table.provider, table.scope, table.userId)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'personal'`),
-    uniqueIndex("chat_api_keys_primary_team_unique")
-      .on(table.organizationId, table.provider, table.scope, table.teamId)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'team'`),
-    uniqueIndex("chat_api_keys_primary_org_unique")
-      .on(table.organizationId, table.provider, table.scope)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'org'`),
+    // At most one primary key per provider for each owner's own keys, and one
+    // per provider among the organization's shared keys (no owner). The owner
+    // column, not the retired scope, decides which partition a key is in.
+    uniqueIndex("chat_api_keys_primary_owner_unique")
+      .on(table.organizationId, table.provider, table.userId)
+      .where(sql`${table.isPrimary} = true AND ${table.userId} IS NOT NULL`),
+    uniqueIndex("chat_api_keys_primary_shared_unique")
+      .on(table.organizationId, table.provider)
+      .where(sql`${table.isPrimary} = true AND ${table.userId} IS NULL`),
   ],
 );
 

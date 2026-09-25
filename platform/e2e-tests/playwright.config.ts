@@ -77,12 +77,14 @@ const uiTestMatch = [
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
+  "**/list-return-url.spec.ts",
   "**/llm-logs-slack-source.spec.ts",
   "**/loading-states.spec.ts",
   "**/mcp-edit.spec.ts",
   "**/mcp-install.spec.ts",
   "**/model-limits.spec.ts",
   "**/outbound-a2a.spec.ts",
+  "**/project-panel-overflow.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-page-editing.spec.ts",
   "**/skill-share.spec.ts",
@@ -101,7 +103,6 @@ const uiTestMatch = [
 const apiTestMatch = [
   "**/a2a-public-origin.spec.ts",
   "**/built-in-agents.spec.ts",
-  "**/chat-api.spec.ts",
   "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
@@ -352,6 +353,8 @@ export default defineConfig({
       name: projectNames.openappa,
       testDir: "./tests",
       testMatch: testPatterns.openappa,
+      // These tests replace the deployment policy and restore it afterward.
+      workers: 1,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

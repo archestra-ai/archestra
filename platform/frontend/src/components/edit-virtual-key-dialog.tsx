@@ -2,16 +2,10 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import {
-  formatExpiration,
-  getDefaultVirtualKeyScope,
-  getVirtualKeyVisibilityOptions,
-  type VirtualKeyScope,
-  VirtualKeyVisibilityField,
-} from "@/components/create-virtual-key-dialog";
+import { formatExpiration } from "@/components/create-virtual-key-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
@@ -20,6 +14,7 @@ import {
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -30,9 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 
 export type EditableVirtualKey =
@@ -47,39 +40,32 @@ export function EditVirtualKeyDialog({
 }) {
   const updateMutation = useUpdateVirtualApiKey();
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: isVirtualKeyAdmin } = useHasPermissions({
-    llmVirtualKey: ["admin"],
-  });
-  const { data: teams = [] } = useTeams({ enabled: canReadTeams === true });
-  const visibilityOptions = useMemo(
-    () =>
-      getVirtualKeyVisibilityOptions({
-        canReadTeams: canReadTeams === true,
-        isAdmin: isVirtualKeyAdmin === true,
-      }),
-    [canReadTeams, isVirtualKeyAdmin],
-  );
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [scope, setScope] = useState<VirtualKeyScope>(
-    getDefaultVirtualKeyScope(visibilityOptions),
-  );
-  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it has to commit them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  // Permission edits live outside this dialog's own snapshot, so the unsaved
+  // guard and the Save button need to hear about them separately.
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   useEffect(() => {
     if (!virtualKey) return;
     const initialExpiresAt = virtualKey.expiresAt
       ? new Date(virtualKey.expiresAt)
       : null;
-    const initialScope = (virtualKey.scope as VirtualKeyScope) ?? "personal";
-    const initialTeamIds = virtualKey.teams.map((team) => team.id);
     const initialProviderApiKeyIds = Object.fromEntries(
       virtualKey.providerApiKeys.map((mapping) => [
         mapping.provider,
@@ -89,14 +75,10 @@ export function EditVirtualKeyDialog({
     setName(virtualKey.name);
     setLabels(virtualKey.labels);
     setExpiresAt(initialExpiresAt);
-    setScope(initialScope);
-    setTeamIds(initialTeamIds);
     setProviderApiKeyIds(initialProviderApiKeyIds);
     initialSnapshotRef.current = {
       name: virtualKey.name,
       expiresAt: initialExpiresAt,
-      scope: initialScope,
-      teamIds: [...initialTeamIds].sort(),
       providerApiKeyIds: initialProviderApiKeyIds,
       labels: virtualKey.labels,
     };
@@ -106,6 +88,7 @@ export function EditVirtualKeyDialog({
   const handleUpdate = useCallback(async () => {
     if (!virtualKey || !name.trim()) return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     const result = await updateMutation.mutateAsync({
       id: virtualKey.id,
       data: isPassthrough
@@ -119,8 +102,6 @@ export function EditVirtualKeyDialog({
             name: name.trim(),
             keyType: "standard",
             expiresAt: expiresAt ?? undefined,
-            scope,
-            teams: scope === "team" ? teamIds : [],
             providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
             labels: finalLabels,
           },
@@ -133,30 +114,25 @@ export function EditVirtualKeyDialog({
     name,
     onOpenChange,
     providerApiKeyIds,
-    scope,
-    teamIds,
     updateMutation,
     virtualKey,
   ]);
 
   if (!virtualKey) return null;
-  const standardReady =
-    (scope !== "team" || teamIds.length > 0) &&
-    providerApiKeyMapToArray(providerApiKeyIds).length > 0;
+  const standardReady = providerApiKeyMapToArray(providerApiKeyIds).length > 0;
   const canSubmit =
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&
     !updateMutation.isPending;
   const isDirty =
-    initialSnapshotRef.current !== null &&
-    hasUnsavedChanges(initialSnapshotRef.current, {
-      name,
-      expiresAt,
-      scope,
-      teamIds: [...teamIds].sort(),
-      providerApiKeyIds,
-      labels,
-    });
+    permissionsDirty ||
+    (initialSnapshotRef.current !== null &&
+      hasUnsavedChanges(initialSnapshotRef.current, {
+        name,
+        expiresAt,
+        providerApiKeyIds,
+        labels,
+      }));
 
   return (
     <FormDialog
@@ -180,7 +156,7 @@ export function EditVirtualKeyDialog({
       description={
         isPassthrough
           ? "Update the passthrough virtual key name and expiration."
-          : "Update the standard virtual key name, visibility, and expiration."
+          : "Update the standard virtual key name, expiration, and who can reach it."
       }
       size="medium"
       isDirty={isDirty}
@@ -204,18 +180,6 @@ export function EditVirtualKeyDialog({
             />
           ) : (
             <>
-              <VirtualKeyVisibilityField
-                value={scope}
-                onValueChange={(nextScope) => {
-                  setScope(nextScope);
-                  if (nextScope !== "team") setTeamIds([]);
-                }}
-                teamIds={teamIds}
-                onTeamIdsChange={setTeamIds}
-                teams={teams}
-                canReadTeams={canReadTeams === true}
-                visibilityOptions={visibilityOptions}
-              />
               <ExpirationDateTimeField
                 value={expiresAt}
                 onChange={setExpiresAt}
@@ -226,6 +190,12 @@ export function EditVirtualKeyDialog({
                 providerApiKeyIds={providerApiKeyIds}
                 onProviderApiKeyIdsChange={setProviderApiKeyIds}
                 providerApiKeys={providerApiKeys}
+              />
+              <ResourceAccessSection
+                resource="llmVirtualKey"
+                id={virtualKey.id}
+                registerSave={registerPermissionsSave}
+                onDirtyChange={setPermissionsDirty}
               />
             </>
           )}

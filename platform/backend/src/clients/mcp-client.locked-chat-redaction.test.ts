@@ -13,7 +13,7 @@
  * against PGlite, exactly like mcp-client.test.ts.
  */
 import { sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import {
   _resetContentKeys,
@@ -29,7 +29,6 @@ import {
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
 import mcpClient from "./mcp-client";
 

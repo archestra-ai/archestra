@@ -37,7 +37,7 @@ import {
 } from "@/components/provider-key-filter-select";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -86,9 +86,6 @@ type VirtualKeyRow =
 type KeyTypeFilter = NonNullable<
   NonNullable<archestraApiTypes.GetAllVirtualApiKeysData["query"]>["keyType"]
 >;
-type ScopeFilter = NonNullable<
-  NonNullable<archestraApiTypes.GetAllVirtualApiKeysData["query"]>["scope"]
->;
 
 export default function VirtualKeysPage() {
   return (
@@ -111,12 +108,10 @@ function VirtualKeysTable() {
 
   const searchFromUrl = searchParams.get("search") || "";
   const keyTypeFromUrl = searchParams.get("keyType");
-  const scopeFromUrl = searchParams.get("scope");
   const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
   const keyTypeFilter = isKeyType(keyTypeFromUrl) ? keyTypeFromUrl : undefined;
-  const scopeFilter = isScope(scopeFromUrl) ? scopeFromUrl : undefined;
   const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
     ? providerApiKeyIdFromUrl
     : undefined;
@@ -131,7 +126,6 @@ function VirtualKeysTable() {
     offset,
     search: searchFromUrl || undefined,
     keyType: keyTypeFilter,
-    scope: scopeFilter,
     providerApiKeyId: providerApiKeyIdFilter,
     labels: labelsFilter,
     toastOnError: false,
@@ -153,43 +147,46 @@ function VirtualKeysTable() {
   // passthrough keys are created through the same dialog in different modes.
   useEffect(() => {
     setActionButton(
-      canCreate ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4" />
-              <span>Create Virtual Key</span>
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-w-72">
-            <DropdownMenuItem
-              className="flex-col items-start gap-0.5"
-              onSelect={() => setCreateKeyType("standard")}
-            >
-              <span className="font-medium">Standard virtual key</span>
-              <span className="text-xs text-muted-foreground">
-                Authenticates your app through your provider keys
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="flex-col items-start gap-0.5"
-              onSelect={() => setCreateKeyType("passthrough")}
-            >
-              <span className="font-medium">Passthrough virtual key</span>
-              <span className="text-xs text-muted-foreground">
-                Grants no access; attributes bring-your-own-key requests to a
-                user
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <PermissionButton permissions={{ llmVirtualKey: ["create"] }}>
-          <Plus className="h-4 w-4" />
-          <span>Create Virtual Key</span>
-        </PermissionButton>
-      ),
+      <div className="flex items-center gap-2">
+        {canCreate ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" />
+                <span>Create Virtual Key</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-w-72">
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onSelect={() => setCreateKeyType("standard")}
+              >
+                <span className="font-medium">Standard virtual key</span>
+                <span className="text-xs text-muted-foreground">
+                  Authenticates your app through your provider keys
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onSelect={() => setCreateKeyType("passthrough")}
+              >
+                <span className="font-medium">Passthrough virtual key</span>
+                <span className="text-xs text-muted-foreground">
+                  Grants no access; attributes bring-your-own-key requests to a
+                  user
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <PermissionButton permissions={{ llmVirtualKey: ["create"] }}>
+            <Plus className="h-4 w-4" />
+            <span>Create Virtual Key</span>
+          </PermissionButton>
+        )}
+        <ResourceListActions resource="llmVirtualKey" />
+      </div>,
     );
     return () => setActionButton(null);
   }, [canCreate, setActionButton]);
@@ -206,11 +203,7 @@ function VirtualKeysTable() {
   });
   const selectedKeys = keys.filter((key) => rowSelection[key.id]);
   const hasActiveFilters = Boolean(
-    searchFromUrl ||
-      keyTypeFilter ||
-      scopeFilter ||
-      providerApiKeyIdFilter ||
-      labelsFilter,
+    searchFromUrl || keyTypeFilter || providerApiKeyIdFilter || labelsFilter,
   );
 
   const clearFilters = useCallback(() => {
@@ -277,21 +270,7 @@ function VirtualKeysTable() {
         </span>
       ),
     },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      size: 160,
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "activity",
       header: "Activity",
@@ -379,22 +358,6 @@ function VirtualKeysTable() {
                 { value: "all", label: "All types" },
                 { value: "standard", label: "Standard" },
                 { value: "passthrough", label: "Passthrough" },
-              ]}
-            />
-            <FilterSelect
-              value={scopeFilter ?? "all"}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  scope: value === "all" ? null : value,
-                  page: "1",
-                })
-              }
-              placeholder="Filter by visibility"
-              items={[
-                { value: "all", label: "All visibilities" },
-                { value: "org", label: "Organization" },
-                { value: "team", label: "Teams" },
-                { value: "personal", label: "Personal" },
               ]}
             />
             <ProviderKeyFilterSelect
@@ -498,14 +461,6 @@ function VirtualKeysTable() {
                         )}
                       </Badge>
                       <LabelTags labels={key.labels} />
-                      <ResourceVisibilityBadge
-                        scope={key.scope}
-                        teams={key.teams}
-                        authorId={key.authorId}
-                        authorName={key.authorName}
-                        currentUserId={currentUserId}
-                        showSelfAsMe
-                      />
                     </div>
                     {/* Token left, mapped providers in the row's spare width. */}
                     <div className="flex items-center justify-between gap-3">
@@ -692,8 +647,4 @@ function VirtualKeyValueCell({
 
 function isKeyType(value: string | null): value is KeyTypeFilter {
   return value === "standard" || value === "passthrough";
-}
-
-function isScope(value: string | null): value is ScopeFilter {
-  return value === "org" || value === "team" || value === "personal";
 }

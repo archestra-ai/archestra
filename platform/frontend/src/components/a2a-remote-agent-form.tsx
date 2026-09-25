@@ -10,7 +10,6 @@ import { useForm } from "react-hook-form";
 import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
   SettingsSection,
@@ -29,9 +28,8 @@ import type {
   UpdateA2aRemoteAgentBody,
 } from "@/lib/a2a-remote-agents.query";
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
-import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { getApiErrorMessage } from "@/lib/utils";
+import { getApiErrorMessage } from "@/lib/utils/api";
 
 type AuthType = "none" | "bearer" | "api_key";
 type AccessChoice = ResourceVisibilityScope | "user";
@@ -79,7 +77,6 @@ export function A2aRemoteAgentForm({
   const { mutate: inspectRemoteAgent, reset: resetRemoteAgentInspection } =
     useInspectA2aRemoteAgent();
   const appName = useAppName();
-  const { data: session } = useSession();
   const [inspection, setInspection] = useState<Inspection | null>(() =>
     agent ? inspectionFromAgent(agent) : null,
   );
@@ -369,7 +366,7 @@ export function A2aRemoteAgentForm({
   const canSubmit = !agent || isDirty;
 
   if (readOnly && agent) {
-    return <ReadOnlySummary agent={agent} currentUserId={session?.user?.id} />;
+    return <ReadOnlySummary agent={agent} />;
   }
 
   return (
@@ -684,13 +681,7 @@ export function A2aRemoteAgentForm({
   );
 }
 
-function ReadOnlySummary({
-  agent,
-  currentUserId,
-}: {
-  agent: A2aRemoteAgent;
-  currentUserId?: string;
-}) {
+function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
   return (
     <div className="space-y-6">
       <DetailFacts facts={[createdByFact(agent.createdBy)]} />
@@ -745,17 +736,6 @@ function ReadOnlySummary({
               value={agent.description || "No description"}
             />
           </dl>
-        </SettingsSection>
-        <SettingsSection title="Access">
-          <ResourceVisibilityBadge
-            scope={agent.scope}
-            teams={agent.teams}
-            users={agent.users}
-            authorId={agent.authorId}
-            authorName={agent.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
         </SettingsSection>
       </SettingsSectionGroup>
     </div>

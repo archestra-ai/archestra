@@ -1,5 +1,5 @@
-import { createFastifyInstance } from "@/server";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import chatopsRoutes, { msTeamsWebhookRoutes } from "./chatops";
 
 /**

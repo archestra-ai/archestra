@@ -81,7 +81,7 @@ describe("mcpServerProxyRoutes POST /api/mcp/server/:mcpServerId", () => {
     const catalog = await makeInternalMcpCatalog({
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "personal",
+      access: "personal",
     });
     // Personal server owned by someone else, with no mcp_server_users link for
     // the caller — invisible to them, so the access gate must reject.
@@ -137,7 +137,6 @@ describe("mcpServerProxyRoutes POST /api/mcp/server/:mcpServerId", () => {
     const catalog = await makeInternalMcpCatalog({
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -170,7 +169,6 @@ describe("mcpServerProxyRoutes POST /api/mcp/server/:mcpServerId", () => {
     const catalog = await makeInternalMcpCatalog({
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     // Stored raw (unprefixed) by makeTool; the gate matches via unslugifyName.
@@ -214,7 +212,6 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -257,7 +254,6 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     mockCreateServerScopedServer.mockImplementation(() => {
@@ -295,7 +291,6 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     const tool = await makeTool({
@@ -339,7 +334,6 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       organizationId: org.id,
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({

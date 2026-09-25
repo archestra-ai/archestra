@@ -1,9 +1,7 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
+import { KeyRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -11,27 +9,31 @@ import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
-import { FormDialog } from "@/components/form-dialog";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import {
   GatewayGrantField,
+  OAUTH_CLIENT_SECTIONS,
+  type OAuthClientSection,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
-import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import {
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type OAuthClientType = "mcp" | "llm";
 
@@ -73,21 +75,24 @@ export function CreateOAuthClientDialog({
     {},
   );
   const [redirectUrisText, setRedirectUrisText] = useState("");
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] =
+    useState<OAuthClientSection>("general");
 
   useEffect(() => {
     if (open) {
+      setActiveSection("general");
       setClientType(fixedClientType ?? defaultClientType);
       setName("");
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
       setProviderApiKeyIds({});
       setRedirectUrisText("");
-      setScope("personal");
-      setTeamIds([]);
+      setInitialGrants([]);
       setLabels([]);
     }
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
@@ -98,7 +103,6 @@ export function CreateOAuthClientDialog({
   const isAuthorizationCode = grantType === "authorization_code";
   const canSubmit =
     name.trim().length > 0 &&
-    (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
       : isMcp
@@ -106,134 +110,19 @@ export function CreateOAuthClientDialog({
         : mappedProviderApiKeys.length > 0);
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
       description={describeClientType(fixedClientType)}
-    >
-      <DialogForm
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-          const shared = {
-            name: name.trim(),
-            grantType,
-            scope,
-            teams: scope === "team" ? teamIds : [],
-            labels: finalLabels,
-          };
-          if (isMcp) {
-            await onSubmit({
-              kind: "mcp",
-              body: {
-                ...shared,
-                allowedGatewayIds: selectedGatewayIds,
-                ...(isAuthorizationCode && { redirectUris }),
-              },
-            });
-          } else {
-            await onSubmit({
-              kind: "llm",
-              body: {
-                ...shared,
-                ...(isAuthorizationCode
-                  ? { redirectUris }
-                  : { providerApiKeys: mappedProviderApiKeys }),
-              },
-            });
-          }
-        }}
-      >
-        <DialogBody className="space-y-4">
-          {!fixedClientType && (
-            <RadioCardField
-              label="What will this client access?"
-              options={CLIENT_TYPE_OPTIONS}
-              value={clientType}
-              onChange={(next) => {
-                setClientType(next as OAuthClientType);
-                // Visibility permissions are per-resource (mcpOauthClient vs
-                // llmOauthClient), so a scope picked under one type may be
-                // forbidden under the other.
-                setScope("personal");
-                setTeamIds([]);
-              }}
-            />
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="oauth-client-name">Name</Label>
-            <Input
-              id="oauth-client-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="support-assistant-prod"
-            />
-          </div>
-
-          <RadioCardField
-            label="Grant type"
-            options={isMcp ? MCP_GRANT_TYPE_OPTIONS : LLM_GRANT_TYPE_OPTIONS}
-            value={grantType}
-            onChange={(next) => setGrantType(next as GrantType)}
-          />
-
-          {isMcp ? (
-            isAuthorizationCode ? (
-              <>
-                <RedirectUrisField
-                  value={redirectUrisText}
-                  onChange={setRedirectUrisText}
-                />
-                <GatewayGrantField
-                  gateways={gateways}
-                  value={selectedGatewayIds}
-                  onValueChange={setSelectedGatewayIds}
-                />
-              </>
-            ) : (
-              <div className="space-y-2">
-                <Label>Allowed gateways &amp; agents</Label>
-                <AgentSelector
-                  mode="multiple"
-                  agents={gateways}
-                  value={selectedGatewayIds}
-                  onValueChange={setSelectedGatewayIds}
-                  placeholder="Select gateways or agents"
-                  searchPlaceholder="Search gateways and agents"
-                  emptyMessage="No gateways or agents found"
-                />
-              </div>
-            )
-          ) : isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
-          ) : (
-            <ProviderKeyAccessFields
-              providerApiKeyIds={providerApiKeyIds}
-              onProviderApiKeyIdsChange={setProviderApiKeyIds}
-              providerApiKeys={providerApiKeys}
-            />
-          )}
-
-          <OauthClientVisibilityField
-            resource={isMcp ? "mcpOauthClient" : "llmOauthClient"}
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-          />
-
-          <AdvancedLabelsSection
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
-        </DialogBody>
-        <DialogStickyFooter>
+      sidebarLabel={name.trim() || "New OAuth client"}
+      sidebarDescription={isMcp ? "Agents & MCP gateways" : "LLM Proxy"}
+      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={OAUTH_CLIENT_SECTIONS}
+      onActiveSectionChange={setActiveSection}
+      footer={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -244,9 +133,133 @@ export function CreateOAuthClientDialog({
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
             Create OAuth Client
           </Button>
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
+        </>
+      }
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+        const shared = {
+          name: name.trim(),
+          grantType,
+          initialGrants: initialGrants.map(
+            ({ name: _name, ...grant }) => grant,
+          ),
+          labels: finalLabels,
+        };
+        if (isMcp) {
+          await onSubmit({
+            kind: "mcp",
+            body: {
+              ...shared,
+              allowedGatewayIds: selectedGatewayIds,
+              ...(isAuthorizationCode && { redirectUris }),
+            },
+          });
+        } else {
+          await onSubmit({
+            kind: "llm",
+            body: {
+              ...shared,
+              ...(isAuthorizationCode
+                ? { redirectUris }
+                : { providerApiKeys: mappedProviderApiKeys }),
+            },
+          });
+        }
+      }}
+    >
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="oauth-client-name">Name</Label>
+          <Input
+            id="oauth-client-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="support-assistant-prod"
+          />
+        </div>
+        {!fixedClientType && (
+          <SelectField
+            id="oauth-client-type"
+            label="What will this client access?"
+            options={CLIENT_TYPE_OPTIONS}
+            value={clientType}
+            onChange={(next) => {
+              setClientType(next as OAuthClientType);
+              // The two kinds are separate permission namespaces, so a
+              // grant chosen under one type means nothing under the other.
+              setInitialGrants([]);
+            }}
+          />
+        )}
+
+        <SelectField
+          id="oauth-client-grant-type"
+          label="Grant type"
+          options={isMcp ? MCP_GRANT_TYPE_OPTIONS : LLM_GRANT_TYPE_OPTIONS}
+          value={grantType}
+          onChange={(next) => setGrantType(next as GrantType)}
+        />
+        {isMcp ? (
+          isAuthorizationCode ? (
+            <>
+              <RedirectUrisField
+                value={redirectUrisText}
+                onChange={setRedirectUrisText}
+              />
+              <GatewayGrantField
+                gateways={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+              />
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label>Allowed gateways &amp; agents</Label>
+              <AgentSelector
+                mode="multiple"
+                agents={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+                placeholder="Select gateways or agents"
+                searchPlaceholder="Search gateways and agents"
+                emptyMessage="No gateways or agents found"
+              />
+            </div>
+          )
+        ) : isAuthorizationCode ? (
+          <RedirectUrisField
+            value={redirectUrisText}
+            onChange={setRedirectUrisText}
+          />
+        ) : (
+          <ProviderKeyAccessFields
+            providerApiKeyIds={providerApiKeyIds}
+            onProviderApiKeyIdsChange={setProviderApiKeyIds}
+            providerApiKeys={providerApiKeys}
+          />
+        )}
+
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+
+      <div hidden={activeSection !== "permissions"}>
+        {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        <ResourceAccessSection
+          resource={isMcp ? "mcpOauthClient" : "llmOauthClient"}
+          grants={initialGrants}
+          onGrantsChange={setInitialGrants}
+          standalone
+        />
+        {/* SPDX-SnippetEnd */}
+      </div>
+    </TabbedDialogShell>
   );
 }
 
@@ -257,7 +270,7 @@ export function CreateOAuthClientDialog({
 type GrantType =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number]["grantType"];
 
-type RadioCardOption = {
+type SelectFieldOption = {
   value: string;
   label: string;
   description: string;
@@ -278,7 +291,7 @@ function describeClientType(fixedClientType?: OAuthClientType) {
   return "Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth.";
 }
 
-const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
+const CLIENT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "mcp",
     label: "Agents & MCP gateways",
@@ -293,7 +306,7 @@ const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-const MCP_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
+const MCP_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "client_credentials",
     label: "Application (client credentials)",
@@ -308,7 +321,7 @@ const MCP_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-const LLM_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
+const LLM_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
   {
     value: "client_credentials",
     label: "Application (client credentials)",
@@ -323,41 +336,40 @@ const LLM_GRANT_TYPE_OPTIONS: RadioCardOption[] = [
   },
 ];
 
-function RadioCardField({
+function SelectField({
+  id,
   label,
   options,
   value,
   onChange,
 }: {
+  id: string;
   label: string;
-  options: RadioCardOption[];
+  options: SelectFieldOption[];
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
-      <RadioGroup value={value} onValueChange={onChange} className="gap-2">
-        {options.map((option) => (
-          <Label
-            key={option.value}
-            htmlFor={`radio-card-${option.value}`}
-            className="flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal has-[:checked]:border-primary"
-          >
-            <RadioGroupItem
-              id={`radio-card-${option.value}`}
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        {/* Below the trigger: item-aligned would lay the menu over the
+            fields around it, since each option is two lines tall. */}
+        <SelectContent position="popper">
+          {options.map((option) => (
+            <SelectItem
+              key={option.value}
               value={option.value}
-              className="mt-0.5"
-            />
-            <div className="space-y-1">
-              <div className="font-medium">{option.label}</div>
-              <p className="text-sm text-muted-foreground">
-                {option.description}
-              </p>
-            </div>
-          </Label>
-        ))}
-      </RadioGroup>
+              description={option.description}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

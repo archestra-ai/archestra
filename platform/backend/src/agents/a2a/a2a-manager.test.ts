@@ -153,7 +153,7 @@ function buildGetTaskRequest(params: {
 
 describe("A2AManager.sendMessage", () => {
   test("empty message parts", async ({ makeAgent }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     const prevContextCount = await A2AContextModel.getTotalCount();
     const prevTaskCount = await A2ATaskModel.getTotalCount();
@@ -172,7 +172,7 @@ describe("A2AManager.sendMessage", () => {
     ["an empty", ""],
     ["a whitespace-only", "   \n  "],
   ])("%s text part is nothing to execute", async ([, text], { makeAgent }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     const prevContextCount = await A2AContextModel.getTotalCount();
@@ -197,7 +197,7 @@ describe("A2AManager.sendMessage", () => {
   test("a blank text part alongside a file still executes", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -225,7 +225,7 @@ describe("A2AManager.sendMessage", () => {
   test("a single part carrying blank text and a file keeps the file", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -253,7 +253,7 @@ describe("A2AManager.sendMessage", () => {
   test("a single part carrying text and a file sends both", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -292,7 +292,7 @@ describe("A2AManager.sendMessage", () => {
   test("multiple text parts are joined into the executed turn", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -316,7 +316,7 @@ describe("A2AManager.sendMessage", () => {
   test("a blank text part does not pad the joined turn", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -342,7 +342,7 @@ describe("A2AManager.sendMessage", () => {
   test("a message carrying only a file part executes", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockClear();
     executeA2AMessage.mockReturnValue({
@@ -375,7 +375,7 @@ describe("A2AManager.sendMessage", () => {
   });
 
   test("Text message", async ({ makeAgent }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     const prevContextCount = await A2AContextModel.getTotalCount();
     const prevTaskCount = await A2ATaskModel.getTotalCount();
@@ -421,7 +421,7 @@ describe("A2AManager.sendMessage", () => {
   test("Text message: client messageId equals db messageId", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
 
     executeA2AMessage.mockReturnValue({
@@ -456,7 +456,7 @@ describe("A2AManager.sendMessage", () => {
   });
 
   test("Continue conversation within context", async ({ makeAgent }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager();
     executeA2AMessage.mockReturnValue({
       responseUiMessage: {
@@ -530,7 +530,7 @@ describe("A2AManager.sendMessage", () => {
   });
 
   test("Text message stateless", async ({ makeAgent }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager({ stateless: true });
     const prevContextCount = await A2AContextModel.getTotalCount();
     const prevTaskCount = await A2ATaskModel.getTotalCount();
@@ -557,7 +557,7 @@ describe("A2AManager.sendMessage", () => {
 
   describe("Approval flow", () => {
     test("Simple", async ({ makeAgent }) => {
-      const agent = await makeAgent({ name: "agent1", teams: [] });
+      const agent = await makeAgent({ name: "agent1" });
       const manager = new A2AManager();
 
       mockA2AExecuteMessageWithApprovalRequests(crypto.randomUUID(), ["1"]);
@@ -632,7 +632,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     test("Multi request in single turn", async ({ makeAgent }) => {
-      const agent = await makeAgent({ name: "agent1", teams: [] });
+      const agent = await makeAgent({ name: "agent1" });
       const manager = new A2AManager();
 
       mockA2AExecuteMessageWithApprovalRequests(crypto.randomUUID(), [
@@ -740,7 +740,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     test("Stateless without contextId", async ({ makeAgent }) => {
-      const agent = await makeAgent({ name: "agent1", teams: [] });
+      const agent = await makeAgent({ name: "agent1" });
       const manager = new A2AManager({ stateless: true });
       const actor: A2AActor = {
         id: "actor1",
@@ -879,7 +879,7 @@ describe("A2AManager.sendMessage", () => {
       //   without user message in between.
       // Path: user-msg -> approval-req1 -> user-resolve-full -> execute -> approval-req2
 
-      const agent = await makeAgent({ name: "agent1", teams: [] });
+      const agent = await makeAgent({ name: "agent1" });
       const manager = new A2AManager();
 
       const approvalMessageId = crypto.randomUUID();
@@ -1005,7 +1005,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     test("Multi-turn messages history", async ({ makeAgent }) => {
-      const agent = await makeAgent({ name: "agent1", teams: [] });
+      const agent = await makeAgent({ name: "agent1" });
       const manager = new A2AManager();
 
       const approvalMessageId = crypto.randomUUID();
@@ -1198,7 +1198,7 @@ describe("A2AManager.sendMessage malformed tool input", () => {
   test("coerces a poisoned tool input from context history before replay", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "a2a-coerce", teams: [] });
+    const agent = await makeAgent({ name: "a2a-coerce" });
     const manager = new A2AManager();
 
     // Turn 1: the agent persists an assistant turn whose tool call carries a

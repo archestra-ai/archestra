@@ -94,7 +94,13 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  Element.prototype.scrollIntoView = vi.fn();
+  server.listen({ onUnhandledRequest: "error" });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -410,8 +416,13 @@ describe("external A2A agent routed pages", () => {
     );
     await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
     await screen.findByRole("status", { name: "Connection compatible" });
-    await user.click(screen.getByRole("button", { name: /Personal/ }));
-    await user.click(screen.getByRole("button", { name: /Users/ }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Who can discover this remote agent",
+      }),
+    );
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("option", { name: "Selected people" }));
     const connectButton = screen.getByRole("button", {
       name: "Connect agent",
     });
@@ -421,8 +432,13 @@ describe("external A2A agent routed pages", () => {
       "Select at least one user.",
     );
     expect(inspectCalls).toBe(1);
-    await user.click(screen.getByRole("button", { name: /Users/ }));
-    await user.click(screen.getByRole("button", { name: /Teams/ }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Who can discover this remote agent",
+      }),
+    );
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("option", { name: "Selected teams" }));
     expect(connectButton).toBeEnabled();
     await user.click(connectButton);
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -454,8 +470,13 @@ describe("external A2A agent routed pages", () => {
       "",
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /Personal/ }));
-    await user.click(screen.getByRole("button", { name: /Organization/ }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Who can discover this remote agent",
+      }),
+    );
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("option", { name: /Everyone/ }));
     await user.click(
       screen.getByRole("button", {
         name: `More actions ${remoteAgent.name}`,
@@ -565,8 +586,13 @@ describe("external A2A agent routed pages", () => {
     expect(
       screen.getByText(/uses a legacy Agent Card source/i),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Personal/ }));
-    await user.click(screen.getByRole("button", { name: /Organization/ }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Who can discover this remote agent",
+      }),
+    );
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("option", { name: /Everyone/ }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
@@ -776,8 +802,13 @@ describe("external A2A agent routed pages", () => {
 
     renderPage(<CreateA2aRemoteAgentPage />);
 
-    await user.click(screen.getByRole("button", { name: /Personal/ }));
-    expect(screen.getByRole("button", { name: /Organization/ })).toBeEnabled();
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Who can discover this remote agent",
+      }),
+    );
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: /Everyone/ })).toBeEnabled();
   });
 
   it("warns assigned agents before deletion from the detail page", async () => {

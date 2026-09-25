@@ -9,7 +9,8 @@ export async function createLlmProviderApiKey(
     name: string;
     apiKey: string;
     providerOptionName?: string | RegExp;
-    scope?: "personal" | "org";
+    /** Create a shared key (no owner) instead of one just for the caller. */
+    shared?: boolean;
     baseUrl?: string;
     // The row assertion only applies when the caller is on the API keys
     // management page. Quickstart-style flows host the create dialog on /chat
@@ -37,11 +38,9 @@ export async function createLlmProviderApiKey(
   await page.getByLabel(/Name/i).fill(params.name);
   await page.getByRole("textbox", { name: /API Key/i }).fill(params.apiKey);
 
-  if (params.scope === "org") {
-    // Scope selector is a collapsible custom control — click the current
-    // ("Personal") option to expand it before picking "Organization".
-    await page.getByRole("button", { name: /^Personal/ }).click();
-    await page.getByRole("button", { name: /^Organization/ }).click();
+  if (params.shared) {
+    // "Who uses this key": Just for me (the default) or Shared.
+    await page.getByRole("tab", { name: "Shared" }).click();
   }
 
   if (params.baseUrl) {

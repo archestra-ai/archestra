@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 import { authQueryKeys } from "./auth.query";
 
 export function usePermissionSources(params?: { enabled?: boolean }) {

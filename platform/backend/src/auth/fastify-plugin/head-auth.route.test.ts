@@ -1,10 +1,14 @@
-import { vi } from "vitest";
-import { createFastifyInstance } from "@/server";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
+import chatRoutes from "@/routes/chat/routes";
 import { authPlugin } from "./plugin";
 
-describe("HEAD route authentication", () => {
-  const app = createFastifyInstance();
+describe("protected route authentication", () => {
+  let app: ReturnType<typeof createFastifyInstance>;
+
+  beforeEach(() => {
+    app = createFastifyInstance();
+  });
 
   afterEach(async () => {
     await app.close();
@@ -22,5 +26,22 @@ describe("HEAD route authentication", () => {
 
     expect(response.statusCode).toBe(401);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  test("rejects an unauthenticated chat message PATCH", async () => {
+    await app.register(authPlugin);
+    await app.register(chatRoutes);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/chat/messages/1d6934ea-eb0d-452d-abf3-72122d140c49",
+      payload: {
+        conversationId: "9c1f74a3-19f6-4f81-9c07-371f7a1f8f6e",
+        partIndex: 0,
+        text: "Updated text",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
   });
 });

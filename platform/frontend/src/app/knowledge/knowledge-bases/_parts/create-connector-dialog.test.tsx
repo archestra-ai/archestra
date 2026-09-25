@@ -728,7 +728,7 @@ describe("CreateConnectorDialog", () => {
     });
   });
 
-  describe("auto-sync default visibility", () => {
+  describe("permission sync default", () => {
     beforeEach(() => {
       mockUseEnterpriseFeature.mockReturnValue(true);
       mockHasPermissions.mockReturnValue({ data: true });
@@ -738,28 +738,46 @@ describe("CreateConnectorDialog", () => {
       mockHasPermissions.mockReturnValue({ data: false });
     });
 
-    const AUTO_SYNC_DESCRIPTION =
-      "Sync access from the source system's own permissions";
-    const ORG_WIDE_DESCRIPTION =
-      "Anyone in your org can access this knowledge source";
-
-    it("defaults a supported type to auto-sync permissions and lists it first", async () => {
-      const { user } = await renderConfigureStep(); // Jira supports auto-sync
-
-      // The collapsed selector shows the default selection.
-      expect(screen.getByText(AUTO_SYNC_DESCRIPTION)).toBeInTheDocument();
-
-      // Expanded, the enabled auto-sync option leads the list.
-      await user.click(screen.getByText(AUTO_SYNC_DESCRIPTION));
-      const autoSync = screen.getByText("Auto-sync permissions");
-      const orgWide = screen.getByText("Organization");
+    it("defaults supported connectors to source permission sync", async () => {
+      await renderConfigureStep();
       expect(
-        autoSync.compareDocumentPosition(orgWide) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).toBeChecked();
     });
 
-    it("keeps org-wide for a type without permission-sync support", async () => {
+    it("creates the connector with permission sync on when the switch is on", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText("SharePoint"));
+      for (const [label, value] of [
+        [/^Name$/, "Team handbook"],
+        [/^Site URL$/, "https://tenant.sharepoint.com"],
+        [/^Tenant ID$/, "test-tenant"],
+        [/^Client ID$/, "test-client"],
+        [/^Client Secret$/, "test-secret"],
+      ] as const) {
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      }
+      expect(
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).toBeChecked();
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      const body = mockMutateAsync.mock.calls[0][0];
+      expect(body.syncPermissionsFromSource).toBe(true);
+      expect(body).not.toHaveProperty("visibility");
+    });
+
+    it("keeps permission sync off for a type without support for it", async () => {
       const user = userEvent.setup();
       renderDialog();
       await user.click(screen.getByText("Web Crawler"));
@@ -767,16 +785,24 @@ describe("CreateConnectorDialog", () => {
         expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
       });
 
-      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+      expect(
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).not.toBeChecked();
     });
 
-    it("keeps org-wide when the auto-sync feature flag is off", async () => {
+    it("offers no permission sync when the feature flag is off", async () => {
       mockUseFeature.mockImplementation(
         (key) => key !== "kbAutoSyncPermissionsEnabled",
       );
 
       await renderConfigureStep();
-      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
+      ).not.toBeInTheDocument();
 
       mockUseFeature.mockImplementation(() => true);
     });
@@ -1145,7 +1171,7 @@ describe("CreateConnectorDialog", () => {
         expect.objectContaining({
           name: "Engineering M-Files",
           connectorType: "mfiles",
-          visibility: "org-wide",
+          syncPermissionsFromSource: false,
           credentials: {
             email: "00000000-0000-0000-0000-000000000042",
             apiToken: "oauth-client-secret",
@@ -1328,11 +1354,10 @@ describe("CreateConnectorDialog", () => {
       const { user } = await renderConfigureStep(); // Jira defaults to auto-sync
 
       await user.click(
-        screen.getByText(
-          "Sync access from the source system's own permissions",
-        ),
+        screen.getByRole("switch", {
+          name: "Sync permissions from the source",
+        }),
       );
-      await user.click(screen.getByText("Organization"));
 
       const apiToken = screen.getByLabelText("API Token");
       const formItem = apiToken.closest(

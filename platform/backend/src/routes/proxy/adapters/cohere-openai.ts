@@ -95,9 +95,15 @@ class CohereOpenaiResponseAdapter
   }
 
   toRefusalResponse(
-    _refusalMessage: string,
+    refusalMessage: string,
     contentMessage: string,
   ): CohereResponse {
+    // Stores the refusal in the inner Cohere format for interaction logging.
+    // This prevents logging the blocked tool call payload.
+    this.rewrittenInner = this.inner.toRefusalResponse(
+      refusalMessage,
+      contentMessage,
+    );
     const usage = this.inner.getUsage();
     const response: OpenAi.Types.ChatCompletionsResponse = {
       id: this.ctx.chatcmplId,

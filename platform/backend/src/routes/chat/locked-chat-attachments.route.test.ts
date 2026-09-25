@@ -15,9 +15,9 @@ import config from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { _resetContentKeys } from "@/content-encryption/index.ee";
 import db from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -51,7 +51,7 @@ describe("locked chat attachments", () => {
       await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       })
     ).id;
 

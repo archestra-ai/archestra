@@ -1,12 +1,15 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
+import AppAccessModel from "@/models/app-access";
+import AppVersionModel from "@/models/app-version";
 import EnvironmentModel from "@/models/environment";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   afterEach,
   beforeEach,
@@ -51,7 +54,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("a metadata-only edit updates fields without forking a version", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -69,7 +72,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("toggles the fullscreen-by-default display preference", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     expect(created.openInFullscreen).toBe(false);
 
     const enabled = await app.inject({
@@ -104,7 +107,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("sets and clears the icon, storing it on the app's backing catalog", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     expect(created.icon).toBeNull();
 
     const set = await app.inject({
@@ -141,7 +144,7 @@ describe("PATCH /api/apps/:appId", () => {
     // The icon is not an `apps` column, so it reaches the audit snapshot only
     // because that snapshot reads the catalog-joined query. Without it, setting
     // an icon would record an audit entry showing nothing changed.
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -173,7 +176,7 @@ describe("PATCH /api/apps/:appId", () => {
     // An emoji is short enough to audit verbatim; a data URL is not. Embedding
     // one would copy it into both sides of EVERY later app audit event, so it
     // collapses to a digest that still changes when the image does.
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const dataUrl = `data:image/png;base64,${"A".repeat(4096)}`;
 
     const response = await app.inject({
@@ -202,7 +205,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {
     // The settings form sends name/description on every save; an omitted icon
     // must not be read as "clear it".
-    const created = await makeApp({ organizationId, scope: "org", icon: "🚀" });
+    const created = await makeApp({ organizationId, icon: "🚀" });
 
     const response = await app.inject({
       method: "PATCH",
@@ -214,7 +217,7 @@ describe("PATCH /api/apps/:appId", () => {
   });
 
   test("supplying html forks a new version", async ({ makeApp }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -225,30 +228,31 @@ describe("PATCH /api/apps/:appId", () => {
     expect(response.json().latestVersion).toBe(created.latestVersion + 1);
   });
 
-  test("an admin may re-scope another user's personal app without becoming its owner", async ({
+  test("a retired visibility write is ignored and leaves the app alone", async ({
     makeUser,
     makeMember,
     makeApp,
   }) => {
-    // `user` is an app admin. Changing a foreign personal app's visibility is a
-    // settings change (allowed via oversight), and it must never reassign
-    // authorship to the acting admin — the app stays the original author's.
+    // `user` is an app admin. `scope` is no longer part of the update body, so
+    // a caller still sending it edits nothing: the app keeps its visibility and
+    // its original author.
     const otherAuthor = await makeUser();
     await makeMember(otherAuthor.id, organizationId);
     const foreign = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
     const response = await app.inject({
       method: "PATCH",
       url: `/api/apps/${foreign.id}`,
-      payload: { scope: "org" },
+      payload: { scope: "org", name: "Renamed by admin" },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      scope: "org",
+    expect(await AppModel.findById(foreign.id)).toMatchObject({
+      name: "Renamed by admin",
+      scope: "personal",
       authorId: otherAuthor.id,
     });
   });
@@ -258,7 +262,6 @@ describe("PATCH /api/apps/:appId", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
     });
     await AppModel.setEnabled(created.id, false);
@@ -283,7 +286,7 @@ describe("PATCH /api/apps/:appId", () => {
     expect(namePatch.statusCode).toBe(200);
   });
 
-  test("an admin cannot rewrite another user's personal app's html (that is chat-authoring, not settings)", async ({
+  test("a wildcard update grant permits editing another creator’s app content", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -295,7 +298,7 @@ describe("PATCH /api/apps/:appId", () => {
     await makeMember(otherAuthor.id, organizationId);
     const foreign = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -304,19 +307,29 @@ describe("PATCH /api/apps/:appId", () => {
       url: `/api/apps/${foreign.id}`,
       payload: { html: "<h1>admin rewrite</h1>" },
     });
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(200);
+    const latest = await AppModel.findById(foreign.id);
+    if (!latest) throw new Error("Expected persisted resource policy");
+    expect(
+      (
+        await AppVersionModel.findByAppAndVersion(
+          foreign.id,
+          latest.latestVersion,
+        )
+      )?.html,
+    ).toContain("admin rewrite");
   });
 
   test("renaming into an existing name returns 409", async () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Taken", html: "<p/>", scope: "org" },
+      payload: { name: "Taken", html: "<p/>" },
     });
     const second = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Other", html: "<p/>", scope: "org" },
+      payload: { name: "Other", html: "<p/>" },
     });
     const secondId = second.json().id as string;
 
@@ -331,7 +344,7 @@ describe("PATCH /api/apps/:appId", () => {
   test("rejects changing uiPermissions without supplying html (400)", async ({
     makeApp,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",
@@ -347,7 +360,7 @@ describe("PATCH /api/apps/:appId", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
@@ -376,7 +389,7 @@ describe("PATCH /api/apps/:appId", () => {
       organizationId,
       name: "production",
     });
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
 
     const bound = await app.inject({
       method: "PATCH",
@@ -403,17 +416,12 @@ describe("PATCH /api/apps/:appId", () => {
     const restricted = await EnvironmentModel.create({
       organizationId,
       name: "restricted-prod",
-      restricted: true,
     });
     // The admin (current `user`) binds the app to the restricted environment.
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted App",
-        scope: "org",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted App", environmentId: restricted.id },
     });
     expect(created.statusCode).toBe(200);
     const appId = created.json().id;
@@ -422,10 +430,23 @@ describe("PATCH /api/apps/:appId", () => {
     // the form echoes the unchanged environmentId. The unchanged binding must
     // not be re-authorized, so the edit succeeds rather than 403.
     const role = await makeCustomRole(organizationId, {
-      permission: { app: ["admin"] },
+      permission: { app: ["read", "update", "admin"] },
     });
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: role.role });
+    const key = { organizationId, resource: "app" as const, scope: appId };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        ...(policy?.grants ?? []),
+        {
+          subject: { type: "user", id: editor.id },
+          actions: ["read", "update"],
+        },
+      ],
+    });
     user = editor;
 
     const renamed = await app.inject({
@@ -436,69 +457,32 @@ describe("PATCH /api/apps/:appId", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().name).toBe("Renamed");
   });
-  test("shares a personal app with named users, and revokes with an empty list", async ({
+  test("retired named-user sharing writes are ignored, not honoured", async ({
     makeUser,
     makeMember,
     makeApp,
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const colleague = await makeUser();
-    await makeMember(colleague.id, organizationId, { role: "member" });
-
-    const shared = await app.inject({
-      method: "PATCH",
-      url: `/api/apps/${created.id}`,
-      payload: { userIds: [colleague.id] },
-    });
-    expect(shared.statusCode).toBe(200);
-    // The app stays personal — the grant sits beside the scope, not in it.
-    expect(shared.json().scope).toBe("personal");
-    // PATCH returns the app-with-warnings shape, so read the grant back from
-    // the detail route that actually surfaces it.
-    const afterShare = await app.inject({
-      method: "GET",
-      url: `/api/apps/${created.id}`,
-    });
-    expect(afterShare.json().users).toEqual([
-      expect.objectContaining({ id: colleague.id }),
-    ]);
-
-    const revoked = await app.inject({
-      method: "PATCH",
-      url: `/api/apps/${created.id}`,
-      payload: { userIds: [] },
-    });
-    expect(revoked.statusCode).toBe(200);
-    const afterRevoke = await app.inject({
-      method: "GET",
-      url: `/api/apps/${created.id}`,
-    });
-    expect(afterRevoke.json().users).toEqual([]);
-  });
-
-  test("rejects sharing with a user outside the organization", async ({
-    makeUser,
-    makeApp,
-  }) => {
-    const created = await makeApp({
-      organizationId,
-      scope: "personal",
-      authorId: user.id,
-    });
-    // A real user, but never made a member of this organization.
-    const outsider = await makeUser();
-
+    await makeMember(colleague.id, organizationId);
+    // `userIds` left the update body with the rest of the legacy sharing
+    // surface, so a caller still sending it neither shares the app nor fails.
     const response = await app.inject({
       method: "PATCH",
       url: `/api/apps/${created.id}`,
-      payload: { userIds: [outsider.id] },
+      payload: { userIds: [colleague.id], name: "Still mine" },
     });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toMatch(/Unknown user/i);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().name).toBe("Still mine");
+    expect(
+      (await AppAccessModel.getUserDetailsForApps([created.id])).get(
+        created.id,
+      ) ?? [],
+    ).toEqual([]);
   });
 });
 
@@ -532,8 +516,8 @@ describe("PATCH /api/apps/:appId — slug", () => {
   test("409s a slug another app in the organization holds", async ({
     makeApp,
   }) => {
-    await makeApp({ organizationId, scope: "org", name: "Taken" });
-    const mine = await makeApp({ organizationId, scope: "org", name: "Mine" });
+    await makeApp({ organizationId, name: "Taken" });
+    const mine = await makeApp({ organizationId, name: "Mine" });
 
     const response = await app.inject({
       method: "PATCH",
@@ -551,7 +535,6 @@ describe("PATCH /api/apps/:appId — slug", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Sales Dashboard",
     });
 

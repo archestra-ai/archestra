@@ -1,7 +1,8 @@
-import { eq, inArray } from "drizzle-orm";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import ModelUserModel from "./model-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 interface ModelTeamDetail {
   id: string;
@@ -101,40 +102,55 @@ class ModelTeamModel {
   }
 
   /**
-   * Filter model IDs down to those the given principal may use: models with
-   * no restriction, or restricted to at least one of `principalTeamIds`.
-   * Callers handle any admin bypass before calling this.
+   * Filter model IDs down to those a grant lets the principal reach. A user
+   * needs a grant on the model (directly, through a team or role, or at `*`).
+   * A caller with no acting user — an organization credential — may exercise
+   * only an organization-wide grant, as the proxy-time check does.
    */
   static async filterAllowedModelIds(params: {
     modelIds: string[];
-    principalTeamIds: string[];
-    /**
-     * The acting user, when there is one. A model restricted to teams is also
-     * allowed for someone it was shared with by name — the finer-grained
-     * counterpart to a team restriction, resolved in one batch query rather
-     * than per model.
-     */
+    organizationId: string;
     userId?: string;
+    action: "read" | "use";
   }): Promise<Set<string>> {
-    const { modelIds, principalTeamIds, userId } = params;
-    const restrictions = await ModelTeamModel.getTeamIdsForModels(modelIds);
-    const principalTeams = new Set(principalTeamIds);
-    const grantedIds = userId
-      ? await ModelUserModel.filterGrantedIds(modelIds, userId)
-      : new Set<string>();
-
-    const allowed = new Set<string>();
-    for (const modelId of modelIds) {
-      const restrictedTo = restrictions.get(modelId);
-      if (
-        !restrictedTo ||
-        restrictedTo.some((teamId) => principalTeams.has(teamId)) ||
-        grantedIds.has(modelId)
-      ) {
-        allowed.add(modelId);
-      }
+    const { modelIds, organizationId, userId, action } = params;
+    if (modelIds.length === 0) return new Set();
+    if (userId) {
+      const rows = await db
+        .select({ id: schema.modelsTable.id })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            inArray(schema.modelsTable.id, modelIds),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              action,
+              resource: "llmModel",
+              scopeColumn: schema.modelsTable.id,
+            }),
+          ),
+        );
+      return new Set(rows.map((row) => row.id));
     }
-    return allowed;
+    const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
+      organizationId,
+      resource: "llmModel",
+      scopes: modelIds,
+    });
+    return new Set(
+      modelIds.filter((modelId) =>
+        policies.some(
+          (policy) =>
+            (policy.scope === "*" || policy.scope === modelId) &&
+            ResourcePermissionPolicyModel.isOrganizationWide({
+              policy,
+              scope: modelId,
+              action,
+            }),
+        ),
+      ),
+    );
   }
 }
 

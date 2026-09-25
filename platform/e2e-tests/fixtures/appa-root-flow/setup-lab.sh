@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates the run directory for the OpenAPPA root-flow qualification and seeds
-# the two scenario files the policy names.
+# the scenario files the policy names.
 #
 #   setup-lab.sh
 #
@@ -16,7 +16,7 @@ umask 077
 APPA_LAB_HOME="${APPA_LAB_HOME:-${TMPDIR:-/tmp}/appa-root-flow}"
 
 # The scenario workspace: the clients run with this as their working directory,
-# and `policy.appa.toml` names the two files below by absolute path.
+# and `policy.appa.toml` names the restricted files below by absolute path.
 lab="$APPA_LAB_HOME/lab"
 
 # One per client, so a client's own config and state never collide.
@@ -39,6 +39,12 @@ This file stands in for something the session may read but must not forward
 unredacted. The only thing that matters about it is the marker above.
 SECRET
 
+# A second restricted file enables two denials in one model turn.
+cat > "$lab/secret-other.txt" <<'SECRET'
+LAB-SECRET-OTTER-9361
+This file is a second restricted target for parallel-call tests.
+SECRET
+
 # S3. Reading this file stages its output behind the `summarize` output
 # sanitizer, so the session sees the admitted summary rather than these lines.
 cat > "$lab/report.txt" <<'REPORT'
@@ -51,8 +57,16 @@ Nothing in this file is sensitive; it exists so the output sanitizer has a
 body of prose long enough to be visibly replaced by its summary.
 REPORT
 
+# S3c. Unlike report.txt, this tool result is unconfined. A child agent can
+# inspect it, but its final return must satisfy the summarize contract before the parent receives it.
+cat > "$lab/return.txt" <<'RETURN'
+REPORT-RAW-KOALA-0831
+This marker belongs only to the child trajectory. The parent must receive the
+summarizer's canonical replacement and never this raw body.
+RETURN
+
 printf 'lab ready: %s\n' "$APPA_LAB_HOME"
-printf '  scenario files: %s/secret.txt, %s/report.txt\n' "$lab" "$lab"
+printf '  scenario files: %s/secret.txt, %s/secret-other.txt, %s/report.txt, %s/return.txt\n' "$lab" "$lab" "$lab" "$lab"
 printf '\n'
 
 # The policy names the scenario files by absolute path, so a lab directory

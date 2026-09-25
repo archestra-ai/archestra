@@ -1,17 +1,16 @@
 import {
+  type ResourcePermissionGrant,
+  ResourcePermissionGrantSchema,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import {
-  assertAgentTeams,
-  assertAssignableAgentTeams,
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
@@ -19,14 +18,14 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  TeamModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, AgentScope, ToolExposureMode } from "@/types";
+import type { Agent, ToolExposureMode } from "@/types";
 import {
   AgentActivationSkillSchema,
   AgentScopeSchema,
@@ -99,11 +98,9 @@ export const ConnectorIdsToolInputSchema =
 
 export const CreateBaseToolArgsSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     name: InsertAgentSchemaBase.shape.name.describe(
       "Name for the new resource.",
-    ),
-    scope: AgentScopeSchema.optional().describe(
-      "Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided.",
     ),
     labels: z
       .array(LabelInputSchema)
@@ -111,10 +108,6 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Optional key-value labels for organization and categorization.",
       ),
-    teams: z
-      .array(UuidIdSchema)
-      .optional()
-      .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
     ),
@@ -262,9 +255,8 @@ function buildEditLink(agentType: "agent" | "mcp_gateway", id: string): string {
 export async function handleCreateResource<
   TArgs extends {
     name: string;
-    scope?: AgentScope;
+    initialGrants?: ResourcePermissionGrant[];
     labels?: Array<{ key: string; value: string }>;
-    teams?: string[];
     description?: string | null;
     icon?: string | null;
     knowledgeBaseIds?: string[];
@@ -295,57 +287,25 @@ export async function handleCreateResource<
   );
 
   try {
-    const teams = args.teams ?? [];
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
 
     if (!args.name || args.name.trim() === "") {
       return errorResult(`${toolLabel} name is required and cannot be empty.`);
     }
 
-    const scope =
-      args.scope ??
-      (teams.length > 0
-        ? "team"
-        : targetAgentType === "agent"
-          ? "personal"
-          : "org");
-
-    // Scope-based authorization — mirrors the REST endpoint (routes/agent.ts)
     if (context.userId && context.organizationId) {
       const checker = await getAgentTypePermissionChecker({
         userId: context.userId,
         organizationId: context.organizationId,
       });
-
-      if (!checker.isAdmin(targetAgentType)) {
-        if (scope === "org") {
-          return errorResult(
-            `Only admins can create org-scoped ${toolLabel}s.`,
-          );
-        }
-        if (scope === "team" || teams.length > 0) {
-          if (!checker.isTeamAdmin(targetAgentType)) {
-            return errorResult(
-              `You need team-admin permission to create team-scoped ${toolLabel}s.`,
-            );
-          }
-
-          const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = teams.filter((id) => !userTeamIdSet.has(id));
-          if (invalidTeams.length > 0) {
-            return errorResult(
-              "You can only assign teams you are a member of.",
-            );
-          }
-        }
-      }
+      checker.require(targetAgentType, "create");
     }
 
     const createParams: Parameters<typeof AgentModel.create>[0] = {
       name: args.name,
-      scope,
-      teams,
+      // The retired visibility column is NOT NULL; nothing reads it. Who can
+      // reach the agent is its initial grants alone.
+      scope: "personal",
       labels,
       agentType: targetAgentType,
       environmentId: await resolveNewAgentEnvironmentId({
@@ -405,8 +365,30 @@ export async function handleCreateResource<
         })
       : [];
 
+    if (args.initialGrants !== undefined) {
+      if (!context.userId || !context.organizationId)
+        return errorResult(
+          "User and organization context are required to assign grants.",
+        );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: targetAgentType === "mcp_gateway" ? "mcpGateway" : "agent",
+        grants: args.initialGrants,
+        target: {
+          id: crypto.randomUUID(),
+          name: args.name,
+          authorId: context.userId,
+        },
+      });
+      // SPDX-SnippetEnd
+    }
     const created = await AgentModel.create(createParams, context.userId, {
       defaultExcludedSubagentIds,
+      initialPermissionGrants: args.initialGrants ?? [],
     });
 
     const toolAssignmentResults =
@@ -473,6 +455,14 @@ export async function handleGetResource<
           })
         : false;
 
+    const checker =
+      context.userId && context.organizationId
+        ? await getAgentTypePermissionChecker({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null;
+
     if (args.id) {
       record = await AgentModel.findById(args.id, context.userId, isAdmin);
       // findById doesn't support excludeOtherPersonalAgents, so we guard here.
@@ -480,9 +470,25 @@ export async function handleGetResource<
       // even though admins can see all personal agents in the UI.
       if (
         record &&
-        record.scope === "personal" &&
         context.userId &&
-        record.authorId !== context.userId
+        record.authorId !== context.userId &&
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        (
+          await ResourcePermissionPolicyModel.findAudience({
+            organizationId: record.organizationId,
+            resource:
+              record.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: record.id,
+          })
+        ).audience === "personal" &&
+        // SPDX-SnippetEnd
+        !checker?.allowsScoped?.({
+          agentType: expectedType,
+          agentId: record.id,
+          action: "read",
+        })
       ) {
         record = null;
       }
@@ -494,6 +500,16 @@ export async function handleGetResource<
           organizationId: context.organizationId,
           name: args.name,
           agentType: expectedType,
+          ...(checker && context.organizationId
+            ? {
+                authorization: {
+                  organizationId: context.organizationId,
+                  baseReadTypes: checker.hasBaseAction?.(expectedType, "read")
+                    ? [expectedType]
+                    : [],
+                },
+              }
+            : {}),
           // Hide other users' personal agents from MCP tools. Only the
           // caller's own personal agents need to be visible, even though
           // admins can see all personal agents in the UI.
@@ -531,6 +547,19 @@ export async function handleGetResource<
       );
     }
 
+    if (context.userId && context.organizationId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: expectedType === "agent" ? "agent" : "mcpGateway",
+        scope: record.id,
+        action: "read",
+      });
+      // SPDX-SnippetEnd
+    }
     const canReadSkills =
       expectedType === "agent" && context.organizationId && context.userId
         ? (
@@ -578,8 +607,6 @@ export async function handleEditResource<
     name?: string;
     description?: string | null;
     icon?: string | null;
-    scope?: AgentScope;
-    teams?: string[];
     labels?: Array<{ key: string; value: string }>;
     knowledgeBaseIds?: string[];
     connectorIds?: string[];
@@ -610,7 +637,10 @@ export async function handleEditResource<
     }
 
     const existingAgent = await AgentModel.findById(args.id);
-    if (!existingAgent) {
+    if (
+      !existingAgent ||
+      existingAgent.organizationId !== context.organizationId
+    ) {
       return errorResult(`${toolLabel} not found.`);
     }
 
@@ -624,75 +654,25 @@ export async function handleEditResource<
       userId: context.userId,
       organizationId: context.organizationId,
     });
-    checker.require(existingAgent.agentType, "update");
-
-    const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
-    const existingTeamIds = existingAgent.teams.map((team) => team.id);
-    requireAgentModifyPermission({
-      checker,
-      agentType: existingAgent.agentType,
-      agentScope: existingAgent.scope,
-      agentAuthorId: existingAgent.authorId,
-      agentTeamIds: existingTeamIds,
-      userTeamIds,
-      userId: context.userId,
+    checker.require(existingAgent.agentType, {
+      action: "update",
+      scope: existingAgent.id,
     });
 
-    // The check above authorizes the edit against the agent's *current* scope
-    // and teams. The incoming ones need authorizing too: otherwise a team-admin
-    // permitted to edit an agent in a team they belong to could reassign it to
-    // a team they don't, or clear its teams and leave it reachable by nobody.
-    // Mirrors the REST update path.
-    if (args.scope !== undefined || args.teams !== undefined) {
-      const scope = args.scope ?? existingAgent.scope;
-      const teamIds = args.teams ?? existingTeamIds;
-
-      try {
-        assertAssignableAgentTeams({
-          checker,
-          agentType: existingAgent.agentType,
-          requestedTeamIds: teamIds,
-          existingTeamIds,
-          userTeamIds,
-        });
-        await assertAgentTeams({
-          scope,
-          teamIds,
-          organizationId: context.organizationId,
-        });
-        // A static tool assignment pins one installed connection, which stays
-        // assignable only while this record shares the connection's team.
-        // Moving its scope or teams would strip the right to a credential its
-        // tools still point at, so the same guard the REST update path runs
-        // refuses the change here too — before anything is written.
-        await assertNoStaticPinsBrokenByTargetChange({
-          agentId: args.id,
-          currentTarget: {
-            organizationId: existingAgent.organizationId,
-            scope: existingAgent.scope,
-            authorId: existingAgent.authorId,
-            teamIds: existingTeamIds,
-          },
-          nextTarget: {
-            organizationId: existingAgent.organizationId,
-            scope,
-            authorId: existingAgent.authorId,
-            teamIds,
-          },
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
-    }
+    // Who can reach the record is not editable here: access lives in its
+    // permission policy, which the resource permissions API writes on its own.
+    requireAgentModifyPermission({
+      agentId: existingAgent.id,
+      action: "update",
+      checker,
+      agentType: existingAgent.agentType,
+    });
 
     const updateData: Record<string, unknown> = {};
     if (args.name !== undefined) updateData.name = args.name;
     if (args.description !== undefined)
       updateData.description = args.description;
     if (args.icon !== undefined) updateData.icon = args.icon;
-    if (args.scope !== undefined) updateData.scope = args.scope;
-    if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
     }
@@ -765,6 +745,7 @@ export async function handleEditResource<
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, `editing ${toolLabel}`);
   }
 }
@@ -787,12 +768,7 @@ async function resolveNewAgentEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      resource,
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 
@@ -827,7 +803,16 @@ async function validateKnowledgeAssignments(params: {
               access,
               knowledgeBase,
             )
-          : knowledgeBase.visibility === "org-wide")
+          : (
+              await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+                {
+                  organizationId,
+                  resource: "knowledgeBase",
+                  sources: [knowledgeBase],
+                  action: "read",
+                },
+              )
+            ).length > 0)
       ) {
         throw createValidationError(
           ["knowledgeBaseIds"],

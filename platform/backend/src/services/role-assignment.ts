@@ -2,7 +2,19 @@
 import { getPermissionsForUserContext } from "@/auth/utils";
 import OrganizationRoleModel from "@/models/organization-role";
 import RoleCompositionModel from "@/models/role-composition";
+import TeamModel from "@/models/team";
 import { ApiError } from "@/types";
+import { ResourcePermissions } from "./resource-permissions";
+
+/** Team membership administration delegates the team's existing access. */
+export async function validateNewTeamMembership(params: {
+  teamId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  if (await TeamModel.isUserTeamAdmin(params.teamId, params.userId)) return;
+  await validateInheritedTeamRoles(params);
+}
 
 export async function validateTeamRoles(params: {
   roles?: string[];
@@ -17,6 +29,10 @@ export async function validateTeamRoles(params: {
       params.organizationId,
     );
     if (!role) throw new ApiError(400, "Role not found");
+    await ResourcePermissions.validateSubjectAssignment({
+      ...params,
+      subjects: [{ type: "role", id: role.id }],
+    });
     const { valid, missingPermissions } =
       OrganizationRoleModel.validateRolePermissions(caller, role.permission);
     if (!valid)
@@ -33,9 +49,16 @@ export async function validateInheritedTeamRoles(params: {
   userId: string;
 }) {
   if (!params.teamId) return;
-  const roles = await RoleCompositionModel.getTeamRoles({
+  const teams = await RoleCompositionModel.getTeamSources({
     teamId: params.teamId,
     organizationId: params.organizationId,
   });
-  await validateTeamRoles({ ...params, roles });
+  await ResourcePermissions.validateSubjectAssignment({
+    ...params,
+    subjects: teams.map((team) => ({ type: "team", id: team.id })),
+  });
+  await validateTeamRoles({
+    ...params,
+    roles: [...new Set(teams.flatMap((team) => team.roles))],
+  });
 }

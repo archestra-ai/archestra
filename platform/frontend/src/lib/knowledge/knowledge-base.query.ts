@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   bulkDeleteKnowledgeBases,

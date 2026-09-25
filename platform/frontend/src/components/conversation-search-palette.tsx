@@ -11,6 +11,7 @@ import {
 } from "@/app/_parts/studio-nav";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -49,9 +50,11 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -117,6 +120,7 @@ function useNavigationDestinations() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
   const openappaEnabled = useFeature("openappaEnabled");
+  const { data: guardrailsDeployment } = useGuardrailsDeployment();
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -138,6 +142,11 @@ function useNavigationDestinations() {
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
+        if (
+          item.url === "/mcp/tool-guardrails" &&
+          guardrailsDeployment?.enabled === true
+        )
+          return false;
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -151,6 +160,7 @@ function useNavigationDestinations() {
     permissionMap,
     pluginsEnabled,
     openappaEnabled,
+    guardrailsDeployment?.enabled,
     canReadLlmProxy,
     canReadMcpGateway,
   ]);
@@ -302,8 +312,10 @@ export function ConversationSearchPalette({
     setSelectedValue("");
   }, [searchQuery]);
 
-  const handleSelectConversation = (conversationId: string) => {
-    router.push(`/chat/${conversationId}`);
+  const handleSelectConversation = (
+    conversation: (typeof conversations)[number],
+  ) => {
+    router.push(conversationHref(conversation));
     onOpenChange(false);
   };
 
@@ -340,8 +352,18 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (pathname === `/chat/${conversationId}`) {
-        router.push("/chat");
+      const deletedConversation = conversations.find(
+        (conversation) => conversation.id === conversationId,
+      );
+      if (
+        deletedConversation &&
+        pathname === conversationHref(deletedConversation).split("?")[0]
+      ) {
+        router.push(
+          deletedConversation.origin === "openappa"
+            ? "/openappa/configure"
+            : "/chat",
+        );
       }
     },
     [deleteMutation, conversations, pathname, router],
@@ -350,7 +372,7 @@ export function ConversationSearchPalette({
   const handlePinConversation = useCallback(
     (conversationId: string) => {
       const conv = conversations.find((c) => c.id === conversationId);
-      if (!conv) return;
+      if (!conv || conv.origin === "openappa") return;
       pinMutation.mutate({ id: conversationId, pinned: !conv.pinnedAt });
     },
     [pinMutation, conversations],
@@ -498,13 +520,18 @@ export function ConversationSearchPalette({
       ? getPreviewText(conv.messages, debouncedSearch)
       : "";
     const isPending = isPendingDeletion === conv.id;
-    const IconComponent = showPinIcon ? Pin : MessageCircle;
+    const IconComponent =
+      conv.origin === "openappa"
+        ? OpenAppaIcon
+        : showPinIcon
+          ? Pin
+          : MessageCircle;
 
     return (
       <CommandItem
         key={conv.id}
         value={`conv-${conv.id}`}
-        onSelect={() => handleSelectConversation(conv.id)}
+        onSelect={() => handleSelectConversation(conv)}
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
         <div className="flex items-center gap-2 w-full min-w-0">

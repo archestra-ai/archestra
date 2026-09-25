@@ -15,7 +15,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  Server,
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
@@ -46,12 +45,10 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { platformOwnedStyles } from "@/components/scope-vocabulary";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -71,12 +68,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
@@ -99,7 +90,6 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import {
   buildSubscriptionOffers,
@@ -119,7 +109,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "personal",
+  shared: false,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -244,8 +234,8 @@ export default function ApiKeysPage() {
         baseUrl: editingApiKey.baseUrl ?? null,
         inferenceBaseUrl: editingApiKey.inferenceBaseUrl ?? null,
         extraHeaders: deserializeExtraHeaders(editingApiKey.extraHeaders),
-        scope: editingApiKey.scope,
-        teamId: editingApiKey.teamId ?? "",
+        shared: editingApiKey.userId === null,
+        teamId: null,
         vaultSecretPath: editingApiKey.vaultSecretPath ?? null,
         vaultSecretKey: editingApiKey.vaultSecretKey ?? null,
         isPrimary: editingApiKey.isPrimary ?? false,
@@ -274,10 +264,6 @@ export default function ApiKeysPage() {
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.apiKey !== "";
 
-    // Detect scope/team changes
-    const scopeChanged = values.scope !== editingApiKey.scope;
-    const teamIdChanged = values.teamId !== (editingApiKey.teamId ?? "");
-
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     const sigV4Provided = Boolean(
@@ -296,13 +282,8 @@ export default function ApiKeysPage() {
           baseUrl: values.baseUrl || null,
           inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
-          scope: scopeChanged ? values.scope : undefined,
-          teamId:
-            scopeChanged || teamIdChanged
-              ? values.scope === "team"
-                ? values.teamId
-                : null
-              : undefined,
+          // The update route no longer accepts the retired `scope`/`teamId`
+          // fields; sharing is edited on the key's Permissions tab.
           isPrimary: values.isPrimary,
           vaultSecretPath:
             !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -372,6 +353,7 @@ export default function ApiKeysPage() {
         <Plus className="h-4 w-4" />
         <span>Add API Key</span>
       </Button>
+      <ResourceListActions resource="llmProviderApiKey" />
     </div>
   );
 
@@ -535,59 +517,7 @@ export default function ApiKeysPage() {
           );
         },
       },
-      {
-        accessorKey: "scope",
-        header: "Access",
-        size: 210,
-        minSize: 170,
-        cell: ({ row }) => {
-          const credential = row.original;
-          if (credential.isSystem) {
-            // Not a visibility scope: nobody in the org owns this row. It is
-            // auto-provisioned because the deployment authenticates with cloud
-            // credentials, so it borrows the platform-owned styling that the
-            // built-in agent badge uses.
-            return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        platformOwnedStyles,
-                        "max-w-full cursor-help gap-1",
-                      )}
-                    >
-                      <Server className="h-3 w-3" />
-                      <span className="truncate">System</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    Provisioned automatically because this deployment
-                    authenticates with cloud credentials instead of an API key.
-                    Managed through environment configuration and usable by the
-                    whole organization.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          }
-          return (
-            <ResourceVisibilityBadge
-              scope={credential.scope}
-              teams={
-                credential.teamId && credential.teamName
-                  ? [{ id: credential.teamId, name: credential.teamName }]
-                  : undefined
-              }
-              authorId={credential.userId}
-              authorName={credential.userName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
-          );
-        },
-      },
+
       {
         accessorKey: "secretStorageType",
         header: "Storage",
@@ -694,8 +624,8 @@ export default function ApiKeysPage() {
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
       anthropicKeylessAuthEnabled,
-      currentUserId,
       providerCatalog,
+      currentUserId,
     ],
   );
 
@@ -883,7 +813,7 @@ export default function ApiKeysPage() {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
-          description="Update the name, API key value, or scope"
+          description="Update the name, the API key value, or who can reach it"
           size="small"
           className="sm:max-w-xl"
           isDirty={

@@ -59,7 +59,6 @@ describe("mcp gateway tool execution", () => {
       mockContext.userId,
       true,
     );
-    expect(created?.scope).toBe("org");
     expect(created?.authorId).toBe(mockContext.userId);
   });
 

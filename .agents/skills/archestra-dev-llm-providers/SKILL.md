@@ -52,4 +52,4 @@ pnpm type-check
 ## Related skills
 
 - `archestra-dev-backend` — general route/codegen/permission conventions (route shape, `RouteId`, endpoint permissions).
-- `archestra-dev-backend-tests` — vitest projects, mocking rules, DB fixtures for the tests above.
+- `archestra-dev-testing/references/backend-tests.md` — vitest projects, mocking rules, DB fixtures for the tests above.

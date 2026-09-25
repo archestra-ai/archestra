@@ -286,7 +286,7 @@ describe("app llm completion", () => {
     const orgKey = await makeLlmProviderApiKey(
       app.organizationId,
       orgSecret.id,
-      { provider: "ollama", scope: "org", name: "Ollama" },
+      { provider: "ollama", name: "Ollama" },
     );
     const orgModel = await makeSyncedModel("ollama", "llama3.1", orgKey.id);
     await db
@@ -298,7 +298,7 @@ describe("app llm completion", () => {
     const appKey = await makeLlmProviderApiKey(
       app.organizationId,
       appSecret.id,
-      { provider: "vllm", scope: "org", name: "vLLM" },
+      { provider: "vllm", name: "vLLM" },
     );
     const appModel = await makeSyncedModel("vllm", "qwen3-32b", appKey.id);
     await makeAgent({

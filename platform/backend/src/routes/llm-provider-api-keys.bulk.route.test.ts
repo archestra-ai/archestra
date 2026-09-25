@@ -2,14 +2,14 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   LlmProviderApiKeyModel,
   ModelModel,
   OrganizationModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import llmProviderApiKeyRoutes from "./llm-provider-api-keys";
@@ -179,12 +179,19 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
     expect(await LlmProviderApiKeyModel.findById(hidden.id)).not.toBeNull();
   });
 
-  test("keeps organization-scoped keys protected by their existing authorization rule", async ({
+  test("a member who can use an organization-shared key still cannot delete it", async ({
+    makeLlmProviderApiKey,
     makeMember,
     makeSecret,
     makeUser,
   }) => {
-    const key = await createKey("bulk-rbac", makeSecret);
+    // Shared the way the create route shares an organization key: members may
+    // read and use it, but deleting it needs the key's delete grant.
+    const secret = await makeSecret({ secret: { apiKey: "bulk-secret-rbac" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      name: "bulk-rbac",
+      access: "org",
+    });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     app.addHook("onRequest", async (request) => {
@@ -199,7 +206,7 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
         id: key.id,
         name: "bulk-rbac",
         error:
-          "Only llmProviderApiKey admins can modify organization-wide API keys",
+          "You do not have permission to perform this action on this resource",
       },
     ]);
     expect(await LlmProviderApiKeyModel.findById(key.id)).not.toBeNull();

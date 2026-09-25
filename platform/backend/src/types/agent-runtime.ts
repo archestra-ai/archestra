@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { A2ATaskStateSchema } from "./a2a-task";
-import { AgentRunShareVisibilitySchema } from "./agent-run-share";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -47,8 +46,8 @@ export type AgentRunAttentionState = z.infer<
 /**
  * How a steer message reaches the running process.
  *
- * `pipe` writes to the runtime-agent FIFO so the loop injects it at the next
- * turn boundary. `tmux_keys` types directly into the tmux session for CLIs
+ * `pipe` writes to a FIFO that the client reads, so it can inject the message
+ * at the next turn boundary. `tmux_keys` types directly into the tmux session for CLIs
  * that own their own input loop, such as Claude Code.
  */
 export const AgentRuntimeSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
@@ -291,7 +290,11 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
   initiatorName: z.string().nullable(),
-  shareVisibility: z.union([AgentRunShareVisibilitySchema, z.null()]),
+  /** Who the run is shared with, derived from its permission policy. */
+  shareVisibility: z.union([
+    z.enum(["organization", "team", "user"]),
+    z.null(),
+  ]),
   shareTeamNames: z
     .array(z.string())
     .nullable()

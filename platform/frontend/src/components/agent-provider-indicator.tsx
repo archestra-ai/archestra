@@ -4,7 +4,6 @@ import type { SupportedProvider } from "@archestra/shared";
 import { CircleDashed } from "lucide-react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { ProviderIcon } from "@/components/provider-icon";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -26,10 +25,11 @@ export function AgentProviderIndicator({
     <RowClickShield className="inline-flex shrink-0">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 rounded-md"
+          <span
+            role="img"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the same tooltip as hover without implying a click action
+            tabIndex={0}
+            className="inline-flex size-8 cursor-help items-center justify-center rounded-md"
             aria-label="Provider and model details"
           >
             {provider ? (
@@ -37,22 +37,22 @@ export function AgentProviderIndicator({
             ) : (
               <CircleDashed className="size-[18px] text-muted-foreground" />
             )}
-          </Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent
           side="top"
-          className="max-w-80 space-y-3 px-4 py-3 text-left text-sm leading-5"
+          className="max-w-64 space-y-1.5 px-2.5 py-2 text-left text-xs leading-4"
         >
-          <div className="space-y-0.5">
-            <p className="text-xs text-muted-foreground">Provider key</p>
+          <div>
+            <p className="text-muted-foreground">Provider key</p>
             <p className="break-words font-medium">
               {usesOrganizationDefault
                 ? "Organization default"
                 : keyName || "No key configured"}
             </p>
           </div>
-          <div className="space-y-0.5">
-            <p className="text-xs text-muted-foreground">Model</p>
+          <div>
+            <p className="text-muted-foreground">Model</p>
             <p className="break-words font-medium">
               {usesOrganizationDefault
                 ? "Organization default"

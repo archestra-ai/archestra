@@ -3,9 +3,10 @@
 
 //
 // Mixed-visibility regressions for the container-ACL model: org-wide and
-// team-scoped connectors must keep their exact pre-container behavior — same
-// tokens, same query results, untouched by permission passes — and the
-// visibility-switch lifecycle must convert cleanly in both directions.
+// team-scoped connectors are reached through their connector grants, untouched
+// by permission passes, while only auto-sync connectors match the chunk ACL
+// tokens a pass writes — and the visibility-switch lifecycle must convert
+// cleanly in both directions.
 import { vi } from "vitest";
 import type { AclEntry, DocumentPermissions } from "@/types";
 
@@ -24,6 +25,7 @@ import { permissionSyncService } from "@/knowledge-base/permission-sync";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import { KbChunkModel, KnowledgeBaseConnectorModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, type TestAccess } from "@/test/access-grants";
 import type { KnowledgeSourceVisibility } from "@/types";
 
 const DIMENSIONS = 384;
@@ -65,6 +67,8 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
     organizationId: string;
     visibility: KnowledgeSourceVisibility;
     teamIds?: string[];
+    /** Who the connector's grants reach; see `TestAccess`. */
+    access?: TestAccess;
     acl: string[];
     name: string;
   }) {
@@ -72,13 +76,14 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
       .insert(schema.knowledgeBasesTable)
       .values({ organizationId: params.organizationId, name: params.name })
       .returning();
-    const [connector] = await db
-      .insert(schema.knowledgeBaseConnectorsTable)
-      .values({
+    const connector = await KnowledgeBaseConnectorModel.create(
+      {
         organizationId: params.organizationId,
         name: params.name,
         connectorType: "github",
         visibility: params.visibility,
+        syncPermissionsFromSource:
+          params.visibility === "auto-sync-permissions",
         teamIds: params.teamIds ?? [],
         config: {
           type: "github",
@@ -86,8 +91,9 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
           owner: "o",
           repos: ["r"],
         },
-      })
-      .returning();
+      },
+      accessGrants(params.access),
+    );
     await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
       connectorId: connector.id,
       knowledgeBaseId: kb.id,
@@ -139,21 +145,33 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
         .where(eq(schema.kbDocumentsTable.id, id))
     )[0]?.acl;
 
-  test("one search spanning all three visibility modes matches each mode's own tokens", async ({
+  test("one search spanning all three visibility modes: grants gate org/team connectors, container tokens gate auto-sync", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
   }) => {
     const org = await makeOrganization();
+    const alice = await makeUser();
+    const bob = await makeUser();
+    await makeMember(bob.id, org.id);
+    const team = await makeTeam(org.id, alice.id);
+    await makeTeamMember(team.id, alice.id);
+
     const orgWide = await seedConnectorWithChunk({
       organizationId: org.id,
       visibility: "org-wide",
+      access: "org",
       acl: ["org:*"],
       name: "org-conn",
     });
     const teamScoped = await seedConnectorWithChunk({
       organizationId: org.id,
       visibility: "team-scoped",
-      teamIds: ["team-1"],
-      acl: ["team:team-1"],
+      teamIds: [team.id],
+      access: { teams: [team.id] },
+      acl: [`team:${team.id}`],
       name: "team-conn",
     });
     const autoSync = await seedConnectorWithChunk({
@@ -187,9 +205,10 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
       await searchTitles({
         connectorIds,
         userAcl: [
+          `principal:${alice.id}`,
           "org:*",
           "user_email:alice@example.com",
-          "team:team-1",
+          `team:${team.id}`,
           autoToken,
         ],
       }),
@@ -198,20 +217,38 @@ describe("container ACLs preserve org-wide / team-scoped behavior", () => {
     expect(
       await searchTitles({
         connectorIds,
-        userAcl: ["org:*", "user_email:bob@example.com"],
+        userAcl: [`principal:${bob.id}`, "org:*", "user_email:bob@example.com"],
       }),
     ).toEqual(["org-conn"]);
     // Team but no container access: org + team.
     expect(
       await searchTitles({
         connectorIds,
-        userAcl: ["org:*", "user_email:bob@example.com", "team:team-1"],
+        userAcl: [
+          `principal:${alice.id}`,
+          "org:*",
+          "user_email:alice@example.com",
+          `team:${team.id}`,
+        ],
       }),
     ).toEqual(["org-conn", "team-conn"]);
+    // A stored team token alone does not open a team connector: its grant
+    // decides, so an outsider presenting the token still sees org-wide only.
+    expect(
+      await searchTitles({
+        connectorIds,
+        userAcl: [
+          `principal:${bob.id}`,
+          "org:*",
+          "user_email:bob@example.com",
+          `team:${team.id}`,
+        ],
+      }),
+    ).toEqual(["org-conn"]);
 
     // The permission pass never touched the org/team connectors' documents.
     expect(await docAcl(orgWide.doc.id)).toEqual(["org:*"]);
-    expect(await docAcl(teamScoped.doc.id)).toEqual(["team:team-1"]);
+    expect(await docAcl(teamScoped.doc.id)).toEqual([`team:${team.id}`]);
   });
 
   test("visibility switch lifecycle: auto-sync → org-wide restores org tokens and drops container rows; switching back re-adopts", async ({

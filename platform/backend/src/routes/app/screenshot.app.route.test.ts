@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import AppRenderScreenshotModel from "@/models/app-render-screenshot";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -39,7 +39,7 @@ describe("POST /api/apps/:appId/screenshot", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Shots", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Shots", html: "<h1>v1</h1>" },
     });
     const appId = created.json().id as string;
 
@@ -75,7 +75,6 @@ describe("POST /api/apps/:appId/screenshot", () => {
       organizationId,
       authorId: user.id,
       name: "Canonical Shots",
-      scope: "org",
     });
     const appId = created.id;
 

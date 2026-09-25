@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {

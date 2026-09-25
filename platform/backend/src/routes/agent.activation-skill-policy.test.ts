@@ -3,6 +3,8 @@ import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentActivationSkillRuleModel,
@@ -12,10 +14,16 @@ import {
   ToolModel,
 } from "@/models";
 import SkillModel from "@/models/skill";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import type { InsertSkill, Skill, User } from "@/types";
 
 vi.mock("@/auth");
@@ -62,20 +70,22 @@ describe("agent activation-skill policy routes", () => {
   });
 
   async function makeSkill(
-    overrides: Partial<InsertSkill> = {},
+    overrides: Partial<Omit<InsertSkill, "scope">> & {
+      access?: TestAccess;
+    } = {},
   ): Promise<Skill> {
+    const { access = "org", ...skillOverrides } = overrides;
     const skill = await SkillModel.createWithFiles({
       skill: {
         organizationId,
         name: `skill-${crypto.randomUUID().slice(0, 8)}`,
         description: "Policy test skill",
         content: "# Instructions",
-        scope: "org",
-        latestVersion: 1,
-        ...overrides,
-      } as InsertSkill,
+        ...skillOverrides,
+      },
       files: [],
       environmentIds: [],
+      ...accessGrants(access),
     });
     if (!skill) throw new Error("failed to create skill");
     return skill;
@@ -153,6 +163,7 @@ describe("agent activation-skill policy routes", () => {
       const name = `shared-${crypto.randomUUID().slice(0, 8)}`;
       await makeSkill({ name });
       const plugin = await PluginModel.create({
+        ...accessGrants("org"),
         organizationId,
         userId: user.id,
         input: {
@@ -160,7 +171,6 @@ describe("agent activation-skill policy routes", () => {
           description: "Policy collision test",
           clientType: "claude-code",
           supportedPlatforms: ["posix"],
-          scope: "org",
           files: [
             {
               path: "skills/shared/SKILL.md",
@@ -328,8 +338,6 @@ describe("agent activation-skill policy routes", () => {
       payload: {
         name: `Policy Agent ${crypto.randomUUID().slice(0, 8)}`,
         agentType: "agent",
-        scope: "personal",
-        teams: [],
         activationSkillPolicy: {
           mode: "manual",
           allowedReferences: [reference],
@@ -400,8 +408,6 @@ describe("agent activation-skill policy routes", () => {
       payload: {
         name: "Gateway with invalid policy",
         agentType: "mcp_gateway",
-        scope: "personal",
-        teams: [],
         activationSkillPolicy: {
           mode: "all",
           allowedReferences: [],
@@ -428,8 +434,6 @@ describe("agent activation-skill policy routes", () => {
       payload: {
         name: "Internal agent without skill permission",
         agentType: "agent",
-        scope: "personal",
-        teams: [],
         activationSkillPolicy: {
           mode: "all",
           allowedReferences: [],
@@ -590,7 +594,9 @@ describe("agent activation-skill policy routes", () => {
     const clone = await app.inject({
       method: "POST",
       url: `/api/agents/${source.id}/clone`,
-      payload: { scope: "personal" },
+      // Clones are personal by default; the retired `scope` field is now
+      // rejected outright, and the scope is incidental to this test anyway.
+      payload: {},
     });
     expect(clone.statusCode, clone.body).toBe(200);
     const policy = await app.inject({
@@ -674,7 +680,7 @@ describe("agent activation-skill policy routes", () => {
     await makeSkill({ name: `second-${suffix}` });
     await makeSkill({
       name: first.name,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const configured = await app.inject({

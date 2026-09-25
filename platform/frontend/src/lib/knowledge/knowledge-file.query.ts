@@ -3,13 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { type BulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   bulkDeleteKnowledgeDirectories,
   bulkDeleteKnowledgeFiles,
-  bulkUpdateKnowledgeDirectories,
-  bulkUpdateKnowledgeFiles,
   getKnowledgeFiles,
   uploadKnowledgeFile,
   promoteAttachmentToKnowledgeFile,
@@ -104,39 +102,45 @@ export function useBulkDeleteKnowledgeItems() {
   });
 }
 
-export function useBulkUpdateKnowledgeVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      items,
-      visibility,
-      teamIds,
-    }: {
-      items: readonly KnowledgeSelectionItem[];
-      visibility: "org-wide" | "team-scoped" | "private";
-      teamIds: string[];
-    }) =>
-      dispatchByKind(items, {
-        files: (ids) =>
-          bulkUpdateKnowledgeFiles({ body: { ids, visibility, teamIds } }),
-        directories: (ids) =>
-          bulkUpdateKnowledgeDirectories({
-            body: { ids, visibility, teamIds },
-          }),
-      }),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: [FILES_KEY] });
-      queryClient.invalidateQueries({ queryKey: [DIRECTORIES_KEY] });
-    },
-  });
-}
-
 /** A ticked row, tagged with which route acts on it. */
 export type KnowledgeSelectionItem = {
   kind: "file" | "directory";
   id: string;
   name: string;
 };
+
+/** Expand selected directories into the readable documents they contain. */
+export function useKnowledgePermissionSelection(
+  items: readonly KnowledgeSelectionItem[],
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [FILES_KEY, "permission-selection", items],
+    enabled,
+    queryFn: async () => {
+      const files = new Map(
+        items
+          .filter((item) => item.kind === "file")
+          .map((item) => [item.id, { id: item.id, name: item.name }]),
+      );
+      for (const directory of items.filter(
+        (item) => item.kind === "directory",
+      )) {
+        for (let offset = 0; ; offset += 100) {
+          const { data, error } = await getKnowledgeFiles({
+            query: { directoryId: directory.id, limit: 100, offset },
+          });
+          throwOnApiError(error, { toastOnError: false });
+          if (!data) throw new Error("Document listing is missing");
+          for (const file of data.data)
+            files.set(file.id, { id: file.id, name: file.filename });
+          if (data.data.length < 100) break;
+        }
+      }
+      return [...files.values()];
+    },
+  });
+}
 
 export function useKnowledgeDirectories() {
   return useQuery({

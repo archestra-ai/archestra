@@ -30,10 +30,7 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
-import {
-  ResourceScopeFilter,
-  useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,
@@ -333,9 +330,10 @@ export function InternalMCPCatalog({
   // Track server ID for re-authentication (preserves tool assignments)
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: userIsMcpServerAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
 
   // Deep-link: auto-open install dialog when ?install={catalogId} is present.
   // Optional &scope=personal|team|org (and &team={teamId} for team scope)
@@ -1189,14 +1187,7 @@ export function InternalMCPCatalog({
             }
           >
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
-            {!selectedFacet && (
-              <ResourceScopeFilter
-                adminPermission={{ mcpServerInstallation: ["admin"] }}
-                ownerLabelPlural="connections"
-                allLabel="All scopes"
-                navigate={replaceRegistryListUrl}
-              />
-            )}
+
             {selectedFacet ? (
               <RegistryFilterDropdown
                 label="Issue"

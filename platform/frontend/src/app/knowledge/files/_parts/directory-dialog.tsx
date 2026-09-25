@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  FileVisibilitySelector,
-  type KnowledgeFileVisibility,
-} from "@/app/knowledge/files/_parts/file-visibility-selector";
+
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
@@ -29,9 +26,6 @@ export function DirectoryDialog({
   onCreated?: (directory: KnowledgeDirectory) => void;
 }) {
   const [name, setName] = useState("");
-  const [visibility, setVisibility] =
-    useState<KnowledgeFileVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const createDirectory = useCreateKnowledgeDirectory();
   const updateDirectory = useUpdateKnowledgeDirectory();
@@ -41,23 +35,14 @@ export function DirectoryDialog({
   useEffect(() => {
     if (!open) return;
     setName(directory?.name ?? "");
-    setVisibility(
-      (directory?.visibility as KnowledgeFileVisibility) ?? "org-wide",
-    );
-    setTeamIds(directory?.teamIds ?? []);
   }, [open, directory]);
 
   const isPending = createDirectory.isPending || updateDirectory.isPending;
-  const canSubmit =
-    name.trim().length > 0 &&
-    (visibility !== "team-scoped" || teamIds.length > 0) &&
-    !isPending;
+  const canSubmit = name.trim().length > 0 && !isPending;
 
   const handleSubmit = () => {
     const body = {
       name: name.trim(),
-      visibility,
-      teamIds: visibility === "team-scoped" ? teamIds : [],
     };
     const onSuccess = () => onOpenChange(false);
 
@@ -81,7 +66,7 @@ export function DirectoryDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={directory ? "Edit directory" : "New directory"}
-      description="Directories organise documents and set the default audience for files added to them."
+      description="Directories organize documents. Set access on each document when you upload it."
       size="small"
     >
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -94,15 +79,6 @@ export function DirectoryDialog({
             onChange={(event) => setName(event.target.value)}
           />
         </div>
-
-        <FileVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          label="Default audience"
-          description="Applied to files uploaded here. Changing it does not re-open documents already indexed from this directory."
-        />
       </div>
 
       <DialogStickyFooter>

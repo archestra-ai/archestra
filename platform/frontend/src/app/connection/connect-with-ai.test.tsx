@@ -11,6 +11,7 @@ test.each([
   "cursor",
   "codex",
   "copilot-cli",
+  "opencode",
 ])("copies the deployment prompt for %s", async (id) => {
   const user = userEvent.setup();
   const client = CONNECT_CLIENTS.find((entry) => entry.id === id);

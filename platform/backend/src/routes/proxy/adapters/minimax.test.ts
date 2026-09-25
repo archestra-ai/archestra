@@ -1,5 +1,4 @@
-import { beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Minimax } from "@/types/llm-providers";
 import { minimaxAdapterFactory } from "./minimax";
 
@@ -198,6 +197,41 @@ describe("MinimaxResponseAdapter reasoning", () => {
     const message = adapter.getOriginalResponse().choices[0].message;
     expect(message.reasoning_content).toBe("Thinking.");
     expect(message.reasoning_details).toEqual([{ text: "Thinking." }]);
+  });
+
+  // The governed-response replace path refuses to send a response it cannot
+  // safely rewrite; without withReplacedText an admitted final answer 503'd.
+  test("withReplacedText replaces the assistant message and drops tool calls", () => {
+    const adapter = minimaxAdapterFactory.createResponseAdapter({
+      id: "chatcmpl-test",
+      object: "chat.completion",
+      created: 1,
+      model: "MiniMax-M2.5",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "RAW",
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function" as const,
+                function: { name: "read_file", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    });
+
+    const replaced = adapter.withReplacedText?.("ADMITTED");
+
+    expect(replaced?.choices[0].message.content).toBe("ADMITTED");
+    expect(replaced?.choices[0].message.tool_calls).toBeUndefined();
+    expect(replaced?.choices[0].finish_reason).toBe("stop");
   });
 });
 

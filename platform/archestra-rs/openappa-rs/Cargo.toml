@@ -9,14 +9,14 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main at the merge of #386 (a hosted root document declares
-# its batteries and their credentials; on top of #384's embedded host) on top of
-# v0.24.0. Re-pin to the first release that includes it. The embedded reporting helper
-# currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8dd1272f4e093856a11ddc11d653180397afdc7d" }
+# Pinned to OpenAPPA main after the merge of #440 (jev labels settle on argmax),
+# on top of #424 (the shared label guide), #433 (pinned deployments and the host
+# credential lookup) and #423 (the native jev annotator). Re-pin to the first release that includes it. The embedded
+# reporting helper currently requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "70e0ad33f8312af528f88271314df79f92f0ac08" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -34,6 +34,9 @@ futures-util = "0.3"
 # A paused clock: the connection-wait test does not spend its thirty seconds.
 tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"
+# Building a consult record by hand: the runtime's own id and clock types.
+uuid = { version = "1", features = ["v7"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

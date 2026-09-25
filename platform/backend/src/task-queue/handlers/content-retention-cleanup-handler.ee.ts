@@ -6,11 +6,12 @@ import {
   ConversationModel,
   InteractionModel,
   McpToolCallModel,
+  OpenappaExternalConsultModel,
 } from "@/models";
 import { fileStore } from "@/skills-sandbox/file-store";
 
 /**
- * Enterprise data-retention sweep over the three content-bearing tables.
+ * Enterprise data-retention sweep over the content-bearing tables.
  * Each table is swept independently — one failure never blocks the others,
  * matching the audit-log sweep's swallow-and-log posture so the periodic
  * chain always reschedules. A fast no-op while every window is disabled.
@@ -37,6 +38,24 @@ export async function handleContentRetentionCleanup(): Promise<void> {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
         "interaction retention sweep: failed",
+      );
+    }
+  }
+
+  // Guardrails consults are part of the LLM traffic record: same window.
+  if (llmLogsDays > 0) {
+    try {
+      const deleted = await OpenappaExternalConsultModel.deleteExpired({
+        retentionDays: llmLogsDays,
+      });
+      logger.info(
+        { deleted, retentionDays: llmLogsDays },
+        "external consult retention sweep: complete",
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "external consult retention sweep: failed",
       );
     }
   }

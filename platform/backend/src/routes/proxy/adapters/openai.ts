@@ -698,7 +698,10 @@ export class OpenAIRequestAdapter
 
     let appliedCount = 0;
     const result = messages.map((message) => {
-      if (message.role === "tool" && updates[message.tool_call_id]) {
+      if (
+        message.role === "tool" &&
+        Object.hasOwn(updates, message.tool_call_id)
+      ) {
         appliedCount++;
         logger.debug(
           { toolCallId: message.tool_call_id },
@@ -992,6 +995,23 @@ export class OpenAIResponseAdapter
             content: contentMessage,
             refusal: null,
           },
+          // Clears logprobs so token representations do not leak withheld text.
+          logprobs: null,
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
+
+  withReplacedText(text: string): OpenAiResponse {
+    return {
+      ...this.response,
+      choices: [
+        {
+          ...this.response.choices[0],
+          message: { role: "assistant", content: text, refusal: null },
+          // Clears logprobs so token representations do not leak withheld text.
+          logprobs: null,
           finish_reason: "stop",
         },
       ],
@@ -1047,7 +1067,7 @@ export class OpenAIStreamAdapter
 
   private replacedText: string | null = null;
   private getTextSuffix: ((completedText: string) => string) | null = null;
-  private textSuffix = "";
+  private textPrefixIssued = false;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
   }
@@ -1127,36 +1147,58 @@ export class OpenAIStreamAdapter
 
     const delta = choice.delta;
 
-    // Forward reasoning ("thinking") deltas. OpenAI-compatible reasoning models
-    // (qwen3, DeepSeek-R1, GLM, ... via Ollama/vLLM/OpenRouter) stream their
-    // thinking in a `reasoning_content` (or `reasoning`) field that isn't part
-    // of the typed delta. A reasoning-only chunk has no `content`, so without
-    // this it would be dropped and the client never sees the thinking. Forward
-    // the raw chunk unchanged so the field reaches the client's reasoning parser.
-    // Skip when the same chunk also carries a tool call: that must go through the
-    // tool-call branch's blocking-policy buffering below (which replays the full
-    // chunk — reasoning included — only once the call is approved), so reasoning
-    // never streams unapproved tool-call data past the gate.
+    // Preserves non-standard reasoning fields (`reasoning_content` or `reasoning`)
+    // from OpenAI-compatible models in client output and accumulated responses.
     const reasoning = (delta as { reasoning_content?: unknown })
       .reasoning_content;
     const reasoningAlt = (delta as { reasoning?: unknown }).reasoning;
     const hasReasoning =
       (typeof reasoning === "string" && reasoning.length > 0) ||
       (typeof reasoningAlt === "string" && reasoningAlt.length > 0);
-    if (hasReasoning && !delta.tool_calls) {
+    if (hasReasoning) {
       this.reasoningText +=
         typeof reasoning === "string" ? reasoning : (reasoningAlt as string);
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
 
-    // Handle text content
+    // Splits streamable content from tool calls in the same chunk.
+    // Content streams immediately. The tool call is buffered for policy evaluation
+    // and re-emitted upon approval.
     if (delta.content) {
       this.state.text += delta.content;
+    }
+    if (delta.content || hasReasoning) {
+      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      let prefixSse = "";
+      if (delta.content && !this.textPrefixIssued && this.getTextSuffix) {
+        const prefix = this.resolveTextPrefix(delta.content);
+        this.textPrefixIssued = true;
+        if (prefix) {
+          prefixSse = this.formatTextDeltaSSE(prefix);
+          sseData = `${prefixSse}data: ${JSON.stringify(
+            withContentPrefix(outbound, "\n\n"),
+          )}\n\n`;
+        }
+      }
+      sseData ??= `data: ${JSON.stringify(outbound)}\n\n`;
+    }
+
+    let isResponsePreamble = false;
+    if (delta.role && !delta.content && !hasReasoning && !delta.tool_calls) {
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      isResponsePreamble = true;
     }
 
     // Handle tool calls
     if (delta.tool_calls) {
+      if (!this.textPrefixIssued && this.getTextSuffix) {
+        const prefix = this.resolveTextPrefix("");
+        if (prefix) {
+          this.textPrefixIssued = true;
+          this.state.text = prefix;
+          const prefixSse = this.formatTextDeltaSSE(prefix);
+          sseData = sseData ? `${prefixSse}${sseData}` : prefixSse;
+        }
+      }
       for (const toolCallDelta of delta.tool_calls) {
         const index = toolCallDelta.index;
 
@@ -1184,7 +1226,9 @@ export class OpenAIStreamAdapter
         }
       }
 
-      this.state.rawToolCallEvents.push(chunk);
+      this.state.rawToolCallEvents.push(
+        delta.content || hasReasoning ? onlyToolCallDeltas(chunk) : chunk,
+      );
       isToolCallChunk = true;
     }
 
@@ -1193,12 +1237,6 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true (which we always set in executeStream)
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
-      this.textSuffix = this.resolveTextSuffix();
-      if (this.textSuffix && sseData) {
-        const choices = [...(chunk.choices ?? [])];
-        choices[0] = { ...choice, finish_reason: null };
-        sseData = `data: ${JSON.stringify({ ...chunk, choices })}\n\n`;
-      }
     }
 
     // Only mark as final after we've received usage data (which comes in a separate chunk
@@ -1207,7 +1245,7 @@ export class OpenAIStreamAdapter
       isFinal = true;
     }
 
-    return { sseData, isToolCallChunk, isFinal };
+    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -1241,6 +1279,16 @@ export class OpenAIStreamAdapter
     return this.state.rawToolCallEvents.map(
       (event) => `data: ${JSON.stringify(event)}\n\n`,
     );
+  }
+
+  prepareResponseReplacement(): void {
+    // Clears raw output state so the persisted turn contains only the approved replacement.
+    this.state.text = "";
+    this.state.toolCalls = [];
+    this.state.rawToolCallEvents = [];
+    this.state.stopReason = "stop";
+    this.reasoningText = "";
+    this.currentToolCallIndices.clear();
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1322,10 +1370,7 @@ export class OpenAIStreamAdapter
     if (usage) {
       finalChunk.usage = usage;
     }
-    const suffix = this.textSuffix
-      ? this.formatTextDeltaSSE(this.textSuffix)
-      : "";
-    return `${suffix}data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
+    return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
   toProviderResponse(): OpenAiResponse {
@@ -1374,18 +1419,31 @@ export class OpenAIStreamAdapter
     };
   }
 
-  private resolveTextSuffix(): string {
-    if (
-      !this.getTextSuffix ||
-      this.responseReplacedWithText ||
-      this.state.toolCalls.length > 0 ||
-      this.state.stopReason !== "stop" ||
-      !this.state.text
-    ) {
+  private resolveTextPrefix(firstText: string): string {
+    if (!this.getTextSuffix || this.responseReplacedWithText) {
       return "";
     }
-    return this.getTextSuffix(this.state.text);
+    return this.getTextSuffix(firstText);
   }
+}
+
+function withContentPrefix(
+  chunk: OpenAiStreamChunk,
+  prefix: string,
+): OpenAiStreamChunk {
+  const choice = chunk.choices?.[0];
+  const content = choice?.delta?.content;
+  if (!choice || typeof content !== "string") return chunk;
+  return {
+    ...chunk,
+    choices: [
+      {
+        ...choice,
+        delta: { ...choice.delta, content: `${prefix}${content}` },
+      },
+      ...(chunk.choices?.slice(1) ?? []),
+    ],
+  };
 }
 
 // =============================================================================
@@ -1722,6 +1780,24 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
 // =============================================================================
 // INTERNAL HELPERS
 // =============================================================================
+
+/** The text portion of a combined chunk with text and tool calls. */
+function withoutToolCallDeltas(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
+  const [choice] = chunk.choices;
+  const { tool_calls: _toolCalls, ...delta } = choice.delta;
+  // The turn is not over while its calls are held: formatEndSSE finishes it.
+  return { ...chunk, choices: [{ ...choice, delta, finish_reason: null }] };
+}
+
+/** The tool call portion of a combined chunk waiting for policy evaluation. */
+function onlyToolCallDeltas(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
+  const [choice] = chunk.choices;
+  const { role, tool_calls } = choice.delta;
+  return {
+    ...chunk,
+    choices: [{ ...choice, delta: { ...(role ? { role } : {}), tool_calls } }],
+  };
+}
 
 /**
  * Client request shapes OpenAI's /chat/completions rejects but that known

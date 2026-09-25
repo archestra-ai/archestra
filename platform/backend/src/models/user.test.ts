@@ -146,58 +146,47 @@ describe("UserModel.delete", () => {
 });
 
 /**
- * Deleting a user must take their personal skills with them. `skills.author_id`
- * is `set null`, so without this the skill survives as an active orphan: a
- * personal row no one can see or edit, and — because the author id is a
- * `skill://` URI segment — one no MCP URI can name.
+ * Deleting a user must take the skills only they could reach with them.
+ * `skills.author_id` is `set null`, so without this such a skill survives as an
+ * active orphan no one can see or edit. A skill the author shared by grant
+ * stays: its recipients still use it.
  *
  * Soft-deleted, not purged: content stays recoverable, and nothing here can
  * fail on a cascade FK and block the user's removal.
  */
 describe("UserModel.delete personal skill cleanup", () => {
-  async function makePersonalSkill(params: {
-    organizationId: string;
-    authorId: string | null;
-    name: string;
-    scope?: "personal" | "org";
-  }) {
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId: params.organizationId,
-        authorId: params.authorId,
-        name: params.name,
-        description: "A personal skill",
-        content: "# Instructions",
-        scope: params.scope ?? "personal",
-      },
-      files: [],
-    });
-    if (!skill) throw new Error(`seed failed for ${params.name}`);
-    return skill;
-  }
-
-  test("soft-deletes the user's personal skills, leaving others alone", async ({
+  test("soft-deletes the user's author-only skills and keeps skills shared by grant", async ({
     makeUser,
     makeOrganization,
+    makeTeam,
+    makeSkill,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     const bystander = await makeUser({ email: "bystander@test.com" });
-    const personal = await makePersonalSkill({
-      organizationId: org.id,
+    const team = await makeTeam(org.id, bystander.id);
+    const authorOnly = await makeSkill(org.id, {
       authorId: user.id,
       name: "own-notes",
     });
-    // Neither an org-scoped skill the user authored nor another user's
-    // personal skill is theirs to take along.
-    const authored = await makePersonalSkill({
-      organizationId: org.id,
+    // Shared by grant with a person, a team, or the organization: each keeps
+    // a recipient, so none is the departing user's to take along.
+    const sharedWithPerson = await makeSkill(org.id, {
+      authorId: user.id,
+      name: "shared-notes",
+      access: { users: [user.id, bystander.id], preset: "view" },
+    });
+    const sharedWithTeam = await makeSkill(org.id, {
+      authorId: user.id,
+      name: "team-runbook",
+      access: { teams: [team.id] },
+    });
+    const sharedWithOrg = await makeSkill(org.id, {
       authorId: user.id,
       name: "org-runbook",
-      scope: "org",
+      access: "org",
     });
-    const someoneElses = await makePersonalSkill({
-      organizationId: org.id,
+    const someoneElses = await makeSkill(org.id, {
       authorId: bystander.id,
       name: "their-notes",
     });
@@ -206,22 +195,28 @@ describe("UserModel.delete personal skill cleanup", () => {
 
     // Soft-deleted, not purged: the row survives with `deletedAt` stamped,
     // invisible to filtered reads.
-    expect(await SkillModel.findById(personal.id)).toBeNull();
+    expect(await SkillModel.findById(authorOnly.id)).toBeNull();
     expect(
-      await SkillModel.findDeletedById(personal.id, org.id),
+      await SkillModel.findDeletedById(authorOnly.id, org.id),
     ).not.toBeNull();
-    expect(await SkillModel.findById(authored.id)).not.toBeNull();
-    expect(await SkillModel.findById(someoneElses.id)).not.toBeNull();
+    for (const kept of [
+      sharedWithPerson,
+      sharedWithTeam,
+      sharedWithOrg,
+      someoneElses,
+    ]) {
+      expect(await SkillModel.findById(kept.id)).not.toBeNull();
+    }
   });
 
   test("runs the same cleanup inside a caller's transaction", async ({
     makeUser,
     makeOrganization,
+    makeSkill,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const personal = await makePersonalSkill({
-      organizationId: org.id,
+    const personal = await makeSkill(org.id, {
       authorId: user.id,
       name: "tx-notes",
     });

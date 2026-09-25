@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import db from "@/database";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 // Use vi.hoisted() to create mock functions that can be accessed in vi.mock
 const { mockGet, mockSet, mockDelete, mockDisconnect, mockOn } = vi.hoisted(

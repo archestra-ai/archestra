@@ -5,10 +5,9 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { resolveDefaultEnvironmentId } from "@/lib/resolve-default-environment";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -149,10 +148,10 @@ export function useDefaultEnvironmentIdForResource(
 ): { environmentId: string | null; isResolved: boolean } {
   const { data: environmentList, isSuccess: environmentsLoaded } =
     useEnvironments();
-  const { data: hasDeployToRestricted, isSuccess: permissionLoaded } =
-    useHasPermissions({ [resource]: ["deploy-to-restricted"] });
 
-  if (!environmentsLoaded || !permissionLoaded) {
+  // The listing already answers "may I deploy here?" per environment, so there
+  // is no separate permission round trip to wait for.
+  if (!environmentsLoaded) {
     return { environmentId: null, isResolved: false };
   }
 
@@ -162,7 +161,6 @@ export function useDefaultEnvironmentIdForResource(
       resourceDefaults:
         environmentList?.resourceDefaults ?? EMPTY_RESOURCE_DEFAULTS,
       resource,
-      canDeployToRestricted: hasDeployToRestricted ?? false,
     }),
     isResolved: true,
   };

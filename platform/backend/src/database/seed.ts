@@ -4,6 +4,7 @@ import {
   ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
@@ -13,6 +14,7 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   isSubscriptionCredential,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
@@ -35,8 +37,10 @@ import config, {
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentActivationSkillRuleModel,
   AgentExcludedToolModel,
   AgentModel,
+  AgentToolModel,
   AgentVersionModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -52,7 +56,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
-import { seedDefaultPlugins } from "@/plugins/default-plugins";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -111,6 +115,23 @@ export async function syncBuiltInAgents(): Promise<void> {
     );
 
     const builtInAgents = [
+      ...(config.openappa.enabled
+        ? [
+            {
+              builtInAgentId: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
+              description:
+                "Guides policy configuration using the OpenAPPA skill and policy tools",
+              systemPrompt:
+                BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                  BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+                ],
+              builtInAgentConfig: {
+                name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              } as const,
+            },
+          ]
+        : []),
       {
         builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
@@ -190,6 +211,23 @@ export async function syncBuiltInAgents(): Promise<void> {
         organizationId: organization.id,
         builtInAgent,
       });
+      if (builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
+        const agent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        );
+        if (agent) {
+          const current = await AgentSuggestedPromptModel.getForAgent(agent.id);
+          if (
+            JSON.stringify(current) !==
+            JSON.stringify(OPENAPPA_CONFIG_SUGGESTED_PROMPTS)
+          ) {
+            await AgentSuggestedPromptModel.syncForAgent(agent.id, [
+              ...OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+            ]);
+          }
+        }
+      }
     }
   }
 }
@@ -245,17 +283,18 @@ export async function syncBuiltInSkillsForOrganization(
       const created = await SkillModel.createWithFiles({
         skill: {
           organizationId: organization.id,
-          scope: "org",
           sourceType: "built_in",
           sourceRef,
           ...shipped.skill,
         },
+        // A built-in skill ships to every member of the organization.
+        publishToOrganization: true,
         files: shipped.files,
       });
-      // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
-      // index, so a null means a pre-existing non-built-in skill already
-      // holds this name. Surface it instead of reporting a phantom seed — that
-      // org has no built-in copy and thus no reset path until the clash clears.
+      // Skill names are unique per author, and a built-in has none, so a
+      // member's skill of the same name no longer blocks it. createWithFiles
+      // still returns null on a conflict, so report that instead of a phantom
+      // seed.
       if (!created) {
         logger.warn(
           {
@@ -263,7 +302,7 @@ export async function syncBuiltInSkillsForOrganization(
             organizationId: organization.id,
             name: builtInSkill.name,
           },
-          "Skipped seeding built-in skill: a skill with this name already exists",
+          "Skipped seeding built-in skill: the insert conflicted",
         );
         continue;
       }
@@ -353,6 +392,84 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     );
   }
   logger.info("Seeded Archestra catalog and tools");
+  // The API refuses such a name now; a catalog that predates that still
+  // shadows the built-in tools and keeps the archestra OpenAPPA battery inactive.
+  for (const conflict of await InternalMcpCatalogModel.findTakingBuiltInToolPrefix())
+    logger.error(
+      { catalogId: conflict.id, organizationId: conflict.organizationId },
+      "An MCP server gives its tools the built-in tools' prefix; rename it",
+    );
+}
+
+/** @public — startup reconciliation, exported for behavior tests. */
+export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
+  if (!config.openappa.enabled) return;
+
+  const toolShortNames = [
+    "get_agent",
+    "get_mcp_gateway",
+    "get_guardrails_policy",
+    "validate_guardrails_policy",
+    "preview_guardrails_policy_change",
+    "update_guardrails_policy",
+    "get_guardrails_policy_change_status",
+    "list_mcp_server_deployments",
+    "get_mcp_server_tools",
+    "load_skill",
+  ] as const;
+
+  for (const organization of await getOrganizationsForBuiltInAgentSync()) {
+    archestraMcpBranding.syncFromOrganization(
+      await OrganizationModel.getById(organization.id),
+    );
+    const toolIds = await ToolModel.findBuiltInToolIdsByNames(
+      toolShortNames.map((shortName) =>
+        archestraMcpBranding.getToolName(shortName),
+      ),
+    );
+    const agent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    const guide = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef: builtInSkillSourceRef("appa-guide"),
+    });
+    if (!agent || !guide || guide.deletedAt) continue;
+
+    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
+      agent.id,
+    );
+    if (
+      snapshot?.mode === "manual" &&
+      snapshot.rules.length === 1 &&
+      snapshot.rules[0].disposition === "allow" &&
+      snapshot.rules[0].reference.source === "native" &&
+      snapshot.rules[0].reference.skillId === guide.id
+    ) {
+      continue;
+    }
+    await withDbTransaction(async (tx) => {
+      await AgentModel.lockRowForUpdate(agent.id, tx);
+      await AgentActivationSkillRuleModel.replaceRules({
+        agentId: agent.id,
+        rules: [
+          {
+            disposition: "allow",
+            reference: { source: "native", skillId: guide.id },
+          },
+        ],
+        tx,
+      });
+      await AgentModel.setActivationSkillPolicyState({
+        id: agent.id,
+        mode: "manual",
+        revision: (snapshot?.revision ?? 0) + 1,
+        tx,
+      });
+    });
+  }
 }
 
 /**
@@ -571,10 +688,9 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     }
 
     // Check if API key already exists for this provider
-    const existing = await LlmProviderApiKeyModel.findByScope(
+    const existing = await LlmProviderApiKeyModel.findOrganizationWideKey(
       org.id,
       provider,
-      "org",
     );
 
     if (existing) {
@@ -595,17 +711,21 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Create the API key
-    const apiKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      name: getProviderDisplayName(provider),
-      provider: provider,
-      secretId: secret.id,
-      scope: "org",
-      userId: null,
-      teamId: null,
-      baseUrl: decision.persistedBaseUrl,
-      isPrimary: true,
-    });
+    const apiKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: getProviderDisplayName(provider),
+        provider: provider,
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+        baseUrl: decision.persistedBaseUrl,
+        isPrimary: true,
+      },
+      // The environment-seeded key serves the whole organization.
+      { publishToOrganization: true },
+    );
 
     logger.info(
       { provider, apiKeyId: apiKey.id },
@@ -954,17 +1074,14 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
             },
           });
           try {
-            // Org scope so every member sees the demos, mirroring built-in
-            // skills. An app must never exist without its backing — on
-            // backing failure remove the app row (same invariant as the
-            // create route).
+            // An app must never exist without its backing — on backing
+            // failure remove the app row (same invariant as the create
+            // route).
             await createAppBacking({
               app,
-              scope: "org",
               environmentId: null,
               userId: admin.userId,
               organizationId: org.id,
-              teamIds: [],
             });
           } catch (backingError) {
             await AppModel.purge(app.id);
@@ -1009,12 +1126,8 @@ export async function seedRequiredStartingData(): Promise<void> {
   await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
   await syncBuiltInSkills();
-  // Release defaults are best-effort and must not hold backend readiness on
-  // GitHub availability. Once seeded, organizations own plugin lifecycle.
-  void seedDefaultPlugins().catch((error) => {
-    logger.warn({ err: error }, "Default plugin seeding failed");
-  });
   await seedArchestraCatalogAndTools();
+  await syncOpenAppaConfigAgentCapabilities();
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

@@ -304,7 +304,7 @@ describe("assignToolToAgent", () => {
     const agent = await makeAgent({
       organizationId: organization.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -446,7 +446,7 @@ describe("assignToolToApp", () => {
     const app = await makeApp({
       organizationId: organization.id,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: organization.id,
@@ -528,7 +528,7 @@ describe("assignToolToApp", () => {
     const app = await makeApp({
       organizationId: organization.id,
       authorId: author.id,
-      scope: "personal",
+      access: "personal",
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: organization.id,
@@ -580,7 +580,6 @@ describe("assignToolToApp", () => {
     const appB = await makeApp({
       organizationId: orgB.id,
       authorId: authorB.id,
-      scope: "org",
     });
     const catalogA = await makeInternalMcpCatalog({
       organizationId: orgA.id,
@@ -636,7 +635,6 @@ describe("assignToolToApp", () => {
     const appB = await makeApp({
       organizationId: orgB.id,
       authorId: authorB.id,
-      scope: "org",
     });
 
     const result = await assignToolToApp({
@@ -741,8 +739,6 @@ describe("personal connections are never statically assignable", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       authorId: me.id,
-      scope: "org",
-      teams: [],
     });
     const tool = await makeTool({});
     const theirs = await makeMcpServer({
@@ -783,8 +779,7 @@ describe("personal connections are never statically assignable", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       authorId: me.id,
-      scope: "personal",
-      teams: [],
+      access: "personal",
     });
     const tool = await makeTool({ catalogId: catalog.id });
     const personalInstallation = await makeMcpServer({
@@ -830,8 +825,7 @@ describe("personal connections are never statically assignable", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       authorId: author.id,
-      scope: "personal",
-      teams: [],
+      access: "personal",
     });
     const tool = await makeTool({ catalogId: catalog.id });
     const teamInstallation = await makeMcpServer({

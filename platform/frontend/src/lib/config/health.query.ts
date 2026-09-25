@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { type UseQueryOptions, useQuery } from "@tanstack/react-query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const { getHealth, getReady } = archestraApiSdk;
 

@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import McpServerUserModel from "@/models/mcp-server-user";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -45,7 +45,6 @@ describe("GET /api/apps/external/:catalogId", () => {
       name: "Get Time",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -93,7 +92,6 @@ describe("GET /api/apps/external/:catalogId", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     // show_board has a required input, so its resource is flagged for the run
@@ -149,7 +147,6 @@ describe("GET /api/apps/external/:catalogId", () => {
       name: "Multi-install",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     // Org install created first; a naive DB-order result would list it first.
     const org = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
@@ -186,7 +183,6 @@ describe("GET /api/apps/external/:catalogId", () => {
       name: "Uninstalled",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeTool({
       catalogId: catalog.id,
@@ -222,7 +218,6 @@ describe("GET /api/apps/external/:catalogId", () => {
       name: "Plain",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     await makeMcpServer({
       catalogId: plainCatalog.id,

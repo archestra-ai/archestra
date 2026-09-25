@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface SingleSelectOption {
   value: string;
@@ -86,7 +86,7 @@ export function SingleSelectCombobox({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-(--radix-popover-trigger-width) p-0"
         align="start"
       >
         <Command>

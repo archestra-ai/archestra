@@ -1,12 +1,13 @@
 "use client";
 
+import { code } from "@streamdown/code";
 import { type ComponentProps, memo, useMemo } from "react";
 import {
   defaultRehypePlugins,
   defaultRemarkPlugins,
   Streamdown,
 } from "streamdown";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
@@ -127,6 +128,7 @@ export const Response = memo(
           code: { copy: true, download: true },
           table: { copy: true, download: true },
         }}
+        plugins={{ code }}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling

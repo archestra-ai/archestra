@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import websocketService from "@/websocket";
@@ -29,7 +29,7 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
     vi.spyOn(McpServerRuntimeManager, "removeMcpServer").mockResolvedValue(
@@ -39,6 +39,7 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

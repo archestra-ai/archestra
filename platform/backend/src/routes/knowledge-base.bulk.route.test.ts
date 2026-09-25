@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { KnowledgeBaseConnectorModel, KnowledgeBaseModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import type { AuditEventName } from "@/types/audit-log";
@@ -14,10 +14,12 @@ describe("knowledge bases and connectors bulk routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    // An admin's organization-wide grants reach every knowledge source.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

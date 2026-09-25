@@ -208,22 +208,6 @@ test.describe("MCP Registry layout", () => {
     ).toBe(true);
   });
 
-  test("a card names the team scope instead of listing every team", async ({
-    mcpRegistryPage,
-    mswControl,
-  }) => {
-    await seed(mswControl);
-    await mcpRegistryPage.goto();
-
-    const card = mcpRegistryPage.cardForCatalogItem("two-teams");
-    await expect(card).toBeVisible();
-
-    // The roster belongs on the detail page; the card has one line to spend.
-    await expect(card.getByText("2 teams")).toBeVisible();
-    await expect(card.getByText("Engineering", { exact: true })).toHaveCount(0);
-    await expect(card.getByText("Consultants", { exact: true })).toHaveCount(0);
-  });
-
   test("no scope badge lays out past its table cell", async ({
     mcpRegistryPage,
     mswControl,
@@ -299,7 +283,7 @@ test.describe("MCP Registry layout", () => {
     ).toBeVisible();
   });
 
-  test("keeps foreign personal servers out of All and reaches them through Other users", async ({
+  test("lists a personal server of another user and narrows to it by author", async ({
     mcpRegistryPage,
     mswControl,
     page,
@@ -307,19 +291,22 @@ test.describe("MCP Registry layout", () => {
     await seed(mswControl);
     await mcpRegistryPage.goto();
 
-    await expect(mcpRegistryPage.cardForCatalogItem("long-author")).toHaveCount(
-      0,
-    );
+    // The server returns only the entries the viewer holds a grant on, so the
+    // list shows all of them and the Author filter is the way to narrow.
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("long-author"),
+    ).toBeVisible();
+    await expect(mcpRegistryPage.cardForCatalogItem("two-teams")).toBeVisible();
 
-    await page.getByRole("combobox", { name: "Filter by type" }).click();
-    await page.getByRole("option", { name: "Personal" }).click();
-    await page.getByRole("combobox", { name: "Filter by owner" }).click();
-    await page.getByRole("option", { name: "Other users" }).click();
+    await page.getByRole("button", { name: "Author", exact: true }).click();
+    await page.getByRole("checkbox", { name: LONG_NAME }).click();
 
     await expect(
       mcpRegistryPage.cardForCatalogItem("long-author"),
     ).toBeVisible();
-    await expect(page.getByText(LONG_NAME)).toBeVisible();
+    await expect(mcpRegistryPage.cardForCatalogItem("two-teams")).toHaveCount(
+      0,
+    );
   });
 
   test("keeps visibly flagged cards in the flat registry", async ({

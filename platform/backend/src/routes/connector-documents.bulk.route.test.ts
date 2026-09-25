@@ -1,9 +1,9 @@
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { buildGroupToken } from "@/knowledge-base/acl-tokens";
 import { KbDocumentModel, KnowledgeBaseConnectorModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -13,10 +13,12 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
   let organizationId: string;
   let connectorId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    // An admin's organization-wide grant reaches every connector.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     const connector = await KnowledgeBaseConnectorModel.create({
       organizationId,

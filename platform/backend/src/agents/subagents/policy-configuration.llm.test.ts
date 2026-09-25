@@ -82,7 +82,6 @@ describe("PolicyConfigurationService.resolveLlm (real resolution)", () => {
     // A connected subscription is always a personal key owned by one user.
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
     const model = await makeOpenAiModel("gpt-5-codex");
@@ -112,15 +111,17 @@ describe("PolicyConfigurationService.resolveLlm (real resolution)", () => {
   test("resolves the org's usable key when the agent pins only a model", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    // An organization-shared key reaches the organization's members.
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-org-key" } });
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
-      scope: "org",
     });
     const model = await makeOpenAiModel("gpt-4.1");
     await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [

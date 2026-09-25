@@ -106,8 +106,11 @@ describe("resolveDynamicTool", () => {
     makeUser,
   }) => {
     const memberUser = await makeUser();
+    // The role reads agents and the registry but cannot modify either. An
+    // organization-wide catalog is granted to the roles that read the
+    // registry, which is how this caller reaches its tools.
     const role = await makeCustomRole(organizationId, {
-      permission: { agent: ["read"] },
+      permission: { agent: ["read"], mcpRegistry: ["read"] },
     });
     await makeMember(memberUser.id, organizationId, { role: role.role });
     const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -808,7 +811,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -845,7 +847,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -879,7 +880,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -905,7 +905,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -937,7 +936,6 @@ describe("dynamic discovery follows catalog visibility", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",
@@ -968,7 +966,6 @@ describe("dynamic discovery follows catalog visibility", () => {
     await makeTeamMember(team.id, userId);
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      scope: "org",
     });
     await makeTool({
       name: "github__search_repositories",

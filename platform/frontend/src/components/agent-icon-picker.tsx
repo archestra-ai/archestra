@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ServiceLogoPicker } from "./service-logo-picker";
 
 const AgentEmojiPicker = dynamic(

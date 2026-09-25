@@ -4,6 +4,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
+  type ResourcePermissionGrant,
 } from "@archestra/shared";
 import {
   and,
@@ -18,7 +19,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   LabelWithDetails,
   SelectServiceAccount,
@@ -30,6 +31,7 @@ import type {
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class ServiceAccountModel {
   static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
@@ -37,6 +39,14 @@ class ServiceAccountModel {
   static async listByOrganizationId(
     organizationId: string,
     labels?: Record<string, string[]>,
+    /**
+     * Restrict the page to the accounts this caller may read: a read grant on
+     * the account, or at `*`. Omitted lists the organization's accounts
+     * unfiltered, which is what the bulk handlers want: they load a batch and
+     * then check each id on its own, so filtering here would report a refused
+     * id as "not found" instead.
+     */
+    viewer?: { userId: string },
   ): Promise<ServiceAccountResponse[]> {
     const labelFilteredIds = labels
       ? await ServiceAccountLabelModel.getIdsMatchingLabels(labels)
@@ -80,6 +90,21 @@ class ServiceAccountModel {
           ...(labelFilteredIds
             ? [inArray(schema.serviceAccountsTable.id, labelFilteredIds)]
             : []),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(viewer
+            ? [
+                ResourcePermissionPolicyModel.grantCondition({
+                  organizationId,
+                  resource: "serviceAccount",
+                  scopeColumn: schema.serviceAccountsTable.id,
+                  userId: viewer.userId,
+                  action: "read",
+                }),
+              ]
+            : []),
+          // SPDX-SnippetEnd
         ),
       )
       .groupBy(schema.serviceAccountsTable.id)
@@ -213,21 +238,45 @@ class ServiceAccountModel {
      * rather than being allowed to forget.
      */
     createdBy: string | null;
+    /** Explicit starting audience; omitted starts the account with its creator. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }): Promise<ServiceAccountDetailResponse> {
-    const [serviceAccount] = await db
-      .insert(schema.serviceAccountsTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: {
-            organizationId: params.organizationId,
-            name: params.name,
-            role: params.role,
-            createdBy: params.createdBy,
-          },
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave an account nobody can manage.
+    const serviceAccount = await withDbTransaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.serviceAccountsTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              organizationId: params.organizationId,
+              name: params.name,
+              role: params.role,
+              createdBy: params.createdBy,
+            },
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: created.organizationId,
+        resource: "serviceAccount",
+        scope: created.id,
+        grants: params.initialPermissionGrants,
+        authorId: CreatedByModel.id(created, created.createdBy) ?? null,
+        // No `visibility`: an account has no audience to derive one from. The
+        // roles that reach every account hold their grant at `*` already, so
+        // deriving here would only copy those same rows onto each object,
+        // where deleting one would not revoke anything.
+      });
+      // SPDX-SnippetEnd
+      return created;
+    });
 
     if (params.labels?.length) {
       await ServiceAccountLabelModel.syncLabels(
@@ -286,17 +335,30 @@ class ServiceAccountModel {
   }
 
   static async delete(id: string, organizationId: string): Promise<boolean> {
-    const deleted = await db
-      .delete(schema.serviceAccountsTable)
-      .where(
-        and(
-          eq(schema.serviceAccountsTable.id, id),
-          eq(schema.serviceAccountsTable.organizationId, organizationId),
-        ),
-      )
-      .returning({ id: schema.serviceAccountsTable.id });
-
-    return deleted.length > 0;
+    return await withDbTransaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.serviceAccountsTable)
+        .where(
+          and(
+            eq(schema.serviceAccountsTable.id, id),
+            eq(schema.serviceAccountsTable.organizationId, organizationId),
+          ),
+        )
+        .returning({ id: schema.serviceAccountsTable.id });
+      if (deleted.length === 0) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The id is gone for good, so leaving its policy behind would hand the
+      // grants to whatever row reused the id.
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["serviceAccount"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
+      return true;
+    });
   }
 
   static async createToken(params: {

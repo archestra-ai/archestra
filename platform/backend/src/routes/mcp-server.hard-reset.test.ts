@@ -3,6 +3,8 @@ import type * as k8s from "@kubernetes/client-node";
 import { and, eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   createHardResetStatusMarker,
@@ -12,8 +14,6 @@ import {
 import K8sDeployment from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 import websocketService from "@/websocket";
@@ -786,10 +786,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       "waitForDeploymentReady",
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const res = await response;
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -960,10 +963,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
     });
     cluster.rebuildComesUp = false;
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const res = await response;
 
     expect(res.statusCode).toBe(200);
     expect(res.json().rebuild.outcome).toBe("not-ready");
@@ -1022,10 +1028,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       },
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(pendingWriteFailed).toBe(true);
     expect(finalWriteFailed).toBe(true);
@@ -1061,10 +1070,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       },
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(res.statusCode).toBe(500);
     expect(pendingAttempts).toBe(5);
@@ -1094,10 +1106,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
         return originalUpdate(params);
       });
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(res.statusCode).toBe(500);
     const stranded = await readInstall(mcpServer.id);
@@ -1460,16 +1475,17 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       makeMcpServer,
     });
 
-    // An editor/member-shaped caller: every ordinary connection permission,
-    // but not the org-wide admin capability.
-    mockHasPermission.mockImplementation(
-      async (permissions: Record<string, string[]>) => ({
-        success: !Object.values(permissions).some((actions) =>
-          actions.includes("admin"),
+    // An editor: every ordinary connection permission, but no `update` on
+    // every registry entry, the grant the org-wide admin capability became.
+    await db
+      .update(schema.membersTable)
+      .set({ role: "editor" })
+      .where(
+        and(
+          eq(schema.membersTable.userId, user.id),
+          eq(schema.membersTable.organizationId, organizationId),
         ),
-        error: null,
-      }),
-    );
+      );
 
     const res = await app.inject({
       method: "POST",
@@ -1602,29 +1618,36 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
     expect(cluster.deletedDeployments).toEqual([]);
   });
 
-  test("the route is gated on mcpServerInstallation:admin, which only admin-tier roles hold", async () => {
-    const { requiredEndpointPermissionsMap, predefinedPermissionsMap } =
-      await import("@archestra/shared/access-control");
-    const {
-      ADMIN_ROLE_NAME,
-      EDITOR_ROLE_NAME,
-      MEMBER_ROLE_NAME,
-      PLATFORM_ADMIN_ROLE_NAME,
-    } = await import("@archestra/shared");
+  test("the handler is gated on managing every registry entry, which only admin-tier roles hold", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
+    const { isMcpInstallationAdmin } = await import(
+      "@/auth/mcp-catalog-permissions"
+    );
 
     expect(requiredEndpointPermissionsMap[RouteId.HardResetMcpServer]).toEqual({
-      mcpServerInstallation: ["admin"],
+      mcpServerInstallation: ["update"],
     });
 
-    const holdsAdmin = (role: string) =>
-      Boolean(
-        predefinedPermissionsMap[
-          role as keyof typeof predefinedPermissionsMap
-        ]?.mcpServerInstallation?.includes("admin"),
-      );
-    expect(holdsAdmin(ADMIN_ROLE_NAME)).toBe(true);
-    expect(holdsAdmin(PLATFORM_ADMIN_ROLE_NAME)).toBe(true);
-    expect(holdsAdmin(EDITOR_ROLE_NAME)).toBe(false);
-    expect(holdsAdmin(MEMBER_ROLE_NAME)).toBe(false);
+    // The retired `mcpServerInstallation:admin` role action became `update`
+    // on the registry at `*`, which a new organization gives admin-tier roles.
+    const org = await makeOrganization();
+    const holdsAdmin = async (role: string) => {
+      const member = await makeUser();
+      await makeMember(member.id, org.id, { role });
+      return isMcpInstallationAdmin({
+        userId: member.id,
+        organizationId: org.id,
+      });
+    };
+    expect(await holdsAdmin("admin")).toBe(true);
+    expect(await holdsAdmin("platform_admin")).toBe(true);
+    expect(await holdsAdmin("editor")).toBe(false);
+    expect(await holdsAdmin("member")).toBe(false);
   });
 });

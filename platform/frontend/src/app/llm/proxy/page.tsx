@@ -40,7 +40,7 @@ import { useCreateLlmOauthClient } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The LLM Proxy connection page: the endpoint URLs a client points at, and an

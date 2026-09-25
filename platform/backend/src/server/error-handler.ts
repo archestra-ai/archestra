@@ -269,6 +269,9 @@ export function handleServerError(
     ) {
       reply.header("retry-after", String(Math.ceil(retryAfterSeconds)));
     }
+    if (typeof error.shouldRetry === "boolean" && !reply.raw.headersSent) {
+      reply.header("x-should-retry", String(error.shouldRetry));
+    }
 
     return reply.status(statusCode).send({
       error: {

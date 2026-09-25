@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import EnvironmentModel from "@/models/environment";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -40,7 +40,7 @@ describe("/api/apps/:appId/tools", () => {
     makeTool,
     makeInternalMcpCatalog,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -80,7 +80,7 @@ describe("/api/apps/:appId/tools", () => {
     makeOrganization,
   }) => {
     const otherOrg = await makeOrganization();
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const foreignCatalog = await makeInternalMcpCatalog({
       organizationId: otherOrg.id,
       name: "foreign-srv",
@@ -105,7 +105,7 @@ describe("/api/apps/:appId/tools", () => {
     makeTool,
     makeInternalMcpCatalog,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -131,7 +131,7 @@ describe("/api/apps/:appId/tools", () => {
     makeUser,
     makeMember,
   }) => {
-    const created = await makeApp({ organizationId, scope: "org" });
+    const created = await makeApp({ organizationId });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "srv",
@@ -169,7 +169,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const devCatalog = await makeInternalMcpCatalog({
@@ -205,7 +204,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const defaultCatalog = await makeInternalMcpCatalog({
@@ -238,7 +236,6 @@ describe("/api/apps/:appId/tools", () => {
     });
     const created = await makeApp({
       organizationId,
-      scope: "org",
       environmentId: prod.id,
     });
     const prodCatalog = await makeInternalMcpCatalog({

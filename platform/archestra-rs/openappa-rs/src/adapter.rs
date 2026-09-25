@@ -30,7 +30,8 @@
 
 use appa_runtime::yell::HarnessName;
 use appa_runtime_api::{
-    Actor, Adapter, AdapterName, CanonicalTool, Derived, ParseRefusal, ProposedCall, TrajectoryId,
+    Actor, Adapter, AdapterName, CanonicalTool, IdentifiedTool, ParseRefusal, ProposedCall,
+    TrajectoryId,
 };
 
 /// The derivation the runtime applies to every Archestra call. The wildcard covers a
@@ -39,7 +40,7 @@ use appa_runtime_api::{
 pub(crate) fn adapter() -> Adapter {
     Adapter {
         name: AdapterName::Embedded,
-        derive,
+        identify_tool,
         names_children,
         spell,
         wildcard_covers_spawn: true,
@@ -61,8 +62,8 @@ pub(crate) const CONTROL_TOOL_RAW: &str = "archestra__execute_remedy_plan";
 const SEPARATOR: &str = "__";
 const HOST_NAMESPACE: &str = "archestra";
 
-fn derive(raw: &str) -> Result<Derived, ParseRefusal> {
-    Ok(Derived {
+fn identify_tool(raw: &str) -> Result<IdentifiedTool, ParseRefusal> {
+    Ok(IdentifiedTool {
         canonical: canonical(raw)?,
         spawn: false,
     })
@@ -115,8 +116,8 @@ fn names_children(_: &Actor, _: &ProposedCall) -> Vec<TrajectoryId> {
 mod tests {
     use super::*;
 
-    fn derived(raw: &str) -> Result<Derived, ParseRefusal> {
-        (adapter().derive)(raw)
+    fn derived(raw: &str) -> Result<IdentifiedTool, ParseRefusal> {
+        (adapter().identify_tool)(raw)
     }
 
     #[test]
@@ -208,6 +209,7 @@ mod tests {
                 r#"{"path":"tasks/a1.output"}"#.into(),
             )
             .unwrap(),
+            cwd: None,
         };
         assert!((adapter().names_children)(&actor, &call).is_empty());
     }

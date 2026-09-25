@@ -1,6 +1,6 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import type { ErrorEvent, EventHint } from "@sentry/core";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { buildRawProviderError, filterErrorEvent } from "./sentry";
 

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sql } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
 import db from "@/database";
-import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
   path.join(__dirname, "0198_first_hammerhead.sql"),

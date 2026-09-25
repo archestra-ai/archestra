@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
@@ -135,27 +135,11 @@ describe("project routes — audit trail", () => {
     expect(rows[0].after).toMatchObject({ deletedAt: null });
   });
 
-  test("a visibility change diffs, though it writes no column on the project row", async () => {
-    const project = await makeProject("audited-share");
-
-    const response = await app.inject({
-      method: "PUT",
-      url: `/api/projects/${project.id}/share`,
-      payload: { visibility: "organization", teamIds: [], userIds: [] },
-    });
-    expect(response.statusCode).toBe(200);
-
-    const rows = await auditRowsFor(project.id, "project.updated");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].before).toMatchObject({ visibility: null });
-    expect(rows[0].after).toMatchObject({ visibility: "organization" });
-  });
-
   test("pinning the default agent is recorded on project.updated", async ({
     makeInternalAgent,
   }) => {
     const project = await makeProject("audited-default-agent");
-    const agent = await makeInternalAgent({ organizationId, scope: "org" });
+    const agent = await makeInternalAgent({ organizationId });
 
     const response = await app.inject({
       method: "PATCH",

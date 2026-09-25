@@ -1,8 +1,8 @@
 import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -132,7 +132,7 @@ describe("agent version routes", () => {
       // team/author-filtered re-fetch does not
       const agent = await makeAgent({
         organizationId,
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
       });
       mockChecker({ canRead: true, isAdmin: false });

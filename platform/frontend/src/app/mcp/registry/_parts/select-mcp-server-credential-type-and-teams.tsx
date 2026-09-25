@@ -1,8 +1,15 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
-import { AlertTriangle, Globe, Lock, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Globe,
+  Lock,
+  type LucideIcon,
+  Users,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,10 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -29,6 +32,8 @@ type InstallScopeOption = {
   label: string;
   disabled: boolean;
   disabledReason?: string;
+  description: string;
+  icon: LucideIcon;
 };
 
 interface SelectMcpServerCredentialTypeAndTeamsProps {
@@ -92,9 +97,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
     mcpServerInstallation: ["update"],
   });
   // WHY: mcpServerInstallation:admin gates org-wide installations
-  const { data: isMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: isMcpServerAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   // All teams for an install admin, otherwise only the teams the user belongs to.
   const { data: teams, isLoading: isLoadingTeams } = useAssignableTeams({
     isResourceAdmin: !!isMcpServerAdmin,
@@ -235,12 +241,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
     onCanInstallChange?.(canInstall);
   }, [canInstall, onCanInstallChange]);
 
-  const visibilityOptions = useMemo<
-    Array<InstallScopeOption & VisibilityOption<McpServerInstallScope>>
-  >(() => {
-    const options: Array<
-      InstallScopeOption & VisibilityOption<McpServerInstallScope>
-    > = [];
+  const visibilityOptions = useMemo<Array<InstallScopeOption>>(() => {
+    const options: Array<InstallScopeOption> = [];
 
     if (!teamOnly) {
       options.push({
@@ -417,12 +419,42 @@ export function SelectMcpServerCredentialTypeAndTeams({
       data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
     >
       {!hideSelector && (
-        <VisibilitySelector
-          label="Install for"
-          value={scope}
-          options={visibilityOptions}
-          onValueChange={handleScopeChange}
-        />
+        <div className="space-y-2">
+          <Label htmlFor="connection-owner">Connection owner</Label>
+          <Select value={scope} onValueChange={handleScopeChange}>
+            <SelectTrigger id="connection-owner">
+              <SelectValue>
+                {
+                  visibilityOptions.find((option) => option.value === scope)
+                    ?.label
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {visibilityOptions.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.disabled}
+                >
+                  <option.icon className="size-4" />
+                  <div className="text-left">
+                    <div>{option.label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {option.disabledReason ?? option.description}
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            {
+              visibilityOptions.find((option) => option.value === scope)
+                ?.description
+            }
+          </FieldDescription>
+        </div>
       )}
 
       {scope === "team" && (

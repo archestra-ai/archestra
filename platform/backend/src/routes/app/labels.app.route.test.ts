@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AppLabelModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AppListItem, User } from "@/types";
 
@@ -46,19 +46,16 @@ describe("app labels over REST", () => {
     }) => {
       const both = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
         name: "Both",
       });
       const envOnly = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
         name: "EnvOnly",
       });
       await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
         name: "Unlabelled",
       });
@@ -83,7 +80,6 @@ describe("app labels over REST", () => {
     test("returns each app's labels on the list item", async ({ makeApp }) => {
       const owned = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
         name: "Labelled",
       });
@@ -104,7 +100,6 @@ describe("app labels over REST", () => {
     }) => {
       const owned = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await AppLabelModel.syncAppLabels(owned.id, [
@@ -125,7 +120,6 @@ describe("app labels over REST", () => {
     }) => {
       const owned = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await AppLabelModel.syncAppLabels(owned.id, [
@@ -152,7 +146,6 @@ describe("app labels over REST", () => {
     }) => {
       const owned = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await AppLabelModel.syncAppLabels(owned.id, [
@@ -181,7 +174,6 @@ describe("app labels over REST", () => {
     test("lists the org's app label keys and values", async ({ makeApp }) => {
       const owned = await makeApp({
         organizationId,
-        scope: "org",
         authorId: user.id,
       });
       await AppLabelModel.syncAppLabels(owned.id, [

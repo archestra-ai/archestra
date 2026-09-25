@@ -58,7 +58,7 @@ import {
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
@@ -236,9 +236,7 @@ export function ConnectCommandPanel({
   const deploymentPluginsEnabled =
     !configError && configData?.features.plugins === true;
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
-    useHasPermissions({
-      plugin: ["read", "admin"],
-    });
+    useHasPermissions({ plugin: ["read", "update"] }, "*");
   const pluginsQueryEnabled =
     pluginsEnabled && deploymentPluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
@@ -1228,7 +1226,6 @@ export function ConnectCommandPanel({
                       name: providerCatalog.label(provider),
                       provider,
                       apiKey: token,
-                      scope: "personal",
                     });
                     // availableKeys invalidates → the command auto-generates.
                   } catch {

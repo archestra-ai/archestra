@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { urlSlugify } from "@archestra/shared";
+import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
 import {
   and,
   count,
@@ -24,6 +24,7 @@ import {
   isReservedAppSlug,
 } from "@/types/app";
 import type { LabelWithDetails } from "@/types/label";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
@@ -33,6 +34,7 @@ import AppVersionModel, { type VersionPayload } from "./app-version";
 import CreatedByModel from "./created-by";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /** Raw `apps` row (no `scope`/`environmentId`/`icon` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
@@ -46,9 +48,15 @@ const COLLISION_SUFFIX_LENGTH = 7;
 // of the code. Keeping the icon there (rather than duplicating it on the app
 // row) means the app and the registry entry that fronts it cannot disagree
 // about it, whichever surface last edited it.
+// `scope` is derived from the app's own grants, not the retired catalog
+// column: `org` when they reach the organization or a role, `team` when they
+// reach a team, `personal` otherwise.
 const appWithCatalogColumns = {
   ...getTableColumns(schema.appsTable),
-  scope: schema.internalMcpCatalogTable.scope,
+  scope: sql<ResourceVisibilityScope>`CASE
+    WHEN ${appAudienceIs("org")} THEN 'org'
+    WHEN ${appAudienceIs("team")} THEN 'team'
+    ELSE 'personal' END`,
   environmentId: schema.internalMcpCatalogTable.environmentId,
   icon: schema.internalMcpCatalogTable.icon,
 };
@@ -524,6 +532,7 @@ class AppModel {
     organizationId: string;
     userId?: string;
     isAppAdmin: boolean;
+    action?: "read" | "use";
   }): Promise<App | null> {
     const app = await AppModel.findByIdInOrg(params.id, params.organizationId);
     if (!app) return null;
@@ -531,7 +540,7 @@ class AppModel {
       organizationId: params.organizationId,
       userId: params.userId,
       app,
-      isAppAdmin: params.isAppAdmin,
+      action: params.action,
     });
     return allowed ? app : null;
   }
@@ -544,7 +553,13 @@ class AppModel {
    * unique-constraint error from this insert, which the caller maps to 409.
    */
   static async create(
-    params: { app: InsertApp; payload: VersionPayload },
+    params: {
+      app: InsertApp;
+      payload: VersionPayload;
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
     tx?: Transaction,
   ): Promise<AppRow> {
     const run = async (tx: Transaction) => {
@@ -559,6 +574,19 @@ class AppModel {
         )
         .returning();
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: app.organizationId,
+        resource: "app",
+        scope: app.id,
+        grants: params.initialPermissionGrants,
+        authorId: app.authorId,
+        publishToOrganization: params.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
       await AppVersionModel.insertVersion(tx, {
         appId: app.id,
         version: 1,
@@ -852,6 +880,15 @@ class AppModel {
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
       await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["app"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
     });
   }
 
@@ -920,12 +957,24 @@ class AppModel {
       AppToolModel.getToolsForApp(id),
       AppLabelModel.getLabelsForApp(id),
     ]);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return {
       ...row,
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: "app",
+            scope: id,
+          })
+        )?.grants ?? [],
       icon: auditIcon(row.icon),
       tools: tools.map((t) => t.name).sort(),
       labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
     };
+    // SPDX-SnippetEnd
   }
 }
 
@@ -947,3 +996,17 @@ function auditIcon(icon: string | null): string | null {
 }
 
 export default AppModel;
+
+function appAudienceIs(audience: ResourceVisibilityScope) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.audienceIs({
+    organizationId: schema.appsTable.organizationId,
+    resource: "app",
+    scopeColumn: schema.appsTable.id,
+    ownerColumn: schema.appsTable.authorId,
+    audience,
+  });
+  // SPDX-SnippetEnd
+}

@@ -251,30 +251,24 @@ jobs:
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
   # or on-demand via the "run-e2e" PR label.
   #
-  # bot-pr-guard: the expensive jobs below skip on automated bot PRs.
+  # bot-pr-guard: the expensive jobs below skip on release-please PRs.
   # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
-  # merge to main — re-running the full suite dozens of times a day — and the
-  # contributor-onboarding bot (archestra-contributor-pr-bot[bot]) opens
-  # one-line docs PRs that auto-merge in seconds. Neither can surface real
-  # failures, and the merge queue re-runs all required checks for real on
-  # merge_group anyway. A job that skips under its own name still satisfies
-  # its required status check (see the required-check note in
-  # platform-e2e-tests.yml), so no placeholder twins are needed — a
+  # merge to main — re-running the full suite dozens of times a day. It
+  # cannot surface real failures, and the merge queue re-runs all required
+  # checks for real on merge_group anyway. A job that skips under its own
+  # name still satisfies its required status check (see the required-check
+  # note in platform-e2e-tests.yml), so no placeholder twins are needed — a
   # same-named twin would mask real failures on merge_group. The guard only
   # bites on pull_request events: on merge_group, github.event.pull_request
   # is null and the first clause short-circuits, so queue validation runs
   # unchanged. Backport PRs from the same App run normal checks.
   #
-  # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
-  # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
-  # the release branch ("chore: update docs/openapi.json version for
-  # release"). Without that commit the merge_group codegen check fails and
-  # the release cannot merge, so that job only skips the contributor bot.
+  # EXCEPTION: platform-lint-and-unit-tests always runs. It auto-commits the
+  # regenerated docs/openapi.json version bump onto the release branch
+  # ("chore: update docs/openapi.json version for release"). Without that
+  # commit the merge_group codegen check fails and the release cannot merge.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    # bot-pr-guard (see above): contributor bot only — release-please PRs
-    # need this job's codegen auto-commit.
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     # Back on a 16-vcpu Blacksmith runner: this job is the PR workflow's
     # wall-clock and its work is embarrassingly parallel — turbo fans out six
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
@@ -357,8 +351,16 @@ jobs:
       # turbo's parallel crate builds each trigger a concurrent rustup
       # download of the same components, which races and fails with
       # "could not rename downloaded file".
-      - name: Setup Rust
-        run: rustup show
+      # Reuse the warm release target restored by backend test shards. The
+      # native addons are intentionally uncached in Turbo because its remote
+      # cache is shared across architectures, but Cargo artifacts here are
+      # scoped to this CI runner and Rust toolchain.
+      - name: Restore Rust build cache
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
 
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
@@ -546,7 +548,7 @@ jobs:
   platform-rust-checks:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -561,18 +563,15 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup Rust
-        run: |
-          rustup show
-          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
       # The mac mini keeps its cargo caches on the persistent disk; only the
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
-        if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
+          targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          cache: ${{ runner.os == 'Linux' }}
+          toolchain-before-cache: "true"
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
@@ -619,7 +618,7 @@ jobs:
   openappa-native-tests:
     name: OpenAPPA Native Tests
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
@@ -668,7 +667,7 @@ jobs:
       # workspace, same shared-key, so the crate build is an incremental no-op
       # without this job racing the shards to save.
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -696,7 +695,7 @@ jobs:
     name: AI Labs Rust Checks
     needs: supply-chain-policy
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
@@ -712,15 +711,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup Rust
-        run: rustup show
-
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
-        if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
+          cache: ${{ runner.os == 'Linux' }}
+          toolchain-before-cache: "true"
 
       - name: Install uv
         uses: ./.github/actions/setup-uv
@@ -750,24 +747,15 @@ jobs:
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
-  # eight jobs partition the suite exactly once. Splitting this out of the
-  # lint job takes the suite off the workflow's critical path. The previous
-  # four-shard shape reached 5m15s on the current suite (PR #7574); an isolated
-  # same-host benchmark reduced a representative shard from 484s (265 files)
-  # to 304s (133 files) at eight-way width. Keep the 16-vCPU runner: the old
-  # 16-shard fan-out on free 4-vCPU runners paid module-import overhead without
-  # enough per-shard parallelism and took 6-9 minutes.
+  # two jobs partition the suite exactly once. This trades about four minutes
+  # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
-    # the pre-migration July runs on these same runners). The private
-    # mirror's task-env PRs run on the same Blacksmith installation now, so
-    # the old 2-vCPU private ubuntu-latest sizing no longer applies. Beyond
-    # this, something is hung.
+    # The measured two-shard gate is about 7m30s. Allow for cold caches and
+    # normal variance, while bounding hung test workers.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -782,7 +770,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -807,12 +795,12 @@ jobs:
       # platform-specific and the remote cache is shared with dev machines),
       # so every shard really compiles the three Rust crates: measured at
       # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. All eight shards restore
+      # dir turns that into an incremental no-op. Both shards restore
       # the same entry (shared-key); only shard 1 saves. Fresh PR branches
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -857,12 +845,12 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 8)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/8"
+        run: pnpm exec vitest run --shard="${SHARD}/2"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -874,7 +862,7 @@ jobs:
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
     # gate must skip too — with plain always() it would run and fail on the
     # shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -889,9 +877,9 @@ jobs:
           echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
-    name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
+    name: Frontend Integration Tests (MSW runner)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -902,10 +890,6 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -970,15 +954,15 @@ jobs:
         run: pnpm --filter @frontend exec playwright install chromium
 
       # Next validates its compiler cache against the current source tree. A
-      # group-specific key lets each pair of shards reuse its own dist dirs on
-      # later PR pushes without two jobs racing to save the same cache entry.
+      # Stable key lets all four shards reuse their own dist dirs on later PR
+      # pushes without competing jobs racing to save the same cache entry.
       - name: Cache integration test compiler output
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*
-          key: frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
+          key: frontend-integration-next-${{ runner.os }}-group-1-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
           restore-keys: |
-            frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-
+            frontend-integration-next-${{ runner.os }}-group-1-
 
       - name: Reap stale MSW webServers
         # Three runner slots share this machine (mac-mini-1, -1-2, -1-3), so
@@ -996,16 +980,11 @@ jobs:
 
       - name: Run integration tests
         shell: bash
-        env:
-          GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          group=$GROUP
           shard_count=4
-          first_shard=$(( (group - 1) * 2 + 1 ))
-          last_shard=$(( first_shard + 1 ))
           pids=()
-          for shard in $(seq "$first_shard" "$last_shard"); do
+          for shard in $(seq 1 "$shard_count"); do
             # Three macOS runner slots share one host. Derive non-overlapping
             # ports from the run/attempt/shard instead of discovering a free
             # port and racing another process to bind it after the probe closes.
@@ -1029,7 +1008,7 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-report-group-${{ matrix.group }}
+          name: playwright-integration-report
           path: platform/frontend/playwright-report-shard-*/
           retention-days: "7"
 
@@ -1037,28 +1016,28 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-traces-group-${{ matrix.group }}
+          name: playwright-integration-traces
           path: platform/frontend/test-results-shard-*/
           retention-days: "7"
 
-  # Keep the existing required check name stable while the work runs in a
-  # matrix. The gate fails if either group fails or is cancelled.
+  # Keep the existing required check name stable. The gate fails if the
+  # integration runner fails or is cancelled.
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
     needs: [frontend-integration-tests]
     permissions: {}
     steps:
-      - name: Check integration test group results
+      - name: Check integration test results
         env:
-          GROUPS_RESULT: ${{ needs.frontend-integration-tests.result }}
+          TESTS_RESULT: ${{ needs.frontend-integration-tests.result }}
         run: |
-          if [ "$GROUPS_RESULT" != "success" ]; then
-            echo "::error::One or more frontend integration test groups failed (result: $GROUPS_RESULT)."
+          if [ "$TESTS_RESULT" != "success" ]; then
+            echo "::error::Frontend integration tests failed (result: $TESTS_RESULT)."
             exit 1
           fi
-          echo "All frontend integration test groups passed."
+          echo "Frontend integration tests passed."
 
   # Fallback for the mac-mini routing above: GitHub has no queue timeout for
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and

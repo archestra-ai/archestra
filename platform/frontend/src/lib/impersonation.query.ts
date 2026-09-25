@@ -6,7 +6,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableImpersonation } from "@/lib/config/config.query";
 import { clearPersistedQueryCache } from "@/lib/query-persistence";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 // The org-level RBAC permission member:impersonate is the source of truth
 // (the backend keeps better-auth's system-level role in lockstep with it),

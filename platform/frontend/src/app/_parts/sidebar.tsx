@@ -33,6 +33,7 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
+import { useOpenAppaNeedsSetup } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { AppLogo } from "@/components/app-logo";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
@@ -59,11 +60,12 @@ import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { getSettingsNavigationUrl } from "./settings-navigation";
 
 type SidebarMode = "chats" | "studio";
@@ -499,6 +501,8 @@ export function AppSidebar() {
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
   const openappaEnabled = useFeature("openappaEnabled");
+  const { data: guardrailsDeployment } = useGuardrailsDeployment();
+  const openappaNeedsSetup = useOpenAppaNeedsSetup();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -528,6 +532,11 @@ export function AppSidebar() {
           .filter(
             (item) => item.url !== "/openappa" || openappaEnabled === true,
           )
+          .filter(
+            (item) =>
+              item.url !== "/mcp/tool-guardrails" ||
+              guardrailsDeployment?.enabled !== true,
+          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -541,10 +550,20 @@ export function AppSidebar() {
             if (item.url === "/settings") {
               return { ...item, url: getSettingsNavigationUrl(permissionMap) };
             }
+            // Never set up: the page would be empty, so the row starts setup.
+            if (item.url === "/openappa" && openappaNeedsSetup) {
+              return { ...item, url: "/openappa/setup" };
+            }
             return item;
           }),
       })),
-    [pluginsEnabled, openappaEnabled, permissionMap],
+    [
+      pluginsEnabled,
+      openappaEnabled,
+      guardrailsDeployment?.enabled,
+      openappaNeedsSetup,
+      permissionMap,
+    ],
   );
 
   return (
@@ -583,10 +602,8 @@ export function AppSidebar() {
                 unseenDotKeys={unseenKeys}
                 onDotItemVisit={markSeen}
               />
-              {/* The chat list (Pinned + Recents, labeled inside
-                    ChatSidebarSection) and the community links below it scroll
-                    together within this region, while the nav above stays
-                    pinned. The fade hints there is more content below. */}
+              {/* Keep sessions scrollable while the navigation and community
+                  links stay in place. The fade hints at more sessions below. */}
               <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
                 {/* group-data-[collapsible=icon]:overflow-hidden keeps this
                     scroller out of the tab order while collapsed — Chrome makes
@@ -594,17 +611,17 @@ export function AppSidebar() {
                     leaves an invisible tab stop on the icon rail (WCAG 2.4.3). */}
                 <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
                   <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
-                  <NavSecondary
-                    items={[]}
-                    pathname={pathname}
-                    searchParams={searchParams}
-                    permissionMap={permissionMap}
-                    showCommunityLinks={showCommunityLinks}
-                    starCount={formattedStarCount}
-                    className="mt-2.5"
-                  />
                 </SidebarGroupContent>
               </SidebarGroup>
+              <NavSecondary
+                items={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                showCommunityLinks={showCommunityLinks}
+                starCount={formattedStarCount}
+                className="mt-auto"
+              />
             </>
           ) : (
             <>

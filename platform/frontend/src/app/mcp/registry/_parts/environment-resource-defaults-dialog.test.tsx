@@ -25,7 +25,7 @@ vi.mock("@/lib/environment.query", () => ({
 const mutate = vi.fn();
 
 function setEnvironments(
-  environments: { id: string; name: string; restricted: boolean }[],
+  environments: { id: string; name: string }[],
   resourceDefaults: Record<string, string | null> = {},
 ) {
   vi.mocked(useEnvironments).mockReturnValue({
@@ -77,8 +77,8 @@ describe("EnvironmentResourceDefaultsDialog", () => {
   test("shows the configured environment per resource kind", () => {
     setEnvironments(
       [
-        { id: "env-explore", name: "Explore", restricted: false },
-        { id: "env-launch", name: "Launch", restricted: false },
+        { id: "env-explore", name: "Explore" },
+        { id: "env-launch", name: "Launch" },
       ],
       { mcpRegistry: "env-explore", app: "env-launch" },
     );
@@ -91,7 +91,7 @@ describe("EnvironmentResourceDefaultsDialog", () => {
   });
 
   test("saves only the kind that changed", async () => {
-    setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
+    setEnvironments([{ id: "env-launch", name: "Launch" }]);
     renderDialog();
 
     await userEvent.click(screen.getByLabelText("MCP Apps"));
@@ -100,26 +100,28 @@ describe("EnvironmentResourceDefaultsDialog", () => {
     expect(mutate).toHaveBeenCalledWith({ app: "env-launch" });
   });
 
-  test("warns that a restricted target falls back for creators without permission", () => {
-    setEnvironments([{ id: "env-locked", name: "Locked", restricted: true }], {
+  test("warns that creators who may not deploy into the target fall back", () => {
+    setEnvironments([{ id: "env-locked", name: "Locked" }], {
       mcpRegistry: "env-locked",
     });
     renderDialog();
 
     expect(
-      screen.getByText("mcpRegistry:deploy-to-restricted").parentElement,
-    ).toHaveTextContent(/Creators without .+ permission fall back to Default/);
+      screen.getByText(
+        /Creators who may not deploy into this environment fall back to/,
+      ),
+    ).toHaveTextContent("Default");
   });
 
   test("is read-only without environment:update", () => {
-    setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
+    setEnvironments([{ id: "env-launch", name: "Launch" }]);
     renderDialog({ canEdit: false });
 
     expect(screen.getByLabelText("MCP Apps")).toBeDisabled();
   });
 
   test("renders nothing while closed", () => {
-    setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
+    setEnvironments([{ id: "env-launch", name: "Launch" }]);
     renderDialog({ canEdit: true, open: false });
 
     expect(screen.queryByLabelText("MCP Apps")).not.toBeInTheDocument();

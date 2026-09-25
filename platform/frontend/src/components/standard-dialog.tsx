@@ -8,7 +8,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type StandardDialogProps = FormDialogProps & {
   bodyClassName?: string;

@@ -43,30 +43,32 @@ test("switches between a personal subscription and provider key while creating a
     isBest: true,
   };
 
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-provider-api-keys/available",
-    body: [personalSubscription, providerKey],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-models/available",
-    body: [personalModel, providerModel],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-models/available",
-    query: { apiKeyId: personalSubscription.id },
-    body: [personalModel],
-    delayMs: 50,
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-models/available",
-    query: { apiKeyId: providerKey.id },
-    body: [providerModel],
-    delayMs: 50,
-  });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/llm-provider-api-keys/available",
+      body: [personalSubscription, providerKey],
+    },
+    {
+      method: "get",
+      url: "/api/llm-models/available",
+      body: [personalModel, providerModel],
+    },
+    {
+      method: "get",
+      url: "/api/llm-models/available",
+      query: { apiKeyId: personalSubscription.id },
+      body: [personalModel],
+      delayMs: 50,
+    },
+    {
+      method: "get",
+      url: "/api/llm-models/available",
+      query: { apiKeyId: providerKey.id },
+      body: [providerModel],
+      delayMs: 50,
+    },
+  ]);
 
   const maximumDepthErrors: string[] = [];
   page.on("pageerror", (error) => {

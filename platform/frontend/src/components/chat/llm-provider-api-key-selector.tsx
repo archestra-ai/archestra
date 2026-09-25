@@ -53,7 +53,7 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] =
       defaultValues: {
         name: label,
         provider,
-        scope: "personal" as const,
+        shared: false,
         // Credential-level subscriptions share their provider with ordinary
         // API keys, so the form has to open on the subscription tab.
         // Provider-level ones have no tabs and ignore this.

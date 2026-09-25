@@ -1,10 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { ProjectShareModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("GET /api/projects + GET /api/projects/:id", () => {
@@ -43,10 +43,10 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
       name: "alpha",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: user.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -96,7 +96,8 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     actingUser = admin;
 
     // The other member's PRIVATE project surfaces for the admin under
-    // scope=personal, tagged as oversight ("admin") with the owner's name.
+    // scope=personal with the owner's name. The admin role's Full grant on
+    // every project is real read access, so the row reads as "shared".
     const personal = await app.inject({
       method: "GET",
       url: "/api/projects?scope=personal",
@@ -106,10 +107,11 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
         Array<{ name: string; viewerRole: string; ownerName: string | null }>
       >();
     const overseen = items.find((p) => p.name === "owned-by-other");
-    expect(overseen).toMatchObject({ viewerRole: "admin" });
+    expect(overseen).toMatchObject({ viewerRole: "shared" });
     expect(overseen?.ownerName).toBe(otherOwner.name);
 
-    // Detail is readable, tagged admin, and exposes shareTeamIds for the edit dialog.
+    // Detail is readable and, since the admin may manage it, exposes
+    // shareTeamIds for the edit dialog.
     const detail = await app.inject({
       method: "GET",
       url: `/api/projects/${project.id}`,
@@ -117,7 +119,7 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     expect(detail.statusCode).toBe(200);
     expect(
       detail.json<{ viewerRole: string; shareTeamIds: string[] | null }>(),
-    ).toMatchObject({ viewerRole: "admin", shareTeamIds: [] });
+    ).toMatchObject({ viewerRole: "shared", shareTeamIds: [] });
 
     // Admin can edit and delete the project.
     const edit = await app.inject({
@@ -145,10 +147,10 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
       name: "shared-org-wide",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: otherOwner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -284,10 +286,10 @@ describe("GET /api/projects/:id/files", () => {
       name: "filed",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -342,7 +344,12 @@ describe("GET /api/projects/:id/files", () => {
       projectName: "filed",
     });
 
-    await ProjectShareModel.remove(project.id);
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
+      visibility: null,
+    });
     const denied = await app.inject({
       method: "GET",
       url: `/api/projects/${project.id}/files`,

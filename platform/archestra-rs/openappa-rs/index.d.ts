@@ -16,12 +16,27 @@ export interface BatteryPackage {
   name: string
   description: string
   namespaces: Array<string>
+  /** The `[[policy.annotator]]` names the battery declares. */
+  annotators: Array<string>
+  /** The annotators the battery's own `[[policy.tool]]` rules route calls to. */
+  routedAnnotators: Array<string>
   policy: string
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
   setup?: string
   files: Array<BatteryFileInput>
+}
+
+export interface ChildReturnRecord {
+  /** Fully scoped session id of the child whose return crossed. */
+  childSessionId: string
+  /** The spawn call the return answers, when the child named it at ChildEnd. */
+  spawnCallId?: string
+  /** The client-native child identity, when the child named one. */
+  childNativeId?: string
+  /** The exact bytes the runtime admitted across the child boundary. */
+  value: string
 }
 
 export interface ComposeBatteryInput {
@@ -63,7 +78,17 @@ export interface CredentialDeclaration {
   line: number
 }
 
-export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
+export declare function dispatchHook(input: string, policy: DispatchPolicy): Promise<string>
+
+/**
+ * The effective policy of the dispatching organization, with the values the host
+ * resolved for the credential variables the runtime reads itself.
+ */
+export interface DispatchPolicy {
+  content: string
+  /** Variable → value, for the document's `runtimeCredentials`. Secrets. */
+  credentials: Record<string, string>
+}
 
 export interface EditedPolicy {
   /** The edited document, absent when an edit was refused. */
@@ -80,7 +105,7 @@ export interface EditedPolicy {
 export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
 /** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
-export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
+export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
 export interface HelperBindingInput {
   /**
@@ -98,7 +123,7 @@ export interface IncludeDeclaration {
   line: number
 }
 
-export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, reporting?: ReportingOptions | undefined | null): Promise<void>
 
 /**
  * Validates an uploaded battery package with the marketplace's own checks and reads
@@ -108,9 +133,17 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
- * which is what Archestra serves.
+ * which is what Archestra serves, or declare annotators alone.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
+
+/**
+ * Loads the child returns a parent's family durably crossed, from the
+ * retained ChildEnd operations in PostgreSQL. This is the authority the
+ * parent side verifies an arriving completion against; nothing the client
+ * carries proves a return.
+ */
+export declare function loadChildReturns(organizationId: string, parentSessionId: string): Promise<Array<ChildReturnRecord>>
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
@@ -143,6 +176,14 @@ export interface PolicyDeclarations {
   include: Array<IncludeDeclaration>
   serverAliases: Array<ServerAliasDeclaration>
   credentials: Array<CredentialDeclaration>
+  /** The annotators the root's own `[[policy.tool]]` rules route calls to. */
+  routedAnnotators: Array<string>
+  /**
+   * The `[credentials]` variables the runtime resolves itself, because an external
+   * or profile of the document names them as its `token_env`. A dispatch carries
+   * their values in `DispatchPolicy.credentials`.
+   */
+  runtimeCredentials: Array<string>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.

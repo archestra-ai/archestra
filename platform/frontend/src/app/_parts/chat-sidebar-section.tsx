@@ -31,6 +31,7 @@ import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { conversationHref } from "@/lib/chat/conversation-href";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
 import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
@@ -99,7 +101,7 @@ import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
@@ -197,9 +199,13 @@ export function ChatSidebarSection({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const currentConversationId =
-    pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
+    conversations.find(
+      (conversation) =>
+        conversationHref(conversation).split("?")[0] === pathname,
+    )?.id ??
+    (pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
-      : null;
+      : null);
   const currentRunTaskId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
@@ -240,14 +246,10 @@ export function ChatSidebarSection({
     if (isMobile) {
       setOpenMobile(false);
     }
-    const run = conversations.find(
+    const conversation = conversations.find(
       (conversation) => conversation.id === id,
-    )?.scheduledRun;
-    router.push(
-      run
-        ? `/chat/${id}?scheduleTriggerId=${run.triggerId}&scheduleRunId=${run.id}`
-        : `/chat/${id}`,
     );
+    router.push(conversationHref(conversation ?? { id }));
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -299,7 +301,9 @@ export function ChatSidebarSection({
   const handleDeleteConversation = async (id: string) => {
     // Navigate away before deleting to avoid "conversation not found" flash
     if (currentConversationId === id) {
-      router.push("/chat");
+      router.push(
+        pathname.startsWith("/openappa/") ? "/openappa/configure" : "/chat",
+      );
     }
 
     try {
@@ -567,6 +571,18 @@ export function ChatSidebarSection({
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {conv.origin === "openappa" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <OpenAppaIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        OpenAPPA configuration
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {conv.share && (
                   <TooltipProvider>
                     <Tooltip>
@@ -646,7 +662,7 @@ export function ChatSidebarSection({
               controls must not be nested, and the trigger must be a real
               button rather than a bare svg. */}
           {editingId !== conv.id &&
-            (canUpdateConversation ||
+            ((canUpdateConversation && conv.origin !== "openappa") ||
               canDeleteConversation ||
               showCreateProject) && (
               <DropdownMenu
@@ -671,7 +687,7 @@ export function ChatSidebarSection({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right">
-                  {canUpdateConversation && (
+                  {canUpdateConversation && conv.origin !== "openappa" && (
                     <>
                       <DropdownMenuItem
                         onClick={(e) => {

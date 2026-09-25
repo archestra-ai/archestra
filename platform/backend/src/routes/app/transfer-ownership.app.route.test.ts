@@ -1,5 +1,9 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AppModel,
@@ -8,7 +12,6 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
 } from "@/models";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import appRoutes from "./app.routes";
@@ -31,7 +34,7 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
         organizationId,
         authorId: ownerId,
         name,
-        scope: "personal",
+        access: "personal",
       });
     };
     app = createFastifyInstance();
@@ -81,6 +84,8 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
               "createdByServiceAccountId",
               "createdBy",
               "authorName",
+              // The creator's own grant follows the record to its new owner.
+              "resourcePermissions",
             ].includes(key),
         ),
       );
@@ -127,7 +132,9 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
   }) => {
     const resource = await create();
     organizationId = (await makeOrganization()).id;
-    expect((await transfer(resource.id)).statusCode).toBe(403);
+    // A resource outside the caller's organization reads as absent rather than
+    // refused, so a probe cannot confirm that the id exists elsewhere.
+    expect((await transfer(resource.id)).statusCode).toBe(404);
   });
 
   test("rejects an unknown resource", async () => {

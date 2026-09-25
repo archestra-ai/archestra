@@ -2,7 +2,6 @@
 
 import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
-  ArrowLeft,
   Copy,
   MessageSquare,
   MoreHorizontal,
@@ -13,7 +12,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createdByFact } from "@/components/created-by-cell";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
@@ -21,7 +27,9 @@ import {
   type OverviewFact,
   OverviewSummary,
 } from "@/components/overview-summary";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -40,6 +48,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
@@ -62,7 +76,7 @@ import {
   useDefaultEnvironment,
   useOrganization,
 } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
@@ -96,6 +110,7 @@ import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 type DetailTab =
   | "overview"
   | "usage"
+  | "permissions"
   | "credentials"
   | "logs"
   | "inspector"
@@ -148,7 +163,9 @@ export function McpCatalogItemPage({ id }: { id: string }) {
       <PageLayout
         title="MCP Server"
         description=""
-        backLink={<BackToRegistryLink />}
+        backLink={
+          <PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>
+        }
         maxWidth="wizard"
       >
         <ItemPageSkeleton />
@@ -161,7 +178,9 @@ export function McpCatalogItemPage({ id }: { id: string }) {
       <PageLayout
         title="MCP Server"
         description=""
-        backLink={<BackToRegistryLink />}
+        backLink={
+          <PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>
+        }
         maxWidth="wizard"
       >
         <Empty className="border">
@@ -190,22 +209,6 @@ export function McpCatalogItemPage({ id }: { id: string }) {
   );
 }
 
-function BackToRegistryLink() {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
-      asChild
-    >
-      <Link href="/mcp/registry">
-        <ArrowLeft className="h-4 w-4" />
-        MCP Registry
-      </Link>
-    </Button>
-  );
-}
-
 function CatalogItemDetails({
   item,
   onDeleted,
@@ -222,6 +225,32 @@ function CatalogItemDetails({
   });
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const pendingHrefRef = useRef<string | null>(null);
+  useBeforeUnloadWhileDirty(permissionsDirty);
+  const guard = useUnsavedChangesGuard({
+    isDirty: permissionsDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) {
+        if (href.startsWith(pathname)) router.replace(href, { scroll: false });
+        else router.push(href);
+      }
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({
+    isDirty: permissionsDirty,
+    onRequestNavigate: requestNavigate,
+  });
 
   const variant =
     item.serverType === "builtin"
@@ -318,6 +347,9 @@ function CatalogItemDetails({
   // secondary operational views remain in the tab strip.
   const tabIds: DetailTab[] = [
     "usage",
+    ...(variant !== "builtin" && !isPlaywright
+      ? (["permissions"] as const)
+      : []),
     ...diagnosticTabs.map((panel) => panel.id),
   ];
 
@@ -390,6 +422,15 @@ function CatalogItemDetails({
       href: tabHref("usage"),
       selected: effectiveTab === "usage",
     },
+    ...(tabIds.includes("permissions")
+      ? [
+          {
+            label: "Permissions",
+            href: tabHref("permissions"),
+            selected: effectiveTab === "permissions",
+          },
+        ]
+      : []),
     ...diagnosticTabs.map((panel) => ({
       label: panel.title,
       href: tabHref(panel.id),
@@ -471,7 +512,7 @@ function CatalogItemDetails({
         )
       }
       documentTitle={item.name}
-      backLink={<BackToRegistryLink />}
+      backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
       description={item.description ?? ""}
       tabs={tabs}
       actionButton={
@@ -550,6 +591,13 @@ function CatalogItemDetails({
       }
     >
       <div className="space-y-4">
+        {effectiveTab === "permissions" && (
+          <ResourcePermissions
+            resource="mcpRegistry"
+            scope={item.id}
+            onDirtyChange={setPermissionsDirty}
+          />
+        )}
         {effectiveTab === "usage" && (
           <McpServerUsageTab
             serversForCatalog={allServersForCatalog}
@@ -665,6 +713,14 @@ function CatalogItemDetails({
           onDeleted={onDeleted}
         />
       </div>
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
     </PageLayout>
   );
 }

@@ -2,7 +2,7 @@
 title: How to Contribute
 category: Development
 order: 1
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,18 +24,8 @@ You can find the entire development team in our [Slack Community](https://arches
 
 Our engineers will join the conversation, greet you, and share the context you need to get started.
 
-Before you can comment, open issues, or open PRs, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
+## Pull Requests
 
-## Contribute Responsibly
+We take contributions as human-written text, not code. Pull requests from non-maintainers are closed automatically by CI.
 
-You are welcome to use AI tools on your contribution. The project only benefits from contributions that meet its quality bar.
-
-We sometimes have to reject contributions that show signs of unreviewed AI-generated code, such as:
-
-1. Massive AI-generated descriptions and comments.
-2. Code that doesn't follow the existing patterns and conventions of the project.
-3. Code that doesn't follow reasonable clean code best practices.
-4. Code that was not tested before contribution.
-5. Or other noticeable signs of rushed or unreviewed AI generation.
-
-From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves. For this reason, we may close the pull request. If this happens to you, please don't be discouraged. We kindly ask that you rework your changes and reopen the pull request when you're ready.
+Describe the change you want in a [GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose) written by a human. If we agree, we handle the implementation with our coding agents. A precise issue lands faster.

@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { RuntimeCredentialConnectionModel } from "@/models";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import {
   createRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,

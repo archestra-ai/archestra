@@ -2,18 +2,17 @@ import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import type { AuditEventName } from "@/types/audit-log";
 import agentRoutes from "./agent";
 
 /**
- * Route-level coverage for `PATCH /api/agents/bulk` and
- * `DELETE /api/agents/bulk`.
+ * Route-level coverage for `DELETE /api/agents/bulk`.
  *
  * These are the reference tests for the whole bulk family, so they pin the
  * parts of the contract every resource shares — partial success, the
@@ -45,9 +44,6 @@ describe("agents bulk routes", () => {
 
   const bulkDelete = (ids: unknown) =>
     app.inject({ method: "DELETE", url: "/api/agents/bulk", payload: { ids } });
-
-  const bulkPatch = (payload: Record<string, unknown>) =>
-    app.inject({ method: "PATCH", url: "/api/agents/bulk", payload });
 
   const auditRows = (action: AuditEventName) =>
     db
@@ -166,7 +162,7 @@ describe("agents bulk routes", () => {
         agentType: "mcp_gateway",
         isPersonalGateway: true,
         authorId: user.id,
-        scope: "personal",
+        access: "personal",
       });
       const ordinary = await makeAgent({ organizationId, name: "ordinary" });
 
@@ -225,147 +221,6 @@ describe("agents bulk routes", () => {
     });
   });
 
-  describe("PATCH /api/agents/bulk", () => {
-    test("moves every agent in the batch to one scope", async ({
-      makeAgent,
-      makeTeam,
-    }) => {
-      const team = await makeTeam(organizationId, user.id, { name: "Design" });
-      const first = await makeAgent({ organizationId, name: "vis-a" });
-      const second = await makeAgent({ organizationId, name: "vis-b" });
-
-      const response = await bulkPatch({
-        ids: [first.id, second.id],
-        scope: "team",
-        teams: [team.id],
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([]);
-      for (const id of [first.id, second.id]) {
-        const agent = await AgentModel.findById(id, user.id, true);
-        expect(agent?.scope).toBe("team");
-        expect(agent?.teams.map((t: { id: string }) => t.id)).toEqual([
-          team.id,
-        ]);
-      }
-    });
-
-    test("rejects team scope with no teams, changing nothing", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({
-        organizationId,
-        name: "stays-org",
-        scope: "org",
-      });
-
-      const response = await bulkPatch({
-        ids: [agent.id],
-        scope: "team",
-        teams: [],
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect((await AgentModel.findById(agent.id, user.id, true))?.scope).toBe(
-        "org",
-      );
-    });
-
-    test("refuses to make a shared agent personal, and says why", async ({
-      makeAgent,
-    }) => {
-      const shared = await makeAgent({
-        organizationId,
-        name: "shared",
-        scope: "org",
-        authorId: user.id,
-      });
-
-      const response = await bulkPatch({
-        ids: [shared.id],
-        scope: "personal",
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toEqual([
-        {
-          id: shared.id,
-          name: "shared",
-          error: "Shared agents cannot be made personal",
-        },
-      ]);
-      expect((await AgentModel.findById(shared.id, user.id, true))?.scope).toBe(
-        "org",
-      );
-    });
-
-    test("leaves an agent already in the requested state alone", async ({
-      makeAgent,
-      makeTeam,
-    }) => {
-      const team = await makeTeam(organizationId, user.id, { name: "Ops" });
-      const agent = await makeAgent({
-        organizationId,
-        name: "already-team",
-        scope: "team",
-        teams: [team.id],
-      });
-
-      const response = await bulkPatch({
-        ids: [agent.id],
-        scope: "team",
-        teams: [team.id],
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([
-        { id: agent.id, name: "already-team" },
-      ]);
-    });
-
-    test("reports a foreign-organization id as not found", async ({
-      makeAgent,
-      makeOrganization,
-    }) => {
-      const foreign = await makeAgent({
-        organizationId: (await makeOrganization()).id,
-        name: "theirs",
-        scope: "org",
-      });
-
-      const response = await bulkPatch({ ids: [foreign.id], scope: "org" });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([
-        { id: foreign.id, name: null, error: "Agent not found" },
-      ]);
-    });
-
-    test("writes one audit record whose diff shows the scope move", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({
-        organizationId,
-        name: "audited-vis",
-        scope: "org",
-        authorId: user.id,
-      });
-
-      expect(
-        (await bulkPatch({ ids: [agent.id], scope: "org" })).statusCode,
-      ).toBe(200);
-
-      const rows = await auditRows("agent.bulk_updated");
-      expect(rows).toHaveLength(1);
-      expect(rows[0].resourceType).toBe("agent");
-      expect(rows[0].before).toMatchObject({
-        agents: [expect.objectContaining({ id: agent.id, scope: "org" })],
-      });
-    });
-  });
-
   describe("as a non-admin member", () => {
     let member: User;
 
@@ -378,32 +233,6 @@ describe("agents bulk routes", () => {
       });
     });
 
-    test("cannot widen agents to org scope, and nothing moves", async ({
-      makeAgent,
-    }) => {
-      const own = await makeAgent({
-        organizationId,
-        name: "members-own",
-        scope: "personal",
-        authorId: member.id,
-      });
-
-      const response = await bulkPatch({ ids: [own.id], scope: "org" });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([]);
-      expect(response.json().failed).toEqual([
-        {
-          id: own.id,
-          name: "members-own",
-          error: "Only admins can set scope to org",
-        },
-      ]);
-      expect((await AgentModel.findById(own.id, member.id, true))?.scope).toBe(
-        "personal",
-      );
-    });
-
     test("cannot delete an agent belonging to someone else", async ({
       makeAgent,
       makeUser,
@@ -412,7 +241,7 @@ describe("agents bulk routes", () => {
       const theirs = await makeAgent({
         organizationId,
         name: "not-mine",
-        scope: "personal",
+        access: "personal",
         authorId: other.id,
       });
 

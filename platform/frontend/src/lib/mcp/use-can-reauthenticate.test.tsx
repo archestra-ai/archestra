@@ -34,11 +34,13 @@ function setup({
   } as unknown as ReturnType<typeof useMyTeams>);
   vi.mocked(useHasPermissions).mockImplementation(((perm: {
     mcpServerInstallation?: string[];
+    mcpRegistry?: string[];
   }) => {
+    // Installation admin is `update` on every registry entry (a grant at `*`).
+    if (perm.mcpRegistry?.includes("update")) return { data: admin };
     const actions = perm.mcpServerInstallation ?? [];
     if (actions.includes("create")) return { data: create };
     if (actions.includes("update")) return { data: update };
-    if (actions.includes("admin")) return { data: admin };
     return { data: false };
   }) as unknown as typeof useHasPermissions);
   return renderHook(() => useCanReauthenticate()).result.current;
@@ -72,7 +74,7 @@ describe("useCanReauthenticate", () => {
     expect(canReauth({ scope: "org" })).toBe(true);
   });
 
-  it("permits an org connection only with mcpServerInstallation:admin", () => {
+  it("permits an org connection only to an installation admin", () => {
     expect(
       setup({ create: true, update: true, admin: false })({ scope: "org" }),
     ).toBe(false);
@@ -81,7 +83,7 @@ describe("useCanReauthenticate", () => {
     ).toBe(true);
   });
 
-  it("permits a team connection for a team admin", () => {
+  it("team administration alone does not permit connection reauthentication", () => {
     const canReauth = setup({
       create: true,
       update: false,
@@ -93,7 +95,7 @@ describe("useCanReauthenticate", () => {
         },
       ],
     });
-    expect(canReauth({ scope: "team", teamId: TEAM_ID })).toBe(true);
+    expect(canReauth({ scope: "team", teamId: TEAM_ID })).toBe(false);
   });
 
   it("permits a team connection for a member with update, denies without it", () => {

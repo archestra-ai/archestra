@@ -1,3 +1,4 @@
+import { hasScopedPermission, type ScopedPermission } from "@archestra/shared";
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
@@ -11,7 +12,9 @@ import {
   KnowledgeBaseConnectorModel,
   TeamModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import * as metrics from "@/observability/metrics";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AclEntry,
   ApiError,
@@ -44,6 +47,8 @@ type VisibilityScopedKnowledgeSourceUpdates = Partial<{
 }>;
 
 interface KnowledgeSourceAccessControlContext {
+  organizationId?: string;
+  grants?: ScopedPermission[];
   userId?: string;
   canReadAll: boolean;
   canManageAutoSync: boolean;
@@ -58,9 +63,21 @@ interface KnowledgeSourceAccessControlContext {
 export function buildDocumentAccessControlList(params: {
   visibility: KnowledgeSourceVisibility;
   teamIds: string[];
+  /** A permission-sync connector: the ACL comes from the upstream audience. */
+  syncPermissionsFromSource?: boolean;
   connectorType?: ConnectorType;
   permissions?: DocumentPermissions;
 }): AclEntry[] {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (params.syncPermissionsFromSource) {
+    return buildAutoSyncDocumentAccessControlList({
+      connectorType: params.connectorType,
+      permissions: params.permissions,
+    });
+  }
+  // SPDX-SnippetEnd
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];
@@ -70,10 +87,10 @@ export function buildDocumentAccessControlList(params: {
     case "team-scoped":
       return params.teamIds.map((id): AclEntry => `team:${id}`);
     case "auto-sync-permissions":
-      return buildAutoSyncDocumentAccessControlList({
-        connectorType: params.connectorType,
-        permissions: params.permissions,
-      });
+      // The mode is read from `syncPermissionsFromSource` above. A connector
+      // whose visibility still says so without the switch set syncs nothing,
+      // so its documents stay fail-closed.
+      return [];
     // SPDX-SnippetEnd
   }
 }
@@ -236,13 +253,14 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, canManageAutoSync, teamIds] = await Promise.all([
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "knowledgeSource",
-        "admin",
-      ),
+    const [canReadAll, canManageAutoSync, teamIds, grants] = await Promise.all([
+      ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "knowledgeBase",
+        scope: "*",
+        action: "update",
+      }),
       userHasPermission(
         params.userId,
         params.organizationId,
@@ -250,10 +268,13 @@ class KnowledgeSourceAccessControlService {
         "read",
       ),
       TeamModel.getUserTeamIds(params.userId),
+      ResourcePermissions.resolveAll(params),
     ]);
 
     return {
       userId: params.userId,
+      organizationId: params.organizationId,
+      grants,
       canReadAll,
       canManageAutoSync,
       teamIds,
@@ -264,24 +285,78 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     knowledgeBase: KnowledgeBase,
   ) {
-    if (knowledgeBase.visibility === "private") {
-      return (
-        accessControl.canReadAll ||
-        (!!accessControl.userId &&
-          knowledgeBase.createdBy === accessControl.userId)
-      );
-    }
-    return this.canAccessSource(accessControl, {
-      ...knowledgeBase,
-      visibility: knowledgeBase.visibility,
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeBase",
+      id: knowledgeBase.id,
+      action: "read",
     });
   }
 
   canAccessConnector(
     accessControl: KnowledgeSourceAccessControlContext,
-    connector: KnowledgeBaseConnector,
+    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
   ) {
-    return this.canAccessSource(accessControl, connector);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // A permission-sync connector mirrors upstream ACLs and exposes audience
+    // and membership details, so managing it also takes the dedicated
+    // `knowledgeSourceAutoSync:read` permission (admin-only by default), on
+    // top of the connector's own read grant. Members still QUERY its
+    // documents (`filterQueryableConnectors`); the per-chunk ACL decides what
+    // each of them retrieves.
+    if (
+      connector.syncPermissionsFromSource &&
+      !accessControl.canManageAutoSync
+    ) {
+      return false;
+    }
+    // SPDX-SnippetEnd
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeConnector",
+      id: connector.id,
+      action: "read",
+    });
+  }
+
+  canQueryKnowledgeBase(
+    accessControl: KnowledgeSourceAccessControlContext,
+    knowledgeBase: KnowledgeBase,
+  ) {
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeBase",
+      id: knowledgeBase.id,
+      action: "use",
+    });
+  }
+
+  /**
+   * For a caller with no user of its own: the knowledge bases or connectors
+   * published to the organization at large for `action`.
+   */
+  async filterPublishedToOrganization<
+    T extends { id: string; organizationId: string },
+  >(params: {
+    organizationId: string;
+    resource: "knowledgeBase" | "knowledgeConnector";
+    sources: T[];
+    action: "read" | "use";
+  }): Promise<T[]> {
+    const published =
+      await ResourcePermissionPolicyModel.findOrganizationWideScopes({
+        organizationId: params.organizationId,
+        resource: params.resource,
+        scopes: params.sources.map((source) => source.id),
+        action: params.action,
+      });
+    return params.sources.filter(
+      (source) =>
+        source.organizationId === params.organizationId &&
+        published.has(source.id),
+    );
   }
 
   filterKnowledgeBases(
@@ -303,8 +378,15 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext,
     connectors: KnowledgeBaseConnector[],
   ) {
-    return connectors.filter((connector) =>
-      this.canQuerySource(accessControl, connector),
+    return connectors.filter(
+      (connector) =>
+        connector.syncPermissionsFromSource ||
+        this.hasScopedAccess({
+          accessControl,
+          resource: "knowledgeConnector",
+          id: connector.id,
+          action: "use",
+        }),
     );
   }
 
@@ -314,6 +396,7 @@ class KnowledgeSourceAccessControlService {
     return buildDocumentAccessControlList({
       visibility: params.connector.visibility,
       teamIds: params.connector.teamIds,
+      syncPermissionsFromSource: params.connector.syncPermissionsFromSource,
     });
   }
 
@@ -331,7 +414,7 @@ class KnowledgeSourceAccessControlService {
     // Auto-sync connectors own their per-document ACLs via the permission-sync
     // pass; never bulk-overwrite them with a single connector-level ACL. The
     // next scheduled (epoch-fenced) permission pass is the authoritative writer.
-    if (connector.visibility === "auto-sync-permissions") {
+    if (connector.syncPermissionsFromSource) {
       return;
     }
     // SPDX-SnippetEnd
@@ -367,62 +450,25 @@ class KnowledgeSourceAccessControlService {
   /**
    * MANAGEMENT visibility: whether the viewer may see/edit the source itself
    * (its config, documents, runs, overrides — everything behind the connector
-   * detail surfaces). Query reach is the separate, wider `canQuerySource`.
+   * detail surfaces), from the viewer's stored grants.
    */
-  private canAccessSource(
-    accessControl: KnowledgeSourceAccessControlContext,
-    source: VisibilityScopedKnowledgeSource,
-  ) {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Auto-sync-permissions connectors mirror upstream ACLs and expose
-    // audience/membership details, so seeing them requires the dedicated
-    // knowledgeSourceAutoSync permission (admin-only by default) — the
-    // knowledgeSource:admin view-all bypass deliberately does NOT extend
-    // here. Members still QUERY their documents (canQuerySource); the
-    // per-chunk ACL decides what each user retrieves.
-    if (source.visibility === "auto-sync-permissions") {
-      return accessControl.canManageAutoSync;
-    }
-    // SPDX-SnippetEnd
-
-    if (accessControl.canReadAll) {
-      return true;
-    }
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (source.visibility !== "team-scoped") {
-      return true;
-    }
-
-    return source.teamIds.some((teamId) =>
-      accessControl.teamIds.includes(teamId),
-    );
-    // SPDX-SnippetEnd
-  }
-
-  private canQuerySource(
-    accessControl: KnowledgeSourceAccessControlContext,
-    source: VisibilityScopedKnowledgeSource,
-  ) {
-    if (accessControl.canReadAll) {
-      return true;
-    }
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (source.visibility !== "team-scoped") {
-      return true;
-    }
-
-    return source.teamIds.some((teamId) =>
-      accessControl.teamIds.includes(teamId),
-    );
-    // SPDX-SnippetEnd
+  private hasScopedAccess(params: {
+    accessControl: KnowledgeSourceAccessControlContext;
+    resource: "knowledgeBase" | "knowledgeConnector";
+    id: string;
+    action: "read" | "use";
+  }) {
+    const { accessControl } = params;
+    if (!accessControl.organizationId) return false;
+    return hasScopedPermission({
+      grants: accessControl.grants ?? [],
+      required: {
+        organizationId: accessControl.organizationId,
+        resource: params.resource,
+        scope: params.id,
+        action: params.action,
+      },
+    });
   }
 }
 

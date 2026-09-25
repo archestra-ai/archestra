@@ -196,7 +196,7 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
  * config, so the renderers close with a restart step.
  */
 export function opencodeOAuthNextStep(serverName: string): string {
-  return `Run \`opencode mcp auth ${serverName}\` now and keep it running while the user completes browser sign-in — this second browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
+  return `Run \`opencode mcp list\` first. If "${serverName}" is connected (OAuth), skip sign-in. Otherwise check \`opencode mcp auth list\`: if "${serverName}" is authenticated but not connected, report the connection error rather than forcing re-authentication. If authentication is missing or expired, run \`opencode mcp auth ${serverName}\` with CI=true set for the process so its browser URL stays visible in captured output. Keep it running while the user completes sign-in — this browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
@@ -466,11 +466,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.proxy) {
         if (!ctx.proxy.virtualKey) {
           steps.push(
-            "Make sure Codex is signed in with your own OpenAI API key (printenv OPENAI_API_KEY | codex login --with-api-key).",
+            "Use your existing Codex ChatGPT login, or sign in with your own OpenAI API key (codex login --with-api-key).",
           );
         }
         steps.push(
-          `Start Codex through the proxy: codex -c model_provider=${ctx.proxy.proxyName}`,
+          `Open a new terminal and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
         );
       }
       if (ctx.skills?.hasSkills ?? !!ctx.skills) {
@@ -776,6 +776,75 @@ case "$marketplace_state" in
         exit 1
       fi
     fi
+    ;;
+esac
+${claudeMarketplaceAutoUpdate(marketplaceName)}`;
+}
+
+/**
+ * Claude Code refreshes a third-party marketplace, and updates the plugins
+ * installed from it, only when that marketplace has auto-update enabled — and
+ * it is off by default for every marketplace added with `marketplace add`.
+ * Without it the client keeps the skill revision it installed on connect
+ * forever, so shipped skill fixes never reach it. Claude Code reads the flag
+ * from the marketplace's `extraKnownMarketplaces` declaration (its own
+ * "Enable auto-update" toggle writes the same field), so set it there. An
+ * explicit value is the user's choice and is kept.
+ */
+function claudeMarketplaceAutoUpdate(marketplaceName: string): string {
+  const manual = sh(
+    `Could not enable auto-update for the "${marketplaceName}" marketplace. Enable it in /plugin > Marketplaces so Claude Code picks up new skill versions.`,
+  );
+  return `claude_marketplace_auto_update() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '%s' unavailable
+    return
+  fi
+  ARCHESTRA_MARKETPLACE_NAME=${sh(marketplaceName)} \\
+    python3 - <<'ARCHESTRA_MARKETPLACE_AUTO_UPDATE_PY'
+import json, os, tempfile
+from pathlib import Path
+
+name = os.environ["ARCHESTRA_MARKETPLACE_NAME"]
+config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+settings_path = config_dir / "settings.json"
+
+try:
+    settings = json.loads(settings_path.read_text())
+    entry = settings.get("extraKnownMarketplaces", {}).get(name)
+except Exception:
+    print("unavailable")
+    raise SystemExit
+
+if not isinstance(entry, dict):
+    print("unavailable")
+    raise SystemExit
+if "autoUpdate" in entry:
+    print("kept")
+    raise SystemExit
+
+entry["autoUpdate"] = True
+try:
+    fd, tmp = tempfile.mkstemp(dir=settings_path.parent, prefix=".settings.", suffix=".tmp")
+    with os.fdopen(fd, "w") as handle:
+        json.dump(settings, handle, indent=2)
+        handle.write("\\n")
+    os.chmod(tmp, settings_path.stat().st_mode & 0o777)
+    os.replace(tmp, settings_path)
+except Exception:
+    print("unavailable")
+    raise SystemExit
+print("enabled")
+ARCHESTRA_MARKETPLACE_AUTO_UPDATE_PY
+}
+
+case "$(claude_marketplace_auto_update)" in
+  enabled)
+    ok ${sh(`Enabled auto-update for the "${marketplaceName}" marketplace.`)}
+    ;;
+  kept) ;;
+  *)
+    warn ${manual}
     ;;
 esac`;
 }
@@ -1112,17 +1181,28 @@ ${codexAttributionHeaderLines(ctx.proxy)}
     sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
 CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
 mkdir -p "$(dirname "$CONFIG")"
+umask 077
 if [ -f "$CONFIG" ]; then
-  # drop any previous archestra-managed block for this provider (idempotent)
+  # Drop the previous managed block and any top-level provider selection.
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
-    !skip {print}
-  ' "$CONFIG" > "$CONFIG.archestra-tmp" && mv "$CONFIG.archestra-tmp" "$CONFIG"
+    !skip {
+      if ($0 ~ /^\\[/) in_table=1
+      if (!in_table && $0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
+      print
+    }
+  ' "$CONFIG" > "$CONFIG.archestra-tmp"
+else
+  : > "$CONFIG.archestra-tmp"
 fi
-cat >> "$CONFIG" <<'ARCHESTRA_TOML'
+printf 'model_provider = "%s"\n' ${sh(ctx.proxy.proxyName)} > "$CONFIG.archestra-next"
+cat "$CONFIG.archestra-tmp" >> "$CONFIG.archestra-next"
+cat >> "$CONFIG.archestra-next" <<'ARCHESTRA_TOML'
 ${block}
 ARCHESTRA_TOML
+mv -f "$CONFIG.archestra-next" "$CONFIG"
+rm "$CONFIG.archestra-tmp"
 echo "Updated $CONFIG"${
       ctx.proxy.virtualKey
         ? `
@@ -1131,7 +1211,7 @@ say ${sh("Signing Codex in with your virtual key")}
 ARCHESTRA_VIRTUAL_KEY=${sh(ctx.proxy.virtualKey)}
 printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`
         : `
-echo "Codex keeps using your own OpenAI API key login."`
+echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
     }`);
   }
 

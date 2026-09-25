@@ -14,6 +14,7 @@
    Streamdown uses standard semantic tokens (bg-sidebar, text-muted-foreground, etc.)
    that resolve to Archestra's CSS variables, so all themes are respected. */
 @source "../../node_modules/streamdown/dist";
+@source "../../node_modules/@streamdown/code/dist";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -835,4 +836,47 @@ button.plugin-featured-action::after {
 
 .openappa-glyph-warning {
   background-color: var(--color-amber-500);
+}
+
+/* ── OpenAPPA setup: policy text the wizard adds or just rewrote ── */
+
+.openappa-line-added {
+  background-color: color-mix(in oklab, var(--color-emerald-500) 12%, transparent);
+}
+
+.openappa-line-changed {
+  background-color: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
+}
+
+/* ── OpenAPPA policy editor: the line a source link points at ──
+   A tinted row plus a solid bar in the line-decoration gutter, pulsed once on
+   arrival so the eye lands on it before it settles. */
+
+.openappa-focus-line {
+  background-color: color-mix(in oklab, var(--color-blue-500) 22%, transparent);
+  animation: openappa-focus-line-pulse 1.4s ease-out;
+}
+
+.openappa-focus-line-gutter {
+  width: 3px !important;
+  margin-left: 3px;
+  border-radius: 2px;
+  background-color: var(--color-blue-500);
+}
+
+@keyframes openappa-focus-line-pulse {
+  0%,
+  30% {
+    background-color: color-mix(
+      in oklab,
+      var(--color-blue-500) 45%,
+      transparent
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .openappa-focus-line {
+    animation: none;
+  }
 }

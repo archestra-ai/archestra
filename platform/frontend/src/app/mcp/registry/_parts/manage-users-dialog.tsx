@@ -167,9 +167,10 @@ export function ManageUsersContent({
   const { data: hasMcpServerUpdatePermission } = useHasPermissions({
     mcpServerInstallation: ["update"],
   });
-  const { data: hasMcpServerAdminPermission } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: hasMcpServerAdminPermission } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
 
   const allServers = allServersUnfiltered.filter(
     (s) => s.catalogId === catalogId,

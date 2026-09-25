@@ -3,13 +3,13 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
-import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentModel, SkillModel } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { ProviderError } from "@/routes/chat/errors";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { listAvailableAgentSkills } from "@/services/agent-activation-skills";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
@@ -349,7 +349,13 @@ async function findDelegationTargetsBySlug(params: {
 
   const [environmentId, isAgentAdmin] = await Promise.all([
     AgentModel.findEnvironmentId(agentId),
-    userHasPermission(userId, organizationId, "agent", "admin"),
+    ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    }),
   ]);
 
   const targets = await AgentModel.findAccessibleDelegationTargets({

@@ -13,20 +13,20 @@ import {
 import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import { betterAuth, hasPermission } from "@/auth";
-import { userHasPermission } from "@/auth/utils";
+import { betterAuth } from "@/auth";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   AgentRunModel,
-  AgentRunShareModel,
   McpServerModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import {
@@ -35,6 +35,7 @@ import {
 } from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AgentRunRecord } from "@/types";
 
 interface McpLogsSubscription {
@@ -1013,17 +1014,18 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
     if (session.actorUserId === clientContext.userId) return true;
-    return userHasPermission(
-      clientContext.userId,
-      clientContext.organizationId,
-      "agent",
-      "admin",
-    );
+    return ResourcePermissions.allows({
+      userId: clientContext.userId,
+      organizationId: clientContext.organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
   }
 
   /**
    * Who may stream a run's logs read-only: anyone who could control it, plus
-   * anyone an execution share or project grants access to. Interactive attach stays owner-only (see
+   * anyone the run's permission policy or project grants access to. Interactive attach stays owner-only (see
    * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
    * live credentials, only a view of the output.
    */
@@ -1036,18 +1038,24 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
     if (await this.mayControlSession(session, clientContext)) return true;
-    const share = await AgentRunShareModel.findAccessibleByTaskId({
-      taskId: session.taskId,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const shared = await ResourcePermissionAccessModel.canRead({
       organizationId: clientContext.organizationId,
       userId: clientContext.userId,
+      resource: "agentRun",
+      scope: session.taskId,
     });
-    if (share) return true;
+    // SPDX-SnippetEnd
+    if (shared) return true;
     if (!session.projectId) return false;
 
     const project = await ProjectModel.findById(session.projectId);
     if (
       !project ||
-      !(await ProjectShareModel.userCanAccessProject({
+      !(await ProjectAccessModel.userCanAccessProject({
+        sessionAccess: true,
         project,
         userId: clientContext.userId,
         organizationId: clientContext.organizationId,
@@ -1055,12 +1063,13 @@ class WebSocketService {
     ) {
       return false;
     }
-    return userHasPermission(
-      clientContext.userId,
-      clientContext.organizationId,
-      "project",
-      "read-all",
-    );
+    return ResourcePermissions.allows({
+      userId: clientContext.userId,
+      organizationId: clientContext.organizationId,
+      resource: "conversation",
+      scope: "*",
+      action: "read",
+    });
   }
 
   private async handleSubscribeMcpExec(
@@ -1612,10 +1621,6 @@ class WebSocketService {
   private async authenticateConnection(
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
-    const { success: userIsMcpServerAdmin } = await hasPermission(
-      { mcpServerInstallation: ["admin"] },
-      request.headers,
-    );
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
@@ -1631,7 +1636,10 @@ class WebSocketService {
         return {
           userId: user.id,
           organizationId,
-          userIsMcpServerAdmin,
+          userIsMcpServerAdmin: await isMcpInstallationAdmin({
+            userId: user.id,
+            organizationId,
+          }),
         };
       }
     } catch (_sessionError) {
@@ -1652,7 +1660,10 @@ class WebSocketService {
           return {
             userId: user.id,
             organizationId,
-            userIsMcpServerAdmin,
+            userIsMcpServerAdmin: await isMcpInstallationAdmin({
+              userId: user.id,
+              organizationId,
+            }),
           };
         }
       } catch (_apiKeyError) {

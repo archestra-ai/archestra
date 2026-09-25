@@ -4,7 +4,9 @@
 //! derives to a canonical identity (`<catalog>__<tool>` → `mcp/<catalog>/<tool>`), so a
 //! battery rule written canonically reaches an installed catalog through the
 //! `server_aliases` table the host composes into the document.
+use crate::deployments::HostCredentials;
 use appa_eventlog::{Backend, LogStore};
+use appa_package::PackageName;
 use appa_runtime::{
     api::Runtime,
     config::{Config, HostDefaults, HostedBattery, IncludeResolution},
@@ -22,8 +24,12 @@ fn defaults() -> HostDefaults {
     }
 }
 
-pub(crate) fn compile(content: &str) -> Result<Config, String> {
-    Config::hosted(content, defaults()).map_err(|error| error.to_string())
+/// Compile a hosted document, resolving every `token_env` it names through `lookup`.
+pub(crate) fn compile(
+    content: &str,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Result<Config, String> {
+    Config::hosted(content, defaults(), lookup).map_err(|error| error.to_string())
 }
 
 /// Open a runtime over `store` under the Archestra adapter.
@@ -80,44 +86,36 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
     refuse_host_variables(&document)?;
-    let policies = batteries
+    let bound = batteries
         .iter()
-        .map(bind_helpers)
-        .collect::<Result<Vec<_>, _>>()?;
-    // A battery reads one variable at most: the bridge token of the helpers this host
-    // bound for it.
-    let granted: Vec<Vec<&str>> = batteries
+        .map(|battery| Ok((battery, bind_helpers(battery)?)))
+        .collect::<Result<Vec<_>, String>>()?;
+    let hosted: Vec<(&ResolvedBattery, &str, Vec<&str>)> = bound
         .iter()
-        .map(|battery| {
-            battery
-                .helpers
-                .iter()
-                .map(|binding| binding.token_env.as_str())
-                .collect()
+        .map(|(battery, bound)| {
+            let token_env = bound.token_env.iter().map(String::as_str).collect();
+            (*battery, bound.policy.as_str(), token_env)
         })
         .collect();
-    let resolved: Vec<(&str, HostedBattery<'_>)> = batteries
-        .iter()
-        .zip(&policies)
-        .zip(&granted)
-        .map(|((battery, policy), token_env)| {
-            (
-                battery.entry.as_str(),
-                HostedBattery {
+    // No organization's values reach a composition: it is checked, stored and later
+    // compiled per dispatch with the values the host resolves then.
+    let unresolved = HostCredentials::default();
+    let config = Config::hosted_included(
+        root,
+        defaults(),
+        |entry| {
+            hosted
+                .iter()
+                .find(|(battery, _, _)| battery.entry == entry)
+                .map(|(battery, policy, token_env)| HostedBattery {
                     name: &battery.name,
                     policy,
                     token_env,
-                },
-            )
-        })
-        .collect();
-    let config = Config::hosted_included(root, defaults(), |entry| {
-        resolved
-            .iter()
-            .find(|(spelling, _)| *spelling == entry)
-            .map(|(_, battery)| *battery)
-            .ok_or(IncludeResolution::Unknown)
-    })
+                })
+                .ok_or(IncludeResolution::Unknown)
+        },
+        |var| unresolved.lookup(var),
+    )
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
@@ -130,17 +128,32 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
     })
 }
 
+/// A battery's policy as the host serves it, and the credential variables it reads.
+struct BoundBattery {
+    policy: String,
+    token_env: Vec<String>,
+}
+
 /// Rewrite a battery's `command` externals onto the host's helper endpoint. A
 /// battery composed without a binding keeps its commands, which the hosted
-/// composition then refuses: an unbound helper never silently drops out.
-fn bind_helpers(battery: &ResolvedBattery) -> Result<String, String> {
+/// composition then refuses: an unbound helper never silently drops out. The
+/// battery reads the bridge token of its bound helpers and the key its
+/// `[externals.jev]` profile names inside the battery's own credential prefix: the
+/// runtime sends that key to the jev endpoint alone.
+fn bind_helpers(battery: &ResolvedBattery) -> Result<BoundBattery, String> {
     let mut document: toml::Table = toml::from_str(&battery.policy)
         .map_err(|error| format!("battery {}: {error}", battery.name))?;
     refuse_host_variables(&document)
         .and_then(|()| refuse_url_externals(&document))
         .map_err(|error| format!("battery {}: {error}", battery.name))?;
+    let jev_key = jev_profile_variable(&document).filter(|variable| {
+        PackageName::parse(&battery.name).is_ok_and(|name| name.credential_prefix().owns(variable))
+    });
     let Some(binding) = &battery.helpers else {
-        return Ok(battery.policy.clone());
+        return Ok(BoundBattery {
+            policy: battery.policy.clone(),
+            token_env: jev_key.into_iter().collect(),
+        });
     };
     if let Some(toml::Value::Table(externals)) = document.get_mut("externals") {
         for (_, section) in externals.iter_mut() {
@@ -171,7 +184,12 @@ fn bind_helpers(battery: &ResolvedBattery) -> Result<String, String> {
             }
         }
     }
-    toml::to_string(&document).map_err(|error| error.to_string())
+    Ok(BoundBattery {
+        policy: toml::to_string(&document).map_err(|error| error.to_string())?,
+        token_env: std::iter::once(binding.token_env.clone())
+            .chain(jev_key)
+            .collect(),
+    })
 }
 
 /// A battery reaches out only through the host's helper bridge: a url external
@@ -200,7 +218,9 @@ pub(crate) fn refuse_host_variables(document: &toml::Table) -> Result<(), String
     Ok(())
 }
 
-/// Every `[externals.<section>.<name>]` binding table, with its section and name.
+/// Every `[externals.<section>.<name>]` binding table, with its section and name, and
+/// every profile section (`[externals.jev]`, `[externals.llm]`) that names its
+/// credential on the section itself, under its section's name.
 pub(crate) fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &toml::Table)> {
     let Some(toml::Value::Table(externals)) = document.get("externals") else {
         return Vec::new();
@@ -209,13 +229,53 @@ pub(crate) fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &tom
         .iter()
         .filter_map(|(section, bindings)| bindings.as_table().map(|bindings| (section, bindings)))
         .flat_map(|(section, bindings)| {
-            bindings.iter().filter_map(move |(name, binding)| {
-                binding
-                    .as_table()
-                    .map(|binding| (section.as_str(), name.as_str(), binding))
-            })
+            let profile = bindings.contains_key("token_env").then_some((
+                section.as_str(),
+                section.as_str(),
+                bindings,
+            ));
+            profile
+                .into_iter()
+                .chain(bindings.iter().filter_map(move |(name, binding)| {
+                    binding
+                        .as_table()
+                        .map(|binding| (section.as_str(), name.as_str(), binding))
+                }))
         })
         .collect()
+}
+
+/// The variable a document's `[externals.jev]` profile reads its key from.
+fn jev_profile_variable(document: &toml::Table) -> Option<String> {
+    document
+        .get("externals")?
+        .get(JEV_PROFILE)?
+        .get("token_env")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// The profile the stock `jev` annotator reads its key from.
+const JEV_PROFILE: &str = "jev";
+
+/// The `[[policy.<key>]]` entries a document declares.
+pub(crate) fn policy_entries<'a>(document: &'a toml::Table, key: &str) -> &'a [toml::Value] {
+    document
+        .get("policy")
+        .and_then(toml::Value::as_table)
+        .and_then(|policy| policy.get(key))
+        .and_then(toml::Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// The annotators a document's `[[policy.tool]]` rules route calls to, sorted and
+/// once each. An annotator no rule names is never consulted.
+pub(crate) fn routed_annotators(document: &toml::Table) -> Vec<String> {
+    let routed: std::collections::BTreeSet<&str> = policy_entries(document, "tool")
+        .iter()
+        .filter_map(|rule| rule.get("annotator").and_then(toml::Value::as_str))
+        .collect();
+    routed.into_iter().map(str::to_owned).collect()
 }
 
 /// A name that stays one path segment under the helper endpoint: `.` and `..`
@@ -234,7 +294,12 @@ mod tests {
     use appa_runtime::hooks;
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
-    const BRIDGE_TOKEN_ENV: &str = "APPA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
+    const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
+
+    /// A compilation no organization's values reach, as a composition's is.
+    fn compile(content: &str) -> Result<Config, String> {
+        super::compile(content, |var| HostCredentials::default().lookup(var))
+    }
     const GITHUB_ENTRY: &str = "batteries/github/appa.toml";
     const LINEAR_ENTRY: &str = "batteries/linear@sha256-3f9c/appa.toml";
 
@@ -256,12 +321,13 @@ mod tests {
             call_id: Some(format!("call:{call_id}")),
             actor: actor.clone(),
             call: ProposedCall {
-                tool: (crate::adapter::adapter().derive)(tool)
+                tool: (crate::adapter::adapter().identify_tool)(tool)
                     .expect("test tool names are well formed")
                     .canonical
                     .as_str()
                     .to_owned(),
                 arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+                cwd: None,
             },
             spawn: false,
             ruling: None,
@@ -281,7 +347,8 @@ mod tests {
             hooks::handle(
                 runtime,
                 HookEvent::SessionStart {
-                    root: actor.root.clone()
+                    root: actor.root.clone(),
+                    principal: None,
                 }
             )
             .await,
@@ -328,6 +395,7 @@ requires = { audience = { within = ["internal"] } }
                         tool: appa_runtime_api::CONTROL_TOOL.into(),
                         arguments: serde_json::value::RawValue::from_string(args.to_string())
                             .unwrap(),
+                        cwd: None,
                     },
                     spawn: false,
                     ruling: None,
@@ -672,6 +740,11 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         let root = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'http://127.0.0.1:9000/api/openappa/helpers/x/y'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n";
         assert!(validate(root).is_err());
         assert!(compose(root, &[]).is_err());
+        // A profile's key reaches its provider: never the host's own bearer.
+        assert!(
+            validate("[policy]\nversion = 2\n[externals.jev]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n")
+                .is_err()
+        );
         assert!(validate("[policy]\nversion = 2\n").is_ok());
         for policy in [
             "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n",
@@ -691,6 +764,53 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 .is_err()
             );
         }
+    }
+
+    /// The jev battery ships its `[externals.jev]` profile: its key is granted to it, and
+    /// the composed document names it among the credentials the runtime resolves itself,
+    /// while a helper's own credential stays the sandbox's.
+    #[test]
+    fn the_jev_battery_composes_with_the_key_its_profile_names() {
+        // SAFETY: as above.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let jev = crate::batteries::bundled()
+            .iter()
+            .find(|battery| battery.name == "jev")
+            .expect("the jev battery is bundled");
+        let github = ResolvedBattery {
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
+                token_env: BRIDGE_TOKEN_ENV.into(),
+            }),
+            policy: "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"github.visibility\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\nannotator = \"github.visibility\"\n[externals.annotators.\"github.visibility\"]\ncommand = [\"python3\", \"visibility.py\"]\ntoken_env = \"APPA_PROVIDER_GITHUB_TOKEN\"\n".into(),
+            ..github_battery()
+        };
+        let root = format!(
+            "include = [\"batteries/jev/appa.toml\", \"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = \"jev_key\"\nAPPA_PROVIDER_GITHUB_TOKEN = \"github_key\"\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"read\"\nannotator = \"jev.tool-call\"\n"
+        );
+        let jev_battery = || ResolvedBattery {
+            entry: "batteries/jev/appa.toml".into(),
+            name: jev.name.clone(),
+            policy: jev.policy.clone(),
+            helpers: None,
+        };
+        let composed = compose(&root, &[jev_battery(), github]).unwrap();
+        let declarations = crate::declarations::parse(&composed.content);
+        assert_eq!(
+            declarations.runtime_credentials,
+            ["APPA_PROVIDER_JEV_API_KEY"]
+        );
+
+        // A profile naming another battery's credential is not granted it.
+        let foreign = ResolvedBattery {
+            policy: jev
+                .policy
+                .replace("APPA_PROVIDER_JEV_API_KEY", "APPA_PROVIDER_GITHUB_TOKEN"),
+            ..jev_battery()
+        };
+        let root = "include = [\"batteries/jev/appa.toml\"]\n[policy]\nversion = 2\n";
+        assert!(compose(root, &[jev_battery()]).is_ok());
+        assert!(compose(root, &[foreign]).is_err());
     }
 
     #[test]

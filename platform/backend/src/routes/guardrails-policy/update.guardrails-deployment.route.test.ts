@@ -1,11 +1,16 @@
+import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./guardrails-deployment.routes";
@@ -78,6 +83,29 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         }),
       );
     });
+  });
+
+  test("stays off while a saved policy is one the runtime refuses to open", async () => {
+    // A revision written before the save-time check opened the policy, or by
+    // the unvalidated declaration migration, can still hold such a rule.
+    const refused =
+      '[policy]\nversion = 2\n[[policy.tool]]\nname = "grain__*"\ndelta = {}\n';
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: refused,
+      contentHash: createHash("sha256").update(refused).digest("hex"),
+      expectedRevision: 0,
+    });
+
+    const response = await set(true);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toContain(
+      'Revision 1: unsupported policy: tool "grain__*" has an invalid qualified identity',
+    );
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+    // Turning it off is never refused.
+    expect((await set(false)).statusCode).toBe(200);
   });
 
   test("refuses writes without management permission", async () => {

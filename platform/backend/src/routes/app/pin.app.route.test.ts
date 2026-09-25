@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AppModel, AppPinModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -45,7 +45,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
       name: "Pinnable",
     });
@@ -77,7 +76,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -120,7 +118,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Tracker",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     const sharedUi = {
@@ -179,7 +176,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Tracker 404",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     await makeTool({
@@ -203,21 +199,24 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   // the auth middleware 403s it for everyone (deny-by-default). A missing
   // registration is invisible from this file's bare fastify instance (routes
   // are registered without the auth plugin), so assert on the map directly,
-  // like the knowledge-base route tests do. app:read matches project pins'
-  // project:read — any member-level viewer may pin; per-instance visibility is
-  // gated in the handlers.
+  // like the knowledge-base route tests do.
+  //
+  // Owned-app pins carry no coarse permission, because a scoped grant can
+  // reach an app without the role-level app:read and demanding it would lock
+  // that viewer out of pinning what they can see. PinApp resolves the app
+  // through loadViewableApp (a per-app grant check) and UnpinApp only removes
+  // the caller's own pin row.
+  //
+  // External-app pins ride on the MCP server's role-level visibility instead,
+  // so they keep app:read.
   test("pin routes are registered in the endpoint permissions map for members", async () => {
     const { requiredEndpointPermissionsMap } = await import(
       "@archestra/shared/access-control"
     );
     const { RouteId } = await import("@archestra/shared");
 
-    expect(requiredEndpointPermissionsMap[RouteId.PinApp]).toEqual({
-      app: ["read"],
-    });
-    expect(requiredEndpointPermissionsMap[RouteId.UnpinApp]).toEqual({
-      app: ["read"],
-    });
+    expect(requiredEndpointPermissionsMap[RouteId.PinApp]).toEqual({});
+    expect(requiredEndpointPermissionsMap[RouteId.UnpinApp]).toEqual({});
     expect(requiredEndpointPermissionsMap[RouteId.PinExternalApp]).toEqual({
       app: ["read"],
     });
@@ -235,7 +234,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     await makeMember(member.id, organizationId, {});
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
       name: "Org Shared",
     });
@@ -265,7 +263,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     const otherAuthor = await makeUser({ email: "app-pin-author@test.com" });
     const foreignPersonal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
     const stranger = await makeUser({ email: "app-pin-stranger@test.com" });
@@ -291,7 +289,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
       name: "Private PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
     const server = await makeMcpServer({
@@ -318,7 +316,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   }) => {
     const owned = await makeApp({
       organizationId,
-      scope: "org",
       authorId: user.id,
     });
     await app.inject({ method: "PUT", url: `/api/apps/${owned.id}/pin` });

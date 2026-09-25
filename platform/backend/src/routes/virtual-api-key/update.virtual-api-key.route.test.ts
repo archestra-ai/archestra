@@ -1,12 +1,13 @@
 import { vi } from "vitest";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
 
 import { userHasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -15,10 +16,11 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 
@@ -48,6 +50,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -98,6 +101,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -126,6 +130,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -169,6 +174,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeMember,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -182,7 +188,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "owned-by-target",
-        scope: "personal",
         providerApiKeys: [
           { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
@@ -205,7 +210,7 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json().name).toBe("renamed-by-admin");
     expect(response.json().authorId).toBe(target.id);
   });

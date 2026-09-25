@@ -8,7 +8,7 @@ import {
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
 import { externalMcpSkillsQueryKey } from "@/lib/skills/skill.query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const {
   approveCatalogItemImage,

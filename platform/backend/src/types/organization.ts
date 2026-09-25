@@ -33,6 +33,7 @@ import {
   ValidationRegexSchema,
 } from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
+import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -632,8 +633,7 @@ export const UpdateIntegrationSettingsSchema = z.object({
 /**
  * Clean API shape for configuring the implicit "default" environment. The
  * handler maps these to the org columns (`defaultEnvironmentName`,
- * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`,
- * `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
  * an explicit null clears the nullable ones.
  */
 export const UpdateDefaultEnvironmentSchema = z.object({
@@ -643,7 +643,7 @@ export const UpdateDefaultEnvironmentSchema = z.object({
   // target, which the NAPI boundary validates as an RFC1123 label.
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
-  restricted: z.boolean().optional(),
+  restricted: RetiredSharingUpdateFieldSchema,
   validationRegex: ValidationRegexSchema.nullable().optional(),
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });

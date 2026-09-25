@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { callApi } from "./api-call";
 
-vi.mock("@/lib/utils", async () => {
-  const actual = await vi.importActual("@/lib/utils");
+vi.mock("@/lib/utils/api", async () => {
+  const actual = await vi.importActual("@/lib/utils/api");
   return {
     ...actual,
     handleApiError: vi.fn(),

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -37,6 +38,10 @@ vi.mock("./catalog-edit-access", () => ({
 describe("SelectMcpServerCredentialTypeAndTeams", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: CURRENT_USER_ID } },
     } as ReturnType<typeof useSession>);
@@ -123,9 +128,11 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
     });
 
     async function expandAndGetTeamOption() {
-      const trigger = await screen.findByRole("button", { name: /Personal/i });
-      trigger.click();
-      return screen.findByRole("button", { name: /Team/i });
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole("combobox", { name: "Connection owner" }),
+      );
+      return screen.findByRole("option", { name: /^Team/ });
     }
 
     it("withholds the team option from a caller without write on the item", async () => {
@@ -147,7 +154,10 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
       await waitFor(() =>
         expect(onScopeChange).toHaveBeenLastCalledWith("personal"),
       );
-      expect(await expandAndGetTeamOption()).toBeDisabled();
+      expect(await expandAndGetTeamOption()).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
 
     it("offers the team option to a caller who holds write on the item", async () => {
@@ -164,7 +174,10 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         />,
       );
 
-      expect(await expandAndGetTeamOption()).toBeEnabled();
+      expect(await expandAndGetTeamOption()).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
 
     it("does not withhold the team option while the write check is still loading", async () => {
@@ -183,7 +196,10 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         />,
       );
 
-      expect(await expandAndGetTeamOption()).toBeEnabled();
+      expect(await expandAndGetTeamOption()).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
   });
 });

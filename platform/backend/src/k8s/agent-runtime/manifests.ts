@@ -152,9 +152,9 @@ export type KubernetesAgentRunLaunchSpec = Omit<
  * tmux is what makes a session attachable and steerable: a human can attach
  * from the browser and type into the same session the agent is using, and a
  * steer can be delivered without a terminal attached at all. The FIFO is the
- * turn-boundary channel the Archestra runtime-agent reads; bring-your-own-image
- * CLIs that own their own input loop are steered with `tmux send-keys`
- * instead, which needs no cooperation from the process.
+ * turn-boundary channel for clients that read it; CLIs that own their own
+ * input loop are steered with `tmux send-keys` instead, which needs no
+ * cooperation from the process.
  *
  * The workspace supervisor owns PID 1; agent command completion is independent
  * of Pod completion. Durable request markers prevent replay after replacement.
@@ -546,8 +546,8 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
 
 /**
  * With no command configured the image must provide `archestra-runtime-agent`
- * on PATH — the contract the default image satisfies and every
- * bring-your-own-image either satisfies or overrides with its own command.
+ * on PATH. Only Agents saved against the retired built-in image rely on this;
+ * new runtimes always name their own command.
  */
 function resolveEntrypoint(command: string[] | null): string {
   const resolved =

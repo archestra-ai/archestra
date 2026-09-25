@@ -45,8 +45,6 @@ export function useChatWithCatalogItem() {
         (await createAgent.mutateAsync({
           name: agentName,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           icon: item.icon ?? undefined,
         }));
 

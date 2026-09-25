@@ -1,9 +1,10 @@
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, AgentToolModel, McpServerModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 const { connectAndGetToolsMock } = vi.hoisted(() => ({
@@ -40,6 +41,18 @@ describe("MCP Server Install - explicit target user", () => {
     // Caller passes every permission gate unless a test narrows it.
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    grantEverywhere(
+      ["mcpRegistry"],
+      async () =>
+        (
+          await hasPermissionMock.getMockImplementation()?.(
+            // The retired action this grant replaced; per-test stubs that
+            // key on real actions leave it denied.
+            { mcpServerInstallation: ["admin"] } as never,
+            {},
+          )
+        )?.success ?? false,
+    );
     connectAndGetToolsMock.mockResolvedValue([]);
 
     organizationId = (await makeOrganization()).id;
@@ -78,7 +91,6 @@ describe("MCP Server Install - explicit target user", () => {
     return makeInternalMcpCatalog({
       organizationId,
       authorId,
-      scope: "org",
       serverType: "remote",
       serverUrl: "https://example.test/mcp",
     });

@@ -1,9 +1,12 @@
-import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -15,42 +18,31 @@ const mockHasPermission = hasPermission as Mock;
 
 /**
  * POST /api/internal_mcp_catalog must refuse to assign a *restricted*
- * environment unless the caller can deploy catalog items to restricted
- * environments — i.e. holds `mcpRegistry:deploy-to-restricted`. The route
- * feeds the probe into `assertCanAssignEnvironment`, which throws 403 for a
- * restricted env the caller can't touch.
+ * environment unless the caller holds a `use` grant on that environment.
+ * `assertCanAssignEnvironment` throws 403 for a restricted env the caller
+ * cannot reach.
  *
  * The harness mirrors internal-mcp-catalog.headers.test.ts (real PGlite via
- * `@/test`, identity injected on the onRequest hook, mocked `hasPermission`),
- * but the mock here is *permission-aware*: it answers the
- * `mcpRegistry:deploy-to-restricted` probe from a per-test flag so we can
- * model a caller who can deploy to restricted envs vs. one who can't. Every
- * other permission probe (e.g. the `mcpServerInstallation:["admin"]` scope
- * check) stays `success: true` so the test isolates the environment gate.
+ * `@/test`, identity injected on the onRequest hook, mocked `hasPermission`).
+ * Every role probe stays `success: true` so the test isolates the environment
+ * gate; the caller is a plain member, so the only way into a restricted
+ * environment is a grant the test writes.
  */
 describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  // Toggles the answer to the mcpRegistry:deploy-to-restricted probe.
-  let canDeployToRestricted: boolean;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    canDeployToRestricted = false;
-    mockHasPermission.mockImplementation(async (permissions: Permissions) => {
-      // The environment gate is the only probe whose answer varies per test.
-      if (permissions.mcpRegistry?.includes("deploy-to-restricted")) {
-        return { success: canDeployToRestricted, error: null };
-      }
-      // Everything else (scope check, etc.) is granted so this suite isolates
-      // the environment guard.
-      return { success: true, error: null };
-    });
+    // Every role probe (scope check, etc.) is granted so this suite isolates
+    // the environment guard.
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "member" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -68,6 +60,15 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     await app.close();
   });
 
+  /** Let this user deploy into exactly one environment. */
+  async function grantDeploy(environmentId: string) {
+    await grantEnvironmentUse({
+      organizationId,
+      environmentId: environmentId,
+      userId: user.id,
+    });
+  }
+
   function createBody(environmentId: string | null) {
     return {
       name: `restricted-env-${crypto.randomUUID().slice(0, 8)}`,
@@ -77,11 +78,10 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     };
   }
 
-  test("a non-env-admin member assigning a RESTRICTED env is rejected (403) and nothing is created", async () => {
-    canDeployToRestricted = false;
-    const restricted = await createEnvironment({
+  test("a member without a grant on a RESTRICTED env is rejected (403) and nothing is created", async () => {
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
 
     const before = await InternalMcpCatalogModel.findAll({
@@ -108,12 +108,12 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     expect(after.length).toBe(before.length);
   });
 
-  test("a caller with mcpRegistry:deploy-to-restricted assigning a RESTRICTED env succeeds", async () => {
-    canDeployToRestricted = true;
-    const restricted = await createEnvironment({
+  test("a caller granted use on that environment assigning a RESTRICTED env succeeds", async () => {
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
+    await grantDeploy(restricted.id);
 
     const response = await app.inject({
       method: "POST",
@@ -125,11 +125,10 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     expect(response.json().environmentId).toBe(restricted.id);
   });
 
-  test("a non-env-admin member assigning an UNRESTRICTED env succeeds", async () => {
-    canDeployToRestricted = false;
+  test("a member with no grant assigning an UNRESTRICTED env succeeds", async () => {
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
 
     const response = await app.inject({
@@ -165,10 +164,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   }
 
   test("updating environmentId on an existing catalog item persists, and clearing to default works", async () => {
-    canDeployToRestricted = false;
     const open = await createEnvironment({
       organizationId,
-      data: { name: "Staging", restricted: false },
+      data: { name: "Staging" },
     });
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
     const id = await createWith(name, null);
@@ -190,11 +188,10 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     expect(cleared.json().environmentId).toBeNull();
   });
 
-  test("a non-env-admin updating to a RESTRICTED env is rejected (403) and the assignment is unchanged", async () => {
-    canDeployToRestricted = false;
-    const restricted = await createEnvironment({
+  test("updating to a RESTRICTED env without a grant on it is rejected (403) and the assignment is unchanged", async () => {
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
     const id = await createWith(name, null);
@@ -212,12 +209,12 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     expect(item?.environmentId ?? null).toBeNull();
   });
 
-  test("an env-admin updating to a RESTRICTED env succeeds", async () => {
-    canDeployToRestricted = true;
-    const restricted = await createEnvironment({
+  test("updating to a RESTRICTED env with a grant on it succeeds", async () => {
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Prod", restricted: true },
+      data: { name: "Prod" },
     });
+    await grantDeploy(restricted.id);
     const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
     const id = await createWith(name, null);
 

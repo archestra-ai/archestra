@@ -1,0 +1,2530 @@
+import { randomUUID } from "node:crypto";
+import type Anthropic from "@anthropic-ai/sdk";
+import type { ChatProvider } from "@archestra/shared";
+import {
+  MICROSOFT_365_COPILOT_MODELS,
+  type SupportedProvider,
+} from "@archestra/shared";
+import { FinishReason, type GenerateContentResponse } from "@google/genai";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyPluginAsync,
+} from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import type OpenAI from "openai";
+import type {
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions/completions";
+import { vi } from "vitest";
+import appConfig from "@/config";
+import {
+  InteractionModel,
+  LimitValidationService,
+  ModelModel,
+  ToolModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { Agent } from "@/types";
+import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { archestraAdapterFactory } from "../adapters/archestra";
+import { azureAdapterFactory } from "../adapters/azure";
+import { azureResponsesAdapterFactory } from "../adapters/azure-responses";
+import { bedrockAdapterFactory } from "../adapters/bedrock";
+import { cerebrasAdapterFactory } from "../adapters/cerebras";
+import { cohereAdapterFactory } from "../adapters/cohere";
+import { deepseekAdapterFactory } from "../adapters/deepseek";
+import { geminiAdapterFactory } from "../adapters/gemini";
+import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
+import { githubCopilotResponsesAdapterFactory } from "../adapters/github-copilot-responses";
+import { groqAdapterFactory } from "../adapters/groq";
+import { kimiAdapterFactory } from "../adapters/kimi";
+import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-copilot";
+import { minimaxAdapterFactory } from "../adapters/minimax";
+import { mistralAdapterFactory } from "../adapters/mistral";
+import { ollamaAdapterFactory } from "../adapters/ollama";
+import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
+import { openaiAdapterFactory } from "../adapters/openai";
+import { openrouterAdapterFactory } from "../adapters/openrouter";
+import { perplexityAdapterFactory } from "../adapters/perplexity";
+import { perplexityResponsesAdapterFactory } from "../adapters/perplexity-responses";
+import { vllmAdapterFactory } from "../adapters/vllm";
+import { xaiAdapterFactory } from "../adapters/xai";
+import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
+import anthropicProxyRoutes from "./anthropic";
+import archestraProxyRoutes from "./archestra";
+import azureProxyRoutes from "./azure";
+import bedrockProxyRoutes from "./bedrock";
+import cerebrasProxyRoutes from "./cerebras";
+import cohereProxyRoutes from "./cohere";
+import deepseekProxyRoutes from "./deepseek";
+import geminiProxyRoutes from "./gemini";
+import githubCopilotProxyRoutes from "./github-copilot";
+import groqProxyRoutes from "./groq";
+import kimiProxyRoutes from "./kimi";
+import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
+import minimaxProxyRoutes from "./minimax";
+import mistralProxyRoutes from "./mistral";
+import ollamaProxyRoutes from "./ollama";
+import ollamaNativeProxyRoutes from "./ollama-native";
+import openAiProxyRoutes from "./openai";
+import openrouterProxyRoutes from "./openrouter";
+import perplexityProxyRoutes from "./perplexity";
+import vllmProxyRoutes from "./vllm";
+import xaiProxyRoutes from "./xai";
+import zhipuaiProxyRoutes from "./zhipuai";
+
+type ProviderFamily =
+  | "openai"
+  | "zhipuai"
+  // Transport-shaped, not provider-shaped: shared by every Responses-style
+  // provider (Azure Responses, Perplexity Agent).
+  | "responses"
+  | "anthropic"
+  | "gemini"
+  | "cohere"
+  | "minimax"
+  | "bedrock";
+
+type ToolDefinition = {
+  name: string;
+  description: string;
+  parameters: {
+    type: string;
+    properties: Record<string, { type: string; description: string }>;
+    required: string[];
+  };
+};
+
+type RequestBuilder = {
+  buildTextRequest: (params: {
+    model: string;
+    content: string;
+  }) => Record<string, unknown>;
+  buildToolRequest: (params: {
+    model: string;
+    content: string;
+    tools: ToolDefinition[];
+    stream?: boolean;
+  }) => Record<string, unknown>;
+  buildToolResultRequest: (params: {
+    model: string;
+  }) => Record<string, unknown>;
+};
+
+type ProviderTestConfig = {
+  providerName: string;
+  providerSlug: string;
+  provider: SupportedProvider;
+  family: ProviderFamily;
+  routePlugin: FastifyPluginAsync;
+  adapterFactory: { createClient: (...args: never[]) => unknown };
+  endpoint: (agentId: string) => string;
+  streamEndpoint?: (agentId: string) => string;
+  headers: () => Record<string, string>;
+  requestBuilder: RequestBuilder;
+  model: string;
+  supportsDeclaredTools?: boolean;
+  supportsStreamingToolCalls?: boolean;
+
+  assertStreamingToolCall: (body: string) => void;
+};
+
+type ToolCallSpec = {
+  name: string;
+  arguments: string;
+};
+
+type UsageSpec = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
+type HarnessOptions = {
+  onRequest?: (request: unknown) => void;
+  text?: string;
+  model?: string;
+  usage?: UsageSpec;
+  nonStreamingToolCall?: ToolCallSpec | null;
+  streamingToolCall?: ToolCallSpec | null;
+  reasoningContent?: string;
+};
+
+const READ_FILE_TOOL: ToolDefinition = {
+  name: "read_file",
+  description: "Read a file from the filesystem",
+  parameters: {
+    type: "object",
+    properties: {
+      file_path: {
+        type: "string",
+        description: "The path to the file to read",
+      },
+    },
+    required: ["file_path"],
+  },
+};
+
+const TOOL_RESULT_DATA = {
+  files: [
+    { name: "README.md", size: 1024, type: "file" },
+    { name: "src", size: 4096, type: "directory" },
+    { name: "package.json", size: 512, type: "file" },
+    { name: "tsconfig.json", size: 256, type: "file" },
+    { name: "node_modules", size: 102400, type: "directory" },
+  ],
+  totalCount: 5,
+  directory: ".",
+};
+
+const DEFAULT_USAGE: UsageSpec = {
+  inputTokens: 100,
+  outputTokens: 20,
+};
+
+function createFastifyApp() {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  return app;
+}
+
+function createAsyncIterable<T>(items: T[]): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let index = 0;
+      return {
+        async next() {
+          if (index < items.length) {
+            return { done: false, value: items[index++] };
+          }
+
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+}
+
+function makeOpenAiMessages(content: string) {
+  return [{ role: "user", content }];
+}
+
+function makeOpenAiToolResultRequest(model: string) {
+  return {
+    model,
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  };
+}
+
+function makeAnthropicToolResultRequest(model: string) {
+  return {
+    model,
+    max_tokens: 1024,
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_123",
+            name: "list_files",
+            input: { directory: "." },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_123",
+            content: JSON.stringify(TOOL_RESULT_DATA),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function makeGeminiToolResultRequest() {
+  return {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: "What files are in the current directory?" }],
+      },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              name: "list_files",
+              args: { directory: "." },
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "list_files",
+              response: TOOL_RESULT_DATA,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function makeCohereToolResultRequest(model: string) {
+  return {
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What files are in the current directory?" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  };
+}
+
+function makeBedrockToolResultRequest(model: string) {
+  return {
+    modelId: model,
+    messages: [
+      {
+        role: "user",
+        content: [{ text: "What files are in the current directory?" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            toolUse: {
+              toolUseId: "tooluse_123",
+              name: "list_files",
+              input: { directory: "." },
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            toolResult: {
+              toolUseId: "tooluse_123",
+              content: [{ text: JSON.stringify(TOOL_RESULT_DATA) }],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function createOpenAiLikeHarness(options: HarnessOptions = {}) {
+  const requests: OpenAI.Chat.Completions.ChatCompletionCreateParams[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "test-model";
+  const text = options.text ?? "Mocked response";
+
+  return {
+    requests,
+    client: {
+      chat: {
+        completions: {
+          create: async (
+            request: OpenAI.Chat.Completions.ChatCompletionCreateParams,
+          ) => {
+            requests.push(request);
+            options.onRequest?.(request);
+
+            if (request.stream) {
+              if (options.streamingToolCall) {
+                const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+                  [
+                    {
+                      id: "chatcmpl_stream_tool",
+                      object: "chat.completion.chunk",
+                      created: 1,
+                      model,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: {
+                            role: "assistant",
+                            tool_calls: [
+                              {
+                                index: 0,
+                                id: "call_stream_tool",
+                                type: "function",
+                                function: {
+                                  name: options.streamingToolCall.name,
+                                  arguments:
+                                    options.streamingToolCall.arguments,
+                                },
+                              },
+                            ],
+                          },
+                          finish_reason: null,
+                          logprobs: null,
+                        },
+                      ],
+                    },
+                    {
+                      id: "chatcmpl_stream_tool",
+                      object: "chat.completion.chunk",
+                      created: 1,
+                      model,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: {},
+                          finish_reason: "tool_calls",
+                          logprobs: null,
+                        },
+                      ],
+                      usage: {
+                        prompt_tokens: usage.inputTokens,
+                        completion_tokens: usage.outputTokens,
+                        total_tokens: usage.inputTokens + usage.outputTokens,
+                      },
+                    },
+                  ];
+                return createAsyncIterable(streamChunks);
+              }
+
+              const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+                [
+                  {
+                    id: "chatcmpl_stream_text",
+                    object: "chat.completion.chunk",
+                    created: 1,
+                    model,
+                    choices: [
+                      {
+                        index: 0,
+                        delta: { role: "assistant", content: text },
+                        finish_reason: null,
+                        logprobs: null,
+                      },
+                    ],
+                  },
+                  {
+                    id: "chatcmpl_stream_text",
+                    object: "chat.completion.chunk",
+                    created: 1,
+                    model,
+                    choices: [
+                      {
+                        index: 0,
+                        delta: {},
+                        finish_reason: "stop",
+                        logprobs: null,
+                      },
+                    ],
+                    usage: {
+                      prompt_tokens: usage.inputTokens,
+                      completion_tokens: usage.outputTokens,
+                      total_tokens: usage.inputTokens + usage.outputTokens,
+                    },
+                  },
+                ];
+              return createAsyncIterable(streamChunks);
+            }
+
+            return {
+              id: "chatcmpl_nonstream",
+              object: "chat.completion",
+              created: 1,
+              model,
+              choices: [
+                {
+                  index: 0,
+                  message: options.nonStreamingToolCall
+                    ? {
+                        role: "assistant",
+                        content: null,
+                        refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
+                        tool_calls: [
+                          {
+                            id: "call_nonstream_tool",
+                            type: "function",
+                            function: {
+                              name: options.nonStreamingToolCall.name,
+                              arguments: options.nonStreamingToolCall.arguments,
+                            },
+                          },
+                        ],
+                      }
+                    : {
+                        role: "assistant",
+                        content: text,
+                        refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
+                      },
+                  finish_reason: options.nonStreamingToolCall
+                    ? "tool_calls"
+                    : "stop",
+                  logprobs: null,
+                },
+              ],
+              usage: {
+                prompt_tokens: usage.inputTokens,
+                completion_tokens: usage.outputTokens,
+                total_tokens: usage.inputTokens + usage.outputTokens,
+              },
+            } satisfies OpenAI.Chat.Completions.ChatCompletion;
+          },
+        },
+      },
+    },
+  };
+}
+
+function createResponsesHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "test-model";
+  const text = options.text ?? "Mocked Azure Responses reply.";
+
+  return {
+    requests,
+    client: {
+      responses: {
+        create: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+
+          if (request.stream) {
+            if (options.streamingToolCall) {
+              const events = [
+                {
+                  type: "response.output_item.added",
+                  output_index: 0,
+                  item: {
+                    id: "fc_123",
+                    type: "function_call",
+                    call_id: "call_123",
+                    name: options.streamingToolCall.name,
+                    arguments: "",
+                  },
+                },
+                {
+                  type: "response.function_call_arguments.delta",
+                  item_id: "fc_123",
+                  output_index: 0,
+                  delta: options.streamingToolCall.arguments,
+                },
+                {
+                  type: "response.function_call_arguments.done",
+                  item_id: "fc_123",
+                  output_index: 0,
+                  arguments: options.streamingToolCall.arguments,
+                },
+                {
+                  type: "response.output_item.done",
+                  output_index: 0,
+                  item: {
+                    id: "fc_123",
+                    type: "function_call",
+                    call_id: "call_123",
+                    name: options.streamingToolCall.name,
+                    arguments: options.streamingToolCall.arguments,
+                  },
+                },
+                {
+                  type: "response.completed",
+                  response: {
+                    id: "resp_123",
+                    object: "response",
+                    model,
+                    output: [
+                      {
+                        id: "fc_123",
+                        type: "function_call",
+                        call_id: "call_123",
+                        name: options.streamingToolCall.name,
+                        arguments: options.streamingToolCall.arguments,
+                      },
+                    ],
+                    usage: {
+                      input_tokens: usage.inputTokens,
+                      output_tokens: usage.outputTokens,
+                      total_tokens: usage.inputTokens + usage.outputTokens,
+                    },
+                  },
+                },
+              ];
+
+              return createAsyncIterable(events);
+            }
+
+            const events = [
+              {
+                type: "response.output_text.delta",
+                item_id: "msg_123",
+                output_index: 0,
+                delta: text,
+              },
+              {
+                type: "response.completed",
+                response: {
+                  id: "resp_123",
+                  object: "response",
+                  model,
+                  output: [
+                    {
+                      id: "msg_123",
+                      type: "message",
+                      role: "assistant",
+                      content: [{ type: "output_text", text }],
+                    },
+                  ],
+                  usage: {
+                    input_tokens: usage.inputTokens,
+                    output_tokens: usage.outputTokens,
+                    total_tokens: usage.inputTokens + usage.outputTokens,
+                  },
+                },
+              },
+            ];
+            return createAsyncIterable(events);
+          }
+
+          return {
+            id: "resp_nonstream",
+            object: "response",
+            created_at: 123,
+            model,
+            status: "completed",
+            output: options.nonStreamingToolCall
+              ? [
+                  {
+                    id: "fc_123",
+                    type: "function_call",
+                    call_id: "call_123",
+                    name: options.nonStreamingToolCall.name,
+                    arguments: options.nonStreamingToolCall.arguments,
+                    status: "completed",
+                  },
+                ]
+              : [
+                  {
+                    id: "msg_123",
+                    type: "message",
+                    role: "assistant",
+                    status: "completed",
+                    content: [{ type: "output_text", text, annotations: [] }],
+                  },
+                ],
+            usage: {
+              input_tokens: usage.inputTokens,
+              input_tokens_details: { cached_tokens: 0 },
+              output_tokens: usage.outputTokens,
+              output_tokens_details: { reasoning_tokens: 0 },
+              total_tokens: usage.inputTokens + usage.outputTokens,
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
+function createAnthropicHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "claude-3-5-sonnet-20241022";
+  const text = options.text ?? "Mocked Anthropic response";
+
+  function createStreamEvents(): AsyncIterable<Anthropic.Messages.MessageStreamEvent> {
+    const events: Anthropic.Messages.MessageStreamEvent[] = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_stream",
+          type: "message",
+          container: null,
+          role: "assistant",
+          content: [],
+          model,
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: usage.inputTokens,
+            output_tokens: usage.outputTokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          } as Anthropic.Messages.Usage,
+        },
+      },
+    ];
+
+    if (options.streamingToolCall) {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_123",
+            caller: { type: "direct" },
+            name: options.streamingToolCall.name,
+            input: {},
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: options.streamingToolCall.arguments,
+          },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "tool_use",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    } else {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "text",
+            text: "",
+            citations: [],
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "end_turn",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    }
+
+    return createAsyncIterable(events);
+  }
+
+  return {
+    requests,
+    client: {
+      messages: {
+        create: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          if (request.stream === true) {
+            return createStreamEvents();
+          }
+
+          return {
+            id: "msg_nonstream",
+            type: "message",
+            role: "assistant",
+            content: options.nonStreamingToolCall
+              ? [
+                  {
+                    type: "tool_use",
+                    id: "toolu_123",
+                    name: options.nonStreamingToolCall.name,
+                    input: JSON.parse(options.nonStreamingToolCall.arguments),
+                  },
+                ]
+              : [{ type: "text", text, citations: [] }],
+            model,
+            stop_reason: options.nonStreamingToolCall ? "tool_use" : "end_turn",
+            stop_sequence: null,
+            usage: {
+              input_tokens: usage.inputTokens,
+              output_tokens: usage.outputTokens,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            },
+          } as Anthropic.Message;
+        },
+        stream: (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          return createStreamEvents();
+        },
+      },
+    },
+  };
+}
+
+function createZhipuaiHarness(options: HarnessOptions = {}) {
+  const openAiHarness = createOpenAiLikeHarness(options);
+
+  return {
+    requests: openAiHarness.requests,
+    client: {
+      chatCompletions: (request: Record<string, unknown>) =>
+        openAiHarness.client.chat.completions.create(
+          request as unknown as ChatCompletionCreateParamsNonStreaming,
+        ),
+      chatCompletionsStream: (request: Record<string, unknown>) =>
+        openAiHarness.client.chat.completions.create({
+          ...(request as unknown as ChatCompletionCreateParamsStreaming),
+          stream: true,
+        }),
+    },
+  };
+}
+
+function createGeminiHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "gemini-2.5-pro";
+  const text = options.text ?? "Mocked Gemini response";
+
+  return {
+    requests,
+    client: {
+      models: {
+        generateContent: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          return {
+            candidates: [
+              {
+                content: {
+                  role: "model",
+                  parts: options.nonStreamingToolCall
+                    ? [
+                        {
+                          functionCall: {
+                            name: options.nonStreamingToolCall.name,
+                            args: JSON.parse(
+                              options.nonStreamingToolCall.arguments,
+                            ),
+                          },
+                        },
+                      ]
+                    : [{ text }],
+                },
+                finishReason: FinishReason.STOP,
+                index: 0,
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: usage.inputTokens,
+              candidatesTokenCount: usage.outputTokens,
+              totalTokenCount: usage.inputTokens + usage.outputTokens,
+            },
+            modelVersion: model,
+            responseId: "gemini_nonstream",
+          } as GenerateContentResponse;
+        },
+        generateContentStream: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          const chunks: unknown[] = options.streamingToolCall
+            ? [
+                {
+                  candidates: [
+                    {
+                      content: {
+                        role: "model",
+                        parts: [
+                          {
+                            functionCall: {
+                              name: options.streamingToolCall.name,
+                              args: JSON.parse(
+                                options.streamingToolCall.arguments,
+                              ),
+                            },
+                          },
+                        ],
+                      },
+                      index: 0,
+                    },
+                  ],
+                },
+                {
+                  usageMetadata: {
+                    promptTokenCount: usage.inputTokens,
+                    candidatesTokenCount: usage.outputTokens,
+                    totalTokenCount: usage.inputTokens + usage.outputTokens,
+                  },
+                  modelVersion: model,
+                  responseId: "gemini_stream",
+                },
+              ]
+            : [
+                {
+                  candidates: [
+                    {
+                      content: {
+                        role: "model",
+                        parts: [{ text }],
+                      },
+                      index: 0,
+                    },
+                  ],
+                },
+                {
+                  usageMetadata: {
+                    promptTokenCount: usage.inputTokens,
+                    candidatesTokenCount: usage.outputTokens,
+                    totalTokenCount: usage.inputTokens + usage.outputTokens,
+                  },
+                  modelVersion: model,
+                  responseId: "gemini_stream",
+                },
+              ];
+
+          return createAsyncIterable(chunks);
+        },
+      },
+    },
+  };
+}
+
+function createCohereHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "command-r-plus-08-2024";
+  const text = options.text ?? "Mocked Cohere response";
+
+  return {
+    requests,
+    client: {
+      chat: {
+        create: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          return {
+            id: "cohere_nonstream",
+            message: {
+              role: "assistant",
+              content: options.nonStreamingToolCall
+                ? []
+                : [{ type: "text", text }],
+              tool_calls: options.nonStreamingToolCall
+                ? [
+                    {
+                      id: "call_123",
+                      type: "function",
+                      function: {
+                        name: options.nonStreamingToolCall.name,
+                        arguments: options.nonStreamingToolCall.arguments,
+                      },
+                    },
+                  ]
+                : undefined,
+            },
+            finish_reason: options.nonStreamingToolCall
+              ? "TOOL_CALL"
+              : "COMPLETE",
+            usage: {
+              tokens: {
+                input_tokens: usage.inputTokens,
+                output_tokens: usage.outputTokens,
+              },
+            },
+            model,
+          };
+        },
+        stream: async (request: Record<string, unknown>) => {
+          requests.push(request);
+          options.onRequest?.(request);
+          const chunks: unknown[] = options.streamingToolCall
+            ? [
+                {
+                  type: "message-start",
+                },
+                {
+                  type: "tool-call-start",
+                  index: 0,
+                  delta: {
+                    message: {
+                      tool_calls: [
+                        {
+                          id: "call_123",
+                          type: "function",
+                          function: {
+                            name: options.streamingToolCall.name,
+                            arguments: "",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                {
+                  type: "tool-call-delta",
+                  index: 0,
+                  delta: {
+                    message: {
+                      tool_calls: [
+                        {
+                          id: "call_123",
+                          type: "function",
+                          function: {
+                            name: options.streamingToolCall.name,
+                            arguments: options.streamingToolCall.arguments,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                {
+                  type: "message-end",
+                  delta: {
+                    finish_reason: "TOOL_CALL",
+                    usage: {
+                      tokens: {
+                        input_tokens: usage.inputTokens,
+                        output_tokens: usage.outputTokens,
+                      },
+                    },
+                  },
+                },
+              ]
+            : [
+                {
+                  type: "message-start",
+                },
+                {
+                  type: "content-delta",
+                  delta: {
+                    message: {
+                      content: [{ type: "text", text }],
+                    },
+                  },
+                },
+                {
+                  type: "message-end",
+                  delta: {
+                    finish_reason: "COMPLETE",
+                    usage: {
+                      tokens: {
+                        input_tokens: usage.inputTokens,
+                        output_tokens: usage.outputTokens,
+                      },
+                    },
+                  },
+                },
+              ];
+
+          return createAsyncIterable(chunks);
+        },
+      },
+    },
+  };
+}
+
+function createMinimaxHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const model = options.model ?? "MiniMax-M2.1";
+  const text = options.text ?? "Mocked MiniMax response";
+
+  return {
+    requests,
+    client: {
+      chatCompletions: async (request: Record<string, unknown>) => {
+        requests.push(request);
+        options.onRequest?.(request);
+        return {
+          id: "minimax_nonstream",
+          object: "chat.completion",
+          created: 1,
+          model,
+          choices: [
+            {
+              index: 0,
+              message: options.nonStreamingToolCall
+                ? {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call_123",
+                        type: "function",
+                        function: {
+                          name: options.nonStreamingToolCall.name,
+                          arguments: options.nonStreamingToolCall.arguments,
+                        },
+                      },
+                    ],
+                  }
+                : {
+                    role: "assistant",
+                    content: text,
+                    // Native MiniMax shape only — the adapter mirrors it into
+                    // reasoning_content for OpenAI-compatible clients.
+                    ...(options.reasoningContent
+                      ? {
+                          reasoning_details: [
+                            { text: options.reasoningContent },
+                          ],
+                        }
+                      : {}),
+                  },
+              finish_reason: options.nonStreamingToolCall
+                ? "tool_calls"
+                : "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: usage.inputTokens,
+            completion_tokens: usage.outputTokens,
+            total_tokens: usage.inputTokens + usage.outputTokens,
+          },
+        };
+      },
+      chatCompletionsStream: async (request: Record<string, unknown>) => {
+        requests.push(request);
+        options.onRequest?.(request);
+        // MiniMax streams thinking cumulatively: each chunk carries the full
+        // reasoning text so far, not a delta.
+        const reasoningChunks = options.reasoningContent
+          ? [
+              options.reasoningContent.slice(
+                0,
+                Math.ceil(options.reasoningContent.length / 2),
+              ),
+              options.reasoningContent,
+            ].map((cumulativeText) => ({
+              id: "minimax_stream",
+              object: "chat.completion.chunk",
+              created: 1,
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { reasoning_details: [{ text: cumulativeText }] },
+                  finish_reason: null,
+                },
+              ],
+            }))
+          : [];
+        const chunks: unknown[] = options.streamingToolCall
+          ? [
+              {
+                id: "minimax_stream",
+                object: "chat.completion.chunk",
+                created: 1,
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_123",
+                          type: "function",
+                          function: {
+                            name: options.streamingToolCall.name,
+                            arguments: options.streamingToolCall.arguments,
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              },
+              {
+                id: "minimax_stream",
+                object: "chat.completion.chunk",
+                created: 1,
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {},
+                    finish_reason: "tool_calls",
+                  },
+                ],
+                usage: {
+                  prompt_tokens: usage.inputTokens,
+                  completion_tokens: usage.outputTokens,
+                  total_tokens: usage.inputTokens + usage.outputTokens,
+                },
+              },
+            ]
+          : [
+              ...reasoningChunks,
+              {
+                id: "minimax_stream",
+                object: "chat.completion.chunk",
+                created: 1,
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content: text },
+                    finish_reason: null,
+                  },
+                ],
+              },
+              {
+                id: "minimax_stream",
+                object: "chat.completion.chunk",
+                created: 1,
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {},
+                    finish_reason: "stop",
+                  },
+                ],
+                usage: {
+                  prompt_tokens: usage.inputTokens,
+                  completion_tokens: usage.outputTokens,
+                  total_tokens: usage.inputTokens + usage.outputTokens,
+                },
+              },
+            ];
+
+        return createAsyncIterable(chunks);
+      },
+    },
+  };
+}
+
+function createBedrockHarness(options: HarnessOptions = {}) {
+  const requests: Record<string, unknown>[] = [];
+  const usage = options.usage ?? DEFAULT_USAGE;
+  const text = options.text ?? "Mocked Bedrock response";
+
+  return {
+    requests,
+    client: {
+      converse: async (modelId: string, request: Record<string, unknown>) => {
+        requests.push({ modelId, ...request });
+        options.onRequest?.({ modelId, ...request });
+        return {
+          $metadata: { requestId: "bedrock_nonstream" },
+          output: {
+            message: {
+              role: "assistant",
+              content: options.nonStreamingToolCall
+                ? [
+                    {
+                      toolUse: {
+                        toolUseId: "tooluse_123",
+                        name: options.nonStreamingToolCall.name,
+                        input: JSON.parse(
+                          options.nonStreamingToolCall.arguments,
+                        ),
+                      },
+                    },
+                  ]
+                : [{ text }],
+            },
+          },
+          stopReason: options.nonStreamingToolCall ? "tool_use" : "end_turn",
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+          },
+        };
+      },
+      converseStream: async (
+        modelId: string,
+        request: Record<string, unknown>,
+      ) => {
+        requests.push({ modelId, ...request });
+        options.onRequest?.({ modelId, ...request });
+        const events: unknown[] = options.streamingToolCall
+          ? [
+              {
+                contentBlockStart: {
+                  contentBlockIndex: 0,
+                  start: {
+                    toolUse: {
+                      toolUseId: "tooluse_123",
+                      name: options.streamingToolCall.name,
+                    },
+                  },
+                },
+              },
+              {
+                contentBlockDelta: {
+                  contentBlockIndex: 0,
+                  delta: {
+                    toolUse: {
+                      input: options.streamingToolCall.arguments,
+                    },
+                  },
+                },
+              },
+              {
+                contentBlockStop: {
+                  contentBlockIndex: 0,
+                },
+              },
+              {
+                metadata: {
+                  usage: {
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                  },
+                },
+              },
+              {
+                messageStop: {
+                  stopReason: "tool_use",
+                },
+              },
+            ]
+          : [
+              {
+                contentBlockDelta: {
+                  contentBlockIndex: 0,
+                  delta: {
+                    text,
+                  },
+                },
+              },
+              {
+                metadata: {
+                  usage: {
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                  },
+                },
+              },
+              {
+                messageStop: {
+                  stopReason: "end_turn",
+                },
+              },
+            ];
+
+        return createAsyncIterable(events);
+      },
+    },
+  };
+}
+
+function createHarness(family: ProviderFamily, options: HarnessOptions = {}) {
+  switch (family) {
+    case "openai":
+      return createOpenAiLikeHarness(options);
+    case "zhipuai":
+      return createZhipuaiHarness(options);
+    case "responses":
+      return createResponsesHarness(options);
+    case "anthropic":
+      return createAnthropicHarness(options);
+    case "gemini":
+      return createGeminiHarness(options);
+    case "cohere":
+      return createCohereHarness(options);
+    case "minimax":
+      return createMinimaxHarness(options);
+    case "bedrock":
+      return createBedrockHarness(options);
+  }
+}
+
+function makeOpenAiCompatibleBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      model: model || defaultModel,
+      messages: makeOpenAiMessages(content),
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      model: model || defaultModel,
+      stream,
+      messages: makeOpenAiMessages(content),
+      tools: tools.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      })),
+    }),
+    buildToolResultRequest: ({ model }) =>
+      makeOpenAiToolResultRequest(model || defaultModel),
+  };
+}
+
+function makeAnthropicBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      model: model || defaultModel,
+      max_tokens: 1024,
+      messages: [{ role: "user", content }],
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      model: model || defaultModel,
+      max_tokens: 1024,
+      stream,
+      messages: [{ role: "user", content }],
+      tools: tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters,
+      })),
+    }),
+    buildToolResultRequest: ({ model }) =>
+      makeAnthropicToolResultRequest(model || defaultModel),
+  };
+}
+
+function makeGeminiBuilder(_defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ content }) => ({
+      contents: [{ role: "user", parts: [{ text: content }] }],
+    }),
+    buildToolRequest: ({ content, tools }) => ({
+      contents: [{ role: "user", parts: [{ text: content }] }],
+      tools: [
+        {
+          functionDeclarations: tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          })),
+        },
+      ],
+    }),
+    buildToolResultRequest: () => makeGeminiToolResultRequest(),
+  };
+}
+
+function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      model: model || defaultModel,
+      input: content,
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      model: model || defaultModel,
+      stream,
+      input: content,
+      tools: tools.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      })),
+    }),
+    buildToolResultRequest: ({ model }) => ({
+      model: model || defaultModel,
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "What files are in the current directory?",
+            },
+          ],
+        },
+        {
+          type: "function_call",
+          call_id: "call_123",
+          name: "list_files",
+          arguments: '{"directory": "."}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_123",
+          output: JSON.stringify(TOOL_RESULT_DATA),
+        },
+      ],
+    }),
+  };
+}
+
+function makeCohereBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      model: model || defaultModel,
+      messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      model: model || defaultModel,
+      stream,
+      messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+      tools: tools.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      })),
+    }),
+    buildToolResultRequest: ({ model }) =>
+      makeCohereToolResultRequest(model || defaultModel),
+  };
+}
+
+function makeBedrockBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      modelId: model || defaultModel,
+      messages: [{ role: "user", content: [{ text: content }] }],
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      modelId: model || defaultModel,
+      _isStreaming: stream,
+      messages: [{ role: "user", content: [{ text: content }] }],
+      toolConfig: {
+        tools: tools.map((tool) => ({
+          toolSpec: {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: { json: tool.parameters },
+          },
+        })),
+      },
+    }),
+    buildToolResultRequest: ({ model }) =>
+      makeBedrockToolResultRequest(model || defaultModel),
+  };
+}
+
+function makeConfig(
+  params: Omit<ProviderTestConfig, "assertStreamingToolCall"> & {
+    assertStreamingToolCall?: (body: string) => void;
+  },
+): ProviderTestConfig {
+  return {
+    ...params,
+    assertStreamingToolCall:
+      params.assertStreamingToolCall ??
+      ((body) => {
+        expect(body).toContain("data:");
+        expect(body).toContain("read_file");
+      }),
+  };
+}
+
+const providerConfigsByProvider = {
+  openai: makeConfig({
+    providerName: "OpenAI",
+    providerSlug: "openai",
+    provider: "openai",
+    family: "openai",
+    routePlugin: openAiProxyRoutes,
+    adapterFactory: openaiAdapterFactory,
+    endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  gemini: makeConfig({
+    providerName: "Gemini",
+    providerSlug: "gemini",
+    provider: "gemini",
+    family: "gemini",
+    routePlugin: geminiProxyRoutes,
+    adapterFactory: geminiAdapterFactory,
+    endpoint: (agentId) =>
+      `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
+    streamEndpoint: (agentId) =>
+      `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+    headers: () => ({
+      "x-goog-api-key": "test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeGeminiBuilder("gemini-2.5-pro"),
+    model: "gemini-2.5-pro",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  anthropic: makeConfig({
+    providerName: "Anthropic",
+    providerSlug: "anthropic",
+    provider: "anthropic",
+    family: "anthropic",
+    routePlugin: anthropicProxyRoutes,
+    adapterFactory: anthropicAdapterFactory,
+    endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
+    headers: () => ({
+      "x-api-key": "test-key",
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+    }),
+    requestBuilder: makeAnthropicBuilder("claude-3-5-sonnet-20241022"),
+    model: "claude-3-5-sonnet-20241022",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  bedrock: makeConfig({
+    providerName: "Bedrock",
+    providerSlug: "bedrock",
+    provider: "bedrock",
+    family: "bedrock",
+    routePlugin: bedrockProxyRoutes,
+    adapterFactory: bedrockAdapterFactory,
+    endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
+    streamEndpoint: (agentId) => `/v1/bedrock/${agentId}/converse-stream`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeBedrockBuilder(
+      "anthropic.claude-3-sonnet-20240229-v1:0",
+    ),
+    model: "anthropic.claude-3-sonnet-20240229-v1:0",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+
+    assertStreamingToolCall(body) {
+      expect(body).toContain("read_file");
+      expect(body).toContain("tooluse_123");
+    },
+  }),
+  cohere: makeConfig({
+    providerName: "Cohere",
+    providerSlug: "cohere",
+    provider: "cohere",
+    family: "cohere",
+    routePlugin: cohereProxyRoutes,
+    adapterFactory: cohereAdapterFactory,
+    endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeCohereBuilder("command-r-plus-08-2024"),
+    model: "command-r-plus-08-2024",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: false,
+  }),
+  cerebras: makeConfig({
+    providerName: "Cerebras",
+    providerSlug: "cerebras",
+    provider: "cerebras",
+    family: "openai",
+    routePlugin: cerebrasProxyRoutes,
+    adapterFactory: cerebrasAdapterFactory,
+    endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      "llama-4-scout-17b-16e-instruct",
+    ),
+    model: "llama-4-scout-17b-16e-instruct",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  mistral: makeConfig({
+    providerName: "Mistral",
+    providerSlug: "mistral",
+    provider: "mistral",
+    family: "openai",
+    routePlugin: mistralProxyRoutes,
+    adapterFactory: mistralAdapterFactory,
+    endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("mistral-large-latest"),
+    model: "mistral-large-latest",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  perplexity: makeConfig({
+    providerName: "Perplexity",
+    providerSlug: "perplexity",
+    provider: "perplexity",
+    family: "openai",
+    routePlugin: perplexityProxyRoutes,
+    adapterFactory: perplexityAdapterFactory,
+    endpoint: (agentId) => `/v1/perplexity/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("sonar-pro"),
+    model: "sonar-pro",
+    supportsDeclaredTools: false,
+    supportsStreamingToolCalls: false,
+  }),
+  groq: makeConfig({
+    providerName: "Groq",
+    providerSlug: "groq",
+    provider: "groq",
+    family: "openai",
+    routePlugin: groqProxyRoutes,
+    adapterFactory: groqAdapterFactory,
+    endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama-3.3-70b-versatile"),
+    model: "llama-3.3-70b-versatile",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  xai: makeConfig({
+    providerName: "xAI",
+    providerSlug: "xai",
+    provider: "xai",
+    family: "openai",
+    routePlugin: xaiProxyRoutes,
+    adapterFactory: xaiAdapterFactory,
+    endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("grok-2-1212"),
+    model: "grok-2-1212",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  openrouter: makeConfig({
+    providerName: "OpenRouter",
+    providerSlug: "openrouter",
+    provider: "openrouter",
+    family: "openai",
+    routePlugin: openrouterProxyRoutes,
+    adapterFactory: openrouterAdapterFactory,
+    endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-4o"),
+    model: "openai/gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  vllm: makeConfig({
+    providerName: "vLLM",
+    providerSlug: "vllm",
+    provider: "vllm",
+    family: "openai",
+    routePlugin: vllmProxyRoutes,
+    adapterFactory: vllmAdapterFactory,
+    endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      "meta-llama/Llama-3.1-8B-Instruct",
+    ),
+    model: "meta-llama/Llama-3.1-8B-Instruct",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  ollama: makeConfig({
+    providerName: "Ollama",
+    providerSlug: "ollama",
+    provider: "ollama",
+    family: "openai",
+    routePlugin: ollamaProxyRoutes,
+    adapterFactory: ollamaAdapterFactory,
+    endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
+    model: "llama3.2",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  // Present to satisfy the `Record<SupportedProvider, …>` exhaustiveness guard.
+  // The native provider uses an NDJSON `/api/chat` transport over a raw-fetch
+  // client, which this OpenAI-SDK-mock harness does not model — so it is filtered
+  // out of the executed matrix below and covered instead by the dedicated
+  // adapters/ollama-native.test.ts unit suite. `family`/`requestBuilder` are
+  // placeholders that are never invoked.
+  "ollama-native": makeConfig({
+    providerName: "Ollama (Native)",
+    providerSlug: "ollama-native",
+    provider: "ollama-native",
+    family: "openai",
+    routePlugin: ollamaNativeProxyRoutes,
+    adapterFactory: ollamaNativeAdapterFactory,
+    endpoint: (agentId) => `/v1/ollama-native/${agentId}/api/chat`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
+    model: "llama3.2",
+  }),
+  zhipuai: makeConfig({
+    providerName: "Zhipu AI",
+    providerSlug: "zhipuai",
+    provider: "zhipuai",
+    family: "zhipuai",
+    routePlugin: zhipuaiProxyRoutes,
+    adapterFactory: zhipuaiAdapterFactory,
+    endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("glm-4.5-flash"),
+    model: "glm-4.5-flash",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  deepseek: makeConfig({
+    providerName: "DeepSeek",
+    providerSlug: "deepseek",
+    provider: "deepseek",
+    family: "openai",
+    routePlugin: deepseekProxyRoutes,
+    adapterFactory: deepseekAdapterFactory,
+    endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
+    model: "deepseek-chat",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  archestra: makeConfig({
+    providerName: "Archestra",
+    providerSlug: "archestra",
+    provider: "archestra",
+    family: "openai",
+    routePlugin: archestraProxyRoutes,
+    adapterFactory: archestraAdapterFactory,
+    endpoint: (agentId) => `/v1/archestra/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  kimi: makeConfig({
+    providerName: "Kimi",
+    providerSlug: "kimi",
+    provider: "kimi",
+    family: "openai",
+    routePlugin: kimiProxyRoutes,
+    adapterFactory: kimiAdapterFactory,
+    endpoint: (agentId) => `/v1/kimi/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("kimi-k2-0711-preview"),
+    model: "kimi-k2-0711-preview",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  minimax: makeConfig({
+    providerName: "Minimax",
+    providerSlug: "minimax",
+    provider: "minimax",
+    family: "minimax",
+    routePlugin: minimaxProxyRoutes,
+    adapterFactory: minimaxAdapterFactory,
+    endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("MiniMax-M2.1"),
+    model: "MiniMax-M2.1",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  azure: makeConfig({
+    providerName: "Azure",
+    providerSlug: "azure",
+    provider: "azure",
+    family: "openai",
+    routePlugin: azureProxyRoutes,
+    adapterFactory: azureAdapterFactory,
+    endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  "github-copilot": makeConfig({
+    providerName: "GitHub Copilot",
+    providerSlug: "github-copilot",
+    provider: "github-copilot",
+    family: "openai",
+    routePlugin: githubCopilotProxyRoutes,
+    adapterFactory: githubCopilotAdapterFactory,
+    endpoint: (agentId) => `/v1/github-copilot/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  // The matrix mocks createClient, so it exercises the OpenAI-shaped inbound
+  // wire format this provider exposes — the Graph translation and its
+  // tool-rejection behavior are covered in microsoft-365-copilot.test.ts.
+  "microsoft-365-copilot": makeConfig({
+    providerName: "Microsoft 365 Copilot",
+    providerSlug: "microsoft-365-copilot",
+    provider: "microsoft-365-copilot",
+    family: "openai",
+    routePlugin: microsoft365CopilotProxyRoutes,
+    adapterFactory: microsoft365CopilotAdapterFactory,
+    endpoint: (agentId) =>
+      `/v1/microsoft-365-copilot/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-refresh-token",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      MICROSOFT_365_COPILOT_MODELS[0].id,
+    ),
+    model: MICROSOFT_365_COPILOT_MODELS[0].id,
+    supportsDeclaredTools: false,
+    supportsStreamingToolCalls: false,
+  }),
+} satisfies Record<ChatProvider, ProviderTestConfig>;
+
+const perplexityResponsesConfig = makeConfig({
+  providerName: "Perplexity Responses",
+  providerSlug: "perplexity-responses",
+  provider: "perplexity",
+  family: "responses",
+  routePlugin: perplexityProxyRoutes,
+  adapterFactory: perplexityResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/perplexity/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  requestBuilder: makeAzureResponsesBuilder("anthropic/claude-opus-5"),
+  model: "anthropic/claude-opus-5",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
+const githubCopilotResponsesConfig = makeConfig({
+  providerName: "GitHub Copilot Responses",
+  providerSlug: "github-copilot-responses",
+  provider: "github-copilot",
+  family: "responses",
+  routePlugin: githubCopilotProxyRoutes,
+  adapterFactory: githubCopilotResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/github-copilot/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  // Copilot's Responses-only family — the models this surface exists to reach.
+  requestBuilder: makeAzureResponsesBuilder("gpt-5.3-codex"),
+  model: "gpt-5.3-codex",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
+const azureResponsesConfig = makeConfig({
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+  provider: "azure",
+  family: "responses",
+  routePlugin: azureProxyRoutes,
+  adapterFactory: azureResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  requestBuilder: makeAzureResponsesBuilder("gpt-4.1"),
+  model: "gpt-4.1",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
+const providerConfigs = [
+  // ollama-native speaks NDJSON /api/chat over a raw-fetch client, not an OpenAI
+  // SDK client, so this harness cannot exercise it. It is covered directly by
+  // adapters/ollama-native.test.ts.
+  ...Object.values(providerConfigsByProvider).filter(
+    (config) => config.provider !== "ollama-native",
+  ),
+  azureResponsesConfig,
+  perplexityResponsesConfig,
+  githubCopilotResponsesConfig,
+] satisfies ProviderTestConfig[];
+
+describe("LLM proxy provider matrix", () => {
+  let app: FastifyInstance;
+  const originalVllmEnabled = appConfig.llm.vllm.enabled;
+  const originalVllmBaseUrl = appConfig.llm.vllm.baseUrl;
+  const originalAzureBaseUrl = appConfig.llm.azure.baseUrl;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    appConfig.llm.vllm.enabled = originalVllmEnabled;
+    appConfig.llm.vllm.baseUrl = originalVllmBaseUrl;
+    appConfig.llm.azure.baseUrl = originalAzureBaseUrl;
+    if (app) {
+      await app.close();
+    }
+  });
+
+  for (const config of providerConfigs) {
+    describe(config.providerName, () => {
+      async function setupRoute(
+        _agent: Agent,
+        harnessOptions: HarnessOptions = {},
+      ) {
+        await ModelModel.upsert({
+          externalId: `${config.provider}/${config.model}`,
+          provider: config.provider,
+          modelId: config.model,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+        });
+        app = createFastifyApp();
+        if (config.provider === "vllm") {
+          appConfig.llm.vllm.enabled = true;
+          appConfig.llm.vllm.baseUrl = "http://localhost:8000/v1";
+        }
+        if (config.provider === "azure") {
+          appConfig.llm.azure.baseUrl = "";
+        }
+        const harness = createHarness(config.family, {
+          model: config.model,
+          ...harnessOptions,
+        });
+        vi.spyOn(config.adapterFactory, "createClient").mockImplementation(
+          () =>
+            (config.provider === "azure" && config.family === "openai"
+              ? {
+                  apiKey: "test-key",
+                  baseUrl: undefined,
+                  defaultHeaders: undefined,
+                  fetch: undefined,
+                  openai: harness.client,
+                }
+              : harness.client) as never,
+        );
+        await app.register(config.routePlugin);
+        return harness;
+      }
+
+      test.skipIf(config.supportsDeclaredTools === false)(
+        "persists declared tools from LLM proxy requests",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} proxy`,
+          });
+          await setupRoute(agent, {
+            nonStreamingToolCall: {
+              name: READ_FILE_TOOL.name,
+              arguments: '{"file_path":"/tmp/test.txt"}',
+            },
+          });
+
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Read a file",
+              tools: [READ_FILE_TOOL],
+            }),
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const secondResponse = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Read a file again",
+              tools: [READ_FILE_TOOL],
+            }),
+          });
+
+          expect(secondResponse.statusCode).toBe(200);
+
+          const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
+          expect(storedTool).not.toBeNull();
+          expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
+        },
+      );
+
+      // DeepSeek-style thinking mode rejects tool-call turns with a 400 unless
+      // the assistant's `reasoning_content` is passed back verbatim, so the
+      // proxy must round-trip the field in both directions: request body
+      // validation must not strip it before it reaches the upstream, and
+      // response serialization must not strip it before it reaches the client.
+      // The zhipuai family shares the wire format: GLM thinking mode uses the
+      // same `reasoning_content` field through its bespoke adapter.
+      test.skipIf(config.family !== "openai" && config.family !== "zhipuai")(
+        "round-trips reasoning_content for thinking-mode tool calls",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} reasoning proxy`,
+          });
+          const responseReasoning =
+            "Considering the tool result before answering.";
+          const harness = await setupRoute(agent, {
+            reasoningContent: responseReasoning,
+          });
+
+          const requestReasoning =
+            "The user wants the file contents, so I should call read_file.";
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              model: config.model,
+              messages: [
+                { role: "user", content: "Read /tmp/test.txt" },
+                {
+                  role: "assistant",
+                  content: "",
+                  reasoning_content: requestReasoning,
+                  tool_calls: [
+                    {
+                      id: "call_reasoning_1",
+                      type: "function",
+                      function: {
+                        name: READ_FILE_TOOL.name,
+                        arguments: '{"file_path":"/tmp/test.txt"}',
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  tool_call_id: "call_reasoning_1",
+                  content: "file contents",
+                },
+              ],
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const upstream = harness.requests[0] as unknown as {
+            messages: Array<Record<string, unknown>>;
+          };
+          const assistantMessage = upstream.messages.find(
+            (message) => message.role === "assistant",
+          );
+          expect(assistantMessage?.reasoning_content).toBe(requestReasoning);
+
+          expect(response.json().choices[0].message.reasoning_content).toBe(
+            responseReasoning,
+          );
+        },
+      );
+
+      // MiniMax speaks its own reasoning dialect: thinking arrives as
+      // reasoning_details and the docs want it passed back the same way for
+      // interleaved thinking. The proxy adapter translates both directions to
+      // the DeepSeek-style reasoning_content contract OpenAI-compatible
+      // clients understand: outgoing assistant reasoning_content becomes
+      // reasoning_details, incoming reasoning_details is mirrored into
+      // reasoning_content.
+      test.skipIf(config.family !== "minimax")(
+        "translates reasoning_content to MiniMax reasoning_details and back",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} reasoning proxy`,
+          });
+          const responseReasoning =
+            "Considering the tool result before answering.";
+          const harness = await setupRoute(agent, {
+            reasoningContent: responseReasoning,
+          });
+
+          const requestReasoning =
+            "The user wants the file contents, so I should call read_file.";
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              model: config.model,
+              messages: [
+                { role: "user", content: "Read /tmp/test.txt" },
+                {
+                  role: "assistant",
+                  content: "",
+                  reasoning_content: requestReasoning,
+                  tool_calls: [
+                    {
+                      id: "call_reasoning_1",
+                      type: "function",
+                      function: {
+                        name: READ_FILE_TOOL.name,
+                        arguments: '{"file_path":"/tmp/test.txt"}',
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  tool_call_id: "call_reasoning_1",
+                  content: "file contents",
+                },
+              ],
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const upstream = harness.requests[0] as unknown as {
+            messages: Array<Record<string, unknown>>;
+          };
+          const assistantMessage = upstream.messages.find(
+            (message) => message.role === "assistant",
+          );
+          expect(assistantMessage?.reasoning_details).toEqual([
+            { text: requestReasoning },
+          ]);
+          expect(assistantMessage?.reasoning_content).toBeUndefined();
+
+          const message = response.json().choices[0].message;
+          expect(message.reasoning_details).toEqual([
+            { text: responseReasoning },
+          ]);
+          expect(message.reasoning_content).toBe(responseReasoning);
+        },
+      );
+
+      test.skipIf(config.family !== "minimax")(
+        "converts cumulative streamed reasoning_details into reasoning_content deltas",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            name: `${config.providerName} reasoning stream`,
+          });
+          const responseReasoning = "First I read the file, then I answer.";
+          await setupRoute(agent, { reasoningContent: responseReasoning });
+
+          const response = await app.inject({
+            method: "POST",
+            url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              ...config.requestBuilder.buildTextRequest({
+                model: config.model,
+                content: "Read the file",
+              }),
+              stream: true,
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const reasoningDeltas = response.body
+            .split("\n")
+            .filter(
+              (line) => line.startsWith("data: ") && line !== "data: [DONE]",
+            )
+            .map(
+              (line) =>
+                JSON.parse(line.slice(6)) as {
+                  choices?: Array<{ delta?: { reasoning_content?: string } }>;
+                },
+            )
+            .map(
+              (streamChunk) =>
+                streamChunk.choices?.[0]?.delta?.reasoning_content,
+            )
+            .filter((delta): delta is string => typeof delta === "string");
+
+          // Each forwarded chunk carries only the new text: joined deltas
+          // reproduce the full thinking exactly. If the adapter forwarded
+          // MiniMax's cumulative text verbatim, the join would repeat the
+          // first half.
+          expect(reasoningDeltas.length).toBeGreaterThanOrEqual(2);
+          expect(reasoningDeltas.join("")).toBe(responseReasoning);
+        },
+      );
+
+      test("stores run IDs on interactions", async ({ makeAgent }) => {
+        const agent = await makeAgent({
+          name: `${config.providerName} execution`,
+        });
+        await ModelModel.upsert({
+          externalId: `${config.provider}/${config.model}`,
+          provider: config.provider,
+          modelId: config.model,
+          inputModalities: null,
+          outputModalities: null,
+          customPricePerMillionInput: "20000.00",
+          customPricePerMillionOutput: "30000.00",
+          lastSyncedAt: new Date(),
+        });
+        await setupRoute(agent);
+
+        const runId = randomUUID();
+        const response = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: {
+            ...config.headers(),
+            "x-archestra-run-id": runId,
+          },
+          payload: config.requestBuilder.buildTextRequest({
+            model: config.model,
+            content: "Hello from execution metrics",
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        const interactions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
+        expect(
+          interactions.some((interaction) => interaction.runId === runId),
+        ).toBe(true);
+      });
+
+      test.skipIf(config.supportsStreamingToolCalls === false)(
+        "streams tool calls through the proxy",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            name: `${config.providerName} stream`,
+          });
+          await setupRoute(agent, {
+            streamingToolCall: {
+              name: READ_FILE_TOOL.name,
+              arguments: '{"file_path":"/tmp/test.txt"}',
+            },
+          });
+
+          const response = await app.inject({
+            method: "POST",
+            url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Stream a tool call",
+              tools: [READ_FILE_TOOL],
+              stream: true,
+            }),
+          });
+
+          expect(response.statusCode).toBe(200);
+          if (config.family === "openai") {
+            expect(response.headers["content-type"]).toContain(
+              "text/event-stream",
+            );
+          }
+          config.assertStreamingToolCall(response.body);
+        },
+      );
+
+      test("preserves structured tool results before provider execution", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({
+          name: `${config.providerName} tool results`,
+        });
+        const harness = await setupRoute(agent);
+        const response = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: config.headers(),
+          payload: config.requestBuilder.buildToolResultRequest({
+            model: config.model,
+          }),
+        });
+        expect(response.statusCode).toBe(200);
+        // Provider formats differ, but the original structured result must reach the client intact.
+        const values: unknown[] = [harness.requests.at(-1)];
+        let foundOriginalResult = false;
+        while (values.length > 0) {
+          const value = values.pop();
+          if (typeof value === "string") {
+            try {
+              values.push(JSON.parse(value));
+            } catch {
+              /* Plain text content. */
+            }
+          } else if (value && typeof value === "object") {
+            if (JSON.stringify(value) === JSON.stringify(TOOL_RESULT_DATA)) {
+              foundOriginalResult = true;
+              break;
+            }
+            values.push(...Object.values(value));
+          }
+        }
+        expect(foundOriginalResult).toBe(true);
+      });
+
+      test("blocks requests when token cost limits are exceeded", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({
+          name: `${config.providerName} limits`,
+        });
+        vi.spyOn(
+          LimitValidationService,
+          "checkLimitsBeforeRequest",
+        ).mockResolvedValue([
+          "Refusal",
+          "The token cost limit has been exceeded.",
+        ]);
+        await setupRoute(agent);
+
+        const blockedResponse = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: config.headers(),
+          payload: config.requestBuilder.buildTextRequest({
+            model: config.model,
+            content: "Will this get blocked?",
+          }),
+        });
+
+        expect(blockedResponse.statusCode).toBe(402);
+        expect(blockedResponse.json()).toMatchObject({
+          error: {
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      });
+    });
+  }
+});

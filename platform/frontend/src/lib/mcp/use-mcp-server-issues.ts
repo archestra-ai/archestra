@@ -50,9 +50,10 @@ export function useMcpServerIssues(
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
   const canReauthenticate = useCanReauthenticate();
-  const { data: canManageInstalls } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: canManageInstalls } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
 
   const issuesByCatalog = useMemo(
     () =>

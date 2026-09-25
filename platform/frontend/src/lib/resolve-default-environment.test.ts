@@ -1,8 +1,10 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 import { resolveDefaultEnvironmentId } from "./resolve-default-environment";
 
-const explore = { id: "env-explore", restricted: false };
-const locked = { id: "env-locked", restricted: true };
+const explore = { id: "env-explore", canDeploy: true };
+const locked = { id: "env-locked", canDeploy: false };
+const unlocked = { id: "env-locked", canDeploy: true };
 
 describe("resolveDefaultEnvironmentId", () => {
   test("returns the environment configured for the resource kind", () => {
@@ -11,7 +13,6 @@ describe("resolveDefaultEnvironmentId", () => {
         environments: [explore],
         resourceDefaults: { mcpRegistry: "env-explore" },
         resource: "mcpRegistry",
-        canDeployToRestricted: false,
       }),
     ).toBe("env-explore");
   });
@@ -22,7 +23,6 @@ describe("resolveDefaultEnvironmentId", () => {
         environments: [explore],
         resourceDefaults: { app: "env-explore" },
         resource: "mcpRegistry",
-        canDeployToRestricted: false,
       }),
     ).toBeNull();
   });
@@ -33,7 +33,6 @@ describe("resolveDefaultEnvironmentId", () => {
         environments: [],
         resourceDefaults: { mcpRegistry: "env-deleted" },
         resource: "mcpRegistry",
-        canDeployToRestricted: true,
       }),
     ).toBeNull();
   });
@@ -44,7 +43,6 @@ describe("resolveDefaultEnvironmentId", () => {
         environments: [locked],
         resourceDefaults: { mcpRegistry: "env-locked" },
         resource: "mcpRegistry",
-        canDeployToRestricted: false,
       }),
     ).toBeNull();
   });
@@ -52,10 +50,9 @@ describe("resolveDefaultEnvironmentId", () => {
   test("uses a restricted environment for a user who may deploy there", () => {
     expect(
       resolveDefaultEnvironmentId({
-        environments: [locked],
+        environments: [unlocked],
         resourceDefaults: { mcpRegistry: "env-locked" },
         resource: "mcpRegistry",
-        canDeployToRestricted: true,
       }),
     ).toBe("env-locked");
   });

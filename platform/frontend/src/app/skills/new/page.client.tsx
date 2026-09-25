@@ -292,6 +292,7 @@ function NewSkillWizard() {
               {effectiveStep === "configure" && (
                 <div className="flex flex-col gap-4">
                   <SkillForm
+                    creating
                     draft={draft}
                     onChange={patchDraft}
                     onFilesChange={(update) =>

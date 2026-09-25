@@ -205,41 +205,6 @@ class ChatOpsChannelBindingModel {
         }
       }
 
-      if (targetAgent.scope === "personal") {
-        const assignedBindings = params.updates.flatMap((update) => {
-          if (update.nextAgentId !== params.targetAgentId) return [];
-          const binding = bindingsById.get(update.bindingId);
-          return binding ? [binding] : [];
-        });
-        if (assignedBindings.some((binding) => !binding.isDm)) {
-          throw new ApiError(
-            400,
-            "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
-          );
-        }
-        if (
-          (assignedBindings.length > 0 || params.directMessages.length > 0) &&
-          targetAgent.authorId !== params.userId
-        ) {
-          throw new ApiError(
-            403,
-            "You can only assign your own personal agents to your DM.",
-          );
-        }
-        if (
-          assignedBindings.some(
-            (binding) =>
-              binding.dmOwnerEmail?.toLowerCase() !==
-              params.dmOwnerEmail.toLowerCase(),
-          )
-        ) {
-          throw new ApiError(
-            403,
-            "Personal agents can only be assigned to your own direct messages.",
-          );
-        }
-      }
-
       const updatedBindings: ChatOpsChannelBinding[] = [];
       for (const update of params.updates) {
         const [updated] = await tx

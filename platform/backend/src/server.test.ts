@@ -1,7 +1,6 @@
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
-import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
 // Create a hoisted mock function that defaults to returning true (healthy)
@@ -110,6 +109,26 @@ describe("createFastifyInstance", () => {
       // Rounded up: Retry-After is whole seconds, and rounding down would
       // invite a retry that is still inside the window.
       expect(response.headers["retry-after"]).toBe("13");
+    });
+
+    test("tells SDK clients not to retry a failure that repeats on every request", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-refused", async () => {
+        const error = new ApiError(500, "Policy refused");
+        error.shouldRetry = false;
+        throw error;
+      });
+      app.get("/test-plain-500", async () => {
+        throw new ApiError(500, "Unexpected");
+      });
+
+      const refused = await app.inject({ method: "GET", url: "/test-refused" });
+      const plain = await app.inject({ method: "GET", url: "/test-plain-500" });
+
+      expect(refused.statusCode).toBe(500);
+      expect(refused.headers["x-should-retry"]).toBe("false");
+      // Without guidance the header is absent and clients keep their own rules.
+      expect(plain.headers["x-should-retry"]).toBeUndefined();
     });
 
     test("omits Retry-After when the error does not say when it clears", async () => {

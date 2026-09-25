@@ -1,9 +1,9 @@
 import { MockLanguageModelV3 } from "ai/test";
 import { eq } from "drizzle-orm";
+import { expect, test, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { InteractionModel } from "@/models";
-import { expect, test, vi } from "@/test";
 import { makeTestPdf } from "@/test/pdf";
 import { normalizeInteractionResponse } from "@/types";
 import {

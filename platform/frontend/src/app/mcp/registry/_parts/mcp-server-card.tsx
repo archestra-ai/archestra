@@ -28,7 +28,6 @@ import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { TableCard } from "@/components/table-card-view";
 import {
   Avatar,
@@ -204,9 +203,10 @@ export function McpServerCard({
   const { data: allMcpServers } = useMcpServers();
   // Teams the user may install a shared connection for: any team for an install
   // admin, otherwise only the teams they belong to.
-  const { data: isMcpServerInstallAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: isMcpServerInstallAdmin } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const { data: teams } = useAssignableTeams({
     isResourceAdmin: !!isMcpServerInstallAdmin,
   });
@@ -554,19 +554,6 @@ export function McpServerCard({
     </Button>
   ) : null;
 
-  const settingsButton = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-8 w-8"
-      data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
-      onClick={() => goToItemPage()}
-      aria-label={`Server settings for ${item.name}`}
-    >
-      <Pencil className="h-4 w-4" />
-    </Button>
-  );
-
   // A 4th connection folds into the +N count rather than lengthening the
   // stack: the stack is the widest fixed item in the compact info row, and
   // every extra circle comes straight out of the width the scope badge's name
@@ -618,9 +605,6 @@ export function McpServerCard({
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
-  // Cards are one mixed list. Like Apps and Projects, every row names its
-  // visibility so personal entries never rely on a removed ownership heading.
-  const showScopeBadge = Boolean(item.scope);
   const showApprovalPanel = item.imageApprovalRequired === true;
 
   /** Who is connected and whether a connection needs attention. */
@@ -631,8 +615,8 @@ export function McpServerCard({
       hasOrgConnection ||
       Boolean(oauthReauthIndicator));
 
-  /** Whether anything follows the badge in the row. */
-  const hasCompactInfoAfterScopeBadge =
+  /** Operational details shown alongside resource metadata. */
+  const hasOperationalDetails =
     toolsCount > 0 || totalAgentCount > 0 || hasTrailingCluster;
   const hasCardMetadata = Boolean(
     environmentLabel ||
@@ -642,8 +626,7 @@ export function McpServerCard({
       showApprovalPanel,
   );
 
-  const hasCompactInfoContent =
-    hasCardMetadata || showScopeBadge || hasCompactInfoAfterScopeBadge;
+  const hasCompactInfoContent = hasCardMetadata || hasOperationalDetails;
 
   /*
     This usually fits on one line at the grid's card width, but operational
@@ -687,19 +670,6 @@ export function McpServerCard({
         <Badge variant="outline" className="shrink-0">
           Image needs approval
         </Badge>
-      )}
-      {showScopeBadge && (
-        <div className="flex min-w-0 items-center">
-          <ResourceVisibilityBadge
-            scope={item.scope}
-            teams={item.teams}
-            authorId={item.authorId}
-            authorName={item.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-            compact
-          />
-        </div>
       )}
       {toolsCount > 0 && (
         <div className="flex shrink-0 items-center gap-1">
@@ -1083,15 +1053,24 @@ export function McpServerCard({
           </span>
         }
         actions={
-          <div className="flex items-center gap-1">
-            {canEditCatalog ? settingsButton : null}
-            <ResourceTableRowActions
-              kind="catalog"
-              resource={item}
-              itemName={item.name}
-              actions={[]}
-            />
-          </div>
+          <ResourceTableRowActions
+            kind="catalog"
+            resource={item}
+            itemName={item.name}
+            actions={
+              canEditCatalog
+                ? [
+                    {
+                      icon: <Pencil className="h-4 w-4" />,
+                      label: "Server settings for",
+                      tooltip: "Server settings",
+                      testId: `${E2eTestId.McpServerSettingsButton}-${item.name}`,
+                      onClick: () => goToItemPage(),
+                    },
+                  ]
+                : []
+            }
+          />
         }
         selected={selection?.selected}
         selectionDisabled={selection?.disabled}

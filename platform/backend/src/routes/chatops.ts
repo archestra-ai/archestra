@@ -54,6 +54,7 @@ import {
 } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -1426,20 +1427,54 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        request.headers,
-      );
-      const targetAgent = await AgentModel.findById(
-        request.body.targetAgentId,
-        request.user.id,
-        isAgentAdmin,
-      );
+      const targetAgent = await AgentModel.findById(request.body.targetAgentId);
       if (
         !targetAgent ||
         targetAgent.organizationId !== request.organizationId
       ) {
         throw new ApiError(404, "Agent not found");
+      }
+      if (targetAgent.agentType !== "agent")
+        throw new ApiError(
+          400,
+          "Only internal agents can be assigned to ChatOps.",
+        );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: request.body.targetAgentId,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
+      const assignedBindings = await ChatOpsChannelBindingModel.findByIds(
+        request.body.updates
+          .filter((update) => update.nextAgentId === request.body.targetAgentId)
+          .map((update) => update.bindingId),
+        request.organizationId,
+      );
+      if (
+        assignedBindings.some(
+          (binding) =>
+            !binding.isDm ||
+            binding.dmOwnerEmail?.toLowerCase() !==
+              request.user.email.toLowerCase(),
+        )
+      ) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "agent",
+          scope: request.body.targetAgentId,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
       }
       for (const { provider } of request.body.directMessages) {
         await assertMessagingChannelAllowed({
@@ -2184,8 +2219,9 @@ function maskValue(value: string): string {
 }
 
 /**
- * Validate that a personal agent is not assigned to a shared channel.
- * Personal agents may only be assigned to DM bindings owned by the agent's author.
+ * Authorize assigning an agent to ChatOps bindings. The caller needs `use` on
+ * the agent; assigning it anywhere but their own DMs also takes
+ * `manage-permissions`, because every member of that channel gains the agent.
  */
 async function validateAgentChannelAssignment(params: {
   agentId: string;
@@ -2209,33 +2245,31 @@ async function validateAgentChannelAssignment(params: {
     throw new ApiError(400, "Only internal agents can be assigned to ChatOps.");
   }
 
-  if (agent.scope !== "personal") return;
-
-  if (!params.isDm) {
-    throw new ApiError(
-      400,
-      "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
-    );
-  }
-
-  // For DMs, only the author can assign their own personal agent
-  if (agent.authorId !== params.userId) {
-    throw new ApiError(
-      403,
-      "You can only assign your own personal agents to your DM.",
-    );
-  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "agent",
+    scope: params.agentId,
+    action: "use",
+  });
   if (
+    !params.isDm ||
     params.dmOwnerEmails?.some(
-      (ownerEmail) =>
-        ownerEmail?.toLowerCase() !== params.userEmail.toLowerCase(),
+      (email) => email?.toLowerCase() !== params.userEmail.toLowerCase(),
     )
   ) {
-    throw new ApiError(
-      403,
-      "Personal agents can only be assigned to your own direct messages.",
-    );
+    await ResourcePermissions.require({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "agent",
+      scope: params.agentId,
+      action: "manage-permissions",
+    });
   }
+  // SPDX-SnippetEnd
 }
 
 /**

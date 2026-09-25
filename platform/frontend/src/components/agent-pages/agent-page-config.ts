@@ -35,8 +35,7 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "Agents",
     resource: "agent",
     defaultIconType: "agent",
-    createDescription:
-      "Give the agent a name and instructions, then review the tools, skills, and knowledge it can use.",
+    createDescription: "Give the agent a name and instructions.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
@@ -108,6 +107,7 @@ export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
  * `general` is the page's default and carries no `?section=`.
  */
 export type AgentDetailSection =
+  | "permissions"
   | "runtime"
   | "general"
   | "tools"

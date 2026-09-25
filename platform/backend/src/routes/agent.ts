@@ -18,18 +18,13 @@ import {
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
   requireAgentModifyPermission,
-  userHasPermission,
 } from "@/auth";
 // Imported from the module rather than the `@/auth` barrel on purpose: route
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import {
-  type AgentTypePermissionChecker,
-  assertAgentTeams,
-} from "@/auth/agent-type-permissions";
+import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { isServiceAccountUserId } from "@/auth/utils";
 import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -64,7 +59,6 @@ import { transferAgentOwnership } from "@/services/agent-ownership";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
@@ -72,6 +66,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
   AgentActivationSkillPolicyResponseSchema,
@@ -82,7 +77,6 @@ import {
   type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
-  AgentScopeSchema,
   AgentSkillAssignmentsResponseSchema,
   AgentSkillAssignmentsSchema,
   AgentSkillExclusionsResponseSchema,
@@ -92,13 +86,14 @@ import {
   ApiError,
   BuiltInAgentConfigSchema,
   CloneAgentBodySchema,
+  CreateAgentBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   ImportAgentResponseSchema,
-  InsertAgentSchema,
   PaginatedAgentActivationSkillsResponseSchema,
   PatchAgentActivationSkillPolicySchema,
+  RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -109,12 +104,7 @@ import {
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
-import {
-  BulkDeleteBodySchema,
-  BulkIdsSchema,
-  BulkOutcomeSchema,
-  runBulk,
-} from "./bulk-route";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -289,7 +279,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { limit, offset },
         { sortBy, sortDirection },
         {
-          organizationId,
+          authorization: {
+            organizationId,
+            baseReadTypes: checker.getAgentTypesWithPermission("read"),
+          },
           name,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
@@ -470,6 +463,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await AgentModel.findAll(user.id, isAdmin, {
+          authorization: {
+            organizationId,
+            baseReadTypes: checker.getAgentTypesWithPermission("read"),
+          },
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -590,11 +587,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateAgent,
         description: "Create a new agent",
         tags: ["Agents"],
-        body: InsertAgentSchema,
+        body: CreateAgentBodySchema,
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId }, reply) => {
+    async ({ body: requestBody, user, organizationId }, reply) => {
+      const { initialGrants, ...body } = requestBody;
+      const resourceId = crypto.randomUUID();
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
       if (agentType === "llm_proxy") {
@@ -631,47 +630,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
-      const isServiceAccount = isServiceAccountUserId(user.id);
-      if (isServiceAccount && body.scope === "personal") {
-        throw new ApiError(
-          400,
-          "Service accounts cannot create personal agents. Use org or team scope.",
-        );
-      }
       requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
       });
-
-      // Validate scope-based permissions for agent creation
-      if (!checker.isAdmin(agentType)) {
-        const scope = body.scope ?? "personal";
-        if (scope === "org") {
-          throw new ApiError(403, "Only admins can create org-scoped agents");
-        }
-        if (scope === "team" || body.teams.length > 0) {
-          if (!checker.isTeamAdmin(agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to create team-scoped agents",
-            );
-          }
-
-          // team-admin can only assign teams they are a member of
-          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = body.teams.filter(
-            (id) => !userTeamIdSet.has(id),
-          );
-          if (invalidTeams.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-        }
-      }
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -735,11 +698,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       // Always assert on create: a null environment still lands on the org
       // default, which may itself be restricted (mirrors the MCP-catalog path).
-      await assertEnvironmentAssignable({
+      await assertCanAssignEnvironment({
         userId: user.id,
         organizationId,
         environmentId,
-        agentType,
       });
       if (body.activationSkillPolicy) {
         await agentActivationSkillPolicyService.validatePolicyForDraft({
@@ -750,26 +712,34 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // A team-scoped agent with no teams is accessible to nobody (not even its
-      // author), so reject it, and reject teams outside this organization.
-      // Applies to admins too — they can otherwise reach this via the API/UI
-      // (issue #6624).
-      await assertAgentTeams({
-        scope: body.scope ?? "personal",
-        teamIds: body.teams,
-        organizationId,
-      });
-
-      // Omit teams if scope is not 'team' — scope takes precedence.
       // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
       // is a trust attribute (the advisor discriminator drives the delegation
       // environment exception), so a client-supplied value is dropped here.
+      if (initialGrants !== undefined) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+          grants: initialGrants,
+          target: {
+            id: resourceId,
+            name: body.name,
+            authorId: user.id,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const createData = {
         ...body,
+        id: resourceId,
         organizationId,
         environmentId,
         builtInAgentConfig: null,
-        ...(body.scope !== "team" && { teams: [] }),
+        // The retired visibility column is NOT NULL; nothing reads it.
+        scope: "personal" as const,
       };
       // Whether a new record starts out able to consult the Advisor is decided
       // here, not by a follow-up write from the client: that second write
@@ -785,6 +755,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.create(createData, user.id, {
         defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
+        initialPermissionGrants: initialGrants ?? [],
       });
       if (body.activationSkillPolicy) {
         try {
@@ -982,22 +953,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Restoring is an update in permission terms
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(existingAgent.agentType, "update");
+        checker.require(existingAgent.agentType, {
+          action: "update",
+          scope: existingAgent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
+        agentId: existingAgent.id,
+        action: "update",
         checker,
         agentType: existingAgent.agentType,
-        agentScope: existingAgent.scope,
-        agentAuthorId: existingAgent.authorId,
-        agentTeamIds: existingAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       // Built-in agents restrict which fields an update may touch; a snapshot
@@ -1024,7 +992,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CloneAgent,
         description:
-          "Clone an agent and all its associations. Optionally override the clone's visibility (scope/teams); by default the source's visibility is copied.",
+          "Clone an agent and its associations with explicit permission grants. The creator receives full access; source sharing is not copied.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
@@ -1066,66 +1034,39 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read + create permission (return 404 to avoid leaking existence)
       try {
-        checker.require(sourceAgent.agentType, "read");
+        checker.require(sourceAgent.agentType, {
+          action: "read",
+          scope: sourceAgent.id,
+        });
         checker.require(sourceAgent.agentType, "create");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions on the source agent
-      const userTeamIds = !checker.isAdmin(sourceAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on the source agent
       requireAgentModifyPermission({
+        agentId: sourceAgent.id,
+        action: "update",
         checker,
         agentType: sourceAgent.agentType,
-        agentScope: sourceAgent.scope,
-        agentAuthorId: sourceAgent.authorId,
-        agentTeamIds: sourceAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
-      // The clone is a new agent, so an explicitly requested visibility is
-      // validated like agent creation (mirrors POST /api/agents).
-      const targetScope = body?.scope ?? sourceAgent.scope;
-      const requestedTeams = body?.teams ?? [];
-
-      // A team-scoped clone must land on ≥1 team (issue #6624) and may only
-      // target teams in this organization. Effective teams default to the
-      // source's when the caller omits them, matching AgentModel.cloneAgent.
-      // Applies to admins too.
-      await assertAgentTeams({
-        scope: targetScope,
-        teamIds: body?.teams ?? sourceAgent.teams.map((t) => t.id),
+      const initialGrants = body?.initialGrants ?? [];
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
         organizationId,
+        userId: user.id,
+        resource:
+          sourceAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+        grants: initialGrants,
+        target: {
+          ...sourceAgent,
+          authorId: user.id,
+        },
       });
-
-      if (!checker.isAdmin(sourceAgent.agentType)) {
-        if (targetScope === "org") {
-          throw new ApiError(403, "Only admins can create org-scoped agents");
-        }
-        if (targetScope === "team" || requestedTeams.length > 0) {
-          if (!checker.isTeamAdmin(sourceAgent.agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to create team-scoped agents",
-            );
-          }
-
-          // team-admin can only assign teams they are a member of
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = requestedTeams.filter(
-            (teamId) => !userTeamIdSet.has(teamId),
-          );
-          if (invalidTeams.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-        }
-      }
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
@@ -1163,8 +1104,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
         userId: user.id,
-        scope: body?.scope,
-        teams: body?.teams,
+        scope: "personal",
+        teams: [],
+        initialGrants,
       });
 
       return reply.send(clonedAgent);
@@ -1222,7 +1164,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1274,7 +1216,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read permission (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1327,23 +1269,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Editing exclusions requires the same permission as agent update
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, { action: "update", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       return reply.send(
@@ -1390,7 +1326,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read permission (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1443,23 +1379,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Editing exclusions requires the same permission as agent update
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, { action: "update", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions like UpdateAgent does
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires an update grant on this agent, like UpdateAgent does
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       return reply.send(
@@ -1600,12 +1530,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await assertCanAssignEnvironment({
             environmentId: resolvedEnvironmentId,
             organizationId,
-            canDeployToRestricted: await userHasPermission(
-              user.id,
-              organizationId,
-              "agent",
-              "deploy-to-restricted",
-            ),
+            userId: user.id,
           });
         }
         enabled = await isArchestraToolAvailableToAgent({
@@ -1626,12 +1551,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId: resolvedEnvironmentId,
           organizationId,
-          canDeployToRestricted: await userHasPermission(
-            user.id,
-            organizationId,
-            "agent",
-            "deploy-to-restricted",
-          ),
+          userId: user.id,
         });
         enabled =
           (await OrganizationModel.getById(organizationId))
@@ -1794,7 +1714,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+      await requireAgentSkillWriteAccess({
         id,
         user,
         organizationId,
@@ -1804,7 +1724,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: id,
           organizationId,
           userId: user.id,
-          isSkillAdmin,
           assignments: body,
         }),
       );
@@ -1847,7 +1766,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+      await requireAgentSkillWriteAccess({
         id,
         user,
         organizationId,
@@ -1857,7 +1776,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: id,
           organizationId,
           userId: user.id,
-          isSkillAdmin,
           excludedSkillIds: body.excludedSkillIds,
         }),
       );
@@ -1898,7 +1816,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateAgentSchemaBase.partial(),
+        // Who can reach an agent changes through its permissions, so the
+        // retired sharing fields are refused rather than dropped.
+        body: UpdateAgentSchemaBase.partial().extend({
+          scope: RetiredSharingUpdateFieldSchema,
+          teams: RetiredSharingUpdateFieldSchema,
+          users: RetiredSharingUpdateFieldSchema,
+        }),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
@@ -1926,7 +1850,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check update permission (return 404 to avoid leaking existence)
       try {
-        checker.require(existingAgent.agentType, "update");
+        checker.require(existingAgent.agentType, {
+          action: "update",
+          scope: existingAgent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1936,79 +1863,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAdmin: checker.isAdmin(existingAgent.agentType),
       });
 
-      // Fetch user's team IDs once for scope-based checks and team assignment validation
-      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
-
-      // Enforce scope-based modify permissions on the existing agent
+      // Who can reach the agent is not editable here: access lives in the
+      // agent's permission policy, which the permissions API writes on its own.
       requireAgentModifyPermission({
+        agentId: existingAgent.id,
+        action: "update",
         checker,
         agentType: existingAgent.agentType,
-        agentScope: existingAgent.scope,
-        agentAuthorId: existingAgent.authorId,
-        agentTeamIds: existingAgent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
-      });
-
-      // Validate scope escalation for non-admin users
-      if (!checker.isAdmin(existingAgent.agentType)) {
-        if (body.scope === "org") {
-          throw new ApiError(403, "Only admins can set scope to org");
-        }
-        if (body.scope === "team" || (body.teams && body.teams.length > 0)) {
-          if (!checker.isTeamAdmin(existingAgent.agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to set scope to team",
-            );
-          }
-        }
-
-        // team-admin: validate team assignments and preserve teams they don't control
-        if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
-          const userTeamIdSet = new Set(userTeamIds);
-          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
-
-          // Validate newly added teams — must be a member
-          const invalidAdds = body.teams.filter(
-            (id) => !existingTeamIds.has(id) && !userTeamIdSet.has(id),
-          );
-          if (invalidAdds.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-
-          // Preserve existing teams the user doesn't control
-          const preservedTeams = [...existingTeamIds].filter(
-            (id) => !userTeamIdSet.has(id),
-          );
-          const userControlledTeams = body.teams.filter((id) =>
-            userTeamIdSet.has(id),
-          );
-          body.teams = [
-            ...new Set([...userControlledTeams, ...preservedTeams]),
-          ];
-        }
-      }
-
-      // Prevent downgrading shared agents to personal
-      if (body.scope === "personal" && existingAgent.scope !== "personal") {
-        throw new ApiError(400, "Shared agents cannot be made personal");
-      }
-
-      // A team-scoped agent must keep ≥1 team (issue #6624) and may only be
-      // assigned teams in this organization. Evaluate the merged result — the
-      // team-admin path above may have rewritten body.teams — so this catches
-      // switching to team scope with none, or clearing the teams of an already
-      // team-scoped agent. Applies to admins too.
-      await assertAgentTeams({
-        scope: body.scope ?? existingAgent.scope,
-        teamIds: body.teams ?? existingAgent.teams.map((t) => t.id),
-        organizationId,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -2046,6 +1907,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
+        if (
+          existingAgent.builtInAgentConfig.name ===
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+        ) {
+          throw new ApiError(
+            403,
+            "The OpenAPPA Configuration Agent is managed by the platform",
+          );
+        }
         // Validate builtInAgentConfig if provided
         if (body.builtInAgentConfig) {
           const parsed = BuiltInAgentConfigSchema.safeParse(
@@ -2057,23 +1927,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // The advisor is one org-wide row every environment's agents reach
-        // through delegation. A team scope would hide it from everyone
-        // outside that team's delegation surface, and an environment would
-        // re-fence it — reject a narrowing change rather than silently scoping
-        // a shared resource. A no-op that restates org scope or an empty team
-        // list is allowed (the dialog may resend it).
+        // through delegation. An environment would re-fence it, so reject a
+        // narrowing change rather than silently scoping a shared resource.
         if (
           existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
         ) {
-          const narrowsScope = body.scope !== undefined && body.scope !== "org";
-          const assignsTeams =
-            body.teams !== undefined && body.teams.length > 0;
-          if (narrowsScope || assignsTeams) {
-            throw new ApiError(
-              400,
-              "The Advisor is shared by the whole organization and cannot be scoped to teams",
-            );
-          }
           if (body.environmentId !== undefined && body.environmentId !== null) {
             throw new ApiError(
               400,
@@ -2094,21 +1952,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
-          ...(body.scope !== undefined && { scope: body.scope }),
-          ...(body.teams !== undefined && { teams: body.teams }),
         };
       } else {
-        // Omit teams if scope is not 'team' — scope takes precedence.
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
         // the advisor delegation exception), so a client cannot promote an
         // ordinary agent into a built-in by supplying it on update.
         const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
           body;
-        updateData = {
-          ...bodyWithoutBuiltIn,
-          ...((body.scope ?? existingAgent.scope) !== "team" &&
-            body.teams !== undefined && { teams: [] }),
-        };
+        updateData = bodyWithoutBuiltIn;
       }
 
       // A model and its API key are a pair: persist both or neither. Validate
@@ -2156,40 +2007,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (body.environmentId !== undefined) {
-        await assertEnvironmentAssignable({
+        await assertCanAssignEnvironment({
           userId: user.id,
           organizationId,
           environmentId: body.environmentId,
-          agentType: existingAgent.agentType,
         });
       }
-
-      // A static tool assignment pins one installed connection, and a
-      // team-scoped connection is only assignable while the agent shares that
-      // team. Moving the agent's scope or teams therefore silently strips the
-      // right to a credential its tools still point at — the runtime trusts
-      // the persisted mcpServerId — so re-check the pins it already holds and
-      // refuse before anything is written (AgentModel.update syncs teams).
-      // The evaluated scope/team set is the merged one: the team-admin branch
-      // above may have rewritten body.teams to preserve teams it cannot touch.
-      // Known gap: an assignment or team-membership change racing this check
-      // can still land a stale pin; validating at call time is the follow-up.
-      const currentTeamIds = existingAgent.teams.map((team) => team.id);
-      await assertNoStaticPinsBrokenByTargetChange({
-        agentId: id,
-        currentTarget: {
-          organizationId: existingAgent.organizationId,
-          scope: existingAgent.scope,
-          authorId: existingAgent.authorId,
-          teamIds: currentTeamIds,
-        },
-        nextTarget: {
-          organizationId: existingAgent.organizationId,
-          scope: body.scope ?? existingAgent.scope,
-          authorId: existingAgent.authorId,
-          teamIds: body.teams ?? currentTeamIds,
-        },
-      });
 
       const agent = await AgentModel.update(id, updateData);
 
@@ -2204,173 +2027,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(agent);
-    },
-  );
-
-  fastify.patch(
-    "/api/agents/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateAgents,
-        description:
-          "Update several agents in one request. Today the only editable " +
-          "surface is visibility — `scope` with the `teams` it belongs to or " +
-          "the `users` it is shared with — and every agent in the batch is " +
-          "moved to the same one. The target is validated once for the whole " +
-          "request (a 400 or 403 changes nothing); per-agent problems, such " +
-          "as an id the caller cannot see or modify, are reported in `failed` " +
-          "and leave the rest of the batch applied. An agent already in the " +
-          "requested state is reported as succeeded without being rewritten.",
-        tags: ["Agents"],
-        body: z
-          .object({
-            ids: BulkIdsSchema,
-            scope: AgentScopeSchema.describe(
-              "The visibility every agent in the batch moves to.",
-            ),
-            teams: z
-              .array(z.string())
-              .optional()
-              .describe("Only meaningful for `scope = team`; required there."),
-            users: z
-              .array(z.string())
-              .optional()
-              .describe(
-                "People to share with. Only meaningful for " +
-                  "`scope = personal`; ignored otherwise. Unlike the " +
-                  "single-agent update, omitting it revokes existing grants " +
-                  "rather than keeping them: this sets one visibility across " +
-                  "the whole selection, so a per-agent grant list would " +
-                  "survive as a difference the request just asked to remove.",
-              ),
-          })
-          .describe(
-            "Ids plus the fields to change. Shaped so further bulk-editable " +
-              "fields can be added here rather than as another endpoint.",
-          ),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { organizationId, user, body } = request;
-      const { scope } = body;
-      // Mirrors the single-agent update: teams only bind a team-scoped agent
-      // and grants only a personal one, so the other set is cleared rather
-      // than left stranded on an agent whose visibility now says otherwise.
-      const teams = scope === "team" ? [...new Set(body.teams ?? [])] : [];
-      const users = scope === "personal" ? [...new Set(body.users ?? [])] : [];
-
-      // Request-level: the target is the same for every agent, so an unusable
-      // one is a bad request rather than N identical per-agent failures.
-      await assertAgentTeams({ scope, teamIds: teams, organizationId });
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const userTeamIdSet = new Set(userTeamIds);
-
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "agents bulk update",
-        notFoundMessage: "Agent not found",
-        unexpectedMessage: "Could not update this agent",
-        load: async (ids) =>
-          new Map(
-            (
-              await AgentModel.findForBulk({ organizationId, agentIds: ids })
-            ).map((agent) => [agent.id, agent]),
-          ),
-        describe: (agent) => agent.name,
-        authorize: (agent) => {
-          if (agent.agentType === "llm_proxy") {
-            throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
-          }
-          // A type the caller cannot update is answered as "not found", as the
-          // single-agent update does, so a batch never confirms an agent
-          // exists that the caller was not allowed to see.
-          try {
-            checker.require(agent.agentType, "update");
-          } catch {
-            throw new ApiError(404, "Agent not found");
-          }
-
-          const isAdmin = checker.isAdmin(agent.agentType);
-          requireAgentModifyPermission({
-            checker,
-            agentType: agent.agentType,
-            agentScope: agent.scope,
-            agentAuthorId: agent.authorId,
-            agentTeamIds: agent.teamIds,
-            userTeamIds: isAdmin ? [] : userTeamIds,
-            userId: user.id,
-          });
-
-          // Admin-ness is per agent type, so these cannot be hoisted to a
-          // request-level 403 the way the team validation above can.
-          if (!isAdmin) {
-            if (scope === "org") {
-              throw new ApiError(403, "Only admins can set scope to org");
-            }
-            if (
-              (scope === "team" || teams.length > 0) &&
-              !checker.isTeamAdmin(agent.agentType)
-            ) {
-              throw new ApiError(
-                403,
-                "You need team-admin permission to set scope to team",
-              );
-            }
-            // A team-admin may only place an agent on teams they belong to.
-            // The single-agent update silently preserves teams they do not
-            // control; a batch cannot, because it sets one team list across
-            // the selection — so an unassignable team is refused outright
-            // rather than quietly producing a different result per agent.
-            const unassignable = teams.filter((id) => !userTeamIdSet.has(id));
-            if (checker.isTeamAdmin(agent.agentType) && unassignable.length) {
-              throw new ApiError(
-                403,
-                "You can only assign teams you are a member of",
-              );
-            }
-          }
-
-          if (scope === "personal" && agent.scope !== "personal") {
-            throw new ApiError(400, "Shared agents cannot be made personal");
-          }
-          // A personal agent IS its author, and `author_id` is nullable —
-          // built-ins are seeded without one, and deleting a user leaves their
-          // shared agents authorless. Making one of those personal would
-          // strand it, reachable by nobody, which is exactly what selecting a
-          // whole page and choosing "personal" would otherwise do.
-          if (scope === "personal" && agent.authorId === null) {
-            throw new ApiError(
-              400,
-              "This agent has no author, so it cannot be made personal. " +
-                "Share it with named people instead, or leave it team- or " +
-                "organization-scoped.",
-            );
-          }
-        },
-        applyEach: async (agent, id) => {
-          const unchanged =
-            agent.scope === scope && sameIdSet(agent.teamIds, teams);
-          if (unchanged && scope !== "personal") return;
-          await AgentModel.update(id, { scope, teams, users });
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            agents: await AgentModel.findVisibilityForBulkAudit({
-              organizationId,
-              agentIds: ids,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 
@@ -2400,7 +2056,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
       const outcome = await runBulk({
         ids: body.ids,
@@ -2419,18 +2074,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
           }
           try {
-            checker.require(agent.agentType, "delete");
+            checker.require(agent.agentType, {
+              action: "delete",
+              scope: agent.id,
+            });
           } catch {
             throw new ApiError(404, "Agent not found");
           }
           requireAgentModifyPermission({
+            agentId: agent.id,
+            action: "delete",
             checker,
             agentType: agent.agentType,
-            agentScope: agent.scope,
-            agentAuthorId: agent.authorId,
-            agentTeamIds: agent.teamIds,
-            userTeamIds: checker.isAdmin(agent.agentType) ? [] : userTeamIds,
-            userId: user.id,
           });
           if (agent.isBuiltIn) {
             throw new ApiError(403, "Built-in agents cannot be deleted");
@@ -2494,23 +2149,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "delete");
+        checker.require(agent.agentType, { action: "delete", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Enforce scope-based modify permissions
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
+      // Requires a delete grant on this agent
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "delete",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       // Prevent deletion of built-in agents
@@ -2574,22 +2223,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "delete");
+        checker.require(agent.agentType, { action: "delete", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "delete",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((t) => t.id),
-        userTeamIds,
-        userId: user.id,
       });
 
       const conflictMessage = await AgentModel.getRestoreConflictMessage(agent);
@@ -2889,7 +2532,7 @@ async function requireReadableAgent(params: {
     organizationId: params.organizationId,
   });
   try {
-    checker.require(agent.agentType, "read");
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -2897,12 +2540,12 @@ async function requireReadableAgent(params: {
   if (!checker.isAdmin(agent.agentType)) {
     // Team/author visibility, mirroring GetAgent's non-admin filter. The
     // already-fetched agent serves as the access context — no re-fetch.
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      params.userId,
-      params.id,
-      false,
-      agent,
-    );
+    const hasAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: params.userId,
+      agentId: params.id,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    });
     if (!hasAccess) {
       throw new ApiError(404, "Agent not found");
     }
@@ -2963,46 +2606,29 @@ function getPermittedAgentTypesForList(params: {
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {
   const action = params.status === "deleted" ? "delete" : "read";
+  const scopedTypes =
+    params.status === "deleted"
+      ? []
+      : (params.checker.getAgentTypesWithScopedPermission?.("read") ?? []);
 
   if (params.effectiveTypes) {
     for (const type of params.effectiveTypes) {
-      params.checker.require(type, action);
+      if (!scopedTypes.includes(type)) params.checker.require(type, action);
     }
     return undefined;
   }
 
-  const permittedTypes = params.checker.getAgentTypesWithPermission(action);
+  const permittedTypes = [
+    ...new Set([
+      ...params.checker.getAgentTypesWithPermission(action),
+      ...scopedTypes,
+    ]),
+  ];
   if (permittedTypes.length === 0) {
     throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
   }
 
   return permittedTypes;
-}
-
-/**
- * Binding an agent to a restricted environment routes its code sandbox to that
- * environment's isolated runtime, so it is gated by the resource-specific
- * deploy-to-restricted permission for the agent's type — agent or
- * mcpGateway. Throws 403/404 if the caller may not assign the environment.
- */
-async function assertEnvironmentAssignable(params: {
-  userId: string;
-  organizationId: string;
-  environmentId: string | null;
-  agentType: AgentType;
-}): Promise<void> {
-  const { userId, organizationId, environmentId, agentType } = params;
-  const hasResourceDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    getResourceForAgentType(agentType),
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasResourceDeploy,
-  });
 }
 
 /**
@@ -3028,12 +2654,7 @@ async function resolveNewAgentEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      resource,
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 
@@ -3064,7 +2685,7 @@ async function requireAgentReadAccess(params: {
   });
 
   try {
-    checker.require(agent.agentType, "read");
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -3104,22 +2725,16 @@ async function requireAgentUpdateAccess(params: {
   });
 
   try {
-    checker.require(agent.agentType, "update");
+    checker.require(agent.agentType, { action: "update", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
 
-  const userTeamIds = !checker.isAdmin(agent.agentType)
-    ? await TeamModel.getUserTeamIds(user.id)
-    : [];
   requireAgentModifyPermission({
+    agentId: agent.id,
+    action: "update",
     checker,
     agentType: agent.agentType,
-    agentScope: agent.scope,
-    agentAuthorId: agent.authorId,
-    agentTeamIds: agent.teams.map((t) => t.id),
-    userTeamIds,
-    userId: user.id,
   });
   return agent;
 }
@@ -3134,16 +2749,14 @@ async function requireAgentUpdateAccess(params: {
  * The skill half is in two places, and both are load-bearing. The capability
  * — `skill:read` — is enforced by the middleware from
  * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
- * skill resource cannot reach these routes at all. The per-skill visibility
- * check is enforced by the assignment service, and this function only resolves
- * the `skill:admin` flag that service needs: publishing or excluding a skill
- * requires that the caller could already read it (org-scoped, their own,
- * shared with them, or assigned to one of their teams), with `skill:admin`
- * bypassing that as it does everywhere else. Neither half implies the other —
- * visibility is a property of the skill, the capability a property of the
- * role. Gateway permission alone is not sufficient for either, because
- * `mcpGateway:update` is a default member permission and publishing hands the
- * skill's full body to every holder of the gateway's token.
+ * skill resource cannot reach these routes at all. The per-skill check is
+ * enforced by the assignment service: publishing or excluding a skill
+ * requires that a grant already lets the caller read it. Neither half implies
+ * the other — visibility is a property of the skill, the capability a
+ * property of the role. Gateway permission alone is not sufficient for
+ * either, because `mcpGateway:update` is a default member permission and
+ * publishing hands the skill's full body to every holder of the gateway's
+ * token.
  *
  * Deliberately NOT re-checked at serve time: revoking a user's team membership
  * (or narrowing a skill's team assignments) does not retroactively un-publish
@@ -3154,18 +2767,8 @@ async function requireAgentSkillWriteAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<{ isSkillAdmin: boolean }> {
-  const { user, organizationId } = params;
-
+}): Promise<void> {
   await requireAgentUpdateAccess(params);
-
-  // Skill permissions are a separate resource from the agent's: an mcpGateway
-  // admin is not automatically a skill admin.
-  const skillChecker = await getSkillPermissionChecker({
-    userId: user.id,
-    organizationId,
-  });
-  return { isSkillAdmin: skillChecker.isAdmin };
 }
 
 /**
@@ -3256,11 +2859,4 @@ async function assertAgentRuntimeModelCompatibility(params: {
   if (!result.compatibility.compatible) {
     throw new ApiError(409, result.compatibility.message);
   }
-}
-
-/** Whether two id lists hold the same set of ids, order aside. */
-function sameIdSet(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const setB = new Set(b);
-  return a.every((id) => setB.has(id));
 }

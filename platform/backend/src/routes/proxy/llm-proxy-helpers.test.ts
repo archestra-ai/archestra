@@ -8,10 +8,9 @@ import { randomUUID } from "node:crypto";
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import { describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
 // Mock prom-client (required by metrics)
@@ -655,6 +654,28 @@ describe("normalizeToolCallsForPolicy", () => {
     ]);
     expect(result).toEqual([
       { toolCallName: "archestra__run_tool", toolCallArgs: '{"tool_args":{}}' },
+    ]);
+  });
+
+  test("keeps a human display name under run_tool instead of forming an invalid policy identity", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        }),
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        toolCallName: "archestra__run_tool",
+        toolCallArgs: JSON.stringify({
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        }),
+      },
     ]);
   });
 });
@@ -1477,6 +1498,19 @@ describe("handleError", () => {
 
     expect(throwErrorFor(error, reply).statusCode).toBe(429);
     expect(headers["retry-after"]).toBe("1");
+  });
+
+  test("keeps the retry guidance an Archestra error carries", () => {
+    const { reply } = makeReply(false);
+    const error = new ApiError(500, "OpenAPPA refused the policy");
+    error.shouldRetry = false;
+    error.retryAfterSeconds = 7;
+
+    const thrown = throwErrorFor(error, reply);
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.shouldRetry).toBe(false);
+    expect(thrown.retryAfterSeconds).toBe(7);
   });
 
   test("drops a Retry-After value that is neither seconds nor a date", () => {

@@ -32,7 +32,7 @@ import {
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 
 export function McpToolCallDetailPage({
   initialData,

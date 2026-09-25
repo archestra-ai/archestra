@@ -1,9 +1,8 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { streamText } from "ai";
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createDirectLLMModel } from "@/clients/llm-client";
-import { beforeEach, describe, expect, test } from "@/test";
 
 /**
  * Pins that *redacted* extended thinking survives the Bedrock model factory —

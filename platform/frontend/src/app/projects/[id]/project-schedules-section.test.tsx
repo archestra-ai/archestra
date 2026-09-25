@@ -43,7 +43,11 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -97,6 +101,9 @@ function mockSchedulePermissions(granted: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   // clearAllMocks does not drop mockReturnValue, so restore the "no dialog
   // open" default here rather than leaking one test's override into the next.
   vi.mocked(useDialogUrlParam).mockReturnValue({
@@ -170,6 +177,27 @@ describe("ProjectSchedulesSection without scheduledTask:read", () => {
     render(<ProjectSchedulesSection projectId="project-1" />);
 
     expect(useScheduleTrigger).not.toHaveBeenCalled();
+  });
+
+  it("still offers permissions for a wildcard grantee without starting the forbidden schedule query", async () => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "scheduledTask",
+          scope: "*",
+          action: "read",
+        },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+
+    const user = userEvent.setup();
+    render(<ProjectSchedulesSection projectId="project-1" />);
+
+    expect(screen.getByText("Schedules")).toBeInTheDocument();
+    expect(useScheduleTriggers).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("menuitem", { name: "Permissions" })).toBeVisible();
   });
 });
 

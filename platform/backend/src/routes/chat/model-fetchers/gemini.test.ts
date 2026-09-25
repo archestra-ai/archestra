@@ -1,6 +1,5 @@
 import type { GoogleGenAI } from "@google/genai";
-import { vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fetchGeminiModels, fetchGeminiModelsViaVertexAi } from "./gemini";
 
 const mockFetch = vi.fn();

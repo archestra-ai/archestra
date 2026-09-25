@@ -186,7 +186,7 @@ describe("handleScheduleTriggerRunExecution", () => {
       organizationId: org.id,
       agentType: "agent",
       systemPrompt: "You are a test agent",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
     const trigger = await makeScheduleTrigger({

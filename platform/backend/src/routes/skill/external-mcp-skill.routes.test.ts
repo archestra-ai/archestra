@@ -7,14 +7,8 @@ import {
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
 } from "@/models";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import { drainBackgroundWork } from "@/utils/background-work";
 import externalMcpSkillRoutes from "./external-mcp-skill.routes";
 
@@ -57,7 +51,6 @@ describe("external MCP Skill routes", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
-      scope: "org",
       icon: "🛰️",
     });
     const server = await makeMcpServer({
@@ -145,7 +138,6 @@ describe("external MCP Skill routes", () => {
     await makeMember(otherUser.id, ctx.organizationId);
     const catalog = await makeInternalMcpCatalog({
       organizationId: null,
-      scope: "org",
     });
     const server = await makeMcpServer({
       catalogId: catalog.id,
@@ -178,7 +170,6 @@ describe("external MCP Skill routes", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
-      scope: "org",
     });
     const server = await makeMcpServer({
       catalogId: catalog.id,

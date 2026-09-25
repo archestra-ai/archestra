@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   ADVISOR_AGENT_DESCRIPTION,
   ADVISOR_SYSTEM_PROMPT,
+  ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -10,6 +11,7 @@ import {
   DUAL_LLM_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   POLICY_CONFIG_SYSTEM_PROMPT,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
@@ -19,6 +21,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
+  AgentActivationSkillRuleModel,
   AppModel,
   AppVersionModel,
   OrganizationModel,
@@ -26,8 +29,10 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
@@ -35,17 +40,87 @@ import {
   builtInSkillVersion,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import {
   decideEnvSeed,
   seedDefaultAppsForPristineOrgs,
   syncBuiltInAgents,
   syncBuiltInSkills,
+  syncOpenAppaConfigAgentCapabilities,
 } from "./seed";
 
 const [BASE_SKILL] = getEnabledBuiltInSkills();
 
 describe("syncBuiltInAgents", () => {
+  test("seeds the OpenAPPA configuration agent only while OpenAPPA is available", async ({
+    makeOrganization,
+  }) => {
+    const original = config.openappa.enabled;
+    const organization = await makeOrganization();
+    try {
+      config.openappa.enabled = true;
+      await syncBuiltInAgents();
+      const agent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      );
+      expect(agent?.name).toBe(BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG);
+      expect(agent?.builtInAgentConfig).toEqual({
+        name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      });
+      expect(
+        await AgentSuggestedPromptModel.getForAgent(agent?.id ?? ""),
+      ).toEqual(OPENAPPA_CONFIG_SUGGESTED_PROMPTS);
+    } finally {
+      config.openappa.enabled = original;
+    }
+  });
+
+  test("assigns the OpenAPPA guide and policy tools to its dedicated agent", async ({
+    makeOrganization,
+  }) => {
+    const original = config.openappa.enabled;
+    const organization = await makeOrganization();
+    try {
+      config.openappa.enabled = true;
+      await syncBuiltInAgents();
+      await syncBuiltInSkills();
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await syncOpenAppaConfigAgentCapabilities();
+
+      const agent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      );
+      const guide = await SkillModel.findBuiltIn({
+        organizationId: organization.id,
+        sourceRef: builtInSkillSourceRef("appa-guide"),
+      });
+      const assignedIds = await AgentToolModel.findToolIdsByAgent(
+        agent?.id ?? "",
+      );
+      const loadSkillIds = await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("load_skill"),
+        archestraMcpBranding.getToolName("get_guardrails_policy"),
+        archestraMcpBranding.getToolName("get_agent"),
+        archestraMcpBranding.getToolName("get_mcp_gateway"),
+      ]);
+      expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
+      expect(
+        await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""),
+      ).toMatchObject({
+        mode: "manual",
+        rules: [
+          {
+            disposition: "allow",
+            reference: { source: "native", skillId: guide?.id },
+          },
+        ],
+      });
+    } finally {
+      config.openappa.enabled = original;
+    }
+  });
   test("creates built-in agents for every organization", async ({
     makeOrganization,
   }) => {
@@ -546,8 +621,15 @@ describe("syncBuiltInSkills", () => {
         sourceRef,
       });
       expect(skill).not.toBeNull();
-      expect(skill?.scope).toBe("org");
       expect(skill?.authorId).toBeNull();
+      // Published to the whole organization by its grants, not a column.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "skill",
+        scope: skill?.id ?? "",
+      });
+      expect(policy?.legacyOrganizationAudience).toBe(true);
+      expect(policy?.grants.length).toBeGreaterThan(0);
       expect(skill?.content).toBe(BASE_SKILL.content);
 
       const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
@@ -567,36 +649,43 @@ describe("syncBuiltInSkills", () => {
     expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
-  test("does not seed a phantom copy when the name is already taken", async ({
+  test("seeds the built-in beside a member's skill of the same name", async ({
     makeOrganization,
+    makeUser,
   }) => {
     const org = await makeOrganization();
+    const author = await makeUser();
 
-    // a pre-existing shared skill squats on the built-in's display name.
-    await SkillModel.createWithFiles({
+    // Names are unique per author, and a built-in has none, so a member's
+    // skill with the built-in's display name no longer blocks the seed.
+    const own = await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
+        authorId: author.id,
         name: BASE_SKILL.name,
         description: "user's own skill",
         content: "# not the built-in",
         sourceType: "manual",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
 
-    // the squatted built-in is skipped (no phantom copy); the other built-ins
-    // still seed.
     expect(await countBuiltInSkills(org.id)).toBe(
-      getEnabledBuiltInSkills().length - 1,
+      getEnabledBuiltInSkills().length,
     );
     const built = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
     });
-    expect(built).toBeNull();
+    expect(built?.content).toBe(BASE_SKILL.content);
+    expect(built?.id).not.toBe(own?.id);
+    // The member's skill is left as it was.
+    const untouched = await SkillModel.findById(own?.id ?? "");
+    expect(untouched?.content).toBe("# not the built-in");
+    expect(untouched?.authorId).toBe(author.id);
   });
 
   test("auto-upgrades a pristine copy when the shipped revision changes", async ({
@@ -610,7 +699,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "old description",
         content: "OLD",
@@ -619,6 +707,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: staleVersion,
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -641,7 +730,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "user description",
         content: "EDITED BY USER",
@@ -650,6 +738,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: builtInSkillVersion({ content: "OLD", files: [] }),
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -876,12 +965,13 @@ describe("seedDefaultAppsForPristineOrgs", () => {
       expect(app.templateId).toMatch(/^default-app:/);
     }
 
-    // Version 1 carries the shipped HTML and the backing is org-scoped.
+    // Version 1 carries the shipped HTML. Who reaches a demo app is its
+    // grants; the backing catalog's retired visibility column is not set.
     const [taskTracker] = apps.filter(
       (app) => app.name === "Demo Task Tracker",
     );
     const loaded = await AppModel.findById(taskTracker.id);
-    expect(loaded?.scope).toBe("org");
+    expect(loaded).not.toBeNull();
     const version = await AppVersionModel.findByAppAndVersion(
       taskTracker.id,
       1,

@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { KbFileModel, KnowledgeBaseModel } from "@/models";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./knowledge-file.routes";
@@ -15,23 +18,27 @@ describe("PUT knowledge file content", () => {
   let organizationId: string;
   let knowledgeBaseId: string;
   const id = randomUUID();
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    organizationId = (await makeOrganization()).id;
-    user = await makeUser();
-    knowledgeBaseId = (
-      await KnowledgeBaseModel.create({
-        organizationId,
-        createdBy: user.id,
-        name: "Market research",
-      })
-    ).id;
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
-    });
-    registerAuditLogHook(app);
-    await app.register(routes);
-  });
+  beforeEach(
+    async ({ makeOrganization, makeUser, makeMember, makeKnowledgeBase }) => {
+      organizationId = (await makeOrganization()).id;
+      user = await makeUser();
+      await makeMember(user.id, organizationId);
+      // Organization-wide, as a base created without an audience used to be.
+      knowledgeBaseId = (
+        await makeKnowledgeBase(organizationId, {
+          createdBy: user.id,
+          name: "Market research",
+          access: "org",
+        })
+      ).id;
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        Object.assign(request, { user, organizationId });
+      });
+      registerAuditLogHook(app);
+      await app.register(routes);
+    },
+  );
   afterEach(async () => {
     await app.close();
   });
@@ -105,13 +112,19 @@ describe("PUT knowledge file content", () => {
     expect(JSON.stringify(audit)).not.toContain("Updated market report");
   });
 
-  test("preserves a private audience and refreshes every linked knowledge base", async () => {
+  test("preserves a private audience and refreshes every linked knowledge base", async ({
+    makeKnowledgeBase,
+  }) => {
     await put();
-    await KbFileModel.update({ id, organizationId, visibility: "private" });
-    const otherKb = await KnowledgeBaseModel.create({
-      organizationId,
+    // Seed the retired column directly: no route or model writes it now.
+    await db
+      .update(schema.kbFilesTable)
+      .set({ visibility: "private" })
+      .where(eq(schema.kbFilesTable.id, id));
+    const otherKb = await makeKnowledgeBase(organizationId, {
       createdBy: user.id,
       name: "Second research base",
+      access: "org",
     });
     expect(
       (await put("Private report", { knowledgeBaseId: otherKb.id })).json()
@@ -131,10 +144,23 @@ describe("PUT knowledge file content", () => {
 
   test("refuses another uploader and leaves the original bytes intact", async ({
     makeUser,
+    makeMember,
+    makeKnowledgeBase,
   }) => {
     await put();
+    const owner = user;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
+    knowledgeBaseId = (
+      await makeKnowledgeBase(organizationId, {
+        createdBy: user.id,
+        name: "Recipient base",
+        access: "org",
+      })
+    ).id;
     expect((await put("Unauthorized replacement")).statusCode).toBe(409);
+    expect(await stored()).toBeNull();
+    user = owner;
     expect(Buffer.from((await stored())?.data ?? []).toString()).toBe(
       "First market report",
     );
@@ -157,12 +183,19 @@ describe("PUT knowledge file content", () => {
   test("does not overwrite a foreign organization UUID", async ({
     makeOrganization,
     makeUser,
+    makeMember,
+    makeKnowledgeBase,
   }) => {
     await put();
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     knowledgeBaseId = (
-      await KnowledgeBaseModel.create({ organizationId, name: "Other base" })
+      await makeKnowledgeBase(organizationId, {
+        createdBy: user.id,
+        name: "Other base",
+        access: "org",
+      })
     ).id;
     expect((await put()).statusCode).toBe(409);
     expect(await stored()).toBeNull();

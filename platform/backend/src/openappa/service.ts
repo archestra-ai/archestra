@@ -1,3 +1,4 @@
+import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -15,13 +16,18 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
+import MemberModel from "@/models/member";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import {
+  expandCommandExecutionPolicyRules,
+  normalizeCommandExecutionArguments,
+} from "@/openappa/command-normalization";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
+import { openappaFailure } from "@/openappa/failure";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -63,7 +69,10 @@ const NativeOfferSchema = z
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
     z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
-    z.object({ decision: z.literal("allow_call") }),
+    z.object({
+      decision: z.literal("allow_call"),
+      spawn_binding: z.string().min(1).optional(),
+    }),
     z.object({ decision: z.literal("pass_control") }),
     z.object({
       decision: z.literal("deny_call"),
@@ -98,7 +107,10 @@ const NativeDecisionSchema = z
       value: z.string(),
       ...ResultDecisionFields,
     }),
-    z.object({ decision: z.literal("context") }),
+    z.object({
+      decision: z.literal("context"),
+      text: z.string().optional(),
+    }),
     z.object({ decision: z.literal("refuse"), detail: z.string() }),
     z.object({
       decision: z.literal("mcp_result"),
@@ -154,6 +166,13 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
 };
+type ChildEndOutcome =
+  | { decision: "release"; crossed: true }
+  | {
+      decision: "replace";
+      content: string;
+      crossed: boolean;
+    };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaYellEnabled(): boolean {
@@ -223,14 +242,14 @@ export function isAppaChatSource(
   return (APPA_CHAT_SOURCES as readonly string[]).includes(source ?? "");
 }
 
-async function binding(content: string) {
+async function binding() {
   if (!openappaEnabled()) {
     throw new Error("OpenAPPA is disabled");
   }
-  // The addon compiles `content` before it serves it, and a composed document
-  // names the helper bridge bearer as a `token_env` the runtime resolves from
-  // this process's environment. Publish it on every crossing, not once at
-  // import time, so opening and reloading never depend on module order.
+  // A composed document names the helper bridge bearer as a `token_env` the
+  // addon resolves from this process's environment when it compiles the
+  // document for a dispatch. Publish it on every crossing, not once at import
+  // time, so no dispatch depends on module order.
   openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
@@ -240,7 +259,6 @@ async function binding(content: string) {
     await module.initializeOpenappa(
       url.toString(),
       config.openappa.postgresMaxConnections,
-      content,
       openappaYellEnabled()
         ? {
             endpoint: "https://appa-yell-wkjbuewj5a-ew.a.run.app",
@@ -260,55 +278,94 @@ async function dispatch(
   session: OpenAppaSession,
   event: Record<string, unknown>,
   /** A policy the caller already read, shared across a batch of dispatches. */
-  policyContent?: string,
+  policy?: DispatchPolicy,
 ) {
+  const principal = await sessionPrincipal(session);
   return withRuntime(
     session.organization_id,
     (module, policy) =>
-      module.dispatchHook(JSON.stringify({ ...session, ...event }), policy),
-    policyContent,
+      module.dispatchHook(
+        JSON.stringify({ ...session, ...event, ...principal }),
+        policy,
+      ),
+    policy,
   );
 }
+
+/**
+ * The email of the user a session acts for, which the runtime reads as the
+ * session's own audience. Sent on every event, since any of them may open the
+ * session; an app or virtual-key caller, or a user outside the organization,
+ * acts for no user.
+ */
+async function sessionPrincipal(
+  session: OpenAppaSession,
+): Promise<{ principal?: string }> {
+  const userId = session.caller_id?.startsWith(USER_CALLER_PREFIX)
+    ? session.caller_id.slice(USER_CALLER_PREFIX.length)
+    : undefined;
+  if (!userId) return {};
+  const member = await MemberModel.findByIdOrEmail(
+    userId,
+    session.organization_id,
+  );
+  return member ? { principal: member.email } : {};
+}
+
+const USER_CALLER_PREFIX = "user:";
 
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
   organizationId: string,
   call: (
     module: Awaited<ReturnType<typeof binding>>,
-    policyContent: string,
+    policy: DispatchPolicy,
   ) => Promise<string>,
-  policyContent?: string,
+  batchPolicy?: DispatchPolicy,
 ) {
-  const policy = policyContent ?? (await effectivePolicy(organizationId));
+  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
-    const module = await binding(policy);
+    const module = await binding();
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
-/** The organization's effective policy content, or the refusal every dispatch shares. */
-async function effectivePolicy(organizationId: string): Promise<string> {
+/**
+ * The organization's effective policy with the credential values the runtime
+ * reads for it, or the refusal every dispatch shares.
+ *
+ * The deployment switch is not read here. Each entry point reads it once at its
+ * request boundary, so a turn that began governed finishes under its policy even
+ * when the switch turns off mid-request.
+ */
+async function effectivePolicy(
+  organizationId: string,
+): Promise<DispatchPolicy> {
   try {
-    if (!(await isGuardrailsV2Active()))
-      throw new Error("Guardrails v2 is disabled");
-    return (await openappaBatteriesService.getEffectivePolicy(organizationId))
-      .content;
+    const rawContent = (
+      await openappaBatteriesService.getEffectivePolicy(organizationId)
+    ).content;
+    return await openappaDeclarations.dispatchPolicy({
+      organizationId,
+      content: expandCommandExecutionPolicyRules(rawContent),
+    });
   } catch (error) {
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
-/** Do not forward internal diagnostics or credentials to clients. */
-function unsafeToProceed(error: unknown): ApiError {
-  const failure = new ApiError(
-    503,
-    "OpenAPPA could not safely complete this operation",
-  );
-  failure.cause = error;
-  return failure;
+/** One policy read shared by a batch of dispatches, taken by the first of them. */
+type SharedPolicy = () => Promise<DispatchPolicy>;
+
+export function sharedPolicy(organizationId: string): SharedPolicy {
+  let read: Promise<DispatchPolicy> | undefined;
+  return () => {
+    read ??= effectivePolicy(organizationId);
+    return read;
+  };
 }
 
 export function chatOpenAppaSession(
@@ -318,7 +375,7 @@ export function chatOpenAppaSession(
 ): OpenAppaSession {
   return {
     organization_id: organizationId,
-    caller_id: `user:${userId}`,
+    caller_id: `${USER_CALLER_PREFIX}${userId}`,
     session_id: sessionId,
   };
 }
@@ -377,18 +434,18 @@ export function sessionFromHeaders(params: {
   };
 }
 
-async function startSession(session: OpenAppaSession, policyContent?: string) {
-  const decision = await dispatch(
-    session,
-    { event: "session_start" },
-    policyContent,
-  );
+async function startSession(
+  session: OpenAppaSession,
+  policy?: DispatchPolicy,
+): Promise<void> {
+  const decision = await dispatch(session, { event: "session_start" }, policy);
   if (decision.decision === "context") {
-    // The initial Chat adapter has no child-return lifecycle yet. Refuse
-    // rather than silently discard a child's required return contract.
+    // The runtime returns start context (the child return contract) before inference.
+    // The proxy cannot send this contract to the model.
+    // Refuses the session instead of running without the return contract.
     throw new ApiError(
       409,
-      "This child requires an OpenAPPA return contract; its adapter must deliver it before inference",
+      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
     );
   }
   if (decision.decision !== "ack")
@@ -435,7 +492,7 @@ async function approveToolResult(params: {
   output: string;
   outcome: ExecutionOutcome;
   controlToolName?: string;
-  policyContent?: string;
+  policy?: DispatchPolicy;
 }): Promise<ProcessedToolResult> {
   const decision = await dispatch(
     params.session,
@@ -448,7 +505,7 @@ async function approveToolResult(params: {
         ? { presentation: nativePresentation(params.controlToolName) }
         : {}),
     },
-    params.policyContent,
+    params.policy,
   );
   const content = extractApprovedOutput(decision, params.output);
   const outputSource =
@@ -488,22 +545,28 @@ export async function processProxyResults(params: {
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
   trustedChat?: boolean;
+  /** How a client-side spawn launch ended. */
+  classifySpawnResult?: (
+    result: CommonToolResult,
+  ) => "pending" | "failed" | undefined;
 }) {
   // The results dispatch one after another; one policy read serves them all.
-  const policyContent = await effectivePolicy(params.session.organization_id);
-  await startSession(params.session, policyContent);
+  const policy = await effectivePolicy(params.session.organization_id);
+  await startSession(params.session, policy);
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
     if (params.isUserQuestion?.(result) === true) continue;
+    const spawn = params.classifySpawnResult?.(result);
+    if (spawn === "pending") continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
       error?.type === "cancelled"
         ? "unknown"
-        : result.isError
+        : spawn === "failed" || result.isError
           ? "failure"
           : "success";
     const approved = await approveToolResult({
@@ -515,7 +578,7 @@ export async function processProxyResults(params: {
           : JSON.stringify(result.content),
       outcome,
       controlToolName: params.controlToolName,
-      policyContent,
+      policy,
     });
     updates[result.id] = approved;
   }
@@ -548,12 +611,21 @@ export async function evaluateToolCalls(
   }>,
   options: {
     canonicalize: ToolNameCanonicalizer;
-    isUserQuestion?: (name: string) => boolean;
+    isUserQuestion?: (name: string, namespace?: string) => boolean;
     /** Compat only: recognize a `run_tool` wrapper behind any client label. */
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    /** This session's notice tool declaration, as the client spells it. */
+    notice?: DeclaredToolSpelling;
+    /** True for a call that names a child trajectory (Task, spawn_agent, task). */
+    isSpawn?: (name: string, namespace?: string) => boolean;
+    /** Whether this client can carry child-return declarations. */
+    supportsDelegation?: boolean;
+    /** Signed lineage retained with a child call for later turns. */
+    lineage?: { spawnCallId?: string; childNativeId?: string };
   },
+  policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
   // Validate tool call IDs and arguments before dispatch.
@@ -592,16 +664,25 @@ export async function evaluateToolCalls(
         return { kind: "control" as const };
       }
       if (
-        options.isUserQuestion?.(call.name) ??
-        isPlatformUserQuestion(call.name, options.canonicalize)
+        options.notice &&
+        call.name === options.notice.name &&
+        call.namespace === options.notice.namespace
+      ) {
+        return { kind: "allow" as const };
+      }
+      const shortName = archestraMcpBranding.getToolShortName(
+        target.toolCallName,
+      );
+      if (
+        options.isUserQuestion?.(call.name, call.namespace) ??
+        (call.namespace === undefined &&
+          isPlatformUserQuestion(call.name, options.canonicalize))
       ) {
         return { kind: "allow" as const };
       }
       // The target is already canonical, so it is read, not re-canonicalized.
-      const tool =
-        archestraMcpBranding.getToolShortName(target.toolCallName) === "yell"
-          ? "yell"
-          : target.toolCallName;
+      const tool = shortName === "yell" ? "yell" : target.toolCallName;
+      const spawn = options.isSpawn?.(call.name, call.namespace) === true;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -610,12 +691,40 @@ export async function evaluateToolCalls(
         options.canonicalize(call.name, call.namespace) === tool
           ? { spelling: call.name }
           : {}),
-        presentation: nativePresentation(options.control?.name),
-        arguments: JSON.parse(target.toolCallArgs),
-        // Delegation evaluates through the parent policy until child adapters exist.
-        spawn: false,
+        presentation: nativePresentation(
+          options.control?.name,
+          options.supportsDelegation,
+        ),
+        arguments: normalizeCommandExecutionArguments(
+          tool,
+          JSON.parse(target.toolCallArgs),
+        ),
+        spawn,
+        ...(options.lineage?.spawnCallId
+          ? { spawn_call_id: options.lineage.spawnCallId }
+          : {}),
+        ...(options.lineage?.childNativeId
+          ? { child_native_id: options.lineage.childNativeId }
+          : {}),
       };
-      const decision = await dispatch(session, event);
+      const decision = await dispatch(session, event, await policy());
+      if (
+        spawn &&
+        (decision.decision === "pass_control" ||
+          (decision.decision === "allow_call" && !decision.spawn_binding))
+      ) {
+        if (decision.decision === "allow_call")
+          await dispatch(
+            session,
+            { event: "cancel_call", tool_call_id: call.id },
+            await policy(),
+          );
+        return {
+          kind: "deny" as const,
+          feedback:
+            "OpenAPPA did not prepare a child fork. Enable policy.deployment.context_control and approve a child return contract before spawning a subagent.",
+        };
+      }
       if (
         decision.decision === "allow_call" ||
         decision.decision === "pass_control"
@@ -650,8 +759,12 @@ export async function evaluateToolCalls(
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const cancelResults = await Promise.allSettled(
-        admitted.map((id) =>
-          dispatch(session, { event: "cancel_call", tool_call_id: id }),
+        admitted.map(async (id) =>
+          dispatch(
+            session,
+            { event: "cancel_call", tool_call_id: id },
+            await policy(),
+          ),
         ),
       );
       for (const [index, cancelResult] of cancelResults.entries()) {
@@ -698,13 +811,20 @@ export async function evaluateHostedToolCalls(
   }>,
   options: Parameters<typeof evaluateToolCalls>[2],
 ): Promise<AppaHostedCallDecision[]> {
-  const decisions = await evaluateToolCalls(session, [...calls], options);
+  const policy = sharedPolicy(session.organization_id);
+  const decisions = await evaluateToolCalls(
+    session,
+    [...calls],
+    options,
+    policy,
+  );
   if (decisions.some((decision) => decision.kind === "deny")) {
     await cancelCalls(
       session,
       calls.flatMap((call, index) =>
         decisions[index].kind === "allow" ? [call.id] : [],
       ),
+      policy,
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
@@ -720,6 +840,7 @@ export async function evaluateHostedToolCalls(
       output: call.output,
       outcome: "success",
       controlToolName: options.control?.name,
+      policy: await policy(),
     });
     verdicts.push(
       approved.outputSource === "tool" && approved.content === call.output
@@ -734,10 +855,15 @@ export async function evaluateHostedToolCalls(
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
+  policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<void> {
   const results = await Promise.allSettled(
-    ids.map((id) =>
-      dispatch(session, { event: "cancel_call", tool_call_id: id }),
+    ids.map(async (id) =>
+      dispatch(
+        session,
+        { event: "cancel_call", tool_call_id: id },
+        await policy(),
+      ),
     ),
   );
   for (const [index, result] of results.entries()) {
@@ -758,8 +884,16 @@ export async function cancelCalls(
 export async function notePrompt(
   session: OpenAppaSession,
   operationId: string,
+  lineage?: { spawnCallId?: string; childNativeId?: string },
 ): Promise<void> {
-  await dispatch(session, { event: "prompt", operation_id: operationId });
+  await dispatch(session, {
+    event: "prompt",
+    operation_id: operationId,
+    ...(lineage?.spawnCallId ? { spawn_call_id: lineage.spawnCallId } : {}),
+    ...(lineage?.childNativeId
+      ? { child_native_id: lineage.childNativeId }
+      : {}),
+  });
 }
 
 /**
@@ -774,6 +908,135 @@ export async function endTurn(
   operationId: string,
 ): Promise<void> {
   await dispatch(session, { event: "turn_end", operation_id: operationId });
+}
+
+/**
+ * Controls the return boundary where child trajectory output enters the parent session.
+ * The runtime stages a ChildReturn until the harness echoes approved bytes through ChildEnd.
+ * An Ack on the echo confirms the bytes crossed the trust boundary.
+ * The spawn correlation rides the dispatch so the retained operation is the
+ * durable authority the parent later verifies the returned bytes against.
+ */
+export async function endChild(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  output: string;
+  spawnCallId?: string;
+  childNativeId?: string;
+}): Promise<ChildEndOutcome> {
+  if (!params.session.parent_id) {
+    throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
+  }
+
+  const policy = sharedPolicy(params.session.organization_id);
+  const decision = await dispatch(
+    params.session,
+    {
+      event: "child_end",
+      operation_id: params.operationId,
+      ...(params.output.length > 0 ? { output: params.output } : {}),
+      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+      ...(params.childNativeId
+        ? { child_native_id: params.childNativeId }
+        : {}),
+    },
+    await policy(),
+  );
+
+  if (decision.decision === "ack") {
+    return { decision: "release", crossed: true };
+  }
+  if (decision.decision === "block") {
+    return {
+      decision: "replace",
+      content: decisionMessage(decision),
+      crossed: false,
+    };
+  }
+  if (decision.decision === "refuse") {
+    throw openappaFailure(new Error("OpenAPPA refused the child return"));
+  }
+  if (decision.decision !== "child_return") {
+    throw openappaFailure(
+      new Error(`Unexpected ChildEnd decision: ${decision.decision}`),
+    );
+  }
+
+  const echo = await dispatch(
+    params.session,
+    {
+      event: "child_end",
+      operation_id: `${params.operationId}:echo`,
+      // Keep an explicitly empty canonical value distinct from a void first end.
+      output: decision.value,
+      // The echo is the latest retained ChildEnd, so it must carry the same
+      // correlation metadata for the durable lookup to read back.
+      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+      ...(params.childNativeId
+        ? { child_native_id: params.childNativeId }
+        : {}),
+    },
+    await policy(),
+  );
+  if (echo.decision !== "ack") {
+    throw openappaFailure(
+      new Error(
+        `OpenAPPA did not admit the canonical child return: ${echo.decision}`,
+      ),
+    );
+  }
+
+  return {
+    decision: "replace",
+    content: decision.value,
+    crossed: true,
+  };
+}
+
+/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+export async function approveSpawnReturn(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  childId: string;
+  value: string;
+}): Promise<void> {
+  const decision = await dispatch(params.session, {
+    event: "tool_result",
+    tool_call_id: params.toolCallId,
+    spawned_id: params.childId,
+    output: params.value,
+    outcome: "success",
+  });
+  if (decision.decision === "block") {
+    const msg = decisionMessage(decision);
+    if (msg.includes("no open dispatch")) {
+      logger.info(
+        { toolCallId: params.toolCallId, childId: params.childId },
+        "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
+      );
+      return;
+    }
+    throw new ApiError(409, msg);
+  }
+  if (decision.decision === "refuse") {
+    throw openappaFailure(new Error("OpenAPPA refused the child spawn result"));
+  }
+  if (
+    decision.decision !== "ack" &&
+    decision.decision !== "replace_output" &&
+    decision.decision !== "deliver_value" &&
+    decision.decision !== "child_return"
+  ) {
+    throw openappaFailure(
+      new Error(`Unexpected SpawnResult decision: ${decision.decision}`),
+    );
+  }
+  const approved = extractApprovedOutput(decision, params.value);
+  if (approved !== params.value) {
+    throw openappaFailure(
+      new Error("OpenAPPA changed an already crossed child return"),
+    );
+  }
 }
 
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
@@ -881,6 +1144,48 @@ export async function executeRemedyByOffer(params: {
   };
 }
 
+export type AppaChildReturnRecord = {
+  /** Fully scoped session id of the child whose return crossed. */
+  childSessionId: string;
+  /** The spawn call the return answers, when the child named it at ChildEnd. */
+  spawnCallId?: string;
+  /** The client-native child identity, when the child named one. */
+  childNativeId?: string;
+  /** The exact bytes the runtime admitted across the child boundary. */
+  value: string;
+};
+
+/**
+ * Loads the child returns a parent's family durably crossed, from the retained
+ * ChildEnd operations in PostgreSQL. This is the authority the parent side
+ * verifies arriving completions against.
+ */
+export async function loadChildReturns(params: {
+  organizationId: string;
+  parentSessionId: string;
+}): Promise<AppaChildReturnRecord[]> {
+  try {
+    if (!(await isGuardrailsV2Active())) return [];
+    const module = await binding();
+    const records = await module.loadChildReturns(
+      params.organizationId,
+      params.parentSessionId,
+    );
+    return records.map((record) => ({
+      childSessionId: record.childSessionId,
+      ...(record.spawnCallId ? { spawnCallId: record.spawnCallId } : {}),
+      ...(record.childNativeId ? { childNativeId: record.childNativeId } : {}),
+      value: record.value,
+    }));
+  } catch (error) {
+    logger.warn(
+      { err: error, parentSessionId: params.parentSessionId },
+      "Failed to load OpenAPPA child returns",
+    );
+    throw openappaFailure(error);
+  }
+}
+
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the verified offer claims.
@@ -900,8 +1205,7 @@ export async function loadOfferReview(params: {
 } | null> {
   try {
     if (!(await isGuardrailsV2Active())) return null;
-    const policy = await guardrailsPolicyService.get(params.organizationId);
-    const module = await binding(policy.content);
+    const module = await binding();
     const result = await module.loadOfferReview(
       params.organizationId,
       params.sessionId,
@@ -920,19 +1224,22 @@ export async function loadOfferReview(params: {
       { err: error, offerId: params.offerId },
       "Failed to load OpenAPPA offer review",
     );
-    throw unsafeToProceed(error);
+    throw openappaFailure(error);
   }
 }
 
-function nativePresentation(controlToolName?: string): {
+function nativePresentation(
+  controlToolName?: string,
+  supportsDelegation = false,
+): {
   control_tool: string;
-  supports_delegation: false;
+  supports_delegation: boolean;
 } {
   return {
     control_tool:
       controlToolName ??
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
-    supports_delegation: false,
+    supports_delegation: supportsDelegation,
   };
 }
 

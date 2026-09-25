@@ -399,11 +399,11 @@ class McpToolCallModel {
       if (!mcpToolCall.agentId) {
         return null;
       }
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        mcpToolCall.agentId,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: mcpToolCall.agentId,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }

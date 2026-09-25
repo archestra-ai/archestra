@@ -1446,24 +1446,24 @@ class AgentToolModel {
    * Clean up invalid static MCP server assignments when a user is removed from a team.
    * Sets mcpServerId to null for agent-tools where:
    * - The assigned MCP server is owned by the removed user
-   * - The user no longer has access to the agent through any team
+   * - The user no longer has access to the agent through any grant
    */
-  static async cleanupInvalidCredentialSourcesForUser(
-    userId: string,
-    teamId: string,
-    isAgentAdmin: boolean,
-  ): Promise<number> {
-    // Get all agents assigned to this team
-    const agentsInTeam = await db
-      .select({ agentId: schema.agentTeamsTable.agentId })
-      .from(schema.agentTeamsTable)
-      .where(eq(schema.agentTeamsTable.teamId, teamId));
+  static async cleanupInvalidCredentialSourcesForUser(params: {
+    userId: string;
+    teamId: string;
+    organizationId: string;
+    isAgentAdmin: boolean;
+  }): Promise<number> {
+    const { userId, isAgentAdmin } = params;
+    // The agents this team reaches: those whose own policy grants it read.
+    const agentIds = await AgentTeamModel.getAgentIdsForTeam({
+      organizationId: params.organizationId,
+      teamId: params.teamId,
+    });
 
-    if (agentsInTeam.length === 0) {
+    if (agentIds.length === 0) {
       return 0;
     }
-
-    const agentIds = agentsInTeam.map((a) => a.agentId);
 
     // Get all MCP servers owned by this user
     const userServers = await db
@@ -1482,11 +1482,12 @@ class AgentToolModel {
 
     for (const agentId of agentIds) {
       // Check if user still has access to this agent through other teams
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
         userId,
         agentId,
         isAgentAdmin,
-      );
+        action: "use",
+      });
 
       // If user no longer has access, clean up their personal tokens
       if (!hasAccess) {

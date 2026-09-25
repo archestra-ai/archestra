@@ -101,9 +101,9 @@ export interface CreateClientOptions {
    */
   onResponseHeaders?: (headers: Headers) => void;
   /**
-   * Ephemeral OpenCode-owned ChatGPT OAuth material for the OpenAI Responses
-   * bridge. It is extracted from one incoming request and must never be
-   * persisted, cached, or used by a non-Responses adapter.
+   * Ephemeral client-owned ChatGPT OAuth material for the OpenAI Responses
+   * bridge. Archestra extracts it from an incoming request. Never persist,
+   * cache, or use this credential outside the Responses adapter.
    */
   openAiCodexPassthrough?: OpenAiCodexPassthrough;
 }
@@ -113,6 +113,7 @@ export interface OpenAiCodexPassthrough {
   accountId: string;
   residency?: string;
   originator?: string;
+  version?: string;
   sessionId?: string;
   userAgent?: string;
 }
@@ -311,6 +312,9 @@ export interface LLMResponseAdapter<TResponse> {
    * @param contentMessage - Human-readable message
    */
   toRefusalResponse(refusalMessage: string, contentMessage: string): TResponse;
+
+  /** Replaces the assistant message with the text approved by policy. */
+  withReplacedText?(text: string): TResponse;
 }
 
 // =============================================================================
@@ -352,6 +356,11 @@ export interface ChunkProcessingResult {
   isToolCallChunk: boolean;
   /** Whether this is the final chunk */
   isFinal: boolean;
+  /**
+   * Safe response-envelope metadata that may precede a buffered assistant
+   * answer. It must never contain model-authored content.
+   */
+  isResponsePreamble?: boolean;
   /** Error information if this chunk represents an error event */
   error?: {
     type: string;
@@ -418,6 +427,9 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   setTextSuffix?(getSuffix: (completedText: string) => string): void;
 
+  /** Carries trusted context inside an opaque Responses compaction item. */
+  setCompactionContext?(proof: string): void;
+
   /** Get raw tool call events as SSE strings (for replay after policy approval) */
   getRawToolCallEvents(): (string | Uint8Array)[];
 
@@ -427,6 +439,9 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * Returns provider-specific events that form a valid complete response.
    */
   formatCompleteTextSSE(text: string): (string | Uint8Array)[];
+
+  /** Reset client-visible indexing after buffered content is discarded. */
+  prepareResponseReplacement?(): void;
 
   /**
    * Re-emit this turn's tool calls as SSE, replacing the buffered raw events.

@@ -1,0 +1,27 @@
+name: "📚 Add a knowledge connector"
+description: Request a knowledge connector for a data source that Archestra does not support yet.
+title: "[Knowledge Connector] Add "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        To add the connector yourself, see [Adding Knowledge Connectors](https://archestra.ai/docs/platform-adding-knowledge-connectors).
+  - type: input
+    id: source
+    attributes:
+      label: Data source
+      placeholder: Example Wiki
+    validations:
+      required: true
+  - type: input
+    id: api_docs
+    attributes:
+      label: API documentation URL
+      placeholder: https://docs.example.com/api
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Authentication, the content you need to sync, or permission requirements.

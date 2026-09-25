@@ -30,8 +30,8 @@ import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useProject } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
+import { cn } from "@/lib/utils/tailwind";
 import type { RightPanelTab } from "./right-side-panel";
 
 type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
@@ -65,6 +65,7 @@ interface ConversationHeaderProps {
   isShared: boolean;
   /** Whether this chat is eligible to be turned into a project. */
   canCreateProject: boolean;
+  isPolicyConversation?: boolean;
   /**
    * When this chat was opened from a scheduled task, its trigger id — renders a
    * non-clickable "scheduled task" breadcrumb segment for orientation.
@@ -92,6 +93,7 @@ export function ConversationHeader({
   canManageShare,
   isShared,
   canCreateProject,
+  isPolicyConversation = false,
   isAppOversight,
   oversightOwnerName,
   onShare,
@@ -216,7 +218,7 @@ export function ConversationHeader({
             </Badge>
           )}
           {/* Desktop: chat actions (Share / Export) next to the title */}
-          {conversationId && messageCount > 0 && (
+          {conversationId && messageCount > 0 && !isPolicyConversation && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -239,7 +241,10 @@ export function ConversationHeader({
             visible (open or collapsed) so it never moves. Clicking a different
             tab switches; clicking the already-open tab collapses the panel —
             there is no separate collapse button. */}
-        <div className="hidden md:flex items-center flex-shrink-0">
+        <div
+          className="hidden md:flex items-center flex-shrink-0"
+          style={isPolicyConversation ? { display: "none" } : undefined}
+        >
           <Tabs
             value={panel.isOpen ? resolvedTab : ""}
             activationMode="manual"
@@ -303,7 +308,10 @@ export function ConversationHeader({
           </Tabs>
         </div>
         {/* Right side - mobile: 3-dot dropdown */}
-        <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+        <div
+          className="flex md:hidden items-center gap-2 flex-shrink-0"
+          style={isPolicyConversation ? { display: "none" } : undefined}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

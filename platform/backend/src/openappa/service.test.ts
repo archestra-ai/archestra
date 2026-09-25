@@ -12,14 +12,18 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
+  approveSpawnReturn,
   cancelCalls,
+  endChild,
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
+  loadChildReturns,
   loadOfferReview,
   processProxyResults,
   sessionFromHeaders,
 } from "./service";
+import { rememberYellSession } from "./yell-session";
 
 function signedRemedyArgs(offerId = "offer-1") {
   const jws = signOfferClaims(
@@ -38,6 +42,7 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
@@ -45,6 +50,8 @@ const native = vi.hoisted(() => ({
     include: [],
     serverAliases: [],
     credentials: [],
+    routedAnnotators: [],
+    runtimeCredentials: [],
     errors: [],
   })),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
@@ -54,6 +61,7 @@ const native = vi.hoisted(() => ({
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
+vi.mock("@/cache-manager");
 // The effective-policy store foreign-keys the organization: a real row must
 // exist for every organization_id the sessions below name.
 let organizationId = "org";
@@ -80,6 +88,7 @@ beforeEach(async ({ makeOrganization }) => {
     "postgresql://test:test@localhost/test",
   );
   native.loadOfferReview.mockReset();
+  native.loadChildReturns.mockReset();
   native.executeRemedyByOffer.mockReset();
   native.executeRemedyByOffer.mockResolvedValue(
     JSON.stringify({
@@ -129,6 +138,53 @@ describe("APPA feature boundary", () => {
     expect(
       getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
     ).toBe(true);
+  });
+
+  test("a turn that began while enabled finishes after the switch turns off", async () => {
+    // The proxy read the switch when this request began. Turning it off
+    // mid-request must not fail the turn it already governs.
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    await GuardrailsDeploymentModel.setEnabled(false);
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "first", name: "read_file", arguments: {} }],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions).toEqual([{ kind: "allow" }]);
+  });
+
+  test("retains signed child lineage on the first evaluated tool call", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    await evaluateToolCalls(
+      {
+        ...session,
+        session_id: "conversation:child",
+        parent_id: "conversation",
+      },
+      [{ id: "search", name: "WebSearch", arguments: { query: "example" } }],
+      {
+        canonicalize: (name) => name,
+        lineage: { spawnCallId: "spawn-1", childNativeId: "child" },
+      },
+    );
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:search",
+        spawn_call_id: "spawn-1",
+        child_native_id: "child",
+      }),
+    );
   });
 
   test("reports through the authenticated native session after policy checking", async () => {
@@ -181,6 +237,137 @@ describe("APPA feature boundary", () => {
         operation_id: "yell:report",
         arguments: args,
       },
+    ]);
+  });
+
+  test("a gateway yell reports under the session and call the proxy allowed", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: false };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt report-1" }] },
+      }),
+    );
+    await rememberYellSession({
+      session,
+      call: {
+        id: "toolu_report",
+        name: "mcp__gateway__archestra__yell",
+        // The model's spelling: key order and whitespace the gateway never sees.
+        arguments:
+          '{ "with_trajectory": false, "message": "Confusing feedback" }',
+      },
+      resolution: {
+        canonicalize: (name) => name.replace("mcp__gateway__", ""),
+        looseRunToolDispatch: false,
+      },
+    });
+    const gateway = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    };
+    const result = await executeArchestraTool("archestra__yell", args, gateway);
+    expect(result.content).toEqual([
+      { type: "text", text: "Receipt report-1" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...session,
+        event: "yell",
+        operation_id: "yell:toolu_report",
+        arguments: args,
+      },
+    ]);
+    await expect(
+      executeArchestraTool("archestra__yell", args, gateway),
+    ).rejects.toThrow("requires an authenticated session");
+  });
+
+  test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: true };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
+    );
+    const resolution = {
+      canonicalize: (name: string) => name,
+      looseRunToolDispatch: false,
+    };
+    const gateway = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    };
+    await rememberYellSession({
+      session,
+      call: { id: "foreign", name: "other_server__yell", arguments: args },
+      resolution,
+    });
+    await expect(
+      executeArchestraTool("archestra__yell", args, gateway),
+    ).rejects.toThrow("requires an authenticated session");
+
+    await rememberYellSession({
+      session,
+      call: {
+        id: "wrapped",
+        name: "archestra__run_tool",
+        arguments: { tool_name: "yell", tool_args: args },
+      },
+      resolution,
+    });
+    for (const [context, other] of [
+      [{ ...gateway, organizationId: "another-org" }, args],
+      [gateway, { ...args, message: "Another report" }],
+    ] as const) {
+      await expect(
+        executeArchestraTool("archestra__yell", other, context),
+      ).rejects.toThrow("requires an authenticated session");
+    }
+    await executeArchestraTool("archestra__yell", args, gateway);
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "yell",
+      operation_id: "yell:wrapped",
+    });
+  });
+
+  test("a yell takes its session and call from one source", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: false };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
+    );
+    const proxySession = { ...session, session_id: "proxy-session" };
+    await rememberYellSession({
+      session: proxySession,
+      call: { id: "cached", name: "archestra__yell", arguments: args },
+      resolution: {
+        canonicalize: (name) => name,
+        looseRunToolDispatch: false,
+      },
+    });
+    const chat = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+      userId: "alice",
+      sessionId: "conversation",
+    };
+    await executeArchestraTool("archestra__yell", args, {
+      ...chat,
+      currentToolCallId: "report",
+    });
+    // A session without its call id does not borrow the cached call.
+    await executeArchestraTool("archestra__yell", args, chat);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const { session_id, operation_id } = JSON.parse(raw);
+        return { session_id, operation_id };
+      }),
+    ).toEqual([
+      { session_id: "conversation", operation_id: "yell:report" },
+      { session_id: "proxy-session", operation_id: "yell:cached" },
     ]);
   });
 
@@ -242,6 +429,35 @@ describe("APPA feature boundary", () => {
         ([raw]) => JSON.parse(raw).operation_id,
       ),
     ).toEqual(["call:first", "call:second"]);
+  });
+
+  test("names a member's email as the session principal, and nobody else's", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const member = await makeUser({ email: "alice@example.com" });
+    await makeMember(member.id, organizationId);
+    const outsider = await makeUser({ email: "mallory@example.com" });
+    const calls = [{ id: "first", name: "read_file", arguments: {} }];
+    const canonicalize = { canonicalize: (name: string) => name };
+
+    for (const callerId of [
+      `user:${member.id}`,
+      `user:${outsider.id}`,
+      "app:assistant",
+    ])
+      await evaluateToolCalls(
+        { ...session, caller_id: callerId },
+        calls,
+        canonicalize,
+      );
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(["alice@example.com", undefined, undefined]);
   });
 
   test("holds what a provider-run call brought in behind the runtime's staged ruling", async () => {
@@ -620,6 +836,399 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
+  test("evaluates a foreign ask_user instead of granting platform-question access", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Not declared" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "trusted-question",
+          name: "archestra__ask_user",
+          namespace: "mcp__gateway",
+          arguments: {},
+        },
+        {
+          id: "foreign-question",
+          name: "archestra__ask_user",
+          namespace: "mcp__foreign",
+          arguments: {},
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        isUserQuestion: (name, namespace) =>
+          name === "archestra__ask_user" && namespace === "mcp__gateway",
+      },
+    );
+    expect(decisions).toEqual([
+      { kind: "allow" },
+      { kind: "deny", feedback: "Not declared", offers: [] },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:foreign-question",
+      }),
+    ]);
+  });
+
+  test.each([
+    undefined,
+    "mcp__evil",
+  ])("evaluates an unregistered remedy lookalike (%s)", async (namespace) => {
+    // The gateway canonicalizer only resolves namespaces it attests; a
+    // foreign server's member stays a bare leaf name. The leaf alone must
+    // never release remedy control: the call carries a namespace, so it is
+    // evaluated like any foreign tool.
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Not declared" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "lookalike",
+          name: "archestra__execute_remedy_plan",
+          namespace,
+          arguments: { offer_id: "offer-1" },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        control: {
+          name: "archestra__execute_remedy_plan",
+          namespace: "mcp__gw",
+        },
+      },
+    );
+
+    expect(decisions).toEqual([
+      { kind: "deny", feedback: "Not declared", offers: [] },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:lookalike",
+        tool: "archestra__execute_remedy_plan",
+      }),
+    ]);
+  });
+
+  test("announces a spawn tool so the runtime can open a child branch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+    expect(
+      await evaluateToolCalls(
+        session,
+        [{ id: "spawn", name: "spawn_agent", arguments: { message: "Go" } }],
+        {
+          canonicalize: (name) => name,
+          isSpawn: (name) => name === "spawn_agent",
+          supportsDelegation: true,
+        },
+      ),
+    ).toEqual([{ kind: "allow" }]);
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({
+      event: "tool_call",
+      tool: "spawn_agent",
+      spawn: true,
+      presentation: { supports_delegation: true },
+    });
+  });
+
+  test.each([
+    "allow_call",
+    "pass_control",
+  ] as const)("does not release a spawn without a fork binding (%s)", async (decision) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify({
+        decision: event.event === "tool_call" ? decision : "ack",
+      });
+    });
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "spawn", name: "spawn_agent", arguments: { message: "Go" } }],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (name) => name === "spawn_agent",
+        supportsDelegation: true,
+      },
+    );
+
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: expect.stringContaining("context_control"),
+      },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual(
+      decision === "allow_call"
+        ? [
+            expect.objectContaining({ event: "tool_call", spawn: true }),
+            expect.objectContaining({
+              event: "cancel_call",
+              tool_call_id: "spawn",
+            }),
+          ]
+        : [expect.objectContaining({ event: "tool_call", spawn: true })],
+    );
+  });
+
+  test("keeps a successful spawn launch pending until the child binds", async () => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    const result = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      classifySpawnResult: (answer) =>
+        answer.name === "spawn_agent" ? "pending" : undefined,
+      results: [
+        {
+          id: "spawn",
+          name: "spawn_agent",
+          content: '{"agent_id":"child-1"}',
+          isError: false,
+        },
+      ],
+    });
+    expect(result.toolResultUpdates).toEqual({});
+    expect(
+      native.dispatchHook.mock.calls.map((call) => JSON.parse(call[0] ?? "{}")),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event: "tool_result" }),
+      ]),
+    );
+  });
+
+  test("reports a failed spawn launch so the runtime closes its prepared fork", async () => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      classifySpawnResult: (answer) =>
+        answer.name === "spawn_agent" ? "failed" : undefined,
+      results: [
+        {
+          id: "spawn",
+          name: "spawn_agent",
+          content: "client rejected the spawn arguments",
+          isError: false,
+        },
+      ],
+    });
+    expect(
+      native.dispatchHook.mock.calls.map((call) => JSON.parse(call[0] ?? "{}")),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "tool_result",
+          tool_call_id: "spawn",
+          outcome: "failure",
+        }),
+      ]),
+    );
+  });
+
+  test("echoes the runtime's canonical ChildReturn before exposing it", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.operation_id === "child_end:turn:echo"
+          ? { decision: "ack" }
+          : {
+              decision: "child_return",
+              value: "SUMMARY(24 characters): safe",
+              output_source: "runtime",
+            },
+      );
+    });
+    const child = {
+      ...session,
+      session_id: "conversation:child",
+      parent_id: session.session_id,
+    };
+
+    await expect(
+      endChild({
+        session: child,
+        operationId: "child_end:turn",
+        output: "REPORT-RAW-KOALA-0831",
+      }),
+    ).resolves.toEqual({
+      decision: "replace",
+      content: "SUMMARY(24 characters): safe",
+      crossed: true,
+    });
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...child,
+        event: "child_end",
+        operation_id: "child_end:turn",
+        output: "REPORT-RAW-KOALA-0831",
+      },
+      {
+        ...child,
+        event: "child_end",
+        operation_id: "child_end:turn:echo",
+        output: "SUMMARY(24 characters): safe",
+      },
+    ]);
+  });
+
+  test("carries spawn correlation on both ChildEnd dispatches for the durable record", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        String(event.operation_id).endsWith(":echo")
+          ? { decision: "ack" }
+          : { decision: "child_return", value: "SUMMARY(24 characters): safe" },
+      );
+    });
+    const child = {
+      ...session,
+      session_id: "conversation:child",
+      parent_id: session.session_id,
+    };
+
+    await endChild({
+      session: child,
+      operationId: "child_end:turn",
+      output: "REPORT-RAW-KOALA-0831",
+      spawnCallId: "spawn-call",
+      childNativeId: "a1",
+    });
+
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "child_end",
+        operation_id: "child_end:turn",
+        spawn_call_id: "spawn-call",
+        child_native_id: "a1",
+      }),
+      expect.objectContaining({
+        event: "child_end",
+        operation_id: "child_end:turn:echo",
+        spawn_call_id: "spawn-call",
+        child_native_id: "a1",
+      }),
+    ]);
+  });
+
+  test("releases an unchanged child return and renders a blocked one safely", async () => {
+    const child = {
+      ...session,
+      session_id: "conversation:child",
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "ack" }),
+    );
+    await expect(
+      endChild({
+        session: child,
+        operationId: "child_end:clean",
+        output: "ok",
+      }),
+    ).resolves.toEqual({ decision: "release", crossed: true });
+
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "block", feedback: "Return withheld" }),
+    );
+    await expect(
+      endChild({
+        session: child,
+        operationId: "child_end:blocked",
+        output: "secret",
+      }),
+    ).resolves.toEqual({
+      decision: "replace",
+      content: "Return withheld",
+      crossed: false,
+    });
+  });
+
+  test("fails closed when ChildEnd is refused or cannot be correlated", async () => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "refuse", detail: "internal detail" }),
+    );
+    const child = {
+      ...session,
+      session_id: "conversation:child",
+      parent_id: session.session_id,
+    };
+    await expect(
+      endChild({
+        session: child,
+        operationId: "child_end:refused",
+        output: "secret",
+      }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    await expect(
+      endChild({
+        session,
+        operationId: "child_end:root",
+        output: "secret",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("submits the exact crossed child value as the parent SpawnResult", async () => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "ack" }),
+    );
+
+    await approveSpawnReturn({
+      session,
+      toolCallId: "spawn-call",
+      childId: "conversation:child",
+      value: "SUMMARY(24 characters): safe",
+    });
+
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toEqual({
+      ...session,
+      event: "tool_result",
+      tool_call_id: "spawn-call",
+      spawned_id: "conversation:child",
+      output: "SUMMARY(24 characters): safe",
+      outcome: "success",
+    });
+  });
+
+  test("fails closed when SpawnResult does not attest the crossed bytes", async () => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "child_return",
+        value: "different bytes",
+      }),
+    );
+
+    await expect(
+      approveSpawnReturn({
+        session,
+        toolCallId: "spawn-call",
+        childId: "conversation:child",
+        value: "SUMMARY(24 characters): safe",
+      }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+  });
+
   test.each([
     "agent__research",
     "skill__research",
@@ -865,6 +1474,40 @@ describe("APPA feature boundary", () => {
       },
     ]);
   });
+  test("refuses a session whose return contract the proxy cannot deliver before inference", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "session_start"
+          ? {
+              decision: "context",
+              text: "[appa] Your final message is checked when you stop: it must be one JSON object matching this schema.",
+            }
+          : { decision: "ack" },
+      );
+    });
+    await expect(
+      processProxyResults({
+        session: { ...session, parent_id: "parent" },
+        canonicalize: (name: string) => name,
+        results: [
+          {
+            id: "call",
+            name: "read_file",
+            content: "RAW RESULT",
+            isError: false,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    // The refusal happens at session start: no tool result reaches the runtime.
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "tool_result"),
+    ).toHaveLength(0);
+  });
+
   test("preserves an explicit native unknown-control ruling without inspecting its text", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -1201,10 +1844,10 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
     content,
-  );
+    credentials: {},
+  });
   const updated = `${content}# updated`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
@@ -1218,10 +1861,10 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
-    updated,
-  );
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
+    content: updated,
+    credentials: {},
+  });
 });
 
 describe("remedy by offer", () => {
@@ -1571,6 +2214,55 @@ describe("remedy by offer", () => {
     expect(input.precheck_refusal).toMatch(
       /^\[appa\] Not submitted for approval: this call to archestra__todo_write could not run even if approved\.\n.*todos\[0\]\.id/,
     );
+  });
+
+  test("loads retained child returns for a parent session", async () => {
+    native.loadChildReturns.mockResolvedValueOnce([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        spawnCallId: "spawn-call",
+        childNativeId: "a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+      {
+        childSessionId: "user:alice|conversation:a2",
+        value: "raw release",
+      },
+    ]);
+
+    const records = await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+    });
+
+    expect(native.loadChildReturns).toHaveBeenCalledWith(
+      organizationId,
+      "user:alice|conversation",
+    );
+    expect(records).toEqual([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        spawnCallId: "spawn-call",
+        childNativeId: "a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+      {
+        childSessionId: "user:alice|conversation:a2",
+        value: "raw release",
+      },
+    ]);
+  });
+
+  test("fails closed with 503 when the child returns cannot be loaded", async () => {
+    native.loadChildReturns.mockRejectedValueOnce(
+      new Error("host SQL requires a leased connection"),
+    );
+    await expect(
+      loadChildReturns({
+        organizationId,
+        parentSessionId: "user:alice|conversation",
+      }),
+    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
   });
 
   test("fails closed with 503 when the offer review cannot be loaded", async () => {

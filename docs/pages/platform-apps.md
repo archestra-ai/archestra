@@ -3,12 +3,12 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML document that runs in a hardened sandbox iframe and talks to the host only through tools. Apps are first-class, scoped entities — created from chat or the `/apps` page, versioned on every edit, runnable standalone or inside a conversation, and governed by the same personal/team/org RBAC as agents and skills.
+MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML document that runs in a hardened sandbox iframe and talks to the host only through tools. Apps are first-class, scoped entities — created from chat or the `/apps` page, versioned on every edit, runnable standalone or inside a conversation, and governed by resource permission grants.
 
 Archestra already hosts and renders MCP Apps served by external MCP servers. This feature adds the authoring side: apps you own, backed by a data store and your own assignable tools, deliberately decoupled from agents.
 
@@ -24,21 +24,21 @@ Authoring is a staged flow — each tool's result points at the next step:
 - `scaffold_app` seeds the app from one opinionated starter template.
 - `edit_app` builds the HTML with targeted replacements. It embeds attached images without sending their base64 through the model.
 - `validate_app` checks the result — static structure plus the diagnostics from a live render.
-- `publish_app` promotes a personal app to a team or the organization.
+- `publish_app` grants read and use access to teams or the organization.
 
 Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
 To undo an unwanted edit, open the app's overflow menu on the **Apps** page and choose **Version history**, then restore an earlier version. Restoring copies that immutable artifact forward as a new current version, so no history is erased. You can also ask an agent to roll an app back; the `restore_app_version` tool performs the same server-side restore without reading or regenerating the app's HTML.
 
-Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
+Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — permissions, environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 
 ## Who Can Use an App
 
-App settings offers four choices under "Who can use this app". **Personal** keeps it to you. **Users** shares it with people you name — a colleague, for example. **Teams** shares it with whole teams. **Organization** opens it to everyone.
+[Resource permission grants](./platform-access-control#resource-permission-grants) control each app’s audience and allowed actions. You can grant access to users, teams, service accounts, roles, or everyone.
 
-Visibility grants use access, not edit access. People you share a personal app with can use it, but only you can edit it. Team members can use a team app, but membership alone does not let them change it — that takes `app:team-admin`. App management follows the platform's [scoped resource permissions](./platform-access-control#scoped-resources).
+Read access shows an app. Use access lets the recipient run it. Update access permits editing. Managing permissions requires a separate grant. Creators receive full access initially; these grants can be revoked.
 
-Sharing a chat does not share the apps it renders. Each viewer resolves an app against that app's own visibility. An app you have not shared with someone shows an access message in their view — a personal app in a chat you shared, for example. The chat's share dialog warns you when this will happen, and names the apps, so you can share them with the same people first.
+Sharing a chat does not share the apps it renders. Each viewer needs access to each app.
 
 Disabling an app (in App settings) pulls it back without deleting it. It leaves everyone else's gallery, and its launch tool leaves every agent surface. To chat, a disabled app does not exist: it is not listed, and no conversation can read, edit, publish, or delete it — not even yours. You still see it in your own gallery, marked Disabled; enable it there to keep building.
 
@@ -100,7 +100,7 @@ An app's HTML is pure UI authored against the **Archestra Apps SDK** — a clien
 
 The SDK:
 
-- `archestra.user` — the authenticated viewer as `{ id, name }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
+- `archestra.user` — the authenticated viewer as `{ id, name, email }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
 - `archestra.storage.user.get(key)` / `set(key, value)` / `list()` / `delete(key)` — persistent storage **private to each viewer** (favorites, drafts, settings). The right default for almost all app state. Values are plain JSON: pass objects directly to `set` and `get` returns exactly what was stored (`null` when absent) — no `JSON.stringify`/`JSON.parse` round-trip. Top-level `null` itself is not storable (`set` rejects it; `delete` clears a key). `list()` returns `[{ key, value }]` entries, not an array of keys.
 - `archestra.storage.shared.*` — same methods against one store **shared by every user of the app** (leaderboards, collaborative lists).
 - `archestra.tools.call(name, args)` — call an assigned tool **as the viewing user, with their existing MCP credentials** (see Tools below). Resolves with the tool's data directly: `structuredContent` when the tool provides it, else JSON parsed from its text output, else the raw text, else `{ media: [{ type, mimeType, dataUrl }] }` for image/audio-only results (the `dataUrl` drops straight into an `img`/`audio` src), else `null`. When the tool's server still needs connecting, the call rejects with a typed `{ code: "auth_required", url }` error the app can render as a link.
@@ -171,7 +171,7 @@ An app can declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` in
 
 ## Shared-app trust boundary
 
-A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
+A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id, display name, and email (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
 
 ## Templates
 

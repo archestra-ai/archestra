@@ -22,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -33,6 +34,7 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -40,14 +42,13 @@ import {
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -75,14 +76,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
   useSkillLabelKeys,
   useSkillLabelValues,
 } from "@/lib/entity-labels.query";
-import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
   useBulkSelection,
@@ -104,10 +109,9 @@ import {
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
-import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
 import {
   getSkillActionModel,
@@ -174,7 +178,6 @@ function SkillsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const appName = useAppName();
   const appIconLogo = useAppIconLogo();
 
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
@@ -197,7 +200,12 @@ function SkillsList() {
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const pluginsEnabled = useFeature("plugins") === true;
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const { data: canOpenPluginDetails } = useHasPermissions(
+    { plugin: ["read", "update"] },
+    "*",
+  );
   const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind =
@@ -374,7 +382,6 @@ function SkillsList() {
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
     useState<SkillItem | null>(null);
@@ -387,10 +394,7 @@ function SkillsList() {
   const currentUserId = session?.user?.id;
   // Resolved once for the whole table, then applied per row: the scope check
   // is a pure function precisely so a table cell does not have to call hooks.
-  const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
-  const { data: isSkillTeamAdmin } = useHasPermissions({
-    skill: ["team-admin"],
-  });
+  const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
@@ -576,9 +580,10 @@ function SkillsList() {
     const historyAction = skillAction(actionModel, "history");
     const deleteAction = skillAction(actionModel, "delete");
     const canModify = computeCanModifySkill({
+      scopedGrants: scopedCapabilities.data ?? [],
       skill,
       isAdmin: !!isSkillAdmin,
-      isTeamAdmin: !!isSkillTeamAdmin,
+      isTeamAdmin: false,
       currentUserId,
       userTeamIds: userTeamIdSet,
     });
@@ -651,6 +656,7 @@ function SkillsList() {
       <ResourceTableRowActions
         kind="skill"
         resource={isDeletedView ? null : skill}
+        permissionScope={"id" in skill ? skill.id : undefined}
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={skill.name}
@@ -712,11 +718,19 @@ function SkillsList() {
               icon: <Puzzle className="h-4 w-4" />,
               label: "Manage plugin",
               href: `/plugins/${item.skill.pluginId}`,
-              permissions: { plugin: ["admin"] },
+              // Managing a plugin needs `update` on every plugin.
+              permissions: { plugin: ["update"] },
+              permissionScope: "*",
             },
           ];
 
-    return <TableRowActions actions={actions} itemName={skill.name} />;
+    return (
+      <TableRowActions
+        permissionScope={"id" in skill ? skill.id : undefined}
+        actions={actions}
+        itemName={skill.name}
+      />
+    );
   };
 
   const columns: ColumnDef<ListedSkill>[] = [
@@ -736,30 +750,41 @@ function SkillsList() {
       ),
       size: 420,
       cell: ({ row }) => (
-        <ListedSkillName
-          item={row.original}
-          appName={appName}
-          appIconLogo={appIconLogo}
-        />
+        <ListedSkillName item={row.original} appIconLogo={appIconLogo} />
       ),
     },
     {
-      id: "visibility",
-      size: 130,
-      header: "Visibility",
+      id: "source",
+      size: 220,
+      header: "Source",
       cell: ({ row }) => {
-        const item = row.original;
-        const standalone = item.source === "standalone" ? item.skill : null;
+        const source = listedSkillSource(row.original);
+        if (row.original.source === "plugin" && canOpenPluginDetails) {
+          return (
+            <RowClickShield className="min-w-0">
+              <Link
+                href={`/plugins/${row.original.skill.pluginId}`}
+                className="block truncate text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                title={source.label}
+              >
+                {source.label}
+              </Link>
+            </RowClickShield>
+          );
+        }
         return (
-          <ResourceVisibilityBadge
-            scope={item.skill.scope}
-            teams={standalone?.teams}
-            users={standalone?.users}
-            authorId={standalone?.authorId ?? currentUserId}
-            authorName={standalone?.authorName ?? session?.user?.name}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
+          <span
+            className="block truncate text-sm text-muted-foreground"
+            title={source.label}
+          >
+            {source.isRepo ? (
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                {source.label}
+              </code>
+            ) : (
+              source.label
+            )}
+          </span>
         );
       },
     },
@@ -857,15 +882,17 @@ function SkillsList() {
         title="Skills"
         description={SKILLS_DESCRIPTION}
         actionButton={
-          !showEmptyState &&
-          !isInitialSkillsLoad && (
-            <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/skills/new">
-                <Plus className="h-4 w-4" />
-                Add new skill
-              </Link>
-            </PermissionButton>
-          )
+          <div className="flex items-center gap-2">
+            {!showEmptyState && !isInitialSkillsLoad && (
+              <PermissionButton permissions={{ skill: ["create"] }} asChild>
+                <Link href="/skills/new">
+                  <Plus className="h-4 w-4" />
+                  Add new skill
+                </Link>
+              </PermissionButton>
+            )}
+            <ResourceListActions resource="skill" />
+          </div>
         }
       >
         <TableCardView storageKey="archestra-skills-view" defaultMode="table">
@@ -918,15 +945,12 @@ function SkillsList() {
                         </SelectContent>
                       </Select>
                     )}
-                  <ResourceScopeFilter
-                    ownerLabelPlural="skills"
-                    adminPermission={{ skill: ["admin"] }}
-                  />
+
                   {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
                     checker has no `skill:delete` boolean, so this shows the
                     trash toggle to skill admins to avoid a control that 403s. */}
                   <ResourceDeletedStatusFilter
-                    deletePermission={{ skill: ["admin"] }}
+                    deletePermission={{ skill: ["delete"] }}
                   />
                   {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
@@ -984,7 +1008,7 @@ function SkillsList() {
                     })}
                   />
                 </FilterBar>
-                <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
+                <ActiveFilterBadges />
               </CollectionFilters>
 
               <section className="space-y-3" aria-label="Skills">
@@ -1008,15 +1032,6 @@ function SkillsList() {
                       : selection.selectAllMatching
                   }
                 >
-                  <PermissionButton
-                    permissions={{ skill: ["update"] }}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBulkVisibilityOpen(true)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span>Edit visibility</span>
-                  </PermissionButton>
                   <PermissionButton
                     permissions={{ skill: ["delete"] }}
                     variant="destructive"
@@ -1054,7 +1069,9 @@ function SkillsList() {
                             </Link>
                             <ListedSkillSourceBadge
                               item={item}
-                              appName={appName}
+                              canOpenPluginDetails={
+                                canOpenPluginDetails === true
+                              }
                             />
                             {standalone ? (
                               <LabelTags labels={standalone.labels} />
@@ -1083,17 +1100,6 @@ function SkillsList() {
                         }
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <ResourceVisibilityBadge
-                            scope={item.skill.scope}
-                            teams={standalone?.teams}
-                            users={standalone?.users}
-                            authorId={standalone?.authorId ?? currentUserId}
-                            authorName={
-                              standalone?.authorName ?? session?.user?.name
-                            }
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
                           {standalone?.templated ? (
                             <Badge variant="outline">
                               <Braces className="mr-1 h-3 w-3" />
@@ -1137,7 +1143,7 @@ function SkillsList() {
                   onRowSelectionChange={onRowSelectionChange}
                   onPageRowIdsChange={selection.onPageRowIdsChange}
                   rangeSelection={rangeSelection}
-                  fixedWidthColumnIds={["visibility", "files", "usageCount"]}
+                  fixedWidthColumnIds={["source", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}
                 />
               </section>
@@ -1145,15 +1151,6 @@ function SkillsList() {
           )}
         </TableCardView>
       </PageLayout>
-
-      {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          skills={selectedSkills}
-          open={bulkVisibilityOpen}
-          onOpenChange={setBulkVisibilityOpen}
-          onApplied={clearSelection}
-        />
-      )}
 
       {bulkDeleteOpen && (
         <DeleteConfirmDialog
@@ -1302,11 +1299,9 @@ function listedSkillFileCount(item: ListedSkill) {
 
 function ListedSkillName({
   item,
-  appName,
   appIconLogo,
 }: {
   item: ListedSkill;
-  appName: string;
   appIconLogo: string;
 }) {
   const standalone = item.source === "standalone" ? item.skill : null;
@@ -1321,7 +1316,26 @@ function ListedSkillName({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="truncate font-medium">{item.skill.name}</span>
-          <ListedSkillSourceBadge item={item} appName={appName} />
+          {compatibility && (
+            <RowClickShield className="inline-flex shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    role="img"
+                    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the compatibility note without implying a click action
+                    tabIndex={0}
+                    aria-label="Compatibility notes"
+                    className="inline-flex size-5 cursor-help items-center justify-center rounded-sm text-amber-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-amber-400"
+                  >
+                    <Info className="size-3.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  {compatibility}
+                </TooltipContent>
+              </Tooltip>
+            </RowClickShield>
+          )}
           {standalone?.labels ? <LabelTags labels={standalone.labels} /> : null}
           {standalone?.githubSyncInterval && (
             <Tooltip>
@@ -1374,42 +1388,56 @@ function ListedSkillName({
           Disabled
         </Badge>
       )}
-      {compatibility && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="outline" className="gap-1">
-              <Info className="h-3 w-3" />
-              compatibility
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{compatibility}</TooltipContent>
-        </Tooltip>
-      )}
     </div>
   );
 }
 
 function ListedSkillSourceBadge({
   item,
-  appName,
+  canOpenPluginDetails,
 }: {
   item: ListedSkill;
-  appName: string;
+  canOpenPluginDetails: boolean;
 }) {
-  if (item.source === "external_mcp") {
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.serverName} · MCP`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
+  const source = listedSkillSource(item);
+  if (
+    item.source === "standalone" &&
+    item.skill.sourceType !== "built_in" &&
+    !source.isRepo
+  ) {
+    return null;
+  }
+  const badge = (
+    <Badge
+      variant="secondary"
+      title={source.label}
+      className="inline-flex max-w-56 shrink overflow-hidden font-normal"
+    >
+      <span className={cn("truncate", source.isRepo && "font-mono")}>
+        {source.label}
+      </span>
+    </Badge>
+  );
+  return item.source === "plugin" && canOpenPluginDetails ? (
+    <RowClickShield className="inline-flex min-w-0 shrink">
+      <Link
+        href={`/plugins/${item.skill.pluginId}`}
+        className="min-w-0 rounded-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <span className="truncate">{item.skill.serverName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">MCP</span>
-      </Badge>
-    );
+        {badge}
+      </Link>
+    </RowClickShield>
+  ) : (
+    badge
+  );
+}
+
+function listedSkillSource(item: ListedSkill): {
+  label: string;
+  isRepo: boolean;
+} {
+  if (item.source === "external_mcp") {
+    return { label: `${item.skill.serverName} · MCP`, isRepo: false };
   }
   if (item.source === "plugin") {
     const repo =
@@ -1418,54 +1446,23 @@ function ListedSkillSourceBadge({
       item.skill.pluginName.toLowerCase() === "openappa" &&
       repo?.toLowerCase() === "archestra-ai/openappa";
     if (isOpenAppa) {
-      return (
-        <Badge
-          variant="secondary"
-          title="OpenAPPA"
-          className="inline-flex max-w-48 shrink items-center overflow-hidden font-normal"
-        >
-          <span className="truncate">OpenAPPA</span>
-        </Badge>
-      );
+      return { label: "OpenAPPA", isRepo: false };
     }
-    return (
-      <Badge
-        variant="secondary"
-        title={`${item.skill.pluginName} · Plugin`}
-        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
-      >
-        <span className="truncate">{item.skill.pluginName}</span>
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-        <span className="shrink-0">Plugin</span>
-      </Badge>
-    );
+    return { label: `${item.skill.pluginName} · Plugin`, isRepo: false };
   }
   if (item.skill.sourceType === "built_in") {
-    return (
-      <Badge
-        variant="secondary"
-        title={appName}
-        className="shrink-0 font-normal"
-      >
-        <span>{appName}</span>
-      </Badge>
-    );
+    return { label: "Built in", isRepo: false };
   }
   const repo = parseRepoFromSourceRef(
     item.skill.sourceRef,
     item.skill.sourceOrigin,
   );
-  return repo ? (
-    <Badge
-      variant="secondary"
-      title={repo}
-      className="inline-flex max-w-48 shrink overflow-hidden font-normal"
-    >
-      <span className="truncate font-mono">{repo}</span>
-    </Badge>
-  ) : null;
+  return repo
+    ? { label: repo, isRepo: true }
+    : {
+        label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
+        isRepo: false,
+      };
 }
 
 function ListedSkillIcon({
@@ -1487,7 +1484,32 @@ function ListedSkillIcon({
     );
   }
   if (item.source === "plugin") {
+    const repo =
+      item.skill.sourceMarketplaceRepo ?? item.skill.sourceRepo ?? null;
+    if (
+      item.skill.pluginName.toLowerCase() === "openappa" &&
+      repo?.toLowerCase() === "archestra-ai/openappa"
+    ) {
+      return (
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+          aria-hidden
+        >
+          <OpenAppaSolidIcon className="size-6" />
+        </span>
+      );
+    }
     return <PluginSourceIcon plugin={item.skill} />;
+  }
+  if (item.skill.sourceRef === "builtin:appa-guide") {
+    return (
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+        aria-hidden
+      >
+        <OpenAppaSolidIcon className="size-6" />
+      </span>
+    );
   }
   return (
     <SkillSourceIcon

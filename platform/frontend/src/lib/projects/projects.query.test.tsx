@@ -4,7 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { useRestoreProject } from "./projects.query";
 
 // The module destructures the SDK at import time, so every name it takes has
@@ -30,7 +30,6 @@ vi.mock("@archestra/shared", async () => {
       pinProject: vi.fn(),
       restoreProject: vi.fn(),
       setProjectInstructions: vi.fn(),
-      setProjectShare: vi.fn(),
       unpinProject: vi.fn(),
       updateProject: vi.fn(),
       uploadProjectFiles: vi.fn(),
@@ -38,9 +37,9 @@ vi.mock("@archestra/shared", async () => {
   };
 });
 
-vi.mock("@/lib/utils", async () => {
+vi.mock("@/lib/utils/api", async () => {
   const actual =
-    await vi.importActual<typeof import("@/lib/utils")>("@/lib/utils");
+    await vi.importActual<typeof import("@/lib/utils/api")>("@/lib/utils/api");
   return { ...actual, handleApiError: vi.fn() };
 });
 

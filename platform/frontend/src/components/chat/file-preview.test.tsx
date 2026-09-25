@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -19,6 +19,7 @@ import {
 
 const API_ORIGIN = "http://localhost:9000";
 const ARTIFACT_URL = `${API_ORIGIN}/api/skill-sandbox/artifacts/svg-1`;
+const CSV_URL = `${API_ORIGIN}/api/skill-sandbox/artifacts/report.csv`;
 const SEALED_URL = "/api/chat/attachments/att-1/content";
 const CONVERSATION_ID = "conv-1";
 const LOCKED_CHAT_KEY = "a".repeat(43);
@@ -213,5 +214,40 @@ describe("FilePreview svg", () => {
     });
     expect(link.getAttribute("href")).toBe("blob:sealed");
     expect(screen.queryByRole("img")).toBeNull();
+  });
+});
+
+describe("FilePreview csv", () => {
+  it("keeps quoted commas and newlines in their cells", async () => {
+    server.use(
+      http.get(CSV_URL, () =>
+        HttpResponse.text(
+          'Customer,Amount,Status\n"Acme, Inc.",100,Paid\n"Beta\nCorp",200,Pending',
+        ),
+      ),
+    );
+
+    render(
+      <FilePreview
+        file={{
+          name: "report.csv",
+          mimeType: "text/csv",
+          contentUrl: CSV_URL,
+        }}
+      />,
+    );
+
+    const rows = await screen.findAllByRole("row");
+    expect(rows).toHaveLength(3);
+    expect(
+      within(rows[1])
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Acme, Inc.", "100", "Paid"]);
+    expect(
+      within(rows[2])
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Beta\nCorp", "200", "Pending"]);
   });
 });

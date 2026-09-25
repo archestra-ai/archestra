@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type ReconnectCredential = Pick<LlmProviderApiKey, "id" | "name" | "provider"> &
   Partial<Pick<LlmProviderApiKey, "subscriptionKind">>;
@@ -81,7 +81,7 @@ export function SubscriptionReconnectNotice({
           defaultValues={{
             name: credential.name,
             provider: credential.provider,
-            scope: "personal",
+            shared: false,
             ...(subscription.marker !== null
               ? { authMethod: "subscription" }
               : {}),

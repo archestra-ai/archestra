@@ -61,7 +61,6 @@ beforeEach(
       organizationId: org.id,
       authorId: userId,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.test/claude-code:current",
         command: ["archestra-claude-code"],

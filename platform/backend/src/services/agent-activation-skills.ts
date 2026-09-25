@@ -234,6 +234,11 @@ function compareNativeSkillRecency(left: Skill, right: Skill): number {
   return createdAt || right.id.localeCompare(left.id);
 }
 
+/**
+ * The caller's own skill first, then team and organization skills. `scope`
+ * must come from the skill's grants (`SkillModel.withGrantedScope`), not the
+ * retired column.
+ */
 function nativeSkillPrecedence(skill: Skill, userId: string | undefined) {
   switch (skill.scope) {
     case "personal":

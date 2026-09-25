@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, MemberModel, OrganizationModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -95,7 +95,7 @@ describe("DELETE /api/agents/:id — members defaulting to the agent", () => {
     await MemberModel.setDefaultAgent(admin.id, organizationId, assistantId);
     await makeInternalAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: admin.id,
     });
 
@@ -132,7 +132,6 @@ describe("DELETE /api/agents/:id — members defaulting to the agent", () => {
     const assistantId = await seededAssistantId();
     const orgDefault = await makeInternalAgent({
       organizationId,
-      scope: "org",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: orgDefault.id,
@@ -167,7 +166,7 @@ describe("DELETE /api/agents/:id — members defaulting to the agent", () => {
       othersAssistantId,
     );
 
-    const doomed = await makeInternalAgent({ organizationId, scope: "org" });
+    const doomed = await makeInternalAgent({ organizationId });
 
     const response = await app.inject({
       method: "DELETE",

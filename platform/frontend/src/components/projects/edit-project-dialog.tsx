@@ -5,42 +5,29 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import { Globe, Lock, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { IdentityFields } from "@/components/identity-fields";
-import { StandardFormDialog } from "@/components/standard-dialog";
-import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
-import { Badge } from "@/components/ui/badge";
+import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
-import {
-  UserShareField,
-  useUserShareOption,
-} from "@/components/user-share-field";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { agentsForProjectAudience } from "@/lib/projects/project-agent-audience";
 import {
-  useProject,
-  useSetProjectShare,
-  useUpdateProject,
-} from "@/lib/projects/projects.query";
-import { useTeams } from "@/lib/teams/team.query";
+  agentsForProjectAudience,
+  type ProjectShareAudience,
+} from "@/lib/projects/project-agent-audience";
+import { useProject, useUpdateProject } from "@/lib/projects/projects.query";
 
-type ProjectVisibility = "none" | "organization" | "team" | "user";
+type ProjectDialogSection = "general" | "permissions";
 type EditProjectForm = {
   name: string;
   description: string;
@@ -52,10 +39,10 @@ type EditProjectForm = {
 const NO_DEFAULT_AGENT = "__org_default__";
 
 /**
- * Single edit entry point for a project's owner/admin: name, description, icon,
- * and default agent plus the shared visibility control. Fetches the project
- * detail by id so it works from the projects list (whose rows lack share team
- * ids) as well as the project page. Renders nothing until the detail has loaded.
+ * Single edit entry point for a project's owner/admin: its identity and default
+ * agent on one page, who can reach it on another. Fetches the project detail by
+ * id so it works from the projects list (whose rows lack the default agent) as
+ * well as the project page. Renders nothing until the detail has loaded.
  */
 export function EditProjectDialog({
   projectId,
@@ -80,6 +67,33 @@ export function EditProjectDialog({
 
 // === internal ===
 
+/**
+ * A dialog page. The inactive one is hidden rather than unmounted:
+ * react-hook-form skips validation for fields that are not mounted, so
+ * unmounting General would let a rejected name reach the update route as soon
+ * as the user switched pages.
+ */
+function DialogSection({
+  id,
+  activeSection,
+  children,
+}: {
+  id: ProjectDialogSection;
+  activeSection: ProjectDialogSection;
+  children: React.ReactNode;
+}) {
+  return (
+    <div hidden={id !== activeSection} className="space-y-4">
+      {children}
+    </div>
+  );
+}
+
+const NAV_ITEMS = [
+  { id: "general" as const, label: "General" },
+  { id: "permissions" as const, label: "Permissions" },
+];
+
 function EditProjectDialogForm({
   project,
   open,
@@ -89,10 +103,9 @@ function EditProjectDialogForm({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [activeSection, setActiveSection] =
+    useState<ProjectDialogSection>("general");
   const updateProject = useUpdateProject();
-  const setShare = useSetProjectShare();
-  const { data: teams = [] } = useTeams({ enabled: open });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   // Without `agent:read` the list comes back empty, which would read as "this
   // org has no agents" rather than "not yours to set" — hide the field instead.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -114,30 +127,28 @@ function EditProjectDialogForm({
   const name = form.watch("name");
   const description = form.watch("description");
   const defaultAgentId = form.watch("defaultAgentId");
-  const initialVisibility: ProjectVisibility = project.visibility ?? "none";
-  const [visibility, setVisibility] =
-    useState<ProjectVisibility>(initialVisibility);
-  const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
-  const [userIds, setUserIds] = useState<string[]>(project.shareUserIds ?? []);
   const [labels, setLabels] = useState<ProfileLabel[]>(project.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const userOption = useUserShareOption<ProjectVisibility>("user");
 
-  // Sharing is edited in this same dialog, so the offer follows the pending
-  // choice rather than what is saved — pick Teams and the list narrows before
-  // you press Save.
+  // Who the project reaches is edited on the Permissions page, which saves
+  // itself — so the agent offer is judged against the sharing on record.
+  const share: ProjectShareAudience = useMemo(
+    () => ({
+      visibility: project.visibility ?? "none",
+      teamIds: project.shareTeamIds ?? [],
+      userIds: project.shareUserIds ?? [],
+    }),
+    [project.visibility, project.shareTeamIds, project.shareUserIds],
+  );
   const editorIsOwner = project.viewerRole === "owner";
   const selectableAgents = useMemo(
-    () =>
-      agentsForProjectAudience(accessibleAgents, {
-        share: { visibility, teamIds, userIds },
-        editorIsOwner,
-      }),
-    [accessibleAgents, visibility, teamIds, userIds, editorIsOwner],
+    () => agentsForProjectAudience(accessibleAgents, { share, editorIsOwner }),
+    [accessibleAgents, share, editorIsOwner],
   );
 
-  // Widening the audience can strand the pinned agent. Fall back to the
-  // organization default rather than leave a selection the save would reject.
+  // A pinned agent the audience cannot run is no longer a valid choice. Fall
+  // back to the organization default rather than leave a selection the save
+  // would reject.
   useEffect(() => {
     // Every agent looks unreachable before the list arrives, which would clear
     // the project's saved pin the moment the dialog opened. `isPending` also
@@ -153,95 +164,13 @@ function EditProjectDialogForm({
     form.setValue("defaultAgentId", null, { shouldDirty: true });
   }, [defaultAgentId, selectableAgents, isAgentsPending, editorIsOwner, form]);
 
-  // Org-wide sharing (both entering and leaving it) is gated behind
-  // `project:share-org` on the backend; mirror that here so the dialog doesn't
-  // offer changes the save would reject.
-  const shareLocked = initialVisibility === "organization" && !canShareOrg;
-
-  const visibilityOptions: Array<VisibilityOption<ProjectVisibility>> = [
-    {
-      value: "none",
-      label: "Personal",
-      description: "No one else can see this project.",
-      icon: Lock,
-      disabled: shareLocked,
-    },
-    {
-      value: "organization",
-      label: "Organization",
-      description: "Everyone in your organization can see this project.",
-      icon: Globe,
-      disabled: !canShareOrg,
-      disabledLabel: !canShareOrg ? "Requires permission" : undefined,
-      disabledReason: !canShareOrg
-        ? "You don't have permission to share projects with the entire organization."
-        : undefined,
-    },
-    { ...userOption, disabled: shareLocked || userOption.disabled },
-    {
-      value: "team",
-      label: "Teams",
-      description: "Share this project with selected teams.",
-      icon: Users,
-      disabled: shareLocked || teams.length === 0,
-      disabledLabel:
-        !shareLocked && teams.length === 0 ? "No teams available" : undefined,
-    },
-  ];
-
-  const isPending = updateProject.isPending || setShare.isPending;
-  const sharingDirty =
-    visibility !== initialVisibility ||
-    (visibility === "team" &&
-      hasUnsavedChanges(
-        [...(project.shareTeamIds ?? [])].sort(),
-        [...teamIds].sort(),
-      )) ||
-    (visibility === "user" &&
-      hasUnsavedChanges(
-        [...(project.shareUserIds ?? [])].sort(),
-        [...userIds].sort(),
-      ));
-  const labelsDirty = hasUnsavedChanges(project.labels, labels);
-  const isDirty = form.formState.isDirty || sharingDirty || labelsDirty;
-  const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
-  // Same guard as Teams: saving Users with nobody picked would quietly make the
-  // project private again.
-  const userSelectionMissing = visibility === "user" && userIds.length === 0;
   const hasLengthError =
     name.length > PROJECT_NAME_MAX_LENGTH ||
     description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(
     async ({ name, description, icon, defaultAgentId }) => {
-      if (teamSelectionMissing || userSelectionMissing) return;
       const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-
-      const nextTeamIds = visibility === "team" ? teamIds : [];
-      // Both lists are always sent, so leaving Teams or Users revokes what that
-      // choice left behind instead of stranding it.
-      const nextUserIds = visibility === "user" ? userIds : [];
-      const shareChanged =
-        visibility !== initialVisibility ||
-        (visibility === "team" &&
-          nextTeamIds.slice().sort().join() !==
-            (project.shareTeamIds ?? []).slice().sort().join()) ||
-        (visibility === "user" &&
-          nextUserIds.slice().sort().join() !==
-            (project.shareUserIds ?? []).slice().sort().join());
-      // Sharing goes first: the default agent is picked against the sharing
-      // chosen here, and the server judges it against the sharing on record.
-      // Saving the agent first would validate it against the old audience and
-      // reject a choice this dialog legitimately offered.
-      if (shareChanged) {
-        const shareOk = await setShare.mutateAsync({
-          id: project.id,
-          visibility,
-          teamIds: nextTeamIds,
-          userIds: nextUserIds,
-        });
-        if (!shareOk) return;
-      }
 
       const ok = await updateProject.mutateAsync({
         id: project.id,
@@ -263,180 +192,142 @@ function EditProjectDialogForm({
   );
 
   return (
-    <StandardFormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title="Edit project"
-      size="medium"
-      isDirty={isDirty}
+      description={`Update "${project.name}" and who can reach it.`}
+      sidebarLabel={name.trim() || project.name}
+      sidebarDescription="Project"
+      sidebarIcon={<AgentIcon icon={icon} fallbackType="project" size={16} />}
+      activeSection={activeSection}
+      navItems={NAV_ITEMS}
+      onActiveSectionChange={setActiveSection}
       onSubmit={onSubmit}
-      bodyClassName="space-y-4"
+      className="max-w-4xl h-[70vh]"
       footer={
-        <>
-          <DialogCancelButton disabled={isPending}>Cancel</DialogCancelButton>
-          <Button
-            type="submit"
-            disabled={
-              isPending ||
-              !name.trim().length ||
-              hasLengthError ||
-              teamSelectionMissing ||
-              userSelectionMissing
-            }
-          >
-            Save
+        // Permissions saves itself, so the form's own Save would only be a
+        // second button doing something else on the page it sits under.
+        activeSection === "permissions" ? (
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Close
           </Button>
-        </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                updateProject.isPending || !name.trim().length || hasLengthError
+              }
+            >
+              Save
+            </Button>
+          </>
+        )
       }
     >
-      <IdentityFields
-        icon={icon}
-        onIconChange={(next) =>
-          form.setValue("icon", next, { shouldDirty: true })
-        }
-        fallbackType="project"
-        label={<Label htmlFor="edit-project-name">Name *</Label>}
-      >
-        <Input
-          id="edit-project-name"
-          maxLength={PROJECT_NAME_MAX_LENGTH}
-          aria-invalid={!!form.formState.errors.name}
-          {...form.register("name", {
-            required: "Project name is required.",
-            maxLength: {
-              value: PROJECT_NAME_MAX_LENGTH,
-              message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-            },
-          })}
-        />
-        {form.formState.errors.name?.message && (
-          <p className="text-xs text-destructive">
-            {form.formState.errors.name.message}
-          </p>
-        )}
-      </IdentityFields>
+      <DialogSection id="general" activeSection={activeSection}>
+        <IdentityFields
+          icon={icon}
+          onIconChange={(next) =>
+            form.setValue("icon", next, { shouldDirty: true })
+          }
+          fallbackType="project"
+          label={<Label htmlFor="edit-project-name">Name *</Label>}
+        >
+          <Input
+            id="edit-project-name"
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name", {
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
+          />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
+        </IdentityFields>
 
-      <div className="space-y-2">
-        <Label htmlFor="edit-project-description">Description</Label>
-        <Textarea
-          id="edit-project-description"
-          placeholder="What is this project about?"
-          rows={3}
-          maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-          aria-invalid={!!form.formState.errors.description}
-          {...form.register("description", {
-            maxLength: {
-              value: PROJECT_DESCRIPTION_MAX_LENGTH,
-              message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-            },
-          })}
-        />
-        {form.formState.errors.description?.message && (
-          <p className="text-xs text-destructive">
-            {form.formState.errors.description.message}
-          </p>
-        )}
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-project-description">Description</Label>
+          <Textarea
+            id="edit-project-description"
+            placeholder="What is this project about?"
+            rows={3}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.description}
+            {...form.register("description", {
+              maxLength: {
+                value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
+          />
+          {form.formState.errors.description?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          )}
+        </div>
 
-      <VisibilitySelector
-        heading="Sharing"
-        description={
-          <>
-            <span>
-              People you share with can read every chat, start their own, and
-              work with the project&apos;s files through chats.
-            </span>
-            {shareLocked ? (
-              <span>
-                {" "}
-                This project is shared with the entire organization; changing
-                its sharing requires the org-wide sharing permission.
-              </span>
-            ) : null}
-          </>
-        }
-        value={visibility}
-        options={visibilityOptions}
-        onValueChange={setVisibility}
-        readOnly={shareLocked}
-      >
-        {visibility === "user" && (
-          <UserShareField value={userIds} onValueChange={setUserIds} />
-        )}
-
-        {visibility === "team" && (
+        {canReadAgents === true && (
           <div className="space-y-2">
-            <Label>Teams</Label>
-            <AssignmentCombobox
-              items={teams.map((team) => ({ id: team.id, name: team.name }))}
-              selectedIds={teamIds}
-              onToggle={(teamId) =>
-                setTeamIds((current) =>
-                  current.includes(teamId)
-                    ? current.filter((id) => id !== teamId)
-                    : [...current, teamId],
+            <Label>Default agent</Label>
+            <FieldDescription>
+              Preselected for new chats and scheduled tasks in this project.
+              Anyone can still pick a different agent for an individual chat.
+            </FieldDescription>
+            <AgentSelector
+              mode="single"
+              agents={selectableAgents}
+              value={defaultAgentId ?? NO_DEFAULT_AGENT}
+              onValueChange={(value) =>
+                form.setValue(
+                  "defaultAgentId",
+                  value === NO_DEFAULT_AGENT ? null : value,
+                  { shouldDirty: true },
                 )
               }
-              label="Select teams"
-              placeholder="Search teams..."
-              emptyMessage="No teams found."
-              className="h-9 w-full justify-between border text-sm text-foreground"
+              hint={audienceHint(share.visibility)}
+              emptyMessage="No agents this project's members can all use."
+              sentinelOption={{
+                value: NO_DEFAULT_AGENT,
+                label: "Default",
+              }}
+              className="w-full"
             />
-            {teamIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {teams
-                  .filter((team) => teamIds.includes(team.id))
-                  .map((team) => (
-                    <Badge key={team.id} variant="secondary">
-                      {team.name}
-                    </Badge>
-                  ))}
-              </div>
-            )}
           </div>
         )}
-      </VisibilitySelector>
 
-      {canReadAgents === true && (
-        <div className="space-y-2">
-          <Label>Default agent</Label>
-          <FieldDescription>
-            Preselected for new chats and scheduled tasks in this project.
-            Anyone can still pick a different agent for an individual chat.
-          </FieldDescription>
-          <AgentSelector
-            mode="single"
-            agents={selectableAgents}
-            value={defaultAgentId ?? NO_DEFAULT_AGENT}
-            onValueChange={(value) =>
-              form.setValue(
-                "defaultAgentId",
-                value === NO_DEFAULT_AGENT ? null : value,
-                { shouldDirty: true },
-              )
-            }
-            hint={audienceHint(visibility)}
-            emptyMessage="No agents this project's members can all use."
-            sentinelOption={{
-              value: NO_DEFAULT_AGENT,
-              label: "Default",
-            }}
-            className="w-full"
-          />
-        </div>
-      )}
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </DialogSection>
 
-      <AdvancedLabelsSection
-        ref={labelsRef}
-        labels={labels}
-        onLabelsChange={setLabels}
-      />
-    </StandardFormDialog>
+      <DialogSection id="permissions" activeSection={activeSection}>
+        <ResourceAccessSection resource="project" id={project.id} />
+      </DialogSection>
+    </TabbedDialogShell>
   );
 }
 
 /** Says why the list is what it is, so a short list doesn't read as a bug. */
-function audienceHint(visibility: ProjectVisibility): string {
+function audienceHint(visibility: ProjectShareAudience["visibility"]): string {
   switch (visibility) {
     case "organization":
       return "Only org-wide agents, so everyone can use them";

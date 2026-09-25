@@ -2,12 +2,12 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
 } from "@archestra/shared";
-import { ProjectShareModel } from "@/models";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import FileModel from "@/models/file";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("PUT /api/projects/:id/instructions", () => {
@@ -102,10 +102,10 @@ describe("PUT /api/projects/:id/instructions", () => {
     makeMember,
   }) => {
     const project = await seedProject("guarded");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export type { SupportedProvider };
 

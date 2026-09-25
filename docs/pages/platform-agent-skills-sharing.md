@@ -69,13 +69,13 @@ git clone <marketplace-url> "$HOME/.config/opencode/skills/<marketplace-name>"
 
 ### Anonymous Access
 
-Admins can publish the marketplace without authentication under **Settings → Skills → Skills marketplace access**. Anonymous clones need no credential and carry the organization-wide skills only — personal and team skills are never part of that view. Anyone who can reach the deployment can then install those skills, so treat it as a public listing.
+Admins can publish the marketplace without authentication under **Settings → Skills → Skills marketplace access**. Anonymous clones need no credential and carry the skills with organization-wide read grants only. Anyone who can reach the deployment can then install those skills, so treat it as a public listing.
 
 ## Who Can Install
 
 Anyone who can read skills can install the shared marketplace, so members set up their own clients without an admin. Because the URL serves each person their own view, there is no per-skill choice in the setup command: it installs everything shared with you, and stays current as skills are added or removed. To share a fixed subset, use a snapshot link.
 
-Creating, refreshing, and revoking snapshot links (below) requires the `skill:admin` permission. Publishing a snapshot link that contains executable plugins also requires `plugin:admin`.
+Creating, refreshing, and revoking snapshot links (below) requires skill `read`, `use`, and `manage-permissions` grants on `*`. Publishing a snapshot link that contains executable plugins also requires `update` on every plugin, a `*` grant.
 
 A marketplace credential lives only as long as the account it belongs to: it is dropped when the person is removed from the organization, and a clone is refused the moment their role loses skill read access.
 
@@ -101,7 +101,7 @@ Existing local clones and already-installed plugins keep working after a revocat
 
 ## Updates
 
-When a skill or approved plugin payload changes in Archestra, a new commit is appended to the materialized repository with a deterministic SHA. Users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Every emitted plugin gets a real, monotonic SemVer (`0.<revision>.0`), so vendor CLIs recognize the update instead of ignoring a content hash in SemVer build metadata. Connected shell wrappers refresh the marketplace and installed plugins after an interactive session exits, at most once per day.
+When a skill or approved plugin payload changes in Archestra, a new commit is appended to the materialized repository with a deterministic SHA. Users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Every emitted plugin gets a real, monotonic SemVer (`0.<revision>.0`), so vendor CLIs recognize the update instead of ignoring a content hash in SemVer build metadata. Connected shell wrappers refresh the marketplace and installed plugins after an interactive session exits, at most once per day. The Claude Code setup also turns on the marketplace's auto-update, so Claude Code refreshes it at startup — sessions started outside your shell included.
 
 The shared marketplace URL also picks up skills that are added or removed later — the next fetch simply carries the current set. A snapshot link's resource set is fixed until an admin refreshes it.
 

@@ -257,12 +257,15 @@ function computeOpenCodeRequestType(request: unknown): "main" | "subagent" {
   ].join("\n");
   if (/title generator/i.test(system)) return "subagent";
 
-  const toolNames = (req.tools ?? []).flatMap((tool) => [
-    tool.function?.name ?? tool.name ?? "",
-    ...(tool.functionDeclarations ?? []).map(
-      (declaration) => declaration.name ?? "",
-    ),
-  ]);
+  const toolNames = (req.tools ?? [])
+    .flatMap((tool) => [
+      tool.function?.name ?? tool.name ?? "",
+      ...(tool.functionDeclarations ?? []).map(
+        (declaration) => declaration.name ?? "",
+      ),
+    ])
+    .filter((name) => name.length > 0);
+  if (toolNames.length === 0) return "subagent";
   const hasSpawn = toolNames.some(
     (name) =>
       name === "task" || name.endsWith(":task") || name.endsWith(".task"),
@@ -478,8 +481,10 @@ class InteractionModel {
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
-    // whole conversation on every row (no-op for all other interactions, and
-    // disabled entirely under content encryption — see isEligible).
+    // whole conversation on every row (no-op for all other interactions). Delta
+    // encoding stays active under content encryption: deltas are computed on
+    // plaintext before encryptInteractionContent runs below, and parent
+    // resolution matches on the always-plaintext hash columns.
     //
     // LockedChat rows are excluded outright. Today they could not qualify anyway
     // (isEligible demands a Claude session source, and these are chat sources),
@@ -906,11 +911,11 @@ class InteractionModel {
       if (!interaction.profileId) {
         return null;
       }
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        interaction.profileId,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: interaction.profileId,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }

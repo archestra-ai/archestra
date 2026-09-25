@@ -1,9 +1,10 @@
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, PluginModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import { PLUGIN_DELIVERY_MAX_COUNT, type User } from "@/types";
 
 vi.mock("@/auth");
@@ -28,6 +29,16 @@ describe("POST /api/connection-setups with plugins", () => {
     await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["plugin"], async () =>
+      Boolean(
+        await mockUserHasPermission.getMockImplementation()?.(
+          "",
+          "",
+          "plugin",
+          "admin" as never,
+        ),
+      ),
+    );
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

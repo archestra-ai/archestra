@@ -23,7 +23,6 @@ let mockAgents: Array<{
 let mockRuntimeBackend: {
   name: "kubernetes";
   available: boolean;
-  defaultImage: string;
   defaultTtlHours: number;
   defaultIdleTimeoutMinutes: number;
   allowPrivileged: boolean;
@@ -235,7 +234,6 @@ describe("AgentSettingsPage", () => {
     mockRuntimeBackend = {
       name: "kubernetes",
       available: true,
-      defaultImage: "registry.example.test/agent:latest",
       defaultTtlHours: 72,
       defaultIdleTimeoutMinutes: 180,
       allowPrivileged: false,

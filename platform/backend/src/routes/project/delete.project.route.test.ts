@@ -1,21 +1,23 @@
 import {
   FileModel,
   ProjectModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 
 describe("projectService.delete (files retained + hidden)", () => {
   test("deleting a project retains its file rows and bytes but hides them", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
 
     const project = await projectService.create({
       organizationId,
@@ -86,9 +88,11 @@ describe("projectService.delete (schedules retained + paused)", () => {
     makeUser,
     makeScheduleTrigger,
     makeScheduleTriggerRun,
+    makeMember,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
 
     const project = await projectService.create({
       organizationId,
@@ -129,8 +133,10 @@ describe("projectService.delete (schedules retained + paused)", () => {
   });
 });
 
-describe("projectService.delete (org-wide share gate)", () => {
-  test("an owner whose role lacks project:share-org cannot delete an org-wide project", async ({
+describe("projectService.delete (decided by the project grant)", () => {
+  // `project:share-org` is retired: deleting is decided by the project's
+  // own `delete` grant, which its owner holds whatever the audience.
+  test("an owner without the retired project:share-org can delete their org-wide project", async ({
     makeOrganization,
     makeUser,
     makeCustomRole,
@@ -149,10 +155,43 @@ describe("projectService.delete (org-wide share gate)", () => {
       name: "org-wide",
       description: null,
     });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    await projectService.delete({
+      id: project.id,
+      organizationId,
+      userId: owner.id,
+    });
+    expect(await ProjectModel.findById(project.id)).toBeNull();
+  });
+
+  test("a member the project is shared with, but who holds no delete grant on it, cannot delete it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "org-wide read",
+      description: null,
+    });
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
       visibility: "organization",
       teamIds: [],
     });
@@ -161,12 +200,9 @@ describe("projectService.delete (org-wide share gate)", () => {
       projectService.delete({
         id: project.id,
         organizationId,
-        userId: owner.id,
+        userId: reader.id,
       }),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: expect.stringContaining("organization-wide"),
-    });
+    ).rejects.toMatchObject({ statusCode: 404 });
     expect(await ProjectModel.findById(project.id)).not.toBeNull();
   });
 
@@ -185,10 +221,10 @@ describe("projectService.delete (org-wide share gate)", () => {
       name: "org-wide-deletable",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      userId: owner.id,
       visibility: "organization",
       teamIds: [],
     });

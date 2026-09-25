@@ -1,75 +1,46 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import type { Plugin } from "@/types";
-import PluginUserModel from "./plugin-user";
-import TeamModel from "./team";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class PluginTeamModel {
+  /**
+   * Plugin IDs a caller can read: a read grant on the plugin, or at `*`.
+   * Without a `userId` (a principal with no user of its own) only a plugin
+   * published to the organization at large counts.
+   */
   static async getUserAccessiblePluginIds(params: {
     organizationId: string;
     userId?: string;
   }): Promise<string[]> {
-    if (!params.userId) {
-      const result = await db.execute<{ id: string }>(sql`
-        SELECT id FROM plugins
-        WHERE scope = 'org' AND organization_id = ${params.organizationId}
-          AND deleted_at IS NULL
-      `);
-      return result.rows.map((row) => row.id);
-    }
-    const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM plugins
-        WHERE scope = 'org' AND organization_id = ${params.organizationId}
-          AND deleted_at IS NULL
-      UNION
-      SELECT id FROM plugins
-        WHERE author_id = ${params.userId} AND scope = 'personal'
-          AND organization_id = ${params.organizationId} AND deleted_at IS NULL
-      UNION
-      SELECT pu.plugin_id AS id FROM plugin_user pu
-        INNER JOIN plugins p ON pu.plugin_id = p.id
-        WHERE pu.user_id = ${params.userId}
-          AND p.organization_id = ${params.organizationId} AND p.deleted_at IS NULL
-      UNION
-      SELECT plugin_team.plugin_id AS id FROM plugin_team
-        INNER JOIN plugins p ON plugin_team.plugin_id = p.id
-        WHERE ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: schema.pluginTeamsTable.teamId })}
-          AND p.scope = 'team'
-          AND p.organization_id = ${params.organizationId} AND p.deleted_at IS NULL
-    `);
-    return result.rows.map((row) => row.id);
-  }
-
-  static async userHasPluginAccess(params: {
-    organizationId: string;
-    userId?: string;
-    plugin: Pick<Plugin, "id" | "organizationId" | "scope" | "authorId">;
-    isAdmin: boolean;
-  }): Promise<boolean> {
-    if (params.plugin.organizationId !== params.organizationId) return false;
-    if (params.isAdmin) return true;
-    if (params.plugin.scope === "org") return true;
-    if (!params.userId) return false;
-    if (params.plugin.scope === "personal") {
-      return (
-        params.plugin.authorId === params.userId ||
-        (await PluginUserModel.userHasGrant(params.plugin.id, params.userId))
-      );
-    }
-    const [match] = await db
-      .select({ teamId: schema.pluginTeamsTable.teamId })
-      .from(schema.pluginTeamsTable)
+    const context = {
+      organizationId: params.organizationId,
+      resource: "plugin" as const,
+      scopeColumn: schema.pluginsTable.id,
+      action: "read" as const,
+    };
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const rows = await db
+      .select({ id: schema.pluginsTable.id })
+      .from(schema.pluginsTable)
       .where(
         and(
-          eq(schema.pluginTeamsTable.pluginId, params.plugin.id),
-          TeamModel.effectiveMembershipCondition({
-            userId: params.userId,
-            teamIdColumn: schema.pluginTeamsTable.teamId,
-          }),
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          notDeleted(schema.pluginsTable),
+          params.userId
+            ? ResourcePermissionPolicyModel.grantCondition({
+                ...context,
+                userId: params.userId,
+              })
+            : ResourcePermissionPolicyModel.organizationAccessCondition(
+                context,
+              ),
         ),
-      )
-      .limit(1);
-    return match !== undefined;
+      );
+    // SPDX-SnippetEnd
+    return rows.map((row) => row.id);
   }
 
   static async syncPluginTeams(

@@ -104,7 +104,7 @@ export function PermissionsCard() {
       <div className="space-y-4">
         {totalResources === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Your roles and teams grant no resource permissions.
+            Your roles and teams do not provide access to any resources.
           </p>
         ) : (
           <>
@@ -296,16 +296,11 @@ const actionLabels: Record<Action, string> = {
   read: "Read",
   update: "Update",
   delete: "Delete",
-  "team-admin": "Team Admin",
-  admin: "Admin",
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
   execute: "Execute",
-  "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
   "manage-deleted": "Manage Deleted",
-  "read-all": "Read All Chats",
-  "share-org": "Share Org-Wide",
   impersonate: "Impersonate",
 };

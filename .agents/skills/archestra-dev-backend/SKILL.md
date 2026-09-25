@@ -5,7 +5,7 @@ description: Use when adding or changing Archestra backend routes, models, servi
 
 # Archestra Backend Development
 
-Use this skill before changing files under `platform/backend/` (except unit tests — see `archestra-dev-backend-tests`). Run all commands from `platform/`.
+Use this skill before changing files under `platform/backend/` (except unit tests — see `archestra-dev-testing/references/backend-tests.md`). Run all commands from `platform/`.
 
 ## Adding or changing an API endpoint
 
@@ -75,6 +75,6 @@ cd backend && pnpm knip   # runs knip:dev AND knip:production — CI runs both; 
 
 ## Related skills
 
-- `archestra-dev-backend-tests` — unit tests, mocking rules, DB fixtures.
+- `archestra-dev-testing/references/backend-tests.md` — unit tests, mocking rules, DB fixtures.
 - `archestra-dev-migrations` — Drizzle schema and migration changes.
 - `archestra-dev-frontend` — consuming the regenerated API client.

@@ -1,6 +1,5 @@
-import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
-import { userHasPermission } from "@/auth/utils";
-import { AppAccessModel, MemberModel, TeamModel } from "@/models";
+import { AppAccessModel, TeamModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 
@@ -58,83 +57,43 @@ export async function resolveOrgTeams(
 }
 
 /**
- * Validate the user ids an app is being shared with, rejecting anyone outside
- * the organization. Ids only — unlike teams there is no name resolution, since
- * the picker always sends ids and matching people by display name would be
- * ambiguous in exactly the cases where getting it wrong matters most.
- */
-export async function resolveOrgUsers(
-  userRefs: string[] | undefined,
-  organizationId: string,
-): Promise<string[]> {
-  const unique = [...new Set((userRefs ?? []).map((ref) => ref.trim()))].filter(
-    (ref) => ref.length > 0,
-  );
-  if (unique.length === 0) return [];
-
-  const members = await MemberModel.findUserIdsInOrganization({
-    organizationId,
-    userIds: unique,
-  });
-  const known = new Set(members);
-  const unknown = unique.filter((id) => !known.has(id));
-  if (unknown.length > 0) {
-    throw new ApiError(
-      400,
-      `Unknown user(s) for this organization: ${unknown.join(", ")}`,
-    );
-  }
-  return unique;
-}
-
-/**
  * Shared app write-authorization, used by both the create/update/delete
  * Archestra MCP tools and the REST CRUD routes so the rule lives in one place.
  *
- * Visibility (being able to view an app) is NOT enough to mutate it: an
- * org-scoped app is visible to every member but only an admin may change it.
- * Delegates to the same 3-tier scope rule agents/skills use (admin bypass /
- * org→admin / team→team-admin+membership / personal→authorship).
+ * Visibility (being able to view an app) is NOT enough to mutate it: reading
+ * and modifying are separate grants on the app's permission policy.
  */
 
-/** Whether the caller holds the org-wide `app:admin` permission. */
+/** Whether the caller holds `update` on every app (a grant at `*`). */
 export async function callerIsAppAdmin(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  return userHasPermission(userId, organizationId, "app", "admin");
+  return ResourcePermissions.allows({
+    userId,
+    organizationId,
+    resource: "app",
+    scope: "*",
+    action: "update",
+  });
 }
 
 /**
- * Throw `ApiError(403)` unless the caller may modify an app with the given
- * scope/author/teams. For a re-scope, call once per scope (current + target).
+ * Throw `ApiError(403)` unless the caller holds `action` (default `update`) on
+ * the app through its permission policy.
  */
 export async function assertCallerMayModifyApp(params: {
+  appId: string;
+  action?: "update" | "delete" | "manage-permissions";
   userId: string;
   organizationId: string;
-  scope: AppScope;
-  authorId: string | null;
-  resourceTeamIds: string[];
 }): Promise<void> {
-  const [isAdmin, isTeamAdmin, userTeamIds] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "app", "admin"),
-    userHasPermission(
-      params.userId,
-      params.organizationId,
-      "app",
-      "team-admin",
-    ),
-    TeamModel.getUserTeamIds(params.userId),
-  ]);
-  requireScopedModifyPermission({
-    isAdmin,
-    isTeamAdmin,
-    scope: params.scope,
-    authorId: params.authorId,
-    resourceTeamIds: params.resourceTeamIds,
-    userTeamIds,
+  await ResourcePermissions.require({
     userId: params.userId,
-    resourceLabel: "app",
+    organizationId: params.organizationId,
+    resource: "app",
+    scope: params.appId,
+    action: params.action ?? "update",
   });
 }
 
@@ -162,6 +121,7 @@ export async function assertCallerMayModifyApp(params: {
  * already reported a disabled app as not found).
  */
 export async function assertCallerMayAuthorApp(params: {
+  action?: "update" | "delete";
   userId: string;
   organizationId: string;
   app: {
@@ -178,7 +138,6 @@ export async function assertCallerMayAuthorApp(params: {
    * meets the freeze as before.
    */
   creationGraceSession?: boolean;
-  resourceTeamIds: string[];
 }): Promise<void> {
   // "Reachable without the admin bypass" is exactly "not oversight-only": the
   // author of a personal app, a member of a team app, and everyone for an org
@@ -190,11 +149,9 @@ export async function assertCallerMayAuthorApp(params: {
     app: {
       id: params.app.id,
       organizationId: params.organizationId,
-      scope: params.app.scope,
       authorId: params.app.authorId,
       enabled: params.app.enabled,
     },
-    isAppAdmin: false,
   });
   if (!reachableWithoutAdmin) {
     throw new ApiError(
@@ -209,10 +166,9 @@ export async function assertCallerMayAuthorApp(params: {
     );
   }
   await assertCallerMayModifyApp({
+    appId: params.app.id,
+    action: params.action,
     userId: params.userId,
     organizationId: params.organizationId,
-    scope: params.app.scope,
-    authorId: params.app.authorId,
-    resourceTeamIds: params.resourceTeamIds,
   });
 }

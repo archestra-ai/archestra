@@ -1,6 +1,6 @@
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -39,7 +39,7 @@ describe("conversation enabled-tools routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -69,7 +69,7 @@ describe("conversation enabled-tools routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: otherUser.id,

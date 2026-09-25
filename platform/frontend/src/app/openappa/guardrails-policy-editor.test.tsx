@@ -15,6 +15,7 @@ import {
   vi,
 } from "vitest";
 import { authQueryKeys } from "@/lib/auth/auth.query";
+import { invalidatePolicyViews } from "@/lib/openappa-policy-views";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 vi.mock("@/components/editor");
@@ -42,7 +43,12 @@ const declarations = {
   managedInGithub: false,
   heldPull: null,
 };
-function battery(name: string, status: string, line: number) {
+function battery(
+  name: string,
+  status: string,
+  line: number,
+  composed = status === "active",
+) {
   return {
     entry: `${name}/policy.toml`,
     name,
@@ -50,6 +56,7 @@ function battery(name: string, status: string, line: number) {
     packageHash: null,
     status,
     line,
+    composed,
     servers: [],
     credentials: [],
     helpers: [],
@@ -242,6 +249,123 @@ test("read-only users can inspect the policy without editing controls", async ()
   ).not.toBeInTheDocument();
 });
 
+test("the Policy page selects an included battery source and searches its status", async () => {
+  const githubEntry = "batteries/github/appa.toml";
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          { ...battery("github", "active", 3), entry: githubEntry },
+          battery("pending", "missing_credentials", 4),
+        ],
+      }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("entry")).toBe(githubEntry);
+      return HttpResponse.json({
+        entry: githubEntry,
+        name: "github",
+        content: '[[policy.tool]]\nname = "mcp/github/get_commit"\n',
+      });
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GuardrailsPolicyEditor readOnly sourceEntry={githubEntry} />
+    </QueryClientProvider>,
+  );
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "GitHub battery policy TOML",
+    }),
+  ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
+  expect(
+    screen.queryByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
+  ).not.toBeInTheDocument();
+
+  await userEvent.click(
+    screen.getByRole("combobox", { name: "Policy source file" }),
+  );
+  await userEvent.type(
+    await screen.findByPlaceholderText("Search included batteries"),
+    "active",
+  );
+  expect(screen.getByRole("option", { name: /GitHubActive/ })).toBeVisible();
+  expect(
+    screen.queryByRole("option", { name: /pendingNeeds a credential/ }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("option", { name: "Organization policy" }),
+  );
+  expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy");
+});
+
+test("battery source remains available when root policy and GitHub sync fail", async () => {
+  const entry = "batteries/github/appa.toml";
+  server.use(
+    http.get(url, () => new HttpResponse(null, { status: 500 })),
+    http.get(
+      `${origin}/api/openappa/github-sync`,
+      () => new HttpResponse(null, { status: 500 }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, () =>
+      HttpResponse.json({
+        entry,
+        name: "github",
+        content: '[[policy.tool]]\nname = "mcp/github/get_commit"\n',
+      }),
+    ),
+  );
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByRole("textbox", { name: "GitHub battery policy TOML" }),
+  ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
+});
+
+test("policy invalidation refreshes the displayed battery source", async () => {
+  const entry = "batteries/github/appa.toml";
+  let batteryContent = 'name = "mcp/github/get_commit"';
+  server.use(
+    http.get(`${origin}/api/openappa/battery-policy-source`, () =>
+      HttpResponse.json({
+        entry,
+        name: "github",
+        content: batteryContent,
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
+    </QueryClientProvider>,
+  );
+  const source = await screen.findByRole("textbox", {
+    name: "GitHub battery policy TOML",
+  });
+  expect(source).toHaveValue(batteryContent);
+  batteryContent = 'name = "mcp/github/get_issue"';
+  await invalidatePolicyViews(client);
+  await waitFor(() => expect(source).toHaveValue(batteryContent));
+});
+
 test("GitHub-owned policy is read-only and becomes editable after disconnect", async () => {
   server.use(
     http.get(`${origin}/api/openappa/github-sync`, () =>
@@ -361,6 +485,51 @@ test("the effective policy is fetched only once its tab is opened", async () => 
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");
+});
+
+test("the composed view names the batteries that fold in as empty stubs", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          battery("acme", "active", 3),
+          battery("globex", "missing_credentials", 5),
+          battery("initech", "server_missing", 7),
+          // An organization-wide battery composes though no rule routes to it.
+          battery("hooli", "unrouted", 9, true),
+        ],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  const stubs = await screen.findByTestId("effective-policy-stubs");
+  expect(stubs).toHaveTextContent("globex");
+  expect(stubs).toHaveTextContent("initech");
+  expect(stubs).not.toHaveTextContent("acme");
+  expect(stubs).not.toHaveTextContent("hooli");
+});
+
+test("the composed view lists no stub while every battery is active", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [battery("acme", "active", 3)],
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Effective policy" }),
+  );
+  await screen.findByRole("textbox", { name: "Effective guardrails policy" });
+  expect(
+    screen.queryByTestId("effective-policy-stubs"),
+  ).not.toBeInTheDocument();
 });
 
 test("switching to the composed view and back keeps an unsaved draft", async () => {

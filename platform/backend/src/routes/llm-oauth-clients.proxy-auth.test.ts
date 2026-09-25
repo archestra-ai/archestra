@@ -42,6 +42,8 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
+      // The organization's proxy, which every member reaches.
+      isDefault: true,
     });
     // The user's own (org-scoped) provider key — NOT a key stored on the client.
     const secret = await makeSecret({ secret: { apiKey: "sk-user-openai" } });
@@ -76,7 +78,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     expect(result?.authenticatedApp?.clientId).toBe(oauthClient.clientId);
   });
 
-  test("authorizes an allowed proxy for a TEAM-visibility-scoped client_credentials client (scoping is management-plane only)", async ({
+  test("authorizes an allowed proxy for a client_credentials client shared with a team (grants are management-plane only)", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -103,8 +105,9 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
-      scope: "team",
-      teams: [team.id],
+      initialGrants: [
+        { subject: { type: "team", id: team.id }, actions: ["read"] },
+      ],
     });
 
     // client_credentials tokens carry no user.
@@ -184,8 +187,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const secret = await makeSecret({ secret: { apiKey: "sk-user-openai" } });
     await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });
@@ -231,8 +233,9 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "team",
-      teams: [team.id],
+      // The organization's proxy, which every member reaches.
+      isDefault: true,
+      access: { teams: [team.id] },
     });
     const secret = await makeSecret({ secret: { apiKey: "sk-user-openai" } });
     await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });

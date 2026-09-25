@@ -22,7 +22,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { ModelCapabilities } from "@/lib/llm-models.query";
-import { cn, formatContextLength } from "@/lib/utils";
+import { formatContextLength } from "@/lib/utils/format-context-length";
+import { cn } from "@/lib/utils/tailwind";
 
 export function ModelCapabilityBadges({
   capabilities,

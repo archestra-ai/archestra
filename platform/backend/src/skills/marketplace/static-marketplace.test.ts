@@ -4,7 +4,8 @@ import {
   SkillModel,
   UserTokenModel,
 } from "@/models";
-import { describe, expect, test } from "@/test";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import {
   loadMarketplaceSkills,
   resolveMarketplaceViewer,
@@ -17,7 +18,7 @@ function basic(user: string, password: string): string {
 async function seedSkill(params: {
   organizationId: string;
   name: string;
-  scope: "org" | "team" | "personal";
+  access?: TestAccess;
   authorId?: string | null;
 }) {
   const skill = await SkillModel.createWithFiles({
@@ -29,9 +30,9 @@ async function seedSkill(params: {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: params.scope,
     },
     files: [],
+    ...accessGrants(params.access),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
@@ -153,17 +154,19 @@ describe("loadMarketplaceSkills", () => {
     const other = await makeUser({ email: "other@test.com" });
     await makeMember(other.id, org.id);
 
-    await seedSkill({ organizationId: org.id, name: "org-wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "org-wide",
+      access: "org",
+    });
     await seedSkill({
       organizationId: org.id,
       name: "mine",
-      scope: "personal",
       authorId: user.id,
     });
     await seedSkill({
       organizationId: org.id,
       name: "theirs",
-      scope: "personal",
       authorId: other.id,
     });
 
@@ -185,11 +188,14 @@ describe("loadMarketplaceSkills", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id);
 
-    await seedSkill({ organizationId: org.id, name: "org-wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "org-wide",
+      access: "org",
+    });
     await seedSkill({
       organizationId: org.id,
       name: "mine",
-      scope: "personal",
       authorId: user.id,
     });
 
@@ -214,11 +220,14 @@ describe("loadMarketplaceSkills", () => {
     const other = await makeUser({ email: "other@test.com" });
     await makeMember(other.id, org.id);
 
-    await seedSkill({ organizationId: org.id, name: "org-wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "org-wide",
+      access: "org",
+    });
     await seedSkill({
       organizationId: org.id,
       name: "theirs",
-      scope: "personal",
       authorId: other.id,
     });
 
@@ -229,6 +238,51 @@ describe("loadMarketplaceSkills", () => {
     });
 
     expect(skills.map((s) => s.name).sort()).toEqual(["org-wide", "theirs"]);
+  });
+
+  test("read grants, not the admin flag, decide which private skills show", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await seedSkill({ organizationId: org.id, name: "shared", access: "org" });
+    await seedSkill({ organizationId: org.id, name: "private" });
+    const load = () =>
+      loadMarketplaceSkills({
+        organizationId: org.id,
+        userId: user.id,
+        isSkillAdmin: true,
+      });
+
+    // The flag alone opens nothing: without a grant the private skill stays
+    // hidden.
+    expect((await load()).map((skill) => skill.name)).toEqual(["shared"]);
+
+    // An update grant at `*` is stored as the Edit preset, which carries read,
+    // so every skill now shows.
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "skill",
+      scope: "*",
+    });
+    if (!policy) throw new Error("Missing permission policy fixture");
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: org.id,
+      resource: "skill",
+      scope: "*",
+      revision: policy.revision,
+      grants: [
+        ...policy.grants,
+        { subject: { type: "user", id: user.id }, actions: ["update"] },
+      ],
+    });
+    expect((await load()).map((skill) => skill.name).sort()).toEqual([
+      "private",
+      "shared",
+    ]);
   });
 
   test("soft-deleted skills drop out of the marketplace", async ({
@@ -243,12 +297,12 @@ describe("loadMarketplaceSkills", () => {
     const kept = await seedSkill({
       organizationId: org.id,
       name: "kept",
-      scope: "org",
+      access: "org",
     });
     const removed = await seedSkill({
       organizationId: org.id,
       name: "removed",
-      scope: "org",
+      access: "org",
     });
     await SkillModel.delete(removed.id);
 
@@ -271,11 +325,11 @@ describe("loadMarketplaceSkills", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id);
 
-    await seedSkill({ organizationId: org.id, name: "ours", scope: "org" });
+    await seedSkill({ organizationId: org.id, name: "ours", access: "org" });
     await seedSkill({
       organizationId: otherOrg.id,
       name: "theirs",
-      scope: "org",
+      access: "org",
     });
 
     const skills = await loadMarketplaceSkills({
@@ -300,7 +354,11 @@ describe("marketplace credentials", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
-    await seedSkill({ organizationId: org.id, name: "Org Wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "Org Wide",
+      access: "org",
+    });
 
     const { rawToken } = await SkillMarketplaceCredentialModel.create({
       organizationId: org.id,
@@ -329,11 +387,14 @@ describe("marketplace credentials", () => {
     const other = await makeUser({ email: "other@test.com" });
     await makeMember(user.id, org.id);
     await makeMember(other.id, org.id);
-    await seedSkill({ organizationId: org.id, name: "Org Wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "Org Wide",
+      access: "org",
+    });
     await seedSkill({
       organizationId: org.id,
       name: "Someone Elses",
-      scope: "personal",
       authorId: other.id,
     });
 
@@ -359,7 +420,11 @@ describe("marketplace credentials", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
-    await seedSkill({ organizationId: org.id, name: "Org Wide", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "Org Wide",
+      access: "org",
+    });
 
     const { rawToken } = await SkillMarketplaceCredentialModel.create({
       organizationId: org.id,

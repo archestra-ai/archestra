@@ -1,5 +1,5 @@
 import { safeSegment, UnsafePathError } from "@/skills-sandbox/file-path";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 // Matches the object store's MAX_SEGMENT_BYTES (file-path.ts) so a renamed
 // candidate never exceeds what the filesystem/S3 backends accept.

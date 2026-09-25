@@ -1,7 +1,6 @@
 "use client";
 
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { SkillSourceBadge } from "@/components/skill-source-badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -50,14 +49,6 @@ const columns: ColumnDef<AvailableSkillRow>[] = [
         </div>
       );
     },
-  },
-  {
-    accessorKey: "scope",
-    header: "Visibility",
-    size: 180,
-    cell: ({ row }) => (
-      <ResourceVisibilityBadge scope={row.original.scope} scopeOnly />
-    ),
   },
 ];
 

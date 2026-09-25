@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   ATTENTION_FACET_STATUS_VALUES,
@@ -98,13 +99,16 @@ function McpRegistryListLayout({
       title="MCP Registry"
       description="Manage your own list of MCP servers and make them available to agents."
       actionButton={
-        <PermissionButton
-          permissions={{ mcpRegistry: ["create"] }}
-          onClick={onAdd}
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add MCP Server</span>
-        </PermissionButton>
+        <div className="flex items-center gap-2">
+          <PermissionButton
+            permissions={{ mcpRegistry: ["create"] }}
+            onClick={onAdd}
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add MCP Server</span>
+          </PermissionButton>
+          <ResourceListActions resource="mcpRegistry" />
+        </div>
       }
     >
       {children}

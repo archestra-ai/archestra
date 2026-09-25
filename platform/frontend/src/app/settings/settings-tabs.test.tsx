@@ -8,6 +8,8 @@ import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 vi.mock("@/lib/clients/auth/auth-client");
 
 let mockPermissions: Permissions = {};
+/** The signed-in actor's per-object grants, as GET /api/resource-permissions returns them. */
+let mockCapabilities: unknown[] = [];
 
 vi.mock("@archestra/shared", async () => {
   const actual = await vi.importActual("@archestra/shared");
@@ -17,6 +19,9 @@ vi.mock("@archestra/shared", async () => {
       getUserPermissions: vi.fn(() =>
         Promise.resolve({ data: mockPermissions }),
       ),
+      getScopedCapabilities: vi.fn(() =>
+        Promise.resolve({ data: mockCapabilities }),
+      ),
       getSecretsType: vi.fn(() => Promise.resolve({ data: { type: "DB" } })),
     },
   };
@@ -24,6 +29,13 @@ vi.mock("@archestra/shared", async () => {
 
 let mockSecretsType = "DB";
 let mockAgentRuntimeEnabled = false;
+let mockOpenAppaEnforcementEnabled = false;
+
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({
+    data: { enabled: mockOpenAppaEnforcementEnabled },
+  }),
+}));
 
 vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: vi.fn(() => ({
@@ -32,9 +44,10 @@ vi.mock("@/lib/secrets.query", () => ({
 }));
 
 vi.mock("@/lib/config/config.query", () => ({
-  useFeature: vi.fn((feature: string) =>
-    feature === "agentRuntime" ? mockAgentRuntimeEnabled : false,
-  ),
+  useFeature: vi.fn((feature: string) => {
+    if (feature === "agentRuntime") return mockAgentRuntimeEnabled;
+    return false;
+  }),
 }));
 
 const createWrapper = () => {
@@ -49,8 +62,10 @@ const createWrapper = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockPermissions = {};
+  mockCapabilities = [];
   mockSecretsType = "DB";
   mockAgentRuntimeEnabled = false;
+  mockOpenAppaEnforcementEnabled = false;
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -104,6 +119,18 @@ describe("useSettingsTabs", () => {
     });
   });
 
+  it("hides legacy Security settings when OpenAPPA enforcement is enabled", async () => {
+    mockOpenAppaEnforcementEnabled = true;
+    mockPermissions = { agentSettings: ["read"] };
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(getTabLabels(result.current)).not.toContain("Security"),
+    );
+  });
+
   it("shows LLM tab when user has llmSettings:read permission", async () => {
     mockPermissions = {
       llmSettings: ["read"],
@@ -145,6 +172,50 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Service Accounts");
+    });
+  });
+
+  it("shows Service Accounts tab for someone granted a single account", async () => {
+    // The tab asks for the `serviceAccount:read` role action, which a
+    // per-object grantee does not hold — after the cutover that action decides
+    // nothing on its own. A grant on one account is what opens the tab, or the
+    // person is granted an account and then cannot navigate to it.
+    mockPermissions = {};
+    mockCapabilities = [
+      {
+        organizationId: "org-1",
+        resource: "serviceAccount",
+        scope: "11111111-1111-4111-8111-111111111111",
+        action: "read",
+      },
+    ];
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getTabLabels(result.current)).toContain("Service Accounts");
+    });
+  });
+
+  it("does not show Service Accounts for a grant on some other resource", async () => {
+    mockPermissions = {};
+    mockCapabilities = [
+      {
+        organizationId: "org-1",
+        resource: "agent",
+        scope: "11111111-1111-4111-8111-111111111111",
+        action: "read",
+      },
+    ];
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getTabLabels(result.current)).not.toContain("Service Accounts");
     });
   });
 

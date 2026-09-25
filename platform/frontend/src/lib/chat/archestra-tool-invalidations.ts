@@ -1,6 +1,8 @@
 import {
   extractMcpToolError,
   TOOL_PUBLISH_APP_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 
@@ -8,6 +10,7 @@ import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 type ToolResultPart = {
   type?: string;
   toolName?: string;
+  input?: unknown;
   state?: string;
   output?: unknown;
   errorText?: string;
@@ -21,10 +24,12 @@ type ToolResultPart = {
  * covers the paginated list and every `["apps", appId]` detail (the scope
  * shown in the settings dialog), `["mcp-catalog"]` because publishing writes
  * the new scope through to the app's backing catalog, which drives the MCP
- * registry card.
+ * registry card. `start_run` refreshes the run sessions shown in the chat
+ * sidebar, including when the tool was invoked through `run_tool`.
  */
 const ARCHESTRA_TOOL_INVALIDATIONS = new Map<string, readonly string[][]>([
   [TOOL_PUBLISH_APP_SHORT_NAME, [["apps"], ["mcp-catalog"]]],
+  [TOOL_START_RUN_SHORT_NAME, [["agent-runs"]]],
 ]);
 
 /**
@@ -45,7 +50,15 @@ export function collectArchestraToolInvalidations(params: {
     const part = rawPart as ToolResultPart;
     const toolName = getToolNameFromPart(part);
     if (!toolName) continue;
-    const shortName = params.getToolShortName(toolName);
+    const dispatchedToolName =
+      params.getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME &&
+      typeof part.input === "object" &&
+      part.input !== null &&
+      "tool_name" in part.input &&
+      typeof part.input.tool_name === "string"
+        ? part.input.tool_name
+        : toolName;
+    const shortName = params.getToolShortName(dispatchedToolName);
     if (!shortName) continue;
     const queryKeys = ARCHESTRA_TOOL_INVALIDATIONS.get(shortName);
     if (!queryKeys) continue;

@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-17
+lastUpdated: 2026-09-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,7 +29,7 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation, or **Start run** for a dedicated runtime. The confirmation page shows the runtime badge beside the agent name.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, permissions, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation, or **Start run** for a dedicated runtime. The confirmation page shows the runtime badge beside the agent name.
 
 Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples. An Agent with a dedicated runtime is marked **Runtime** in the list and on its page. Its **Chat** action reads **Start run**.
 
@@ -279,3 +279,7 @@ You are a helpful assistant for
 Prefix an expression with a backslash to keep it as text: `\{{user.name}}` renders as `{{user.name}}`. This is useful when a prompt documents its own variables.
 
 An expression Handlebars cannot read is left as written, and the rest of the prompt still renders. The agent editor flags those expressions as you type, so you can see which ones reach the model as literal text.
+
+### Messaging Channel Assignment
+
+Assigning an agent to your own direct message requires its `use` grant. Assigning it to a shared channel or another person’s direct message also requires `manage-permissions` on the agent. Channel management permissions still apply. Each sender must have `use` permission when a message executes; assigning an agent does not grant access to everyone in the channel.

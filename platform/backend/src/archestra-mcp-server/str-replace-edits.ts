@@ -1,5 +1,5 @@
-import { ApiError } from "@/types";
-import { fencedBlock } from "./helpers";
+import { ApiError } from "@/types/api";
+import { fencedBlock } from "./fenced-block";
 
 /**
  * Provider-agnostic str_replace edit engine, shared by the app and skill

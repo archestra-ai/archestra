@@ -9,11 +9,8 @@ import {
   parseLockedChatDekHeader,
 } from "@/content-encryption/locked-chat";
 import { wrapLockedChatDek } from "@/content-encryption/locked-chat-escrow";
-import {
-  ApiError,
-  type ConversationContentKey,
-  type LockedChatEscrowBlob,
-} from "@/types";
+import type { ConversationContentKey, LockedChatEscrowBlob } from "@/types";
+import { ApiError } from "@/types/api";
 
 /**
  * Request-side helpers for locked chats: header parsing, access

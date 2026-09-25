@@ -5,7 +5,7 @@ import { type ReactNode, useId } from "react";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function ClaudeCodeInferenceSettings({
   agentId,

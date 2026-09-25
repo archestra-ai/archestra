@@ -10,12 +10,7 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import {
-  AgentModel,
-  AgentToolModel,
-  AgentVersionModel,
-  TeamModel,
-} from "@/models";
+import { AgentModel, AgentToolModel, AgentVersionModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
@@ -270,12 +265,6 @@ async function handleBulkAssignTool(params: {
     // it would buy no isolation while refusing catalog-less legacy rows, which
     // no environment predicate matches.
 
-    const requiresTeamIds = [...targetAgents.values()].some(
-      (target) => target && !checker.isAdmin(target.agentType),
-    );
-    const userTeamIds = requiresTeamIds
-      ? await TeamModel.getUserTeamIds(userId)
-      : [];
     const results = await Promise.allSettled(
       assignments.map(async (assignment) => {
         const targetId = getBulkAssignmentTargetId(assignment);
@@ -295,15 +284,15 @@ async function handleBulkAssignTool(params: {
             `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
           );
         }
-        checker.require(target.agentType, "update");
+        checker.require(target.agentType, {
+          action: "update",
+          scope: targetId,
+        });
         requireAgentModifyPermission({
+          agentId: targetId,
+          action: "update",
           checker,
           agentType: target.agentType,
-          agentScope: target.scope,
-          agentAuthorId: target.authorId,
-          agentTeamIds: target.teamIds,
-          userTeamIds,
-          userId,
         });
 
         return assignToolToAgent({
@@ -400,13 +389,6 @@ async function handleBulkRemoveTool(params: {
         ),
     );
 
-    const requiresTeamIds = [...targetAgents.values()].some(
-      (target) => target && !checker.isAdmin(target.agentType),
-    );
-    const userTeamIds = requiresTeamIds
-      ? await TeamModel.getUserTeamIds(userId)
-      : [];
-
     const results = await Promise.allSettled(
       removals.map(async (removal) => {
         const target = targetAgents.get(removal.agentId);
@@ -420,15 +402,15 @@ async function handleBulkRemoveTool(params: {
             `Agent ${removal.agentId} is in a different environment; you can only remove tools within your own environment.`,
           );
         }
-        checker.require(target.agentType, "update");
+        checker.require(target.agentType, {
+          action: "update",
+          scope: removal.agentId,
+        });
         requireAgentModifyPermission({
+          agentId: removal.agentId,
+          action: "update",
           checker,
           agentType: target.agentType,
-          agentScope: target.scope,
-          agentAuthorId: target.authorId,
-          agentTeamIds: target.teamIds,
-          userTeamIds,
-          userId,
         });
 
         // Auto-tool mode: deleting an assignment row is a no-op (dynamic access

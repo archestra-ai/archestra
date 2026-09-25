@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -42,7 +42,7 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Fresh", scope: "org" },
+      payload: { name: "Fresh" },
     });
     expect(created.statusCode).toBe(200);
     expect(created.json().locked).toBe(false);
@@ -53,7 +53,6 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
   }) => {
     const target = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
     });
 
@@ -77,7 +76,6 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
   }) => {
     const target = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       locked: true,
     });
@@ -102,7 +100,6 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
   test("a locked app cannot be deleted until unlocked", async ({ makeApp }) => {
     const target = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       locked: true,
     });
@@ -129,7 +126,6 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
   }) => {
     const target = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
     });
     const member = await makeUser();
@@ -162,7 +158,6 @@ describe("POST /api/apps/:appId/(lock|unlock)", () => {
   test("the apps listing carries the locked flag", async ({ makeApp }) => {
     const target = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       locked: true,
     });

@@ -18,7 +18,7 @@ import {
   useCreateLlmProviderApiKey,
   useReconnectLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface ProviderAuthRequiredCardProps {
   provider: SupportedProvider;
@@ -133,7 +133,6 @@ export function ProviderAuthRequiredCard({
                   name: label,
                   provider,
                   apiKey: secret,
-                  scope: "personal",
                 });
               }
               toast.success(

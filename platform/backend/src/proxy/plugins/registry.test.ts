@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import {
   type LlmProxyPlugin,
   LlmProxyPluginInitializer,
@@ -272,6 +272,245 @@ describe("LlmProxyPluginRegistry", () => {
     ).resolves.toMatchObject({ decision: "allow" });
   });
 
+  test("lets a finalizer annotate an approved call only by appending the one marker it reports", async () => {
+    // A delegation marker is platform text added to a call the policies
+    // approved; anything else added, or anything changed beside it, would be a
+    // call the policies never saw.
+    type Calls = LlmProxyToolCallsContext["toolCalls"];
+    type Answer = {
+      toolCalls: Calls;
+      blocked?: readonly { id: string; name: string; reason: string }[];
+      annotated?: readonly {
+        id: string;
+        name: string;
+        field: string;
+        appended: string | Record<string, unknown>;
+      }[];
+    };
+    const marker = `[appa] delegated trajectory appa-${"0a".repeat(20)} — child of s1:a1.`;
+    const suffix = `\n\n${marker}`;
+    const finalize = async (
+      toolCalls: Calls,
+      answer: (toolCalls: Calls) => Answer,
+    ) => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register({
+        id: "finalizer",
+        finalizesToolCalls: true,
+        async onToolCalls({ toolCalls }) {
+          return { decision: "allow", ...answer(toolCalls) };
+        },
+      });
+      const context = requestContext();
+      await registry.onSessionInit(context);
+      return registry.onToolCalls({ ...context, toolCalls });
+    };
+    const agent = () => ({
+      id: "call-1",
+      name: "Agent",
+      arguments: { prompt: "Fix the tests", description: "fix" },
+    });
+    const appendTo = (field: string, appended: string) => (calls: Calls) => ({
+      toolCalls: [
+        {
+          ...calls[0],
+          arguments: {
+            ...(calls[0].arguments as Record<string, unknown>),
+            [field]: `${(calls[0].arguments as Record<string, string>)[field]}${appended}`,
+          },
+        },
+      ],
+      annotated: [{ id: "call-1", name: calls[0].name, field, appended }],
+    });
+
+    // Text appended to a text argument, in either argument representation.
+    await expect(
+      finalize([agent()], appendTo("prompt", suffix)),
+    ).resolves.toMatchObject({
+      toolCalls: [{ arguments: { prompt: `Fix the tests${suffix}` } }],
+    });
+    await expect(
+      finalize(
+        [{ ...agent(), arguments: JSON.stringify(agent().arguments) }],
+        (calls) => ({
+          toolCalls: [
+            {
+              ...calls[0],
+              arguments: JSON.stringify({
+                ...agent().arguments,
+                prompt: `Fix the tests${suffix}`,
+              }),
+            },
+          ],
+          annotated: [
+            { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+          ],
+        }),
+      ),
+    ).resolves.toMatchObject({ decision: "allow" });
+    // One text item pushed onto an item list, keeping the call's namespace.
+    const item = { type: "text", text: marker };
+    await expect(
+      finalize(
+        [
+          {
+            id: "call-1",
+            name: "spawn_agent",
+            namespace: "multi_agent_v1",
+            arguments: { items: [{ type: "text", text: "go" }] },
+          },
+        ],
+        (calls) => ({
+          toolCalls: [
+            {
+              ...calls[0],
+              arguments: { items: [{ type: "text", text: "go" }, item] },
+            },
+          ],
+          annotated: [
+            {
+              id: "call-1",
+              name: "spawn_agent",
+              field: "items",
+              appended: item,
+            },
+          ],
+        }),
+      ),
+    ).resolves.toMatchObject({ decision: "allow" });
+
+    // Anything but exactly one marker line is a rewrite.
+    for (const appended of ["\n\n; rm -rf /", `${suffix} and more`, marker]) {
+      await expect(
+        finalize(
+          [{ id: "call-1", name: "Bash", arguments: { command: "ls" } }],
+          appendTo("command", appended),
+        ),
+      ).rejects.toThrow("rewrote a call it did not report as blocked");
+    }
+    // An unreported change beside the reported append.
+    await expect(
+      finalize([agent()], (calls) => ({
+        toolCalls: [
+          {
+            ...calls[0],
+            arguments: { prompt: `Fix the tests${suffix}`, description: "x" },
+          },
+        ],
+        annotated: [
+          { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+        ],
+      })),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
+    // A report that does not describe the change it made.
+    await expect(
+      finalize([agent()], (calls) => ({
+        ...appendTo("prompt", suffix)(calls),
+        annotated: [
+          {
+            id: "call-1",
+            name: "Agent",
+            field: "prompt",
+            appended: `\n\n${marker.replace("s1:a1", "s1")}`,
+          },
+        ],
+      })),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
+    // Renamed or moved to another namespace while annotated.
+    await expect(
+      finalize([agent()], (calls) => {
+        const answer = appendTo("prompt", suffix)(calls);
+        return {
+          ...answer,
+          toolCalls: [{ ...answer.toolCalls[0], namespace: "elsewhere" }],
+        };
+      }),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
+    // An in-place change to the object the finalizer was given is compared
+    // against the snapshot taken before it ran.
+    await expect(
+      finalize([agent()], (calls) => {
+        const args = calls[0].arguments as Record<string, unknown>;
+        args.description = "changed in place";
+        args.prompt = `Fix the tests${suffix}`;
+        return {
+          toolCalls: calls,
+          annotated: [
+            { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+          ],
+        };
+      }),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
+
+    // Reports must name calls of this batch, once, and never a blocked one.
+    for (const annotation of [
+      { id: "call-9", name: "Agent" },
+      { id: "call-1", name: "Task" },
+    ]) {
+      await expect(
+        finalize([agent()], (calls) => ({
+          ...appendTo("prompt", suffix)(calls),
+          annotated: [{ ...annotation, field: "prompt", appended: suffix }],
+        })),
+      ).rejects.toThrow(
+        "reported an annotation on a call the policies never saw",
+      );
+    }
+    await expect(
+      finalize([agent()], (calls) => {
+        const answer = appendTo("prompt", suffix)(calls);
+        return {
+          ...answer,
+          annotated: [...(answer.annotated ?? []), ...(answer.annotated ?? [])],
+        };
+      }),
+    ).rejects.toThrow(
+      "reported an annotation on a call the policies never saw",
+    );
+    await expect(
+      finalize([agent()], (calls) => ({
+        toolCalls: [{ id: "call-1", name: "notice", arguments: {} }],
+        blocked: [{ id: "call-1", name: calls[0].name, reason: "denied" }],
+        annotated: [
+          { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+        ],
+      })),
+    ).rejects.toThrow(
+      "reported an annotation on a call the policies never saw",
+    );
+    await expect(
+      finalize([agent()], (calls) => ({
+        toolCalls: calls,
+        annotated: [
+          { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+        ],
+      })),
+    ).rejects.toThrow("reported an annotation it did not make");
+
+    // One call blocked, another annotated, in the same batch.
+    await expect(
+      finalize(
+        [agent(), { id: "call-2", name: "Bash", arguments: { command: "ls" } }],
+        (calls) => ({
+          toolCalls: [
+            appendTo("prompt", suffix)(calls).toolCalls[0],
+            { id: "call-2", name: "notice", arguments: { ruling: "no" } },
+          ],
+          blocked: [{ id: "call-2", name: "Bash", reason: "no" }],
+          annotated: [
+            { id: "call-1", name: "Agent", field: "prompt", appended: suffix },
+          ],
+        }),
+      ),
+    ).resolves.toMatchObject({
+      toolCalls: [
+        { id: "call-1", arguments: { prompt: `Fix the tests${suffix}` } },
+        { id: "call-2", name: "notice" },
+      ],
+      blocked: [{ id: "call-2", name: "Bash" }],
+    });
+  });
+
   test("validates prepared transport arguments before a finalizer can reserve calls", async () => {
     const registry = new LlmProxyPluginRegistry();
     const phases: string[] = [];
@@ -405,6 +644,41 @@ describe("LlmProxyPluginRegistry", () => {
     await expect(
       registry.onModelResponse({ ...context, response: "provider" }),
     ).resolves.toBe("provider:first:second");
+    await registry.complete(context);
+  });
+
+  test("keeps buffered assistant bytes private until every governing plugin releases them", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const context = requestContext();
+    registry.register({
+      id: "return-contract",
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse({ responseText }) {
+        expect(responseText).toBe("raw child answer");
+        return { decision: "replace", responseText: "safe child answer" };
+      },
+    });
+    registry.register({
+      id: "second-return-contract",
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse({ responseText }) {
+        expect(responseText).toBe("safe child answer");
+        return { decision: "release" };
+      },
+    });
+
+    await registry.onSessionInit(context);
+    expect(registry.buffersModelResponse(context)).toBe(true);
+    await expect(
+      registry.onBufferedModelResponse({
+        ...context,
+        response: {},
+        responseText: "raw child answer",
+      }),
+    ).resolves.toEqual({
+      decision: "replace",
+      responseText: "safe child answer",
+    });
     await registry.complete(context);
   });
 

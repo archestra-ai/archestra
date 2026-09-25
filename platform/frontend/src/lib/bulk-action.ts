@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { getApiErrorMessage } from "@/lib/utils";
+import { getApiErrorMessage } from "@/lib/utils/api";
 
 /**
  * Runs a per-item mutation across a selection and reports the batch as one

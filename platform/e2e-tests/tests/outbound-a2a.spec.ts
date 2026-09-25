@@ -6,6 +6,8 @@ import {
   ensureWireMockAnthropicChatProvider,
   expectChatReady,
   goToChat,
+  selectApiKeyById,
+  selectRuntimeModelFromDialog,
 } from "../utils";
 import { test as apiTest } from "./api-fixtures";
 
@@ -86,8 +88,6 @@ test("delegates from a parent agent to an external A2A agent", async ({
       urlSuffix: "/api/agents",
       data: {
         name: parentName,
-        teams: [],
-        scope: "personal",
         agentType: "agent",
       },
     });
@@ -170,6 +170,18 @@ test("delegates from a parent agent to an external A2A agent", async ({
     });
     await goToChat(page, { agentId: parentId });
     await expectChatReady(page);
+    // A saved user model override can take precedence over the agent's model.
+    // Pin this conversation to the provider backed by the mappings above.
+    const expandModelControls = page.getByRole("button", {
+      name: "Change model or provider",
+    });
+    if (await expandModelControls.isVisible())
+      await expandModelControls.click();
+    await selectApiKeyById(page, apiKeyId);
+    if (await expandModelControls.isVisible())
+      await expandModelControls.click();
+    await page.getByTestId(E2eTestId.ChatModelSelectorTrigger).click();
+    await selectRuntimeModelFromDialog(page, runtimeModel);
 
     const userPrompt = `${promptMarker}: delegate this request to the external agent.`;
     await page.getByTestId(E2eTestId.ChatPromptTextarea).fill(userPrompt);

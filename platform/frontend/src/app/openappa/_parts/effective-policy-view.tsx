@@ -5,7 +5,12 @@ import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
+import {
+  useEffectivePolicy,
+  usePolicyDeclarations,
+} from "@/lib/openappa-batteries.query";
+import { BATTERY_STATUS } from "./battery-status";
+import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
 /**
  * The composed document the runtime actually enforces: the organization's text
@@ -16,6 +21,7 @@ import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
  */
 export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
   const effective = useEffectivePolicy(enabled);
+  const declarations = usePolicyDeclarations();
   if (effective.isPending) return <Skeleton className="h-[65vh] w-full" />;
   if (effective.isError || !effective.data)
     return (
@@ -27,6 +33,14 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
   const { content, contentHash, rootRevision, lastError } = effective.data;
   const refused = lastError !== null;
   const hash = contentHash.slice(0, 12);
+  // A battery the host holds back folds in as the empty stub, which the
+  // document itself does not show. Under a refusal every battery is out, so
+  // the stubs are not listed twice.
+  const stubs = refused
+    ? []
+    : (declarations.data?.batteries ?? []).filter(
+        (battery) => !battery.composed,
+      );
   return (
     <div
       className="overflow-hidden rounded-lg border bg-background"
@@ -46,6 +60,26 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
           </p>
         </div>
       </div>
+      {stubs.length > 0 && (
+        <div className="border-b px-4 py-3">
+          <InlineNotice variant="warning" data-testid="effective-policy-stubs">
+            <InlineNoticeText>
+              <span>Composed as empty stubs, their rules left out: </span>
+              {stubs.map((battery, index) => (
+                <span key={battery.name}>
+                  {index > 0 ? <span>, </span> : null}
+                  <span className="font-medium">{battery.name}</span>
+                  <span>
+                    {" "}
+                    ({BATTERY_STATUS[battery.status].label.toLowerCase()})
+                  </span>
+                </span>
+              ))}
+              <span>.</span>
+            </InlineNoticeText>
+          </InlineNotice>
+        </div>
+      )}
       {lastError && (
         <div className="border-b px-4 py-3">
           <InlineNotice variant="error" data-testid="effective-policy-error">
@@ -60,15 +94,9 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
         language="ini"
         value={content}
         options={{
+          ...POLICY_EDITOR_OPTIONS,
           readOnly: true,
           ariaLabel: "Effective guardrails policy",
-          minimap: { enabled: false },
-          fontSize: 14,
-          lineNumbers: "on",
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          padding: { top: 16, bottom: 16 },
-          automaticLayout: true,
         }}
       />
       <div className="border-t px-4 py-3 text-xs text-muted-foreground">

@@ -101,7 +101,6 @@ describe("MCP Gateway - External IdP install guard", () => {
       name: CATALOG_NAME,
       serverType: "remote",
       serverUrl: "https://remote.example.com/mcp",
-      scope: "org",
     });
     const tool = await makeTool({
       catalogId: catalog.id,

@@ -13,36 +13,7 @@ import logger from "@/logging";
 import { KbDocumentModel, KbFileModel } from "@/models";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import { taskQueueService } from "@/task-queue";
-import { type AclEntry, ApiError } from "@/types";
-import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
-
-/**
- * Audience tokens a document indexed from a repository file carries.
- *
- * These are DIRECT tokens, deliberately not a `container:` token pointing at a
- * `kb_container_acls` row: that table is owned by the permission-sync pass, and
- * an ordinary connector ACL refresh deletes every container row for its
- * connector — which would silently strip an authored audience and fail-close
- * the documents whose only grant it was. Direct tokens are already in every
- * user's base token set, so they also need no cache invalidation when a
- * visibility changes.
- */
-function buildFileAcl(params: {
-  visibility: KnowledgeFileVisibility;
-  teamIds: string[];
-  uploaderEmail: string | null;
-}): AclEntry[] {
-  switch (params.visibility) {
-    case "org-wide":
-      return ["org:*"];
-    case "team-scoped":
-      return params.teamIds.map((teamId): AclEntry => `team:${teamId}`);
-    case "private":
-      // No uploader means an offboarded user; an empty ACL fails closed rather
-      // than silently widening a file that was meant to be private.
-      return params.uploaderEmail ? [`user_email:${params.uploaderEmail}`] : [];
-  }
-}
+import { ApiError } from "@/types";
 
 /**
  * The internal connector backing a knowledge base's uploaded files, created on
@@ -135,7 +106,6 @@ export async function indexFilesIntoKnowledgeBase(params: {
   fileIds: string[];
   knowledgeBaseId: string;
   organizationId: string;
-  uploaderEmailById: Map<string, string | null>;
 }): Promise<{
   indexed: number;
   failures: { fileId: string; error: string }[];
@@ -214,10 +184,12 @@ export async function indexFilesIntoKnowledgeBase(params: {
         ocr,
       });
 
-      const acl = buildFileAcl({
-        visibility: file.visibility,
-        teamIds: await KbFileModel.findTeamIds(file.id),
-        uploaderEmail: params.uploaderEmailById.get(file.id) ?? null,
+      // Direct tokens from the file's grants, deliberately not a `container:`
+      // token: `kb_container_acls` belongs to the permission-sync pass, whose
+      // connector refresh would strip an authored audience.
+      const acl = await KbFileModel.findDocumentAcl({
+        fileId: file.id,
+        organizationId: params.organizationId,
       });
 
       const existing = await KbDocumentModel.findBySourceId({

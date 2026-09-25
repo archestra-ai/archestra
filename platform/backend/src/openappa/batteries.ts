@@ -26,12 +26,14 @@ import {
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
+  AttachReadiness,
   BatteryCredentialBindings,
   BatteryInstall,
   BatteryInstallRow,
   BatteryInstallStatus,
-  BatteryMatch,
+  BatteryMatches,
   BatteryPackageFile,
+  BatteryScope,
   BatterySummary,
   CreateBatteryInstall,
   EffectivePolicy,
@@ -87,6 +89,8 @@ class OpenAppaBatteriesService {
         source,
         contentHash,
         namespaces: battery.namespaces,
+        annotators: battery.annotators,
+        scope: batteryScope(battery),
         helpers: battery.helpers,
         credentials: battery.credentials,
         setup: battery.setup ?? null,
@@ -99,20 +103,29 @@ class OpenAppaBatteriesService {
   async matchesForCatalog(params: {
     organizationId: string;
     catalogId: string;
-  }): Promise<BatteryMatch[]> {
+  }): Promise<BatteryMatches> {
     const { organizationId, catalogId } = params;
     const catalog = await this.requireCatalog(params);
     const { installs } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
-    return matchBatteries(catalog, new Set(available.keys())).map((match) => ({
-      ...match,
-      install:
-        installs.find(
-          (install) =>
-            install.catalogId === catalogId &&
-            install.batteryName === match.battery,
-        ) ?? null,
-    }));
+    const { readiness } = await this.attachTargets({
+      organizationId,
+      catalogId,
+    });
+    return {
+      attach: readiness,
+      matches: matchBatteries(catalog, new Set(available.keys())).map(
+        (match) => ({
+          ...match,
+          install:
+            installs.find(
+              (install) =>
+                install.catalogId === catalogId &&
+                install.batteryName === match.battery,
+            ) ?? null,
+        }),
+      ),
+    };
   }
 
   /** What the root declares, what came of each declaration, and what holds it back. */
@@ -136,6 +149,42 @@ class OpenAppaBatteriesService {
               reasons: sync.heldReasons,
             }
           : null,
+    };
+  }
+
+  /** The one root and resolved composition used to classify coverage rows. */
+  async coverageSnapshot(organizationId: string): Promise<{
+    rootContent: string;
+    resolution: PolicyResolution;
+    batteries: PolicyBatteryView[];
+    rootRevision: number;
+    lastError: string | null;
+  }> {
+    const { root, resolution, batteries, policy } =
+      await this.current(organizationId);
+    return {
+      rootContent: root.content,
+      resolution,
+      batteries,
+      rootRevision: policy.rootRevision,
+      lastError: policy.lastError,
+    };
+  }
+
+  /** Show the exact policy bytes an include currently resolves to. */
+  async policySource(organizationId: string, entry: string) {
+    const root = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    const included = resolution.entries.find((item) => item.entry === entry);
+    if (!included?.battery)
+      throw new ApiError(404, "This battery policy is no longer included");
+    return {
+      entry: included.entry,
+      name: included.name,
+      content: included.battery.policy,
     };
   }
 
@@ -263,17 +312,17 @@ class OpenAppaBatteriesService {
     await this.recompileOrganizations(organizationIds);
   }
 
-  /** Include a battery and point its namespaces at one catalog's tool prefixes. */
+  /**
+   * Include a battery and point its namespaces at one catalog's tool prefixes. A
+   * battery made of annotators alone governs the organization, so it is included
+   * with no catalog.
+   */
   async createInstall(params: {
     userId: string;
     organizationId: string;
     install: CreateBatteryInstall;
   }): Promise<BatteryWriteResult> {
     const { userId, organizationId, install } = params;
-    const catalog = await this.requireCatalog({
-      organizationId,
-      catalogId: install.catalogId,
-    });
     const entry = install.packageHash
       ? uploadedEntry({
           name: install.batteryName,
@@ -287,6 +336,11 @@ class OpenAppaBatteriesService {
     });
     if (!battery)
       throw new ApiError(404, `Unknown battery ${install.batteryName}`);
+    const catalog = await this.installCatalog({
+      organizationId,
+      battery,
+      catalogId: install.catalogId ?? null,
+    });
     await this.editRoot({
       organizationId,
       userId,
@@ -307,11 +361,12 @@ class OpenAppaBatteriesService {
             409,
             `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
           );
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [catalog.id],
+        if (catalog === null) return [{ kind: "addInclude", entry }];
+        const { targets, readiness } = await this.attachTargets({
+          organizationId,
+          catalogId: catalog.id,
         });
-        const targets = prefixes.byCatalog.get(catalog.id) ?? new Set<string>();
+        assertAttachable({ catalog: catalog.name, readiness });
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -321,7 +376,7 @@ class OpenAppaBatteriesService {
     return this.batteryView({
       organizationId,
       name: install.batteryName,
-      catalogId: install.catalogId,
+      catalogId: catalog?.id ?? null,
     });
   }
 
@@ -341,6 +396,18 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog =
+      existing.catalogId === null
+        ? null
+        : await this.requireCatalog({
+            organizationId,
+            catalogId: existing.catalogId,
+          });
+    if (catalog === null && changes.enabled === false)
+      throw new ApiError(
+        409,
+        `${existing.batteryName} governs the organization, not a catalog, so there is nothing to detach. Remove the install to drop it.`,
+      );
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -354,24 +421,17 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
-        });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const edits: PolicyEditInput[] = [];
-        if (changes.enabled !== undefined)
+        if (catalog !== null)
           edits.push(
-            ...(changes.enabled
-              ? bindEdits({ resolution, namespaces, targets })
-              : unbindEdits({
-                  resolution,
-                  namespaces,
-                  targets,
-                  keep: otherNamespaces(resolution, existing.batteryName),
-                })),
+            ...(await this.catalogBindingEdits({
+              organizationId,
+              resolution,
+              catalog,
+              batteryName: existing.batteryName,
+              namespaces: battery?.namespaces ?? [],
+              enabled: changes.enabled,
+            })),
           );
         for (const [variable, key] of Object.entries(
           changes.credentialBindings ?? {},
@@ -416,6 +476,13 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
+    const catalog =
+      existing.catalogId === null
+        ? null
+        : await this.requireCatalog({
+            organizationId,
+            catalogId: existing.catalogId,
+          });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -433,25 +500,83 @@ class OpenAppaBatteriesService {
           (entry) => entry.name === existing.batteryName,
         );
         if (!included) return [];
+        // An organization-wide row stands for the include alone.
+        if (catalog === null)
+          return [{ kind: "removeInclude", entry: included.entry }];
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await catalogToolPrefixes(organizationId, {
-          targets: [],
-          catalogIds: [existing.catalogId],
+        const { targets } = await this.attachTargets({
+          organizationId,
+          catalogId: catalog.id,
         });
-        const targets =
-          prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const remaining = namespaces.some(
           (namespace) =>
             remainingTargets({ resolution, namespace, targets }).length > 0,
         );
         const keep = otherNamespaces(resolution, existing.batteryName);
-        return [
+        const edits: PolicyEditInput[] = [
           // With no target left anywhere the battery governs nothing, so the
           // entry that declares it goes with its last catalog.
           ...(remaining
             ? []
             : [{ kind: "removeInclude" as const, entry: included.entry }]),
           ...unbindEdits({ resolution, namespaces, targets, keep }),
+        ];
+        assertDetaches({
+          edits,
+          battery: existing.batteryName,
+          catalog: catalog.name,
+        });
+        return edits;
+      },
+    });
+    await this.recompile(organizationId);
+  }
+
+  /**
+   * Take a battery out of the policy: its include entry and every alias its
+   * namespaces bind, whether or not a catalog still answers to them. An alias
+   * another included battery declares stays that battery's.
+   */
+  async removeInclude(params: {
+    userId: string;
+    organizationId: string;
+    name: string;
+  }): Promise<void> {
+    const { userId, organizationId, name } = params;
+    await this.editRoot({
+      organizationId,
+      userId,
+      edits: async (latest) => {
+        const resolution = await openappaDeclarations.resolve({
+          organizationId,
+          content: latest.content,
+        });
+        // A stored text may spell one battery twice; the battery goes as a whole.
+        const included = resolution.entries.filter(
+          (entry) => entry.name === name,
+        );
+        if (included.length === 0)
+          throw new ApiError(404, `The policy includes no ${name} battery`);
+        const namespaces = [
+          ...new Set(
+            included.flatMap((entry) => entry.battery?.namespaces ?? []),
+          ),
+        ];
+        const targets = new Set(
+          namespaces.flatMap((namespace) =>
+            boundTargets({ resolution, namespace }),
+          ),
+        );
+        return [
+          ...included.map(
+            (entry) => ({ kind: "removeInclude", entry: entry.entry }) as const,
+          ),
+          ...unbindEdits({
+            resolution,
+            namespaces,
+            targets,
+            keep: otherNamespaces(resolution, name),
+          }),
         ];
       },
     });
@@ -530,6 +655,7 @@ class OpenAppaBatteriesService {
       contentHash,
       entry,
       namespaces: inspected.namespaces,
+      annotators: inspected.annotators,
       helpers: inspected.helpers,
       credentials: inspected.credentials,
       setup: inspected.setup ?? null,
@@ -557,7 +683,15 @@ class OpenAppaBatteriesService {
   ): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    if (effective && effective.rootRevision === root.revision) return effective;
+    // Revision zero is shipped policy text and can change without a database revision.
+    if (
+      effective &&
+      effective.rootRevision === root.revision &&
+      effective.installFingerprint.endsWith(
+        root.revision === 0 ? `:${root.contentHash}` : "",
+      )
+    )
+      return effective;
     return this.recompile(organizationId);
   }
 
@@ -616,14 +750,15 @@ class OpenAppaBatteriesService {
     const planned = await this.plan({
       organizationId,
       root,
-      governed: installs.map((install) => install.catalogId),
+      governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const fingerprint = hash(
-      JSON.stringify({
-        batteries: this.composeInputs({ planned, installs }),
-        credentials: planned.resolution.credentials,
-      }),
-    );
+    const fingerprint =
+      hash(
+        JSON.stringify({
+          batteries: this.composeInputs({ planned, installs }),
+          credentials: planned.resolution.credentials,
+        }),
+      ) + (root.revision === 0 ? `:${root.contentHash}` : "");
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)
@@ -639,7 +774,7 @@ class OpenAppaBatteriesService {
       const planned = await this.plan({
         organizationId,
         root,
-        governed: previous.map((install) => install.catalogId),
+        governed: previous.flatMap((install) => install.catalogId ?? []),
       });
       // Rows the plan already agrees with are left alone: rewriting them would
       // touch every row of the organization on a call that changed nothing.
@@ -652,12 +787,13 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
-      const installFingerprint = hash(
-        JSON.stringify({
-          batteries: composed,
-          credentials: planned.resolution.credentials,
-        }),
-      );
+      const installFingerprint =
+        hash(
+          JSON.stringify({
+            batteries: composed,
+            credentials: planned.resolution.credentials,
+          }),
+        ) + (root.revision === 0 ? `:${root.contentHash}` : "");
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
         expected &&
@@ -734,7 +870,10 @@ class OpenAppaBatteriesService {
    * A battery composes its own policy only while it is active: a battery held
    * back by a missing credential, an unresolved server or a naming conflict
    * composes as the empty battery, exactly as an unresolved entry does, so the
-   * runtime never consults a helper the host cannot serve.
+   * runtime never consults a helper the host cannot serve. An organization-wide
+   * battery composes while unrouted or missing its credential: a rule that routes
+   * to its annotator has to find it declared, and a helper run without its
+   * credential answers nothing, which refuses the calls routed to it.
    */
   private composeInputs(params: {
     planned: PlannedComposition;
@@ -749,7 +888,7 @@ class OpenAppaBatteriesService {
       entries: planned.resolution.entries,
       helpers: (entry) => {
         const planned = byName.get(entry.name);
-        if (planned?.status !== "active") return "stub";
+        if (!planned?.composed) return "stub";
         if (!entry.battery || entry.battery.externals.length === 0) return null;
         const owner = helperOwner(installs, entry.name);
         return owner ? { urlBase: helperUrlBase(owner.id), tokenEnv } : "stub";
@@ -829,9 +968,9 @@ class OpenAppaBatteriesService {
         )
         .map((entry) => entry.name),
     );
-    const batteries: PlannedBattery[] = [];
-    const rows = new Map<string, BatteryInstallRow>();
-    for (const entry of resolution.entries) {
+    const drafts = resolution.entries.map((entry) => {
+      const scope = batteryScope(entry.battery);
+      const organizationWide = scope === "organization";
       const namespaces = entry.battery?.namespaces ?? [];
       const servers = namespaces
         .flatMap((namespace) => aliases.get(namespace) ?? [])
@@ -853,11 +992,40 @@ class OpenAppaBatteriesService {
         resolved: entry.battery !== null && !duplicated.has(entry.name),
         credentials,
         bindable,
-        servers,
-        conflicting: catalogIds.some((catalogId) =>
-          prefixes.conflicting.has(catalogId),
-        ),
+        governs: organizationWide
+          ? { kind: "organization" }
+          : {
+              kind: "catalogs",
+              servers,
+              conflicting: catalogIds.some((catalogId) =>
+                prefixes.conflicting.has(catalogId),
+              ),
+            },
       });
+      return { entry, scope, servers, credentials, catalogIds, status };
+    });
+    // A tool rule routes to an annotator from the root or from a battery that
+    // composes its own rules; a stubbed battery's rules route nothing.
+    const routed = new Set([
+      ...resolution.routedAnnotators,
+      ...drafts
+        .filter(composes)
+        .flatMap(({ entry }) => entry.battery?.routedAnnotators ?? []),
+    ]);
+    const batteries: PlannedBattery[] = [];
+    const rows = new Map<string, BatteryInstallRow>();
+    for (const draft of drafts) {
+      const { entry, scope, servers, credentials, catalogIds } = draft;
+      const organizationWide = scope === "organization";
+      // Nothing consults an organization-wide battery no rule routes to.
+      const status =
+        organizationWide &&
+        draft.status === "active" &&
+        !(entry.battery?.annotators ?? []).some((annotator) =>
+          routed.has(annotator),
+        )
+          ? "unrouted"
+          : draft.status;
       const bindings: BatteryCredentialBindings = Object.fromEntries(
         credentials
           .filter((credential) => credential.key !== null)
@@ -870,6 +1038,8 @@ class OpenAppaBatteriesService {
         packageHash: entry.packageHash,
         line: entry.line,
         status,
+        scope,
+        composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
@@ -877,8 +1047,8 @@ class OpenAppaBatteriesService {
         })),
         credentials,
       });
-      for (const catalogId of catalogIds) {
-        const key = `${entry.name}\u0000${catalogId}`;
+      for (const catalogId of organizationWide ? [null] : catalogIds) {
+        const key = rowKey({ batteryName: entry.name, catalogId });
         if (rows.has(key)) continue;
         rows.set(key, {
           batteryName: entry.name,
@@ -894,6 +1064,7 @@ class OpenAppaBatteriesService {
       resolution.entries.flatMap((entry) => entry.battery?.namespaces ?? []),
     );
     return {
+      root,
       resolution,
       batteries,
       rows: [...rows.values()],
@@ -968,7 +1139,7 @@ class OpenAppaBatteriesService {
   private async batteryView(params: {
     organizationId: string;
     name: string;
-    catalogId: string;
+    catalogId: string | null;
   }): Promise<BatteryWriteResult> {
     const { batteries, installs } = await this.recompose(params.organizationId);
     const battery = batteries.find(
@@ -1134,6 +1305,89 @@ class OpenAppaBatteriesService {
     );
   }
 
+  /** The alias targets an attach to one catalog binds: its synced tool prefixes. */
+  private async attachTargets(params: {
+    organizationId: string;
+    catalogId: string;
+  }): Promise<{ targets: ReadonlySet<string>; readiness: AttachReadiness }> {
+    const { organizationId, catalogId } = params;
+    const prefixes = await catalogToolPrefixes(organizationId, {
+      targets: [],
+      catalogIds: [catalogId],
+    });
+    const targets = prefixes.byCatalog.get(catalogId) ?? new Set<string>();
+    const readiness: AttachReadiness = prefixes.conflicting.has(catalogId)
+      ? "conflicting"
+      : targets.size === 0
+        ? "unsynced"
+        : "ready";
+    return { targets, readiness };
+  }
+
+  /**
+   * The catalog an install governs, or null for a battery made of annotators
+   * alone, which governs the organization. Each kind refuses the other's request.
+   */
+  private async installCatalog(params: {
+    organizationId: string;
+    battery: NativeBatteryPackage;
+    catalogId: string | null;
+  }) {
+    const { organizationId, battery, catalogId } = params;
+    const organizationWide = batteryScope(battery) === "organization";
+    if (organizationWide && catalogId !== null)
+      throw new ApiError(
+        400,
+        `${battery.name} is made of annotators alone and governs the organization, not a catalog. Install it without one.`,
+      );
+    if (!organizationWide && catalogId === null)
+      throw new ApiError(
+        400,
+        `${battery.name} governs MCP servers. Name the catalog to attach it to.`,
+      );
+    return catalogId === null
+      ? null
+      : this.requireCatalog({ organizationId, catalogId });
+  }
+
+  /** The alias edits that attach or detach one catalog from an included battery. */
+  private async catalogBindingEdits(params: {
+    organizationId: string;
+    resolution: PolicyResolution;
+    catalog: { id: string; name: string };
+    batteryName: string;
+    namespaces: readonly string[];
+    enabled: boolean | undefined;
+  }): Promise<PolicyEditInput[]> {
+    const { organizationId, resolution, catalog, batteryName, namespaces } =
+      params;
+    const { targets, readiness } = await this.attachTargets({
+      organizationId,
+      catalogId: catalog.id,
+    });
+    switch (params.enabled) {
+      case true:
+        assertAttachable({ catalog: catalog.name, readiness });
+        return bindEdits({ resolution, namespaces, targets });
+      case false: {
+        const unbind = unbindEdits({
+          resolution,
+          namespaces,
+          targets,
+          keep: otherNamespaces(resolution, batteryName),
+        });
+        assertDetaches({
+          edits: unbind,
+          battery: batteryName,
+          catalog: catalog.name,
+        });
+        return unbind;
+      }
+      case undefined:
+        return [];
+    }
+  }
+
   private async requireCatalog(params: {
     organizationId: string;
     catalogId: string;
@@ -1225,8 +1479,11 @@ function rowsSettled(params: {
   });
 }
 
-function rowKey(row: { batteryName: string; catalogId: string }): string {
-  return `${row.batteryName}\u0000${row.catalogId}`;
+function rowKey(row: {
+  batteryName: string;
+  catalogId: string | null;
+}): string {
+  return `${row.batteryName}\u0000${row.catalogId ?? ""}`;
 }
 
 function sortedBindings(
@@ -1282,6 +1539,7 @@ type CatalogPrefixes = {
 type PlannedBattery = PolicyBatteryView;
 
 type PlannedComposition = {
+  root: GuardrailsPolicy;
   resolution: PolicyResolution;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
@@ -1298,16 +1556,16 @@ type Slot<T> = { running: Promise<T>; queued: Promise<T> | null };
 /**
  * The status precedence of the design: an entry that resolves to nothing first,
  * then a variable no key can be bound to, then an ambiguous prefix, then a target
- * no catalog carries.
+ * no catalog carries. A battery governing the organization has no server to
+ * resolve: after its credentials, `plan` checks a rule routes to its annotators.
  */
 function batteryStatus(params: {
   resolved: boolean;
   credentials: ReadonlyArray<{ variable: string; key: string | null }>;
   bindable: ReadonlySet<string>;
-  servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
-  conflicting: boolean;
+  governs: BatteryGovernance;
 }): BatteryInstallStatus {
-  const { resolved, credentials, bindable, servers, conflicting } = params;
+  const { resolved, credentials, bindable, governs } = params;
   if (!resolved) return "unavailable";
   if (
     credentials.some(
@@ -1315,14 +1573,66 @@ function batteryStatus(params: {
     )
   )
     return "missing_credentials";
-  if (conflicting || servers.some((server) => server.catalogs.size > 1))
-    return "naming_conflict";
-  if (
-    servers.length === 0 ||
-    servers.some((server) => server.catalogs.size === 0)
-  )
-    return "server_missing";
-  return "active";
+  switch (governs.kind) {
+    case "organization":
+      return "active";
+    case "catalogs": {
+      const { servers, conflicting } = governs;
+      if (conflicting || servers.some((server) => server.catalogs.size > 1))
+        return "naming_conflict";
+      if (
+        servers.length === 0 ||
+        servers.some((server) => server.catalogs.size === 0)
+      )
+        return "server_missing";
+      return "active";
+    }
+  }
+}
+
+/**
+ * What a battery governs, with what its status depends on: the catalogs its
+ * namespaces' aliases resolve to, or the organization, where a policy rule has
+ * to route a tool to one of its annotators.
+ */
+type BatteryGovernance =
+  | { kind: "organization" }
+  | {
+      kind: "catalogs";
+      servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
+      conflicting: boolean;
+    };
+
+/**
+ * Whether a battery composes its own policy rather than the empty stub: an
+ * active one, and an organization-wide one whose package resolves, since its
+ * annotator must stay declared for the rules that route to it.
+ */
+function composes(battery: {
+  status: BatteryInstallStatus;
+  scope: BatteryScope;
+}): boolean {
+  switch (battery.status) {
+    case "active":
+    case "unrouted":
+      return true;
+    case "missing_credentials":
+      return battery.scope === "organization";
+    case "unavailable":
+    case "naming_conflict":
+    case "server_missing":
+    case "refused":
+      return false;
+  }
+}
+
+/** A battery with no tool namespace and at least one annotator governs the organization. */
+function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {
+  return battery !== null &&
+    battery.namespaces.length === 0 &&
+    battery.annotators.length > 0
+    ? "organization"
+    : "catalogs";
 }
 
 /** The row whose helpers a battery's composed externals consult: its earliest one. */
@@ -1338,6 +1648,50 @@ function helperOwner(
           a.createdAt.getTime() - b.createdAt.getTime() ||
           a.id.localeCompare(b.id),
       )[0] ?? null
+  );
+}
+
+/**
+ * An include with no alias would compose as a stub governing nothing, so a
+ * catalog with no prefix an alias can point at takes no battery.
+ */
+function assertAttachable(params: {
+  catalog: string;
+  readiness: AttachReadiness;
+}): void {
+  const { catalog, readiness } = params;
+  switch (readiness) {
+    case "conflicting":
+      throw new ApiError(
+        409,
+        `The tools of ${catalog} carry a prefix holding "__", which a composed alias cannot target.`,
+      );
+    case "unsynced":
+      throw new ApiError(
+        409,
+        `${catalog} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+      );
+    case "ready":
+      return;
+  }
+}
+
+/**
+ * A derived row outlives the prefixes it was derived from until the next
+ * recompose, so a detach can find nothing to edit: the aliases it would drop
+ * are stale, or another included battery's. Answering success would leave the
+ * text as it is, so the caller is sent to the removal that drops them.
+ */
+function assertDetaches(params: {
+  edits: readonly PolicyEditInput[];
+  battery: string;
+  catalog: string;
+}): void {
+  const { edits, battery, catalog } = params;
+  if (edits.length > 0) return;
+  throw new ApiError(
+    409,
+    `Detaching ${catalog} leaves the policy as it is: the aliases ${battery} binds are stale or another battery's. Remove the ${battery} include to drop them.`,
   );
 }
 

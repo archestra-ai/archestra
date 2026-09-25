@@ -169,7 +169,7 @@ export async function teardownP4Shim(connectorId: string): Promise<void> {
 async function desiredShimSpec(connector: KnowledgeBaseConnector) {
   if (
     connector.connectorType !== "perforce" ||
-    connector.visibility !== "auto-sync-permissions" ||
+    !connector.syncPermissionsFromSource ||
     !connector.enabled
   ) {
     return null;

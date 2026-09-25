@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const { getTool, getToolObservers, getToolsWithAssignments } = archestraApiSdk;
 

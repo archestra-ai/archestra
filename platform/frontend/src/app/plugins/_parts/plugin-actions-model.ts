@@ -8,6 +8,12 @@ export interface PluginActionDefinition {
   id: PluginActionId;
   label: string;
   permissions: Permissions;
+  /**
+   * `*`: plugins are executable bytes, so every action beyond the listing also
+   * needs `update` on every plugin, the grant the retired `plugin:admin`
+   * role action became.
+   */
+  permissionScope: "*";
   href?: string;
 }
 
@@ -20,23 +26,27 @@ export function getPluginActionModel(params: {
     {
       id: "install",
       label: "Install",
-      permissions: { plugin: ["read", "admin"] },
+      permissions: { plugin: ["read", "update"] },
+      permissionScope: "*",
     },
     {
       id: "edit",
       label: ACTION_LABEL.edit,
-      permissions: { plugin: ["update", "admin"] },
+      permissions: { plugin: ["update"] },
+      permissionScope: "*",
       href: pluginEditHref(params.pluginId),
     },
     {
       id: "updates",
       label: params.hasPendingUpdate ? "Review update" : "Updates",
-      permissions: { plugin: ["update", "admin"] },
+      permissions: { plugin: ["update"] },
+      permissionScope: "*",
     },
     {
       id: "delete",
       label: ACTION_LABEL.delete,
-      permissions: { plugin: ["delete", "admin"] },
+      permissions: { plugin: ["delete", "update"] },
+      permissionScope: "*",
     },
   ];
 }

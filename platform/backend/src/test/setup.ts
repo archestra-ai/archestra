@@ -3,7 +3,7 @@
  *
  * Performance Optimizations Applied:
  * 1. Database and migrations created ONCE per test file (beforeAll), not per test
- * 2. Tables are truncated between tests (beforeEach), much faster than recreating DB
+ * 2. Tables are truncated after tests that accessed the DB; pure tests skip it
  * 3. PGlite instance is reused across all tests in a file
  * 4. Sentry is disabled to prevent data transmission during tests
  *
@@ -60,6 +60,15 @@ process.setMaxListeners(20);
 
 // Module-level variables to persist across tests within a file
 let pgliteClient: PGlite | null = null;
+// Tests that never issue SQL leave the database unchanged, so the next test
+// can skip truncating hundreds of tables.
+let databaseTouched = false;
+// The filename opts a suite into rollback; ordinary database suites retain
+// table resets, including tests of commit and schema-change behavior.
+let completedRollbackTests = 0;
+let releaseTestTransaction: (() => void) | null = null;
+let testTransactionFinished: Promise<void> | null = null;
+const rollbackSentinel = new Error("Test transaction rollback");
 // Pristine config snapshot for the per-test restore (see beforeEach).
 // Captured HERE at setup-module scope — setup files evaluate before any test
 // file's module code in the worker, so a test file that mutates config (or
@@ -112,6 +121,7 @@ console.warn = (...args: unknown[]) => {
  * replay the migrations directly so the suite still works.
  */
 beforeAll(async () => {
+  completedRollbackTests = 0;
   const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
 
   if (snapshotPath && fs.existsSync(snapshotPath)) {
@@ -120,10 +130,8 @@ beforeAll(async () => {
       loadDataDir: snapshot,
       extensions: { vector },
     });
-    testDb = drizzle({ client: pgliteClient });
   } else {
     pgliteClient = new PGlite("memory://", { extensions: { vector } });
-    testDb = drizzle({ client: pgliteClient });
     for (const migrationSql of getMigrationsSql()) {
       await pgliteClient.exec(migrationSql);
     }
@@ -134,6 +142,8 @@ beforeAll(async () => {
   // (e.g. a `window` for the app SDK) would otherwise race the detection and
   // send PGlite down the browser path mid-init.
   await pgliteClient.waitReady;
+  trackDatabaseAccess(pgliteClient);
+  testDb = drizzle({ client: pgliteClient });
 
   // Set the test database via the internal setter. The module's default
   // export is a forwarding Proxy over getDb(), so consumers — including
@@ -147,13 +157,17 @@ beforeAll(async () => {
   dbModule.__setTestDb(
     testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
   );
+  // Preserve the existing first-test reset: migrations may leave seed rows in
+  // the snapshot, and a file-level hook may access the database before tests.
+  databaseTouched = true;
 });
 
-/**
- * Clean up tables before each test to ensure test isolation.
- * Using TRUNCATE CASCADE is the fastest way to clear all data.
- */
-beforeEach(async () => {
+/** Reset the database only after a test (or file-level hook) accessed it. */
+beforeEach(async ({ task }) => {
+  // Vitest exposes the current file on its typed hook context. This keeps
+  // rollback suites in the clean project's shared module cache without
+  // relying on process-global mode or internal runner state.
+  const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (!pgliteClient) {
     throw new Error("Database not initialized. Did beforeAll run?");
   }
@@ -175,28 +189,62 @@ beforeEach(async () => {
     enterpriseTier.setUserCountForTesting(0);
   }
 
-  // Get all user tables from the database (excluding system tables)
-  const tablesResult = await pgliteClient.query<{ tablename: string }>(`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public'
-    AND tablename NOT LIKE 'drizzle_%'
-  `);
+  if (databaseTouched && (!rollbackMode || completedRollbackTests === 0)) {
+    // Get all user tables from the database (excluding system tables)
+    const tablesResult = await pgliteClient.query<{ tablename: string }>(`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public'
+      AND tablename NOT LIKE 'drizzle_%'
+    `);
 
-  const tables = tablesResult.rows.map((row) => row.tablename);
+    const tables = tablesResult.rows.map((row) => row.tablename);
 
-  if (tables.length > 0) {
-    // Use TRUNCATE ... CASCADE for all tables at once
-    // This is the fastest way to clear all data while respecting FK constraints
-    const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
-    await pgliteClient.exec(truncateSql);
+    if (tables.length > 0) {
+      // CASCADE also clears dependent tables, and RESTART IDENTITY resets
+      // sequences used by fixtures.
+      const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
+      await pgliteClient.exec(truncateSql);
+    }
   }
+  databaseTouched = false;
 
   // Process-local caches (e.g. the agent id/slug resolve cache) outlive the
-  // per-test truncation above — clear every registered one so a mapping cached
+  // database reset above — clear every registered one so a mapping cached
   // by one test (fixture slugs are name-derived and can repeat) can't leak
   // into the next. The registry module is dependency-free, so importing it
   // here cannot pre-load real modules ahead of a test file's mocks.
   clearRegisteredProcessLocalCaches();
+
+  if (rollbackMode) {
+    if (!testDb) throw new Error("Test database not initialized");
+    let signalReady: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      signalReady = resolve;
+    });
+    let release: () => void = () => {};
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    releaseTestTransaction = release;
+    let started = false;
+    testTransactionFinished = testDb
+      .transaction(async (tx) => {
+        const dbModule = await import("../database/index.js");
+        dbModule.__setTestDb(
+          tx as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+        );
+        started = true;
+        signalReady();
+        await hold;
+        throw rollbackSentinel;
+      })
+      .catch((error: unknown) => {
+        signalReady();
+        if (error !== rollbackSentinel) throw error;
+      });
+    await ready;
+    if (!started) await testTransactionFinished;
+  }
 
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.
@@ -218,7 +266,57 @@ beforeEach(async () => {
  * unrelated files. useRealTimers is a no-op when timers are already real.
  */
 const realFetch = globalThis.fetch;
-afterEach(() => {
+afterEach(({ task }) => {
+  const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
+  if (rollbackMode) {
+    return finishTestTransaction().finally(restoreTestGlobals);
+  }
+  restoreTestGlobals();
+});
+
+async function finishTestTransaction(): Promise<void> {
+  // Registered fire-and-forget work must finish while its test's transaction
+  // is still open. The ordinary project continues to drain at file teardown.
+  const errors: unknown[] = [];
+  const release = releaseTestTransaction;
+  const finished = testTransactionFinished;
+  try {
+    const { drainBackgroundWork } = await import("../utils/background-work.js");
+    await drainBackgroundWork();
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    try {
+      release?.();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await finished;
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      const dbModule = await import("../database/index.js");
+      dbModule.__setTestDb(
+        testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+      );
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      releaseTestTransaction = null;
+      testTransactionFinished = null;
+      // An unsuccessful teardown makes the next test rebuild the clean state.
+      completedRollbackTests =
+        errors.length === 0 ? completedRollbackTests + 1 : 0;
+    }
+  }
+  if (errors.length > 0) {
+    throw errors[0];
+  }
+}
+
+function restoreTestGlobals(): void {
   globalThis.fetch = realFetch;
   vi.clearAllMocks();
   vi.useRealTimers();
@@ -232,7 +330,7 @@ afterEach(() => {
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
-});
+}
 
 /**
  * Clean up the PGlite client after all tests in the file complete.
@@ -264,7 +362,47 @@ afterAll(async () => {
     pgliteClient = null;
   }
   testDb = null;
+  databaseTouched = false;
 });
+
+function trackDatabaseAccess(client: PGlite): void {
+  // Patch the prototype rather than shadowing instance methods: tests can spy
+  // on PGlite.prototype.query. Drizzle transactions use a separate client, so
+  // entering any transaction must count as access as well. Count reads too:
+  // an extra reset is safer than inferring which SQL writes.
+  const sqlPrototype = PGlite.prototype as unknown as {
+    [databaseAccessTrackersKey]?: WeakMap<PGlite, () => void>;
+    query: (...args: unknown[]) => Promise<unknown>;
+    exec: (...args: unknown[]) => Promise<unknown>;
+    transaction: (...args: unknown[]) => Promise<unknown>;
+  };
+  if (!sqlPrototype[databaseAccessTrackersKey]) {
+    const trackers = new WeakMap<PGlite, () => void>();
+    const query = sqlPrototype.query;
+    const exec = sqlPrototype.exec;
+    const transaction = sqlPrototype.transaction;
+    sqlPrototype.query = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(query, this, args);
+    };
+    sqlPrototype.exec = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(exec, this, args);
+    };
+    sqlPrototype.transaction = function (this: PGlite, ...args: unknown[]) {
+      trackers.get(this)?.();
+      return Reflect.apply(transaction, this, args);
+    };
+    sqlPrototype[databaseAccessTrackersKey] = trackers;
+  }
+  sqlPrototype[databaseAccessTrackersKey].set(client, () => {
+    databaseTouched = true;
+  });
+}
+
+const databaseAccessTrackersKey = Symbol.for(
+  "archestra.test.pgliteAccessTrackers",
+);
 
 /**
  * Overwrite `live`'s contents with `snapshot`'s, in place (the config module

@@ -69,7 +69,6 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       const agentResponse = await createAgent(
         request,
         `JWKS Cred Priority E2E ${Date.now()}`,
-        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
@@ -192,7 +191,6 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       const agentResponse = await createAgent(
         request,
         `JWKS JWT Fallback E2E ${Date.now()}`,
-        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;

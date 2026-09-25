@@ -1,5 +1,8 @@
-import { describe, expect, test } from "@/test";
-import { extractAppaSessionIdentity } from "./session-identity";
+import { describe, expect, test } from "vitest";
+import {
+  extractAppaSessionIdentity,
+  nativeSpawnParentId,
+} from "./session-identity";
 
 const CLAUDE_SESSION = "74582997-cc91-4cd5-baee-676e581ca028";
 const CLAUDE_FORK_SESSION = "8f3c1e2a-9b4d-4c7e-a1f2-3d4e5f6a7b8c";
@@ -127,6 +130,23 @@ describe("client trajectory identity", () => {
         }),
       ).toMatchObject({
         sessionId: CLAUDE_SESSION,
+        provenance: "claude-code-metadata",
+      });
+    });
+
+    test("does not treat non-Claude metadata as a native Claude session", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "anthropic-sdk/0.1" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
         provenance: "claude-metadata",
       });
     });
@@ -145,6 +165,52 @@ describe("client trajectory identity", () => {
         sessionId: CLAUDE_SESSION,
         parentId: "parent-root",
       });
+    });
+
+    test.each([
+      {
+        carrier: "agent header",
+        headers: {
+          "user-agent": "claude-code/2.1.258",
+          "x-claude-code-session-id": CLAUDE_SESSION,
+          "x-claude-code-agent-id": "child-agent",
+        },
+        body: {},
+      },
+      {
+        carrier: "metadata agent id",
+        headers: { "user-agent": "claude-code/2.1.258" },
+        body: {
+          metadata: {
+            agent_id: "child-agent",
+            user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+          },
+        },
+      },
+    ])("recognizes a delegated child from its $carrier", ({
+      headers,
+      body,
+    }) => {
+      expect(
+        nativeSpawnParentId({
+          headers,
+          body,
+          sessionId: CLAUDE_SESSION,
+        }),
+      ).toBe(CLAUDE_SESSION);
+    });
+
+    test("does not classify a root Claude request as a delegated child", () => {
+      expect(
+        nativeSpawnParentId({
+          headers: {
+            "user-agent": "claude-code/2.1.258",
+            "x-claude-code-session-id": CLAUDE_SESSION,
+          },
+          body: {},
+          sessionId: CLAUDE_SESSION,
+        }),
+      ).toBeUndefined();
     });
   });
 
@@ -204,6 +270,96 @@ describe("client trajectory identity", () => {
       // A client fork is not a spawn-prepared child: no parent id is stamped,
       // or the runtime would refuse the forked session outright.
       expect(fork.parentId).toBeUndefined();
+      expect(
+        nativeSpawnParentId({
+          headers: codexHeaders,
+          body: {
+            client_metadata: codexTurnMetadata({
+              thread_id: CODEX_FORK_THREAD,
+              forked_from_thread_id: CODEX_THREAD,
+            }),
+          },
+          sessionId: fork.sessionId,
+        }),
+      ).toBeUndefined();
+    });
+
+    test("a spawn child names its parent thread without stamping X-Appa-Parent-ID", () => {
+      const body = {
+        client_metadata: codexTurnMetadata({
+          thread_id: CODEX_FORK_THREAD,
+          parent_thread_id: CODEX_THREAD,
+        }),
+      };
+      const identity = extractAppaSessionIdentity({
+        family: "openai:responses",
+        body,
+        headers: codexHeaders,
+      });
+      expect(identity).toMatchObject({
+        sessionId: CODEX_FORK_THREAD,
+        parentId: undefined,
+      });
+      expect(
+        nativeSpawnParentId({
+          headers: codexHeaders,
+          body,
+          sessionId: identity.sessionId,
+        }),
+      ).toBe(CODEX_THREAD);
+    });
+
+    test("spawn parent detection uses every Codex parent metadata form", () => {
+      const cases = [
+        {
+          headers: {
+            ...codexHeaders,
+            "x-codex-turn-metadata": JSON.stringify({
+              parent_thread_id: CODEX_THREAD,
+            }),
+          },
+          body: {},
+        },
+        {
+          headers: codexHeaders,
+          body: { client_metadata: { parent_thread_id: CODEX_THREAD } },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            metadata: { "x-codex-parent-thread-id": CODEX_THREAD },
+          },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            client_metadata: {
+              "x-codex-turn-metadata": {
+                parent_thread_id: CODEX_THREAD,
+              },
+            },
+          },
+        },
+        {
+          headers: codexHeaders,
+          body: {
+            client_metadata: {
+              "x-codex-turn-metadata": JSON.stringify({
+                parent_thread_id: CODEX_THREAD,
+              }),
+            },
+          },
+        },
+      ];
+      for (const { headers, body } of cases) {
+        expect(
+          nativeSpawnParentId({
+            headers,
+            body,
+            sessionId: CODEX_FORK_THREAD,
+          }),
+        ).toBe(CODEX_THREAD);
+      }
     });
 
     test("a compaction turn stays on the thread's root", () => {
@@ -382,21 +538,29 @@ describe("client trajectory identity", () => {
     });
 
     test("x-parent-session-id is not stamped: the runtime refuses unprepared children", () => {
+      const headers = {
+        ...openCodeHeaders,
+        "x-session-id": OPENCODE_FORK_SESSION,
+        "x-parent-session-id": OPENCODE_SESSION,
+      };
       expect(
         extractAppaSessionIdentity({
           family: "openai:chatCompletions",
           body: {},
-          headers: {
-            ...openCodeHeaders,
-            "x-session-id": OPENCODE_FORK_SESSION,
-            "x-parent-session-id": OPENCODE_SESSION,
-          },
+          headers,
         }),
       ).toMatchObject({
         sessionId: OPENCODE_FORK_SESSION,
         parentId: undefined,
         provenance: "opencode-session-header",
       });
+      expect(
+        nativeSpawnParentId({
+          headers,
+          body: {},
+          sessionId: OPENCODE_FORK_SESSION,
+        }),
+      ).toBe(OPENCODE_SESSION);
     });
 
     test("accepts x-session-affinity repeating the same session id", () => {
@@ -530,14 +694,39 @@ describe("client trajectory identity", () => {
       ).toThrow(/contradictory OpenCode session headers/);
     });
 
-    test("refuses a hosted header contradicting the normal one", () => {
+    test("accepts the explicit parent and hosted child header pair", () => {
+      const headers = {
+        ...openCodeHeaders,
+        "x-session-id": OPENCODE_SESSION,
+        "x-opencode-session": OPENCODE_FORK_SESSION,
+      };
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {},
+          headers,
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_FORK_SESSION,
+        provenance: "opencode-hosted-header",
+      });
+      expect(
+        nativeSpawnParentId({
+          headers,
+          body: {},
+          sessionId: OPENCODE_FORK_SESSION,
+        }),
+      ).toBe(OPENCODE_SESSION);
+    });
+
+    test("refuses a hosted child beside a non-parent affinity claim", () => {
       expect(() =>
         extractAppaSessionIdentity({
           family: "openai:chatCompletions",
           body: {},
           headers: {
             ...openCodeHeaders,
-            "x-session-id": OPENCODE_SESSION,
+            "x-session-affinity": OPENCODE_SESSION,
             "x-opencode-session": OPENCODE_FORK_SESSION,
           },
         }),

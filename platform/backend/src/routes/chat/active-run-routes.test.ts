@@ -1,13 +1,10 @@
-import {
-  ConversationModel,
-  ConversationShareModel,
-  MessageModel,
-} from "@/models";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import { ConversationModel, MessageModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("chat active-run routes", () => {
@@ -17,10 +14,17 @@ describe("chat active-run routes", () => {
   let conversationId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       user = await makeUser();
       const organization = await makeOrganization();
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
       const agent = await makeAgent({ organizationId });
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
@@ -157,10 +161,10 @@ describe("chat active-run routes", () => {
     const sharee = await makeUser();
     await makeMember(sharee.id, organizationId);
 
-    await ConversationShareModel.upsert({
-      conversationId,
+    await shareForTest({
+      resource: "conversation",
+      scope: conversationId,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "user",
       teamIds: [],
       userIds: [sharee.id],

@@ -103,7 +103,7 @@ describe("ensureConnectionVirtualKey", () => {
     const copilotKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret()).id,
-      { provider: "github-copilot", scope: "personal", userId: user.id },
+      { provider: "github-copilot", userId: user.id },
     );
 
     const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
@@ -141,14 +141,13 @@ describe("ensureConnectionVirtualKey", () => {
       (await makeSecret()).id,
       {
         provider: "github-copilot",
-        scope: "personal",
         userId: user.id,
       },
     );
     const otherKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret()).id,
-      { provider: "github-copilot", scope: "personal", userId: otherUser.id },
+      { provider: "github-copilot", userId: otherUser.id },
     );
 
     const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
@@ -256,7 +255,7 @@ describe("ensureConnectionVirtualKey", () => {
     const orgKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic" },
     );
 
     const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
@@ -274,7 +273,7 @@ describe("ensureConnectionVirtualKey", () => {
     const personalKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      { provider: "anthropic", userId: user.id },
     );
 
     const { virtualApiKeyId: sameId } = await ensureConnectionVirtualKey({
@@ -350,12 +349,12 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     const personalKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      { provider: "anthropic", userId: user.id },
     );
     const orgKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "funded-key" } })).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic" },
     );
     verdictByApiKey({ "exhausted-key": "exhausted", "funded-key": "usable" });
 
@@ -395,12 +394,12 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      { provider: "anthropic", userId: user.id },
     );
     const orgKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "funded-key" } })).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic" },
     );
     verdictByApiKey({
       "inconclusive-key": "inconclusive",
@@ -436,7 +435,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     const orgKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
-      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
+      { provider: "anthropic", name: "Org Anthropic" },
     );
     verdictByApiKey({ "exhausted-key": "exhausted" });
 
@@ -474,7 +473,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
-      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
+      { provider: "anthropic", name: "Org Anthropic" },
     );
     verdictByApiKey({ "inconclusive-key": "inconclusive" });
 
@@ -507,7 +506,6 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
       (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
       {
         provider: "anthropic",
-        scope: "personal",
         userId: user.id,
         name: "Personal Anthropic",
       },
@@ -515,7 +513,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
-      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
+      { provider: "anthropic", name: "Org Anthropic" },
     );
     verdictByApiKey({
       "exhausted-key": "exhausted",
@@ -550,7 +548,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "openai-key" } })).id,
-      { provider: "openai", scope: "org" },
+      { provider: "openai" },
     );
 
     const { creditWarning } = await ensureConnectionVirtualKey({

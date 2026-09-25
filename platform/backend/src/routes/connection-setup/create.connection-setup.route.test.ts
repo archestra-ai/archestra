@@ -1,7 +1,7 @@
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
@@ -714,13 +714,13 @@ describe("POST /api/connection-setups", () => {
     const personalKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      { provider: "anthropic", userId: user.id },
     );
     // ...and an org key the admin explicitly mapped as the connection default
     const mappedKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic" },
     );
     const { OrganizationModel } = await import("@/models");
     await OrganizationModel.patch(organizationId, {

@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -19,10 +19,11 @@ describe("DELETE /api/llm-virtual-keys/bulk", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 

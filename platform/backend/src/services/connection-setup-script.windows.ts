@@ -317,11 +317,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.proxy) {
         if (!ctx.proxy.virtualKey) {
           steps.push(
-            "Make sure Codex is signed in with your own OpenAI API key ($env:OPENAI_API_KEY | codex login --with-api-key).",
+            "Use your existing Codex ChatGPT login, or sign in with your own OpenAI API key (codex login --with-api-key).",
           );
         }
         steps.push(
-          `Start Codex through the proxy: codex -c model_provider=${ctx.proxy.proxyName}`,
+          `Open a new PowerShell session and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
         );
       }
       if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
@@ -643,6 +643,37 @@ if (-not $marketplaceAdded) {
     exit 1
   }
 }
+}
+${claudeMarketplaceAutoUpdate(marketplaceName)}`;
+}
+
+/**
+ * PowerShell twin of the bash renderer's `claudeMarketplaceAutoUpdate`:
+ * Claude Code keeps a third-party marketplace's plugins at the installed
+ * revision unless the marketplace declares `autoUpdate`, which is off by
+ * default. Set it on our declaration unless the user already chose a value.
+ */
+function claudeMarketplaceAutoUpdate(marketplaceName: string): string {
+  return `$archAutoUpdateState = 'unavailable'
+try {
+  $archAutoConfigDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+  $archAutoSettingsPath = Join-Path $archAutoConfigDir 'settings.json'
+  $archAutoSettings = Get-Content -Raw -Path $archAutoSettingsPath | ConvertFrom-Json
+  $archAutoEntry = $archAutoSettings.extraKnownMarketplaces.PSObject.Properties[${psq(marketplaceName)}]
+  if ($archAutoEntry -and $archAutoEntry.Value) {
+    if ($archAutoEntry.Value.PSObject.Properties['autoUpdate']) {
+      $archAutoUpdateState = 'kept'
+    } else {
+      $archAutoEntry.Value | Add-Member -NotePropertyName 'autoUpdate' -NotePropertyValue $true
+      [IO.File]::WriteAllText($archAutoSettingsPath, ($archAutoSettings | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
+      $archAutoUpdateState = 'enabled'
+    }
+  }
+} catch { $archAutoUpdateState = 'unavailable' }
+if ($archAutoUpdateState -eq 'enabled') {
+  Ok ${psq(`Enabled auto-update for the "${marketplaceName}" marketplace.`)}
+} elseif ($archAutoUpdateState -ne 'kept') {
+  Warn ${psq(`Could not enable auto-update for the "${marketplaceName}" marketplace. Enable it in /plugin > Marketplaces so Claude Code picks up new skill versions.`)}
 }`;
 }
 
@@ -806,22 +837,29 @@ ${codexAttributionHeaderLines(ctx.proxy)}
     sections.push(`Say ${psq(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
 $arch_config = Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }) 'config.toml'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $arch_config) | Out-Null
+$arch_keep = New-Object System.Collections.Generic.List[string]
 if (Test-Path $arch_config) {
   # Drop any previous archestra-managed block for this provider (idempotent).
   $arch_start = ${psq(`# >>> ${marker} >>>`)}
   $arch_end = ${psq(`# <<< ${marker} <<<`)}
-  $arch_keep = New-Object System.Collections.Generic.List[string]
   $arch_skip = $false
+  $arch_in_table = $false
   foreach ($arch_line in (Get-Content -Path $arch_config)) {
     if ($arch_line -eq $arch_start) { $arch_skip = $true; continue }
     if ($arch_line -eq $arch_end) { $arch_skip = $false; continue }
-    if (-not $arch_skip) { $arch_keep.Add($arch_line) }
+    if ($arch_skip) { continue }
+    if ($arch_line -match '^\\[') { $arch_in_table = $true }
+    if (-not $arch_in_table -and $arch_line -match '^\\s*model_provider\\s*=') { continue }
+    $arch_keep.Add($arch_line)
   }
-  Set-Content -Path $arch_config -Value $arch_keep -Encoding utf8
 }
-Add-Content -Path $arch_config -Encoding utf8 -Value @'
+$arch_next = $arch_config + '.archestra-next'
+Set-Content -Path $arch_next -Encoding utf8 -Value ${psq(`model_provider = "${ctx.proxy.proxyName}"`)}
+if ($arch_keep.Count -gt 0) { Add-Content -Path $arch_next -Encoding utf8 -Value $arch_keep }
+Add-Content -Path $arch_next -Encoding utf8 -Value @'
 ${block}
 '@
+Move-Item -Force -Path $arch_next -Destination $arch_config
 Write-Host ('Updated ' + $arch_config)${
       ctx.proxy.virtualKey
         ? `
@@ -830,7 +868,7 @@ Say ${psq("Signing Codex in with your virtual key")}
 $ArchVirtualKey = ${psq(ctx.proxy.virtualKey)}
 $ArchVirtualKey | codex login --with-api-key`
         : `
-Write-Host 'Codex keeps using your own OpenAI API key login.'`
+Write-Host 'Codex uses your existing ChatGPT or OpenAI API-key login.'`
     }`);
   }
 

@@ -10,13 +10,26 @@ import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
+import { archestraAudience } from "./archestra-audience";
 import { openappaDeclarations } from "./declarations";
 
-type HelperConsultOutcome =
-  | { kind: "answered"; answer: Record<string, unknown> }
+/**
+ * The last line a helper wrote to stderr, safe as a header value. Untrusted:
+ * passed through to the runtime's consult record, never parsed or acted on.
+ */
+export type HelperDiagnostics = string & {
+  readonly __brand: "HelperDiagnostics";
+};
+
+export type HelperConsultOutcome =
+  | {
+      kind: "answered";
+      answer: Record<string, unknown>;
+      diagnostics?: HelperDiagnostics;
+    }
   | { kind: "not_found" }
-  | { kind: "failed"; reason: string }
-  | { kind: "timed_out" }
+  | { kind: "failed"; reason: string; diagnostics?: HelperDiagnostics }
+  | { kind: "timed_out"; diagnostics?: HelperDiagnostics }
   | { kind: "busy" };
 
 /**
@@ -24,7 +37,8 @@ type HelperConsultOutcome =
  * URL supplies the organization, the credential bindings and the battery whose
  * files are mounted read-only into a fresh sandbox. The consult envelope goes in
  * on stdin, the credential as a Dagger secret, and the helper's stdout comes
- * back as the answer. Nothing about the run is persisted.
+ * back as the answer, with the last line of its stderr as diagnostics. Nothing
+ * about the run is persisted here.
  */
 class OpenAppaHelperBridge {
   /** Consults in flight, a raced-out run included until it settles. */
@@ -109,6 +123,17 @@ class OpenAppaHelperBridge {
       (candidate) => candidate.name === params.externalName,
     );
     if (!battery || !external) return { kind: "not_found" };
+    if (
+      archestraAudience.serves({
+        batteryName: install.batteryName,
+        packageHash: install.packageHash,
+        externalName: external.name,
+      })
+    )
+      return archestraAudience.consult({
+        organizationId: install.organizationId,
+        request: params.request,
+      });
 
     const resolved = await Promise.all(
       battery.credentials.map((credential) =>
@@ -163,16 +188,22 @@ class OpenAppaHelperBridge {
       );
       return { kind: "failed", reason: "the helper sandbox is unavailable" };
     }
-    if (executed.timedOut) return { kind: "timed_out" };
+    const diagnostics = helperDiagnostics(executed.stderr);
+    if (executed.timedOut) return { kind: "timed_out", diagnostics };
     if (executed.exitCode !== 0)
       return {
         kind: "failed",
         reason: `the helper exited with status ${executed.exitCode}`,
+        diagnostics,
       };
     const answer = parseJsonObject(executed.stdout);
     return answer
-      ? { kind: "answered", answer }
-      : { kind: "failed", reason: "the helper did not print a JSON object" };
+      ? { kind: "answered", answer, diagnostics }
+      : {
+          kind: "failed",
+          reason: "the helper did not print a JSON object",
+          diagnostics,
+        };
   }
 
   private async resolveCredential(params: {
@@ -252,6 +283,29 @@ function helperConsultCap(): number {
 }
 
 class HelperDeadlineError extends Error {}
+
+/** The runtime keeps at most 8 KiB of diagnostics. */
+const DIAGNOSTICS_LIMIT = 8 * 1024;
+/** What Node accepts in a header value: tab, printable ASCII, latin1. */
+const HEADER_VALUE = /^[\t\x20-\x7e\x80-\xff]+$/;
+
+/**
+ * The last non-empty line of the helper's stderr tail, or none when that line
+ * is not a valid header value or does not fit whole in the tail.
+ */
+function helperDiagnostics(stderr: string): HelperDiagnostics | undefined {
+  const cut = stderr.length > DIAGNOSTICS_LIMIT;
+  const lines = stderr.slice(-DIAGNOSTICS_LIMIT).split("\n");
+  // A cut tail begins mid-line: its first line may be the end of a longer one.
+  const whole = cut ? lines.slice(1) : lines;
+  const last = whole
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .at(-1);
+  return last !== undefined && HEADER_VALUE.test(last)
+    ? (last as HelperDiagnostics)
+    : undefined;
+}
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {

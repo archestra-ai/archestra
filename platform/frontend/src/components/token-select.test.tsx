@@ -18,7 +18,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServersGroupedByCatalog: useMcpServersGroupedByCatalogMock,
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils/tailwind", () => ({
   cn: (...classes: Array<string | false | null | undefined>) =>
     classes.filter(Boolean).join(" "),
 }));

@@ -20,7 +20,6 @@ import { LabelTags } from "@/components/label-tags";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
   TableRowActions,
@@ -64,8 +63,10 @@ export function ProjectsTable({
   rangeSelection: BulkRangeSelectionController;
 }) {
   const router = useRouter();
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
 
   const columns: ColumnDef<ProjectListItem>[] = [
     createSelectColumn<ProjectListItem>({
@@ -104,30 +105,6 @@ export function ProjectsTable({
       },
     },
     {
-      id: "sharing",
-      size: 160,
-      header: "Sharing",
-      cell: ({ row }) => {
-        const project = row.original;
-        return (
-          <span className="flex flex-wrap items-center gap-1">
-            <ScopeBadge
-              scope={projectVisibilityToScope(project.visibility)}
-              teamNames={project.shareTeamNames}
-              userNames={project.shareUserNames}
-            />
-            {project.viewerRole === "admin" && project.visibility === null && (
-              <Badge variant="secondary">
-                {project.ownerName
-                  ? `Owned by ${project.ownerName}`
-                  : "Other user"}
-              </Badge>
-            )}
-          </span>
-        );
-      },
-    },
-    {
       id: "actions",
       size: 112,
       header: () => <div className="text-right">Actions</div>,
@@ -140,9 +117,7 @@ export function ProjectsTable({
         );
         const canDelete = canDeleteProject({
           viewerRole: project.viewerRole,
-          visibility: project.visibility,
           isProjectAdmin: !!isProjectAdmin,
-          canShareOrg: !!canShareOrg,
         });
         const actions: TableRowAction[] = [
           ...(canPin
@@ -276,11 +251,10 @@ export function DeletedProjectsTable({
               {
                 icon: <ArchiveRestore className="h-4 w-4" />,
                 label: "Restore",
-                // The route gates restore on `project:admin`, not
-                // `project:delete` — the same bar that serves this slice at
-                // all. A lower one here would disable Restore for exactly the
-                // oversight role the trash is built for.
-                permissions: { project: ["admin"] },
+                // Restore is decided by the project's own `delete` grant, like
+                // deleting it, which an overseer of every project holds too.
+                permissions: { project: ["delete"] },
+                permissionScope: row.original.id,
                 onClick: () => onRestore(row.original),
               },
               permanentDeleteRowAction({

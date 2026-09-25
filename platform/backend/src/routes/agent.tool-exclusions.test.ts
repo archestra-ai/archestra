@@ -1,7 +1,7 @@
 import { type Mock, vi } from "vitest";
 import { getAgentTypePermissionChecker } from "@/auth";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -125,7 +125,10 @@ describe("agent tool-exclusions routes", () => {
       url: `/api/agents/${agent.id}/tool-exclusions`,
     });
     expect(getResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "read");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "read",
+      scope: agent.id,
+    });
 
     const putResponse = await app.inject({
       method: "PUT",
@@ -133,7 +136,10 @@ describe("agent tool-exclusions routes", () => {
       payload: { excludedToolIds: [] },
     });
     expect(putResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "update");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "update",
+      scope: agent.id,
+    });
   });
 
   test("PUT rejects invalid exclusions with 400 and leaves state untouched", async ({

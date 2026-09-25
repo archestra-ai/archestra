@@ -64,9 +64,9 @@ export type AgentRuntimeConfig = {
   idleTimeoutMinutes: number | null;
 };
 
-export function defaultAgentRuntime(defaultImage = ""): AgentRuntimeConfig {
+export function defaultAgentRuntime(): AgentRuntimeConfig {
   return {
-    image: defaultImage,
+    image: "",
     command: null,
     inferenceProtocol: "openai_responses",
     backend: "kubernetes",
@@ -90,10 +90,7 @@ export function AgentRuntimeFields({
 }) {
   const enabledId = useId();
   const runtimeEnabled = useFeature("agentRuntime");
-  const configuredDefaultImage = useFeature("agentRuntimeBaseImage");
-  const defaultImage =
-    typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
-  const config = value ?? defaultAgentRuntime(defaultImage);
+  const config = value ?? defaultAgentRuntime();
 
   return (
     <div className="space-y-4" data-testid="agent-runtime">
@@ -117,7 +114,7 @@ export function AgentRuntimeFields({
           checked={value !== null}
           disabled={runtimeEnabled !== true && value === null}
           onCheckedChange={(checked) =>
-            onChange(checked ? defaultAgentRuntime(defaultImage) : null)
+            onChange(checked ? defaultAgentRuntime() : null)
           }
         />
       </div>
@@ -185,9 +182,6 @@ export function AgentRuntimeImageFields({
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
-  const configuredDefaultImage = useFeature("agentRuntimeBaseImage");
-  const defaultImage =
-    typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
   const command = config.command?.[0] ?? "";
   const argumentsValue = (config.command ?? []).slice(1).join("\n");
   return (
@@ -208,10 +202,10 @@ export function AgentRuntimeImageFields({
           command: toCommand(next.command, next.arguments),
         })
       }
-      image={{ placeholder: defaultImage }}
+      image={{ placeholder: "registry.example.com/my-agent:latest" }}
       command={{
-        placeholder: "Use the image's default command",
-        description: "Leave blank to use the image's default command.",
+        placeholder: "my-agent",
+        description: "The executable that starts your Agent client.",
       }}
       arguments={{
         placeholder: "--permission-mode\nbypassPermissions",

@@ -59,7 +59,6 @@ import {
 } from "@/archestra-mcp-server/dynamic-tools";
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
-import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type ArchestraElicitationOutcome,
@@ -110,6 +109,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
@@ -279,6 +279,18 @@ const rawArchestraTokenCache =
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+]);
+const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "get_guardrails_policy",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "get_guardrails_policy_change_status",
+  "load_skill",
+  "list_mcp_server_deployments",
+  "get_mcp_server_tools",
+  "search_tools",
+  "ask_user",
 ]);
 
 /**
@@ -463,6 +475,14 @@ export async function createAgentServer(params: {
             ),
           )
         : [];
+    const implicitPolicyTools =
+      openappaEnabled() && agent.agentType === "agent"
+        ? getArchestraMcpTools().filter((tool) =>
+            APPA_POLICY_TOOL_SHORT_NAMES.has(
+              archestraMcpBranding.getToolShortName(tool.name) ?? "",
+            ),
+          )
+        : [];
     const implicitAskUserTools = getImplicitAskUserTools();
     const candidateTools = dedupeToolsByName(
       [
@@ -472,6 +492,7 @@ export async function createAgentServer(params: {
         ...implicitMetaTools.map(asBuiltInTool),
         ...implicitTaskControlTools.map(asBuiltInTool),
         ...implicitOpenAppaTools.map(asBuiltInTool),
+        ...implicitPolicyTools.map(asBuiltInTool),
         ...implicitAskUserTools.map(asBuiltInTool),
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
@@ -495,6 +516,8 @@ export async function createAgentServer(params: {
       toolExposureMode: agent.toolExposureMode ?? "full",
       advertiseUiResourceTools: surface.advertiseUiTools,
       autoToolMode: agent.accessAllTools,
+      advertiseOpenAppaPolicyTools:
+        surface.keepChatOnlyTools && openappaEnabled(),
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
     const permittedTools = surface.keepChatOnlyTools
@@ -716,7 +739,11 @@ export async function createAgentServer(params: {
           null;
         try {
           if (skillsSurfaceEnabled()) {
-            skillResource = await serveSkillResource({ uri, agentId });
+            skillResource = await serveSkillResource({
+              uri,
+              agentId,
+              callerUserId: tokenAuth?.userId ?? null,
+            });
           }
         } catch (error) {
           logger.error(
@@ -728,6 +755,9 @@ export async function createAgentServer(params: {
             "Skill resource read failed",
           );
           throw { code: -32603, message: "Resource read failed" };
+        }
+        if (skillResource && "error" in skillResource) {
+          throw skillResource.error;
         }
         if (skillResource) {
           return complete(withPrivateCacheHint(skillResource));
@@ -1490,26 +1520,13 @@ async function validateResolvedTeamToken(params: {
   token: SelectTeamToken;
   agentAccessContext?: AgentAccessContext | null;
 }): Promise<TokenAuthResult | null> {
-  const { profileId, token, agentAccessContext } = params;
-
-  // Check if profile is accessible via this token
-  if (!token.isOrganizationToken) {
-    // Team token: profile must be assigned to this team, or be teamless (org-wide)
-    const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-      profileId,
-      token.teamId,
-      agentAccessContext,
-    );
-    if (!hasAccess) {
-      logger.warn(
-        { profileId, tokenTeamId: token.teamId },
-        "Profile not accessible via team token",
-      );
-      return null;
-    }
-  }
-  // Org token: any profile in the organization is accessible
-  // (organization membership is verified in the route handler)
+  const { profileId, token } = params;
+  const hasAccess = await AgentTeamModel.credentialHasAgentAccess({
+    organizationId: token.organizationId,
+    agentId: profileId,
+    teamId: token.isOrganizationToken ? null : token.teamId,
+  });
+  if (!hasAccess) return null;
 
   return {
     tokenId: token.id,
@@ -1559,36 +1576,27 @@ async function validateResolvedUserToken(params: {
   const { profileId, token, agentAccessContext } = params;
 
   // Check if user has MCP gateway admin permission (can access all gateways)
-  const isGatewayAdmin = await userHasPermission(
-    token.userId,
-    token.organizationId,
-    "mcpGateway",
-    "admin",
-  );
-
-  if (isGatewayAdmin) {
-    return {
-      tokenId: token.id,
-      teamId: null, // User tokens aren't scoped to a single team
-      isOrganizationToken: false,
-      organizationId: token.organizationId,
-      isUserToken: true,
-      userId: token.userId,
-    };
-  }
+  const isGatewayAdmin = await ResourcePermissions.allows({
+    userId: token.userId,
+    organizationId: token.organizationId,
+    resource: "mcpGateway",
+    scope: "*",
+    action: "update",
+  });
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
   if (
-    !(await AgentTeamModel.userHasAgentAccess(
-      token.userId,
-      profileId,
-      false,
-      agentAccessContext,
-    ))
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: token.userId,
+      agentId: profileId,
+      isAgentAdmin: isGatewayAdmin,
+      agentAccessContext: agentAccessContext,
+      action: "use",
+    }))
   ) {
     logger.warn(
       { profileId, userId: token.userId },
-      "Profile not accessible via user token (no shared teams)",
+      "Profile not accessible via user token (missing use permission)",
     );
     return null;
   }
@@ -1730,23 +1738,13 @@ async function validateOAuthTokenByHash(params: {
     const organizationId = agent.organizationId;
 
     // Check if user has MCP gateway admin permission (can access all gateways)
-    const isGatewayAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "mcpGateway",
-      "admin",
-    );
-
-    if (isGatewayAdmin) {
-      return {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId,
-        isUserToken: true,
-        userId,
-      };
-    }
+    const isGatewayAdmin = await ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "mcpGateway",
+      scope: "*",
+      action: "update",
+    });
 
     // Non-admin access has two additive sources:
     //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
@@ -1754,12 +1752,13 @@ async function validateOAuthTokenByHash(params: {
     //      that minted this token — its allowedGatewayIds may grant access to
     //      gateways the user could not otherwise reach (e.g. a gateway reachable
     //      only through a specific pre-registered app).
-    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
-      userId,
-      params.profileId,
-      false,
-      agent,
-    );
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: userId,
+      agentId: params.profileId,
+      isAgentAdmin: isGatewayAdmin,
+      agentAccessContext: agent,
+      action: "use",
+    });
     const hasClientGrant =
       hasRbacAccess || !accessToken.clientId
         ? false
@@ -2179,13 +2178,17 @@ async function authenticateExternalIdpToken(
       return { result: null, reason: "not_org_member" };
     }
 
-    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
-    const isAdmin = await userHasPermission(
-      user.id,
-      agent.organizationId,
-      permissionResource,
-      "admin",
-    );
+    // An MCP gateway administrator holds `update` on every gateway (a grant at
+    // `*`). The LLM proxy has no such grant, so nobody bypasses its team check.
+    const isAdmin =
+      permissionResource === "mcpGateway" &&
+      (await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: agent.organizationId,
+        resource: "mcpGateway",
+        scope: "*",
+        action: "update",
+      }));
 
     const authenticated: TokenAuthResult = {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
@@ -2198,15 +2201,18 @@ async function authenticateExternalIdpToken(
       rawToken: tokenValue,
     };
 
-    if (isAdmin) {
-      return { result: authenticated, reason: null };
-    }
-
     // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
+    if (
+      !(await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: profileId,
+        isAgentAdmin: isAdmin,
+        action: "use",
+      }))
+    ) {
       logger.warn(
         { profileId, userId: user.id },
-        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+        "validateExternalIdpToken: profile not accessible via external IdP (missing use permission)",
       );
       return { result: null, reason: "no_gateway_access" };
     }
@@ -2269,6 +2275,9 @@ function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
+  // Identity lookup may be cached separately, but a user's authorization must
+  // reflect resource grants and team/role membership on every request.
+  if (result?.userId) return;
   // Negative results are intentionally NOT cached. Caching auth failures
   // creates a "cache treadmill" where every retry refreshes the negative
   // entry: a transient race during agent/IdP creation fails the first
@@ -2362,10 +2371,16 @@ function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
+  advertiseOpenAppaPolicyTools: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
-    params;
+  const {
+    toolExposureMode,
+    advertiseUiResourceTools,
+    autoToolMode,
+    advertiseOpenAppaPolicyTools,
+    tools,
+  } = params;
   return tools.filter((tool) => {
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
     // the meta tools themselves and the always-exposed skill path must stay
@@ -2383,6 +2398,10 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          (advertiseOpenAppaPolicyTools &&
+            APPA_POLICY_TOOL_SHORT_NAMES.has(
+              archestraMcpBranding.getToolShortName(tool.name) ?? "",
+            )) ||
           (openappaEnabled() &&
             isImplicitOpenAppaTool(
               archestraMcpBranding.getToolShortName(tool.name),

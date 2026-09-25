@@ -19,7 +19,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   getLlmModels,
@@ -154,10 +154,14 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
   };
 }
 
-export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
+export function useModelsWithApiKeys(options?: {
+  toastOnError?: boolean;
+  enabled?: boolean;
+}) {
   const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["models-with-api-keys"],
+    enabled: options?.enabled,
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
       throwOnApiError(error, { toastOnError });

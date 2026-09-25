@@ -1,7 +1,9 @@
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ChatOpsChannelBindingModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 import chatopsRoutes from "./chatops";
@@ -24,20 +26,19 @@ describe("PATCH /api/chatops/bindings", () => {
   let originalOwner: Agent;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     user = await makeAdmin();
+    await makeMember(user.id, organizationId, { role: "admin" });
     originalOwner = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     targetAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     app = createFastifyInstance();
@@ -75,7 +76,6 @@ describe("PATCH /api/chatops/bindings", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     await ChatOpsChannelBindingModel.update(binding.id, {
       agentId: newerOwner.id,
@@ -104,7 +104,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
@@ -167,7 +166,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const response = await patch({
@@ -187,7 +185,6 @@ describe("PATCH /api/chatops/bindings", () => {
     const gatewayAgent = await makeAgent({
       organizationId,
       agentType: "mcp_gateway",
-      scope: "org",
     });
 
     const response = await patch({
@@ -204,14 +201,30 @@ describe("PATCH /api/chatops/bindings", () => {
     ).toBe(originalOwner.id);
   });
 
-  test("rejects assigning a personal agent to another user's DM on legacy routes", async ({
+  test("requires permission management to publish to another user's DM", async ({
     makeAgent,
   }) => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
     const personalAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
+    });
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: personalAgent.id,
+    });
+    if (!policy) throw new Error("Missing permission policy fixture");
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "agent",
+      scope: personalAgent.id,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+      revision: policy.revision,
     });
     const dmBinding = await ChatOpsChannelBindingModel.create({
       organizationId,

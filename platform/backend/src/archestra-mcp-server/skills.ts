@@ -1,4 +1,5 @@
 import {
+  ResourcePermissionGrantSchema,
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_CREATE_SKILL_SHORT_NAME,
@@ -9,10 +10,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
-import {
-  getSkillPermissionChecker,
-  requireSkillModifyPermission,
-} from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -22,7 +19,6 @@ import {
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
-  TeamModel,
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { getPluginSkill } from "@/plugins/plugin-skills";
@@ -37,6 +33,7 @@ import {
 } from "@/services/agent-activation-skills";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { getExternalMcpSkill } from "@/services/external-mcp-skills";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   formatExternalSkillActivation,
   formatExternalSkillName,
@@ -139,6 +136,7 @@ const LoadSkillSchema = z.object({
 
 const CreateSkillSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     content: SkillManifestContentSchema,
     files: z
       .array(SkillFileInputSchema)
@@ -384,6 +382,20 @@ const registry = defineArchestraTools([
       }
 
       const skill = resolved.skill;
+      if (ctx.userId) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const effective = await ResourcePermissions.getEffective({
+          organizationId: ctx.organizationId,
+          userId: ctx.userId,
+          resource: "skill",
+          scope: skill.id,
+        });
+        // SPDX-SnippetEnd
+        if (!effective.grants.some((grant) => grant.action === "use"))
+          return errorResult("You do not have permission to use this skill.");
+      }
 
       const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
 
@@ -501,13 +513,30 @@ const registry = defineArchestraTools([
       const agentEnvironmentId = await AgentModel.findEnvironmentId(
         context.agent.id,
       );
+      const resourceId = crypto.randomUUID();
+      if (args.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          ...ctx,
+          resource: "skill",
+          grants: args.initialGrants,
+          target: {
+            id: resourceId,
+            name: parsed.name,
+            authorId: ctx.userId,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const skill = await SkillModel.createWithFiles({
+        initialPermissionGrants: args.initialGrants,
         skill: {
           ...toSkillInsertFields(parsed),
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
           sourceType: "manual",
-          scope: "personal",
         },
         files: toSkillFiles(args.files ?? []),
         environmentIds: agentEnvironmentId ? [agentEnvironmentId] : [],
@@ -550,7 +579,11 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
+      const skill = await findAccessibleSkill(
+        { ...ctx, action: "update" },
+        args.name,
+        context.agent.id,
+      );
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -612,7 +645,11 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
+      const skill = await findAccessibleSkill(
+        { ...ctx, action: "update" },
+        args.name,
+        context.agent.id,
+      );
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -901,7 +938,7 @@ async function canRunSkillSandbox(
  * cross-environment skill is indistinguishable from a nonexistent one.
  */
 async function findAccessibleSkill(
-  ctx: SkillReadContext,
+  ctx: SkillReadContext & { action?: "read" | "update" },
   name: string,
   agentId?: string,
 ) {
@@ -925,28 +962,37 @@ async function findAccessibleSkill(
   }
   if (candidates.length === 0) return null;
 
-  const isSkillAdmin =
-    ctx.userId !== undefined &&
-    (
-      await getSkillPermissionChecker({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      })
-    ).isAdmin;
-
   const accessible: Skill[] = [];
   for (const skill of candidates) {
-    const hasAccess = await SkillTeamModel.userHasSkillAccess({
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      skill,
-      isSkillAdmin,
-    });
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const hasAccess = ctx.userId
+      ? (
+          await ResourcePermissions.getEffective({
+            organizationId: ctx.organizationId,
+            userId: ctx.userId,
+            resource: "skill",
+            scope: skill.id,
+          })
+        ).grants.some(
+          (grant) => grant.action === "read" || grant.action === ctx.action,
+        )
+      : await SkillTeamModel.userHasSkillAccess({
+          organizationId: ctx.organizationId,
+          skill,
+        });
+    // SPDX-SnippetEnd
     if (hasAccess) accessible.push(skill);
   }
   if (accessible.length === 0) return null;
 
-  return selectEffectiveNativeSkills(accessible, ctx.userId)[0] ?? null;
+  return (
+    selectEffectiveNativeSkills(
+      await SkillModel.withGrantedScope(accessible),
+      ctx.userId,
+    )[0] ?? null
+  );
 }
 
 /**
@@ -957,20 +1003,17 @@ async function checkSkillModifyPermission(
   ctx: UserContext,
   skill: Skill,
 ): Promise<string | null> {
-  const checker = await getSkillPermissionChecker(ctx);
-  const userTeamIds = checker.isAdmin
-    ? []
-    : await TeamModel.getUserTeamIds(ctx.userId);
-  const skillTeamIds = await SkillTeamModel.getTeamsForSkill(skill.id);
   try {
-    requireSkillModifyPermission({
-      checker,
-      scope: skill.scope,
-      authorId: skill.authorId,
-      skillTeamIds,
-      userTeamIds,
-      userId: ctx.userId,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      ...ctx,
+      resource: "skill",
+      scope: skill.id,
+      action: "update",
     });
+    // SPDX-SnippetEnd
     return null;
   } catch (error) {
     if (error instanceof ApiError) return error.message;

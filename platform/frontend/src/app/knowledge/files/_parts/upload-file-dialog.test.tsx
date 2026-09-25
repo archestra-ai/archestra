@@ -25,10 +25,6 @@ const selectState = vi.hoisted(() => ({
 
 vi.mock("sonner");
 
-vi.mock("@/app/knowledge/files/_parts/file-visibility-selector", () => ({
-  FileVisibilitySelector: () => <div>Visibility</div>,
-}));
-
 // Radix Select relies on browser layout APIs that jsdom does not implement.
 // This keeps the real dialog and mutation flow while replacing only the
 // inaccessible listbox interaction; Chrome verification covers the real
@@ -132,8 +128,6 @@ describe("UploadFileDialog", () => {
     await waitFor(() =>
       expect(requestBody).toEqual({
         name: createdDirectory.name,
-        visibility: "org-wide",
-        teamIds: [],
       }),
     );
     expect(screen.queryByText("New directory")).not.toBeInTheDocument();

@@ -1,0 +1,27 @@
+name: "🤖 Add an LLM provider"
+description: Request support for an LLM provider that Archestra does not support yet.
+title: "[LLM Provider] Add "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        To add the provider yourself, see [Adding LLM Providers](https://archestra.ai/docs/platform-adding-llm-providers).
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: Example AI
+    validations:
+      required: true
+  - type: input
+    id: api_docs
+    attributes:
+      label: API documentation URL
+      placeholder: https://docs.example.com/api
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: API compatibility (for example, OpenAI-compatible), authentication, or the models you need.

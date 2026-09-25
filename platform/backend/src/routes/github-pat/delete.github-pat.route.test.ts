@@ -1,10 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import GithubPatModel from "@/models/github-pat";
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
 import { createGithubPat } from "@/services/github-pat";
-import { afterEach, describe, expect, test } from "@/test";
+import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { buildGithubPatTestApp } from "./github-pat.test-helpers";
 
 describe("DELETE /api/github-pats/:id", () => {
@@ -74,11 +74,11 @@ describe("DELETE /api/github-pats/:id", () => {
         sourceType: "github",
         sourceRef: "acme/skills@main:pat-synced",
         sourceCommit: "abc",
-        scope: "org",
         githubSyncInterval: "1d",
         githubPatId: created.id,
       },
       files: [],
+      ...accessGrants("org"),
     });
     if (!skill) throw new Error("seed failed");
 
@@ -123,11 +123,11 @@ describe("DELETE /api/github-pats/:id", () => {
         sourceType: "github",
         sourceRef: "acme/skills@main:pat-synced-deleted",
         sourceCommit: "abc",
-        scope: "org",
         githubSyncInterval: "1d",
         githubPatId: created.id,
       },
       files: [],
+      ...accessGrants("org"),
     });
     if (!skill) throw new Error("seed failed");
 

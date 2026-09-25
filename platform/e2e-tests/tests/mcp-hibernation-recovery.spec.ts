@@ -501,8 +501,12 @@ test.describe("MCP hibernation - administrator recovery", () => {
         data: {
           name: `MCP Hibernation Recovery Gateway ${Date.now()}`,
           agentType: "mcp_gateway",
-          scope: "team",
-          teams: [defaultTeam.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: defaultTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       gatewayId = (await gatewayResponse.json()).id;

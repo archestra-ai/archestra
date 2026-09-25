@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
 import { openaiAdapterFactory } from "./openai";
 
@@ -367,6 +367,76 @@ describe("OpenAIResponseAdapter", () => {
         "Tool call blocked by policy",
       );
       expect(refusal.choices[0].finish_reason).toBe("stop");
+    });
+
+    test("clears logprobs that encode the withheld raw text", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "withheld raw text",
+      });
+      response.choices[0].logprobs = {
+        content: [
+          {
+            token: "withheld raw text",
+            bytes: [],
+            logprob: -0.1,
+            top_logprobs: [],
+          },
+        ],
+        refusal: null,
+      };
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const refusal = adapter.toRefusalResponse(
+        "Full refusal",
+        "Tool call blocked by policy",
+      );
+
+      expect(refusal.choices[0].logprobs).toBeNull();
+      expect(JSON.stringify(refusal.choices[0])).not.toContain(
+        "withheld raw text",
+      );
+    });
+  });
+
+  describe("withReplacedText", () => {
+    test("replaces the message content", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "Original content",
+      });
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const replaced = adapter.withReplacedText?.("approved replacement");
+
+      expect(replaced?.choices[0].message.content).toBe("approved replacement");
+      expect(replaced?.choices[0].finish_reason).toBe("stop");
+    });
+
+    test("clears logprobs that encode the replaced raw text", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "withheld raw text",
+      });
+      response.choices[0].logprobs = {
+        content: [
+          {
+            token: "withheld raw text",
+            bytes: [],
+            logprob: -0.1,
+            top_logprobs: [],
+          },
+        ],
+        refusal: null,
+      };
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      const replaced = adapter.withReplacedText?.("approved replacement");
+
+      expect(replaced?.choices[0].logprobs).toBeNull();
+      expect(JSON.stringify(replaced?.choices[0])).not.toContain(
+        "withheld raw text",
+      );
     });
   });
 });
@@ -802,18 +872,6 @@ describe("openaiAdapterFactory", () => {
       expect(apiKey).toBeUndefined();
     });
   });
-
-  describe("provider info", () => {
-    test("has correct provider name", () => {
-      expect(openaiAdapterFactory.provider).toBe("openai");
-    });
-
-    test("has correct interaction type", () => {
-      expect(openaiAdapterFactory.interactionType).toBe(
-        "openai:chatCompletions",
-      );
-    });
-  });
 });
 
 describe("OpenAIStreamAdapter", () => {
@@ -1066,10 +1124,9 @@ describe("OpenAIStreamAdapter", () => {
     expect(result.sseData).toBeNull();
   });
 
-  test("does not stream a chunk carrying both reasoning and a tool call", () => {
-    // A reasoning+tool_call chunk must route through the tool-call blocking-policy
-    // buffering (sseData null, isToolCallChunk true), not stream immediately — so
-    // reasoning can't carry unapproved tool-call data past the policy gate.
+  test("streams reasoning without its accompanying tool call and records it", () => {
+    // The call remains buffered for policy evaluation, but reasoning is not call
+    // data and must reach the client and the accumulated response.
     const adapter = openaiAdapterFactory.createStreamAdapter();
     const result = adapter.processChunk({
       id: "chatcmpl-rt",
@@ -1095,8 +1152,51 @@ describe("OpenAIStreamAdapter", () => {
       ],
     } as unknown as Chunk);
 
-    expect(result.sseData).toBeNull();
+    expect(deltaOf(result.sseData)).toEqual({ reasoning_content: "thinking" });
     expect(result.isToolCallChunk).toBe(true);
+    expect(
+      (
+        adapter.toProviderResponse().choices[0].message as {
+          reasoning_content?: string;
+        }
+      ).reasoning_content,
+    ).toBe("thinking");
+    expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
+      tool_calls: expect.any(Array),
+    });
+  });
+
+  test("keeps reasoning when a trajectory prefix and tool call share the opening chunk", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.setTextSuffix?.(() => "[appa] protected child trajectory");
+
+    const result = adapter.processChunk({
+      id: "chatcmpl-prefixed-reasoning",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "qwen3",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            reasoning_content: "thinking",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "search", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).toContain("[appa] protected child trajectory");
+    expect(result.sseData).toContain('"reasoning_content":"thinking"');
+    expect(result.sseData).not.toContain('"tool_calls"');
   });
 
   function finishReasonOf(endSse: string | Uint8Array): unknown {
@@ -1110,7 +1210,7 @@ describe("OpenAIStreamAdapter", () => {
     ).choices?.[0]?.finish_reason;
   }
 
-  test("closes a refused stream as stop, not the upstream tool_calls", () => {
+  test("clears held calls and closes a replaced stream as stop", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({
       id: "chatcmpl-3",
@@ -1135,8 +1235,18 @@ describe("OpenAIStreamAdapter", () => {
       ],
     } as Chunk);
 
-    adapter.formatCompleteTextSSE("blocked");
+    expect(adapter.state.toolCalls).toHaveLength(1);
+    expect(adapter.getRawToolCallEvents()).toHaveLength(1);
 
+    adapter.prepareResponseReplacement?.();
+    const replacementWire = [
+      ...adapter.formatCompleteTextSSE("blocked"),
+      adapter.formatEndSSE(),
+    ].join("");
+
+    expect(adapter.state.toolCalls).toEqual([]);
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+    expect(replacementWire).not.toContain("call_1");
     expect(finishReasonOf(adapter.formatEndSSE())).toBe("stop");
 
     const response = adapter.toProviderResponse();

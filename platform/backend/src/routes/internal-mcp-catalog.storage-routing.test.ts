@@ -1,8 +1,8 @@
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -28,13 +28,14 @@ describe("Internal MCP Catalog - Storage Routing", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

@@ -1,18 +1,20 @@
+import { randomUUID } from "node:crypto";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { ProjectLabelModel, ProjectModel } from "@/models";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   constructResponseSchema,
   GetAgentRunResponseSchema,
@@ -22,12 +24,10 @@ import {
   ProjectLifecycleSchema,
   ProjectListItemSchema,
   ProjectListScopeSchema,
-  ProjectShareVisibilitySchema,
   SandboxFileListItemSchema,
 } from "@/types";
 import {
   BulkDeleteBodySchema,
-  BulkIdsSchema,
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
@@ -106,11 +106,33 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           icon: z.string().max(1_000_000).nullable().optional(),
           defaultAgentId: z.string().uuid().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).default([]),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
     },
     async ({ body, organizationId, user }) => {
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "project",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: user.id,
+            // A project starts unshared, so its own audience is its owner.
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const project = await projectService.create({
         organizationId,
         userId: user.id,
@@ -119,6 +141,11 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         icon: body.icon ?? null,
         defaultAgentId: body.defaultAgentId ?? null,
         labels: body.labels,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: body.initialGrants ?? [],
+        // SPDX-SnippetEnd
       });
       const labels = await ProjectLabelModel.getLabelsFor(project.id);
       return {
@@ -249,12 +276,13 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, organizationId, user }) => {
-      const isProjectAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "project",
-        "admin",
-      );
+      const isProjectAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "project",
+        scope: "*",
+        action: "update",
+      });
       const parsedLabels = parseLabelsParam(query.labels);
       const labelFilteredIds = parsedLabels
         ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
@@ -339,109 +367,6 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         labels: body.labels,
       });
       return { ok: true as const };
-    },
-  );
-
-  fastify.put(
-    "/api/projects/:id/share",
-    {
-      schema: {
-        operationId: RouteId.SetProjectShare,
-        description:
-          "Set who can see the project (owner or a project admin): the whole " +
-          'organization, specific teams, or nobody (visibility "none" unshares).',
-        tags: ["Projects"],
-        params: z.object({ id: z.string().uuid() }),
-        body: z.object({
-          // "none" unshares — expressed as a value (not null) because the
-          // generated client cannot represent a nullable enum.
-          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
-          teamIds: z.array(z.string()).default([]),
-          // People a `user` share names; ignored for other visibilities.
-          userIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
-      },
-    },
-    async ({ params: { id }, body, organizationId, user }) => {
-      await projectService.setShare({
-        id,
-        organizationId,
-        userId: user.id,
-        visibility: body.visibility === "none" ? null : body.visibility,
-        teamIds: body.teamIds,
-        userIds: body.userIds,
-      });
-      return { ok: true as const };
-    },
-  );
-
-  fastify.patch(
-    "/api/projects/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateProjects,
-        description:
-          "Update several projects in one request. Today the only " +
-          "bulk-editable surface is who can see them — the whole " +
-          'organization, named teams, named people, or nobody ("none" ' +
-          "unshares) — and every project in the batch is moved to the same " +
-          "one. Per-project problems, such as an id the caller neither owns " +
-          "nor administers, are reported in `failed` and leave the rest of " +
-          "the batch applied.",
-        tags: ["Projects"],
-        body: z.object({
-          ids: BulkIdsSchema,
-          // "none" unshares — a value rather than null, because the generated
-          // client cannot represent a nullable enum.
-          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
-          teamIds: z.array(z.string()).default([]),
-          userIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { organizationId, user, body } = request;
-      const visibility = body.visibility === "none" ? null : body.visibility;
-
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "projects bulk update",
-        notFoundMessage: "Project not found",
-        unexpectedMessage: "Could not update this project",
-        load: async (ids) =>
-          new Map(
-            (await ProjectModel.findForBulk({ ids, organizationId })).map(
-              (project) => [project.id, project],
-            ),
-          ),
-        describe: (project) => project.name,
-        // The service owns the authorization (owner or project admin) and
-        // throws exactly as the single-project route would, so a batch refuses
-        // what one request refuses — per project, not for the whole batch.
-        applyEach: async (_project, id) => {
-          await projectService.setShare({
-            id,
-            organizationId,
-            userId: user.id,
-            visibility,
-            teamIds: body.teamIds,
-            userIds: body.userIds,
-          });
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            projects: await ProjectModel.findVisibilityForBulkAudit({
-              ids,
-              organizationId,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 
@@ -695,7 +620,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetProjectConversations,
         description:
           "All chats in a project the caller can read. Chats authored by " +
-          "others require `project:read-all`; without it the caller sees " +
+          "others require `read` on every chat (a grant at `*` on " +
+          "`conversation`); without it the caller sees " +
           "only their own. `readOnly` marks chats authored by someone else " +
           "(viewable, never writable).",
         tags: ["Projects"],
@@ -720,7 +646,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetProjectRuns,
         description:
           "All run sessions in a project the caller can read. Sessions " +
-          "started by others require `project:read-all`; all non-owner views " +
+          "started by others require `read` on every chat (a grant at `*` " +
+          "on `conversation`); all non-owner views " +
           "are read-only.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),

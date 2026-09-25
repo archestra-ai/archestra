@@ -13,7 +13,15 @@ import {
 import { vi } from "vitest";
 import config from "@/config";
 import { AuditLogModel, PluginModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import {
   type Agent,
   type CreatePlugin,
@@ -25,12 +33,6 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from ".";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
 
 const HOOKS_BYTES = '{\n  "hooks": { "SessionStart": [] }\n}\n';
 
@@ -83,11 +85,15 @@ describe("plugin tool execution", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  async function seedPlugin(overrides: Partial<CreatePlugin> = {}) {
+  async function seedPlugin(
+    overrides: Partial<CreatePlugin> = {},
+    access?: TestAccess,
+  ) {
     const plugin = await PluginModel.create({
       organizationId,
       userId: adminUserId,
       input: pluginPayload(overrides),
+      ...accessGrants(access),
     });
     if (!plugin) throw new Error("seed plugin creation failed");
     return plugin;
@@ -224,11 +230,11 @@ describe("plugin tool execution", () => {
     makeMember,
   }) => {
     // an editor holds plugin:read but not plugin:admin, so the catalog is
-    // scope-filtered: org plugins show, someone else's personal plugin does not.
+    // grant-filtered: org plugins show, someone else's own plugin does not.
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
-    await seedPlugin({ displayName: "Org hooks", scope: "org" });
-    await seedPlugin({ displayName: "Admin only", scope: "personal" });
+    await seedPlugin({ displayName: "Org hooks" }, "org");
+    await seedPlugin({ displayName: "Admin only" });
 
     const result = await executeArchestraTool(
       TOOL_LIST_PLUGINS_FULL_NAME,
@@ -241,22 +247,31 @@ describe("plugin tool execution", () => {
     expect(textOf(result)).not.toContain("Admin only");
   });
 
-  test("create_plugin rejects a team scope with unknown teams", async () => {
-    const result = await executeArchestraTool(
+  test("create_plugin and update_plugin no longer take the retired audience fields", async () => {
+    // Audience is set with initialGrants on create and through the resource
+    // permissions API afterwards; the strict tool schemas refuse the old
+    // scope/team/user fields rather than ignoring them.
+    const created = await executeArchestraTool(
       TOOL_CREATE_PLUGIN_FULL_NAME,
-      pluginPayload({
-        displayName: "Team hooks",
+      {
+        ...pluginPayload({ displayName: "Team hooks" }),
         scope: "team",
         teamIds: ["00000000-0000-0000-0000-000000000000"],
-      }),
+      },
       context,
     );
+    expect(created.isError).toBe(true);
 
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("Unknown team id(s)");
+    const plugin = await seedPlugin();
+    const updated = await executeArchestraTool(
+      TOOL_UPDATE_PLUGIN_FULL_NAME,
+      { id: plugin.id, scope: "org" },
+      context,
+    );
+    expect(updated.isError).toBe(true);
   });
 
-  test("update_plugin edits metadata and validates visibility", async () => {
+  test("update_plugin edits metadata", async () => {
     const plugin = await seedPlugin();
 
     const renamed = await executeArchestraTool(
@@ -272,16 +287,6 @@ describe("plugin tool execution", () => {
     });
     expect(stored?.displayName).toBe("Renamed hooks");
     expect(stored?.enabled).toBe(false);
-
-    const invalid = await executeArchestraTool(
-      TOOL_UPDATE_PLUGIN_FULL_NAME,
-      { id: plugin.id, scope: "team" },
-      context,
-    );
-    expect(invalid.isError).toBe(true);
-    expect(textOf(invalid)).toContain(
-      "Team-visible plugins require at least one team",
-    );
   });
 
   test("update_plugin refuses files on a GitHub-sourced plugin", async () => {

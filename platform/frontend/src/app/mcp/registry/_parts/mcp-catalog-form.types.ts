@@ -2,6 +2,7 @@ import {
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   LocalConfigFormSchema,
+  ResourcePermissionGrantSchema,
 } from "@archestra/shared";
 import { z } from "zod";
 
@@ -193,7 +194,7 @@ const enterpriseManagedConfigSchema = z.object({
   responseFieldPath: z.string().optional(),
 });
 
-export const formSchema = z
+const activeAuthFormSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required"),
     description: z.string().optional().or(z.literal("")),
@@ -240,6 +241,9 @@ export const formSchema = z
       .optional(),
     // Scope for catalog item visibility
     scope: z.enum(["personal", "team", "org"]).optional(),
+    initialGrants: z
+      .array(ResourcePermissionGrantSchema.extend({ name: z.string() }))
+      .optional(),
     // Teams a team-scoped item is shared with, each with its access level
     teams: z
       .array(z.object({ id: z.string(), level: z.enum(["use", "write"]) }))
@@ -357,4 +361,45 @@ export const formSchema = z
     }
   });
 
+export const formSchema = z.preprocess(
+  omitInactiveAuthFields,
+  activeAuthFormSchema,
+);
+
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
+
+// RHF retains unmounted fields so switching back restores the user's draft.
+// Validate and submit only the selected method's configuration, without
+// mutating those retained values or suppressing errors in shared fields.
+function omitInactiveAuthFields(value: unknown) {
+  if (!value || typeof value !== "object" || !("authMethod" in value)) {
+    return value;
+  }
+
+  const data = { ...value } as Record<string, unknown>;
+  if (
+    data.authMethod !== "oauth" &&
+    data.authMethod !== "oauth_client_credentials"
+  ) {
+    delete data.oauthConfig;
+  } else if (
+    data.authMethod === "oauth_client_credentials" &&
+    data.oauthConfig &&
+    typeof data.oauthConfig === "object"
+  ) {
+    const oauthConfig = { ...data.oauthConfig } as Record<string, unknown>;
+    delete oauthConfig.authorizationEndpoint;
+    delete oauthConfig.oauthServerUrl;
+    data.oauthConfig = oauthConfig;
+  }
+  if (data.authMethod !== "bearer") {
+    data.authHeaderName = "";
+  }
+  if (
+    data.authMethod !== "enterprise_managed" &&
+    data.authMethod !== "idp_jwt"
+  ) {
+    delete data.enterpriseManagedConfig;
+  }
+  return data;
+}

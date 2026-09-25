@@ -69,7 +69,8 @@ export interface SessionInfo {
  *    caller or resolved from OpenCode's native User-Agent/originator:
  *    `x-session-id`, `x-session-affinity`, `x-opencode-session`, then the
  *    `session-id` header its Responses requests carry (source:
- *    'opencode_session')
+ *    'opencode_session'). A delegated child keeps its own native session id;
+ *    its parent signal classifies the row instead of renaming it.
  * 6. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/branch` or `--fork-session` creates a new ID here, ensuring forks
  *    record as separate sessions in logs.

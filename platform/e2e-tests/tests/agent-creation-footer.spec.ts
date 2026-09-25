@@ -50,6 +50,7 @@ for (const viewport of [
 
       const next = page.getByTestId(E2eTestId.AgentSetupNextButton);
       const submit = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
+      const mobile = viewport.width < 640;
       const scrollContainer =
         viewport.width < 768
           ? page.getByRole("main")
@@ -57,6 +58,7 @@ for (const viewport of [
 
       try {
         await expect(next).toBeDisabled();
+        if (mobile) await next.scrollIntoViewIfNeeded();
         await expect(next).toBeInViewport({ ratio: 1 });
         // An enabled Next after filling proves React registered the value,
         // rather than just the browser updating a pre-hydration input.
@@ -67,8 +69,8 @@ for (const viewport of [
         await goToStep({ page, button: next, step: "tools" });
 
         // The real tools panel is taller than the viewport in both flows.
-        // No spacers or mocked content: catch an overflow ancestor trapping
-        // the shared sticky footer outside the visible page.
+        // No spacers or mocked content: the footer stays in reach on desktop
+        // and follows the fields on phones instead of covering them.
         await expect(
           page.getByRole("button", { name: "Configuration", exact: true }),
         ).toBeVisible();
@@ -84,10 +86,12 @@ for (const viewport of [
             element.scrollTop =
               (element.scrollHeight - element.clientHeight) * fraction;
           }, fraction);
-          await expect(next).toBeInViewport({ ratio: 1 });
-          await expect(
-            page.getByRole("button", { name: "Configuration", exact: true }),
-          ).toBeInViewport({ ratio: 1 });
+          if (!mobile || fraction === 1) {
+            await expect(next).toBeInViewport({ ratio: 1 });
+            await expect(
+              page.getByRole("button", { name: "Configuration", exact: true }),
+            ).toBeInViewport({ ratio: 1 });
+          }
         }
         expect(
           await scrollContainer.evaluate(
@@ -111,6 +115,7 @@ for (const viewport of [
         await goToStep({ page, button: next, step: "advanced" });
         await expect(submit).toBeEnabled();
         const createFooterStyle = await footerStyle(submit);
+        expect(createFooterStyle.position).toBe(mobile ? "static" : "sticky");
         expect(createRequests).toBe(0);
 
         // The final field stays reachable above the action row at the bottom.
@@ -194,7 +199,8 @@ for (const viewport of [
             element.scrollTop =
               (element.scrollHeight - element.clientHeight) * fraction;
           }, fraction);
-          await expect(submit).toBeInViewport({ ratio: 1 });
+          if (!mobile || fraction === 1)
+            await expect(submit).toBeInViewport({ ratio: 1 });
         }
         expect(
           await scrollContainer.evaluate(
@@ -227,7 +233,7 @@ for (const viewport of [
 
 async function footerStyle(button: Locator) {
   return button.evaluate((element) => {
-    const footer = element.parentElement;
+    const footer = element.closest("[data-wizard-footer]");
     if (!footer) throw new Error("Action footer is missing");
     const style = getComputedStyle(footer);
     return {
@@ -237,6 +243,7 @@ async function footerStyle(button: Locator) {
       boxShadow: style.boxShadow,
       padding: style.padding,
       bottom: style.bottom,
+      position: style.position,
     };
   });
 }
@@ -271,9 +278,11 @@ async function clickInViewport({
   button: Locator;
 }) {
   await expect(button).toBeEnabled();
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width < 640) await button.scrollIntoViewIfNeeded();
   await expect(button).toBeInViewport({ ratio: 1 });
   const box = await button.boundingBox();
   if (!box) throw new Error("Action is missing");
-  // A locator click would silently scroll an off-screen action into view.
+  // Keep the visibility assertion explicit after mobile scrolling.
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }

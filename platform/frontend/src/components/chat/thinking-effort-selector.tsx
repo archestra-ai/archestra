@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLlmModels } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const OPTIONS: { value: ThinkingEffortOption; label: string; hint: string }[] =
   [

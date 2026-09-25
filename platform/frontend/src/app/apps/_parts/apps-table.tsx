@@ -21,12 +21,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LabelTags } from "@/components/label-tags";
 import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
-import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
@@ -158,41 +156,6 @@ export function AppsTable({
               </div>
             )}
           </div>
-        );
-      },
-    },
-    {
-      id: "sharing",
-      size: 160,
-      header: "Sharing",
-      cell: ({ row }) => {
-        const app = row.original;
-        // Same admin-oversight badge as the card: someone else's personal app.
-        const isForeignPersonalApp =
-          app.source === "owned" &&
-          app.scope === "personal" &&
-          app.viewerRole === "admin";
-        return (
-          <span className="flex flex-wrap items-center gap-1">
-            <ScopeBadge
-              scope={app.scope}
-              teamNames={
-                app.source === "owned"
-                  ? app.teams?.map((team) => team.name)
-                  : undefined
-              }
-              userNames={
-                app.source === "owned"
-                  ? app.users?.map((user) => user.name)
-                  : undefined
-              }
-            />
-            {isForeignPersonalApp && (
-              <Badge variant="secondary">
-                {app.authorName ? `Owned by ${app.authorName}` : "Other user"}
-              </Badge>
-            )}
-          </span>
         );
       },
     },
@@ -330,7 +293,6 @@ export function AppsTable({
         emptyIcon={AppWindow}
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
-        fixedWidthColumnIds={["sharing"]}
         flexibleColumnIds={["name"]}
       />
 
@@ -382,6 +344,7 @@ function OwnedAppActions({
   return (
     <>
       <TableRowActions
+        permissionScope={app.id}
         actions={actions}
         dropdownActions={dropdownActions}
         dropdownContent={ownership.menuItem}

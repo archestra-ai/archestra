@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const TEST_UUID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
@@ -49,7 +50,7 @@ describe("createProxyPreHandler", () => {
 
   async function setupProxy(params: {
     apiPrefix: string;
-    endpointSuffix: string | string[];
+    endpointSuffix: string | readonly string[];
     rewritePrefix?: string;
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
@@ -122,6 +123,24 @@ describe("createProxyPreHandler", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    test("reserves Responses compact for the dedicated governed route", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
+        providerName: "OpenAI",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${TEST_UUID}/responses/compact`,
+        headers: { "content-type": "application/json" },
+        payload: { model: "gpt-5.6-sol", input: "history" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(upstreamHits).toBe(0);
     });
 
     test("does not skip GET requests to the endpoint suffix", async () => {

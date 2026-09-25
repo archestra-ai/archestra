@@ -11,7 +11,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
 
     // Seed and assign Archestra tools to the agent
     await seedAndAssignArchestraTools(agent.id);
@@ -46,7 +46,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool1 = await makeTool({ name: "tool1" });
     const tool2 = await makeTool({ name: "tool2" });
 
@@ -79,7 +79,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool = await makeTool({ name: "tool1" });
 
     const conversation = await ConversationModel.create({
@@ -108,7 +108,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool1 = await makeTool({ name: "tool1" });
     const tool2 = await makeTool({ name: "tool2" });
     const tool3 = await makeTool({ name: "tool3" });
@@ -150,7 +150,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool = await makeTool({ name: "tool1" });
 
     const conversation = await ConversationModel.create({
@@ -193,7 +193,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool = await makeTool({ name: "tool1" });
 
     const conversation = await ConversationModel.create({
@@ -225,7 +225,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool1 = await makeTool({ name: "tool1" });
     const tool2 = await makeTool({ name: "tool2" });
 
@@ -270,7 +270,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
 
     // Seed and assign Archestra tools to the agent
     await seedAndAssignArchestraTools(agent.id);
@@ -314,7 +314,7 @@ describe("ConversationEnabledToolModel", () => {
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
+    const agent = await makeAgent({ name: "Test Agent" });
     const tool1 = await makeTool({ name: "tool1" });
     const tool2 = await makeTool({ name: "tool2" });
 

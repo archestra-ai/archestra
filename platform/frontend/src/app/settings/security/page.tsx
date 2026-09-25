@@ -2,6 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -12,6 +13,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import {
   useOrganization,
   useUpdateSecuritySettings,
@@ -23,6 +25,18 @@ const DEFAULT_INVOCATION_POLICY: CallPolicyAction =
 const DEFAULT_RESULT_POLICY: ResultPolicyAction = "mark_as_untrusted";
 
 export default function SecuritySettingsPage() {
+  const router = useRouter();
+  const { data: deployment, isPending } = useGuardrailsDeployment();
+
+  useEffect(() => {
+    if (deployment?.enabled) router.replace("/settings/openappa");
+  }, [deployment?.enabled, router]);
+
+  if (isPending || deployment?.enabled) return null;
+  return <LegacySecuritySettingsPage />;
+}
+
+function LegacySecuritySettingsPage() {
   const { data: organization } = useOrganization();
   const updateMutation = useUpdateSecuritySettings(
     "Security settings updated",

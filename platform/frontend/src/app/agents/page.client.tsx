@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
@@ -25,7 +26,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
-import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import {
   AgentAccessBadges,
   AgentLastUsedFooter,
@@ -46,7 +46,7 @@ import {
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkA2aSharingDialog } from "@/components/bulk-a2a-sharing-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
@@ -62,6 +62,7 @@ import {
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LabelTags } from "@/components/label-tags";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -70,13 +71,13 @@ import {
   ProviderKeyFilterSelect,
 } from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -90,6 +91,7 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
@@ -101,7 +103,6 @@ import {
 } from "@/lib/a2a-remote-agents.query";
 import {
   useBulkDeleteProfiles,
-  useBulkUpdateProfileVisibility,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
@@ -114,7 +115,11 @@ import {
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   type BulkOutcome,
   reportBulkOutcome,
@@ -131,6 +136,7 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
 
@@ -282,7 +288,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     limit: pageSize,
     offset: pageIndex * pageSize,
     initialData: initialData?.agents ?? undefined,
-    initialDataExcludeOtherPersonalAgents: true,
     initialDataPinned: isDeletedView ? undefined : false,
     pinned: isDeletedView ? undefined : false,
     ...catalogFilters,
@@ -297,7 +302,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     limit: 100,
     offset: 0,
     initialData: initialData?.pinnedAgents ?? undefined,
-    initialDataExcludeOtherPersonalAgents: true,
     initialDataPinned: true,
     initialDataLimit: 100,
     enabled: !isDeletedView,
@@ -305,16 +309,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     status: undefined,
     pinned: true,
   });
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
-  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: isAgentTeamAdmin } = useHasPermissions({
-    agent: ["team-admin"],
-  });
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["update"] }, "*");
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
   const { data: environmentList } = useEnvironments();
@@ -441,7 +443,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     filterSignature: string;
     allMatching: boolean;
   } | null>(null);
-  const bulkAgentVisibility = useBulkUpdateProfileVisibility();
   const bulkExternalAgentVisibility = useBulkUpdateA2aRemoteAgentVisibility();
   const pinAgent = usePinAgent();
   // Derived from what is on screen rather than read straight out of
@@ -519,10 +520,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const allMatchingSelectionUnavailable =
     allMatchingSelected &&
     (isFetchingAllMatching || isAllMatchingError || bulkSelectionOverLimit);
-  const {
-    agents: bulkVisibilityRegularAgents,
-    externalAgents: bulkVisibilityExternalAgents,
-  } = partitionAgentRows(bulkVisibilityRows);
+  // Access to internal agents is a grant policy edited on each agent's
+  // Permissions tab; only external A2A agents still carry a visibility scope.
+  const { externalAgents: bulkVisibilityExternalAgents } =
+    partitionAgentRows(bulkVisibilityRows);
   const openBulkVisibility = async () => {
     const requestedFilterSignature = filterSignature;
     const requestedAllMatching = allMatchingSelected;
@@ -578,12 +579,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     (canManageExternalAgents
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = {
-    ...(selectedRegularAgents.length > 0 ? { agent: ["update" as const] } : {}),
-    ...(selectedExternalAgents.length > 0
-      ? { agentSettings: ["update" as const] }
-      : {}),
-  };
+  const bulkVisibilityPermissions = { agentSettings: ["update" as const] };
+  const showBulkVisibility =
+    selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
     ...(selectedExternalAgents.length > 0
@@ -593,7 +591,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkBusy =
     bulkDeleteAgents.isPending ||
     bulkDeleteExternalAgents.isPending ||
-    bulkAgentVisibility.isPending ||
     bulkExternalAgentVisibility.isPending ||
     isFetchingAllMatching;
   const bulkDeleteDescription = (() => {
@@ -640,13 +637,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [updateQueryParams]);
 
   const renderAgentActions = (agent: AgentData) => {
-    const canModify = computeCanModifyAgent({
-      agent,
-      isAdmin: !!isAgentAdmin,
-      isTeamAdmin: !!isAgentTeamAdmin,
-      currentUserId,
-      userTeamIds: userTeamIdSet,
-    });
+    const canModify =
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG &&
+      computeCanModifyAgent({
+        scopedGrants: scopedCapabilities.data ?? [],
+        agent,
+        isAdmin: !!isAgentAdmin,
+        isTeamAdmin: false,
+        currentUserId,
+        userTeamIds: userTeamIdSet,
+      });
     return (
       <AgentActions
         agent={agent}
@@ -753,15 +753,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <ResourceVisibilityBadge
-              scope={agent.scope}
-              teams={agent.teams}
-              users={agent.users}
-              authorId={agent.authorId}
-              authorName={agent.authorName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
             <Badge variant={agent.connection.enabled ? "default" : "secondary"}>
               {agent.connection.enabled ? "Enabled" : "Disabled"}
             </Badge>
@@ -775,7 +766,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     return (
       <TableCard
         key={getAgentListRowId(row)}
-        icon={<AgentIcon icon={agent.icon} size={20} />}
+        icon={
+          agent.builtInAgentConfig?.name ===
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ? (
+            <OpenAppaSolidIcon className="size-5" />
+          ) : (
+            <AgentIcon icon={agent.icon} size={20} />
+          )
+        }
         title={
           <span className="flex min-w-0 items-center gap-1.5">
             <Link
@@ -799,15 +797,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <ResourceVisibilityBadge
-            scope={agent.scope}
-            teams={agent.teams}
-            users={agent.users}
-            authorId={agent.authorId}
-            authorName={agent.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
           {/* Badge row, not the title line: the title shares its line with
               the action cluster and clips at phone width. */}
           {agent.runtime != null && (
@@ -877,7 +866,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            icon={<AgentIcon icon={agent.icon} size={20} />}
+            icon={
+              agent.builtInAgentConfig?.name ===
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ? (
+                <OpenAppaSolidIcon className="size-5" />
+              ) : (
+                <AgentIcon icon={agent.icon} size={20} />
+              )
+            }
             // A trashed agent has no detail page: `GET /api/agents/:id`
             // filters deleted rows, so the link would land on "not found".
             href={
@@ -904,29 +900,62 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
-      id: "team",
-      header: "Accessible to",
+      id: "tools",
+      header: "Tools",
       enableSorting: false,
-      size: 160,
+      size: 90,
+      // The same counts the card shows. Access used to sit here, as the word
+      // "Permissions" linking to the tab that owns it, which is a link and
+      // not a value: every internal row read the same and sorted on nothing.
+      cell: ({ row }) =>
+        row.original.type === "external" ? (
+          <span className="text-sm text-muted-foreground">-</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {row.original.value.accessAllTools
+              ? "All"
+              : row.original.value.tools.filter(
+                  (tool) => !tool.delegateToAgentId,
+                ).length}
+          </span>
+        ),
+    },
+    {
+      id: "subagents",
+      header: "Subagents",
+      enableSorting: false,
+      size: 100,
+      cell: ({ row }) =>
+        row.original.type === "external" ? (
+          <span className="text-sm text-muted-foreground">-</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {row.original.value.accessAllSubagents
+              ? "All"
+              : row.original.value.tools.filter(
+                  (tool) => tool.delegateToAgentId,
+                ).length}
+          </span>
+        ),
+    },
+    {
+      id: "lastUsedAt",
+      header: "Last used",
+      enableSorting: false,
+      size: 100,
       cell: ({ row }) => (
-        <RowClickShield>
-          <ResourceVisibilityBadge
-            scope={row.original.value.scope}
-            teams={row.original.value.teams}
-            users={row.original.value.users}
-            authorId={row.original.value.authorId}
-            authorName={row.original.value.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
-        </RowClickShield>
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTimeFromNow(row.original.value.lastUsedAt ?? null, {
+            neverLabel: "Never",
+          })}
+        </span>
       ),
     },
     {
       id: "provider",
-      header: "Provider",
+      header: () => <span className="whitespace-nowrap">Provider</span>,
       enableSorting: false,
-      size: 80,
+      size: 96,
       cell: ({ row }) =>
         row.original.type === "external" ? (
           <span className="text-muted-foreground">—</span>
@@ -1088,15 +1117,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </p>
       }
       actionButton={
-        <div className="flex gap-2">
-          <PermissionButton
-            variant="outline"
-            permissions={{ agent: ["create"] }}
-            onClick={() => setIsImportDialogOpen(true)}
-          >
-            <Upload className="h-4 w-4" />
-            Import Agent
-          </PermissionButton>
+        <div className="flex items-center gap-2">
           {(canCreateAgent || canManageExternalAgents) && (
             <Button
               onClick={() => router.push(agentNewHref("agent"))}
@@ -1106,6 +1127,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               Add Agent
             </Button>
           )}
+          <ResourceListActions resource="agent">
+            {canCreateAgent && (
+              <DropdownMenuItem onSelect={() => setIsImportDialogOpen(true)}>
+                <Upload className="h-4 w-4" />
+                <span>Import Agent</span>
+              </DropdownMenuItem>
+            )}
+          </ResourceListActions>
         </div>
       }
     >
@@ -1140,8 +1169,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <ResourceScopeFilter
                     showBuiltIn
                     showLabels
-                    ownerLabelPlural="agents"
-                    adminPermission={{ agent: ["admin"] }}
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ProviderKeyFilterSelect
@@ -1162,10 +1189,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     permissions={[{ resource: "team", action: "read" }]}
                   />
                 )}
-                <ActiveFilterBadges
-                  adminPermission={{ agent: ["admin"] }}
-                  queryParamsAdapter={queryParamsAdapter}
-                />
+                <ActiveFilterBadges queryParamsAdapter={queryParamsAdapter} />
               </CollectionFilters>
 
               <BulkActions
@@ -1187,16 +1211,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     : "match the current filters",
                 }}
               >
-                <PermissionButton
-                  permissions={bulkVisibilityPermissions}
-                  disabled={allMatchingSelectionUnavailable}
-                  variant="outline"
-                  size="sm"
-                  onClick={openBulkVisibility}
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
-                </PermissionButton>
+                {showBulkVisibility && (
+                  <PermissionButton
+                    permissions={bulkVisibilityPermissions}
+                    disabled={allMatchingSelectionUnavailable}
+                    variant="outline"
+                    size="sm"
+                    onClick={openBulkVisibility}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span>Share</span>
+                  </PermissionButton>
+                )}
                 <PermissionButton
                   permissions={bulkDeletePermissions}
                   disabled={allMatchingSelectionUnavailable}
@@ -1229,7 +1255,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     })
                   : unpinnedRows.length > 0 || pinnedRows.length === 0
                     ? renderAgentSection({
-                        title: "Agents",
                         sectionRows: unpinnedRows,
                         sectionPagination: {
                           pageIndex,
@@ -1241,15 +1266,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               </div>
 
               {bulkVisibilityOpen && (
-                <BulkVisibilityDialog
-                  items={[
-                    ...bulkVisibilityRegularAgents.map((profile) => ({
-                      ...profile,
-                      teams: profile.teams ?? [],
-                      users: profile.users ?? [],
-                    })),
-                    ...bulkVisibilityExternalAgents,
-                  ]}
+                <BulkA2aSharingDialog
+                  items={bulkVisibilityExternalAgents}
                   noun="agent"
                   plural="agents"
                   open={bulkVisibilityOpen}
@@ -1260,31 +1278,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                       setBulkVisibilityContext(null);
                     }
                   }}
-                  isPending={
-                    bulkAgentVisibility.isPending ||
-                    bulkExternalAgentVisibility.isPending
-                  }
+                  isPending={bulkExternalAgentVisibility.isPending}
                   applyDisabled={allMatchingSelectionUnavailable}
-                  renderSelector={
-                    bulkVisibilityExternalAgents.length > 0
-                      ? ({ subject: _, ...props }) => (
-                          <A2aRemoteAgentScopeSelector {...props} />
-                        )
-                      : undefined
-                  }
                   onApply={async (change) => {
                     if (allMatchingSelectionUnavailable) return false;
                     const outcomes: BulkOutcome[] = [];
-                    if (bulkVisibilityRegularAgents.length > 0) {
-                      outcomes.push(
-                        await bulkAgentVisibility.mutateAsync({
-                          profiles: bulkVisibilityRegularAgents,
-                          scope: change.scope,
-                          teamIds: change.teamIds,
-                          userIds: change.userIds,
-                        }),
-                      );
-                    }
                     if (bulkVisibilityExternalAgents.length > 0) {
                       outcomes.push(
                         await bulkExternalAgentVisibility.mutateAsync({

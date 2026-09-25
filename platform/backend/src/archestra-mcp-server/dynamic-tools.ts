@@ -6,7 +6,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
-import { userHasPermission } from "@/auth/utils";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import {
@@ -361,6 +361,7 @@ async function agentHasSearchableKnowledgeConnectors(params: {
     organizationId,
     canReadAll: access.canReadAll,
     viewerTeamIds: access.teamIds,
+    viewerUserId: access.userId,
     // Query scope: an auto-sync-permissions connector makes the query tool
     // available to everyone; its per-chunk ACLs gate what a user retrieves.
     visibilityScope: "query",
@@ -467,10 +468,8 @@ export function userIsCatalogAdmin(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  return userHasPermission(
-    userId,
-    organizationId,
-    "mcpServerInstallation",
-    "admin",
-  );
+  return isMcpInstallationAdmin({
+    userId: userId,
+    organizationId: organizationId,
+  });
 }

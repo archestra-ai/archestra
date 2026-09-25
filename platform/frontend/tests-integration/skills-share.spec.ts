@@ -40,6 +40,12 @@ test.describe("Skills marketplace share step", () => {
       url: "/api/user/permissions",
       body: makeUserPermissions({ skill: ["read"] }),
     });
+    // No grant at `*` on skills: sharing every skill is not theirs to do.
+    await mswControl.use({
+      method: "get",
+      url: "/api/resource-permissions",
+      body: [],
+    });
 
     await page.goto(STEP_URL);
     const panel = page.getByTestId("skills-marketplace-static");

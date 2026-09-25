@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import {
-  getAgentCatalogImages,
-  getDefaultAgentRuntimeImage,
-} from "@archestra/shared";
+import { getAgentCatalogImages } from "@archestra/shared";
 import { KubeConfig, type V1DaemonSet } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
-import { beforeEach, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { agentImagePrefetcher } from "./image-prefetch.ee";
 
@@ -35,7 +31,10 @@ let writes: number;
 beforeEach(() => {
   config.agentRuntime.enabled = true;
   config.enterpriseFeatures.core = true;
-  config.agentRuntime.defaultImage = "registry.example.test/agent-archestra:v1";
+  config.agentRuntime.catalogImages = getAgentCatalogImages({
+    registry: "registry.example.test",
+    tag: "v1",
+  });
   config.agentRuntime.nodeSelector = { runtime: "true" };
   config.orchestrator.kubernetes.helmReleaseName = "test-release";
   config.orchestrator.kubernetes.runtimeOwnerRoleName = undefined;
@@ -78,7 +77,7 @@ beforeEach(() => {
 test("warms the catalog on the runtime pool, skips unchanged writes, and removes obsolete versions", async () => {
   await agentImagePrefetcher.reconcile();
   expect(fleet.size).toBe(
-    Object.keys(getAgentCatalogImages(config.agentRuntime.defaultImage)).length,
+    Object.keys(config.agentRuntime.catalogImages).length,
   );
   for (const ds of fleet.values()) {
     expect(ds.spec?.template.spec).toMatchObject({
@@ -102,17 +101,16 @@ test("warms the catalog on the runtime pool, skips unchanged writes, and removes
   const initialWrites = writes;
   await agentImagePrefetcher.reconcile();
   expect(writes).toBe(initialWrites);
-  config.agentRuntime.defaultImage = "registry.example.test/agent-archestra:v2";
+  config.agentRuntime.catalogImages = getAgentCatalogImages({
+    registry: "registry.example.test",
+    tag: "v2",
+  });
   await agentImagePrefetcher.reconcile();
   expect(
     [...fleet.values()]
       .map((ds) => ds.spec?.template.spec?.initContainers?.[1].image)
       .sort(),
-  ).toEqual(
-    Object.values(
-      getAgentCatalogImages(config.agentRuntime.defaultImage),
-    ).sort(),
-  );
+  ).toEqual(Object.values(config.agentRuntime.catalogImages).sort());
   expect(writes).toBe(initialWrites * 3);
 });
 
@@ -122,32 +120,39 @@ test("a transient API failure never breaks startup and a later pass retries", as
   expect(writes).toBe(0);
   server.use(http.get(API, () => HttpResponse.json({ items: [] })));
   await agentImagePrefetcher.reconcile();
-  expect(fleet.size).toBe(6);
+  expect(fleet.size).toBe(5);
 });
 
 test("refreshes floating catalog images when the stable platform version advances", async () => {
-  config.agentRuntime.defaultImage = getDefaultAgentRuntimeImage("1.3.65");
-  await agentImagePrefetcher.reconcile();
-  const claudeImage = getAgentCatalogImages(config.agentRuntime.defaultImage)[
-    "claude-code"
-  ];
-  const before = [...fleet.values()].find((daemonSet) =>
-    daemonSet.spec?.template.spec?.initContainers?.some(
-      (container) => container.image === claudeImage,
-    ),
-  );
-  expect(
-    before?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy,
-  ).toBe("Always");
-  const previousFingerprint = before?.metadata?.annotations;
+  const originalVersion = config.api.version;
+  config.agentRuntime.catalogImages = getAgentCatalogImages({
+    registry: "registry.example.test",
+    tag: "latest",
+  });
+  config.api.version = "1.3.65";
+  try {
+    await agentImagePrefetcher.reconcile();
+    const claudeImage = config.agentRuntime.catalogImages["claude-code"];
+    const before = [...fleet.values()].find((daemonSet) =>
+      daemonSet.spec?.template.spec?.initContainers?.some(
+        (container) => container.image === claudeImage,
+      ),
+    );
+    expect(
+      before?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy,
+    ).toBe("Always");
+    const previousFingerprint = before?.metadata?.annotations;
 
-  config.agentRuntime.defaultImage = getDefaultAgentRuntimeImage("1.3.66");
-  await agentImagePrefetcher.reconcile();
-  const after = fleet.get(before?.metadata?.name ?? "");
-  expect(after?.metadata?.annotations).not.toEqual(previousFingerprint);
-  expect(after?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy).toBe(
-    "Always",
-  );
+    config.api.version = "1.3.66";
+    await agentImagePrefetcher.reconcile();
+    const after = fleet.get(before?.metadata?.name ?? "");
+    expect(after?.metadata?.annotations).not.toEqual(previousFingerprint);
+    expect(
+      after?.spec?.template.spec?.initContainers?.[1]?.imagePullPolicy,
+    ).toBe("Always");
+  } finally {
+    config.api.version = originalVersion;
+  }
 });
 
 test("does no cluster work when Agent Runtime is disabled", async () => {

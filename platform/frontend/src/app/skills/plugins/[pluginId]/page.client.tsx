@@ -19,7 +19,10 @@ import {
 export function PluginSkillPage({ pluginId }: { pluginId: string }) {
   const search = useSearchParams();
   const skillPath = search.get("skillPath") ?? "";
-  const { data: canManagePlugin } = useHasPermissions({ plugin: ["admin"] });
+  const { data: canManagePlugin } = useHasPermissions(
+    { plugin: ["update"] },
+    "*",
+  );
   const { data: skill, isPending } = usePluginSkill({ pluginId, skillPath });
 
   if (isPending) return <SkillPageLoading />;

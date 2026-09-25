@@ -41,7 +41,6 @@ test("preserves native Responses reasoning, replay state and tool calls through 
   const secret = await makeSecret({ secret: { apiKey: "test-native-key" } });
   const key = await makeLlmProviderApiKey(organization.id, secret.id, {
     provider: "openai",
-    scope: "org",
   });
   await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
   const { value } = await VirtualApiKeyModel.create({

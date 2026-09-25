@@ -1,7 +1,4 @@
-import {
-  CreatedByNullableSchema,
-  ResourceVisibilityScopeSchema,
-} from "@archestra/shared";
+import { CreatedByNullableSchema } from "@archestra/shared";
 import { z } from "zod";
 import { LabelWithDetailsSchema } from "./label";
 
@@ -32,15 +29,9 @@ export const McpOauthClientMetadataSchema = z.object({
   // Rows created before authorization_code support have no grantType; treat
   // them as the original client_credentials clients.
   grantType: McpOauthClientGrantTypeSchema.default("client_credentials"),
-  // Rows created before team scoping have no scope/authorId; they were
-  // implicitly visible org-wide, so they parse as org-scoped with no author.
-  scope: ResourceVisibilityScopeSchema.default("org"),
+  // Rows created before authorship was recorded have no author. Who can see
+  // or manage a client is its grants' business, not this metadata's.
   authorId: z.string().nullable().default(null),
-});
-
-const McpOauthClientTeamInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
 });
 
 export const McpOauthClientSchema = z.object({
@@ -52,12 +43,10 @@ export const McpOauthClientSchema = z.object({
   allowedGatewayIds: z.array(z.string()),
   redirectUris: z.array(z.string()),
   disabled: z.boolean(),
-  scope: ResourceVisibilityScopeSchema,
   authorId: z.string().nullable(),
   authorName: z.string().nullable(),
   /** The author, in the shape shared by every major object. */
   createdBy: CreatedByNullableSchema,
-  teams: z.array(McpOauthClientTeamInfoSchema),
   labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),
   updatedAt: z.date(),

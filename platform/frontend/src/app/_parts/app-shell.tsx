@@ -31,9 +31,10 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
+import { isOpenAppaChatPath } from "@/lib/openappa-routes";
 import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
@@ -95,14 +96,15 @@ export function AppShell({ children }: AppShellProps) {
   // Driven by the offline video renderer: its frames must contain the replay
   // and nothing of the surrounding app.
   const isRecordingRender = pathname.startsWith(APP_RECORDING_RENDER_ROUTE);
-  // Chat and project detail pages are viewport-locked, two-pane layouts
+  // Chat, OpenAPPA chat, and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their
   // internal overflow containers take over. Other pages rely on natural body
   // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
-  const isViewportLocked = isChat || isProjectDetail;
+  const isViewportLocked =
+    isChat || isProjectDetail || isOpenAppaChatPath(pathname);
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState({

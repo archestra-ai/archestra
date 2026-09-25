@@ -61,8 +61,6 @@ export function useChatWithKnowledgeBase() {
         agent = await createAgent.mutateAsync({
           name: agentName,
           agentType: "agent",
-          scope: "personal",
-          teams: [],
           knowledgeBaseIds: [knowledgeBase.id],
         });
       }

@@ -7,6 +7,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
@@ -29,6 +30,7 @@ import {
   max,
   min,
   ne,
+  not,
   notInArray,
   or,
   type SQL,
@@ -86,11 +88,12 @@ import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
-import TeamModel from "./team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ToolModel from "./tool";
 
 type AgentListFilters = {
   organizationId?: string;
+  authorization?: { organizationId: string; baseReadTypes: AgentType[] };
   ids?: string[];
   name?: string;
   agentType?: AgentType;
@@ -386,6 +389,56 @@ class AgentModel {
   }
 
   /**
+   * Set each agent's `scope` from its grants instead of the retired column,
+   * which every new agent stores as `personal`: `org` when they reach the
+   * organization or a role, `team` when they reach a team, `personal`
+   * otherwise. An LLM proxy has no grants and keeps its column.
+   */
+  /**
+   * An agent that is not someone else's personal one: it reaches more than
+   * its author by grants, or `userId` wrote it, or holds a grant on it. An
+   * overseer who can read every agent still does not list others' private
+   * ones.
+   */
+  static notOthersPersonalCondition(userId: string): SQL {
+    return or(
+      not(agentAudienceIs("personal")),
+      eq(schema.agentsTable.authorId, userId),
+      explicitAgentReadCondition(userId),
+    ) as SQL;
+  }
+
+  static async populateGrantedScope(
+    agents: Pick<Agent, "id" | "organizationId" | "agentType" | "scope">[],
+  ): Promise<void> {
+    const byKey = new Map<string, string[]>();
+    for (const agent of agents) {
+      if (agent.agentType === "llm_proxy") continue;
+      const resource =
+        agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+      const key = `${agent.organizationId}\u0000${resource}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), agent.id]);
+    }
+    const audiences = new Map<string, AgentScope>();
+    for (const [key, scopes] of byKey) {
+      const [organizationId, resource] = key.split("\u0000") as [
+        string,
+        "agent" | "mcpGateway",
+      ];
+      const found = await ResourcePermissionPolicyModel.findAudiences({
+        organizationId,
+        resource,
+        scopes,
+      });
+      for (const [id, { audience }] of found) audiences.set(id, audience);
+    }
+    for (const agent of agents) {
+      const audience = audiences.get(agent.id);
+      if (audience) agent.scope = audience;
+    }
+  }
+
+  /**
    * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
@@ -614,7 +667,12 @@ class AgentModel {
       suggestedPrompts,
       activationSkillPolicy,
       ...agent
-    }: InsertAgent & {
+    }: Omit<InsertAgent, "scope"> & {
+      /**
+       * The retired visibility column; it defaults to "personal" and nothing
+       * reads it. The grants decide who reaches the agent.
+       */
+      scope?: InsertAgent["scope"];
       activationSkillMode?: AgentActivationSkillMode;
       isPersonalGateway?: boolean;
       // Server-owned like isPersonalGateway: omitted from the request schemas
@@ -631,6 +689,9 @@ class AgentModel {
        * itself so those assignments are not pre-excluded.
        */
       skipExclusionPrefill?: boolean;
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
       /**
        * Skip auto-assigning the creation-default built-in tool set. Used by
        * clone and import, which set their own authoritative assignment set
@@ -683,17 +744,25 @@ class AgentModel {
         ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
         : undefined;
 
-    const [createdAgent] = await AgentModel.insertWithSlugRetry({
-      ...agent,
-      // A staged policy is always inserted fail-closed. The policy service
-      // installs its exact rules and flips to the requested mode before the
-      // create route returns.
-      ...(activationSkillPolicy && { activationSkillMode: "manual" as const }),
-      ...(enableAccessAllTools && { accessAllTools: false }),
-      organizationId,
-      ...(slug && { slug }),
-      ...(authorId && { authorId }),
-    });
+    const [createdAgent] = await AgentModel.insertWithSlugRetry(
+      {
+        ...agent,
+        // A staged policy is always inserted fail-closed. The policy service
+        // installs its exact rules and flips to the requested mode before the
+        // create route returns.
+        ...(activationSkillPolicy && {
+          activationSkillMode: "manual" as const,
+        }),
+        ...(enableAccessAllTools && { accessAllTools: false }),
+        organizationId,
+        ...(slug && { slug }),
+        ...(authorId && { authorId }),
+      },
+      {
+        grants: options?.initialPermissionGrants,
+        publishToOrganization: options?.publishToOrganization,
+      },
+    );
 
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
@@ -849,9 +918,7 @@ class AgentModel {
 
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
-      teams && teams.length > 0
-        ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
-        : Promise.resolve([]),
+      AgentTeamModel.getTeamDetailsForAgent(createdAgent.id),
       db
         .select({ tool: agentToolRefColumns })
         .from(schema.agentToolsTable)
@@ -872,6 +939,7 @@ class AgentModel {
       connectorIds: connectorIds ?? [],
       suggestedPrompts: suggestedPrompts ?? [],
     };
+    await AgentModel.populateGrantedScope([result]);
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
@@ -885,6 +953,7 @@ class AgentModel {
     isAgentAdmin?: boolean,
     options?: {
       agentType?: AgentType;
+      authorization?: { organizationId: string; baseReadTypes: AgentType[] };
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
       /**
@@ -926,7 +995,23 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
+      ...(userId ? [agentListFence(userId)] : []),
     ];
+    if (options?.authorization) {
+      if (!userId) return [];
+      const { organizationId, baseReadTypes } = options.authorization;
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, organizationId),
+      );
+      if (options.status !== "deleted") {
+        whereConditions.push(
+          or(
+            inArray(schema.agentsTable.agentType, baseReadTypes),
+            explicitAgentReadCondition(userId),
+          ) as SQL,
+        );
+      }
+    }
 
     // Filter by agentTypes if specified (array of types)
     if (options?.agentTypes && options.agentTypes.length > 0) {
@@ -962,18 +1047,12 @@ class AgentModel {
 
     // Filter by scope if specified
     if (options?.scope) {
-      whereConditions.push(eq(schema.agentsTable.scope, options.scope));
+      whereConditions.push(agentAudienceIs(options.scope));
     }
 
-    // Exclude other users' personal agents (show non-personal + own personal)
+    // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
-        eq(schema.agentsTable.authorId, userId),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
+      whereConditions.push(AgentModel.notOthersPersonalCondition(userId));
     }
 
     // Apply access control filtering for non-agent admins
@@ -1054,6 +1133,7 @@ class AgentModel {
     }
 
     await Promise.all([
+      AgentModel.populateGrantedScope(agents),
       isChatView ? Promise.resolve() : AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
@@ -1140,6 +1220,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateGrantedScope(results);
     await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
@@ -1290,6 +1371,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateGrantedScope(results);
     await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
@@ -1336,11 +1418,41 @@ class AgentModel {
   }
 
   /**
-   * Find all non-personal internal agents (excluding built-in agents).
-   * Used to populate the agent selection dropdown in Teams/Slack/etc channels.
-   * Personal agents are excluded because channels are shared — only org/team
-   * scoped agents make sense for channel assignment.
+   * Internal agents (not built-in) the user can use, for the agent picker in
+   * Teams/Slack/etc. A channel is shared, so it leaves personal agents out. A
+   * direct message is the user's own, so it keeps them.
    */
+  static async findUsableChatopsAgents(params: {
+    organizationId: string;
+    userId: string;
+    includePersonal: boolean;
+  }) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: schema.agentsTable.organizationId,
+            resource: "agent",
+            scopeColumn: schema.agentsTable.id,
+            userId: params.userId,
+            action: "use",
+          }),
+          params.includePersonal ? undefined : not(agentAudienceIs("personal")),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
+    // SPDX-SnippetEnd
+  }
+
   static async findAllInternalAgents(): Promise<
     Pick<Agent, "id" | "name" | "scope" | "authorId">[]
   > {
@@ -1357,7 +1469,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.agentType, "agent"),
           eq(schema.agentsTable.builtIn, false),
-          ne(schema.agentsTable.scope, "personal"),
+          not(agentAudienceIs("personal")),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -1387,11 +1499,8 @@ class AgentModel {
           eq(schema.agentsTable.agentType, "agent"),
           eq(schema.agentsTable.builtIn, false),
           or(
-            ne(schema.agentsTable.scope, "personal"),
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
-            ),
+            not(agentAudienceIs("personal")),
+            eq(schema.agentsTable.authorId, userId),
           ),
           notDeleted(schema.agentsTable),
         ),
@@ -1526,18 +1635,6 @@ class AgentModel {
       ),
     );
 
-    const regularTeamNames = db
-      .select({
-        agentId: schema.agentTeamsTable.agentId,
-        teamName: min(schema.teamsTable.name).as("team_name"),
-      })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
-      )
-      .groupBy(schema.agentTeamsTable.agentId)
-      .as("regular_catalog_team_names");
     const externalTeamNames = db
       .select({
         agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
@@ -1556,11 +1653,11 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         createdAt: schema.agentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${regularTeamNames.teamName}, '')`.as(
+        teamName: sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`.as(
           "team_name",
         ),
         personalPriority: sql<number>`CASE
-          WHEN ${schema.agentsTable.scope} = 'personal'
+          WHEN ${agentAudienceIs("personal")}
             AND ${schema.agentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`(
@@ -1571,10 +1668,6 @@ class AgentModel {
         )`.as("pinned_at"),
       })
       .from(schema.agentsTable)
-      .leftJoin(
-        regularTeamNames,
-        eq(regularTeamNames.agentId, schema.agentsTable.id),
-      )
       .where(regularWhereClause);
     const externalCandidates = db
       .select({
@@ -1805,29 +1898,11 @@ class AgentModel {
           ),
         );
     } else if (sorting?.sortBy === "team") {
-      const teamNameSubquery = db
-        .select({
-          agentId: schema.agentTeamsTable.agentId,
-          teamName: min(schema.teamsTable.name).as("teamName"),
-        })
-        .from(schema.agentTeamsTable)
-        .leftJoin(
-          schema.teamsTable,
-          eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-        )
-        .groupBy(schema.agentTeamsTable.agentId)
-        .as("teamNames");
-
-      query = query
-        .leftJoin(
-          teamNameSubquery,
-          eq(schema.agentsTable.id, teamNameSubquery.agentId),
-        )
-        .orderBy(
-          ...pinnedAgentOrderClauses,
-          ...personalAgentPriorityOrderClauses,
-          direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`),
-        );
+      query = query.orderBy(
+        ...pinnedAgentOrderClauses,
+        ...personalAgentPriorityOrderClauses,
+        direction(sql`COALESCE(${agentFirstGrantedTeamName()}, '')`),
+      );
     } else {
       query = query.orderBy(
         ...pinnedAgentOrderClauses,
@@ -1919,6 +1994,7 @@ class AgentModel {
     }
 
     await Promise.all([
+      AgentModel.populateGrantedScope(agents),
       AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
@@ -1953,12 +2029,27 @@ class AgentModel {
     const { filters, userId, isAgentAdmin } = params;
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
+      ...(userId ? [agentListFence(userId)] : []),
     ];
 
     if (filters?.organizationId) {
       whereConditions.push(
         eq(schema.agentsTable.organizationId, filters.organizationId),
       );
+    }
+    if (filters?.authorization) {
+      const { organizationId, baseReadTypes } = filters.authorization;
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, organizationId),
+      );
+      if (!userId) whereConditions.push(sql<boolean>`false`);
+      else if (filters.status !== "deleted")
+        whereConditions.push(
+          or(
+            inArray(schema.agentsTable.agentType, baseReadTypes),
+            explicitAgentReadCondition(userId),
+          ) as SQL,
+        );
     }
     if (filters?.ids) {
       whereConditions.push(
@@ -1990,19 +2081,25 @@ class AgentModel {
 
     if (filters?.scope === "built_in") {
       whereConditions.push(eq(schema.agentsTable.builtIn, true));
-    } else if (filters?.scope === "personal") {
+      if (config.openappa.enabled) {
+        whereConditions.push(
+          notInArray(
+            sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+            [
+              BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+              BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+            ],
+          ),
+        );
+      }
+    } else if (
+      filters?.scope === "personal" ||
+      filters?.scope === "team" ||
+      filters?.scope === "org"
+    ) {
       whereConditions.push(
-        eq(schema.agentsTable.scope, "personal"),
-        eq(schema.agentsTable.builtIn, false),
-      );
-    } else if (filters?.scope === "team") {
-      whereConditions.push(
-        eq(schema.agentsTable.scope, "team"),
-        eq(schema.agentsTable.builtIn, false),
-      );
-    } else if (filters?.scope === "org") {
-      whereConditions.push(
-        eq(schema.agentsTable.scope, "org"),
+        agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
     } else {
@@ -2012,16 +2109,7 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (filters?.teamIds?.length) {
-      const agentIdsInTeams = await db
-        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
-        .from(schema.agentTeamsTable)
-        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
-      const ids = agentIdsInTeams.map((row) => row.agentId);
-      whereConditions.push(
-        ids.length > 0
-          ? inArray(schema.agentsTable.id, ids)
-          : sql<boolean>`false`,
-      );
+      whereConditions.push(agentGrantsReadToAnyTeam(filters.teamIds));
     }
     if (filters?.authorIds?.length) {
       whereConditions.push(
@@ -2037,8 +2125,9 @@ class AgentModel {
     }
     if (filters?.excludeOtherPersonalAgents && userId) {
       const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
+        not(agentAudienceIs("personal")),
         eq(schema.agentsTable.authorId, userId),
+        explicitAgentReadCondition(userId),
       );
       if (condition) whereConditions.push(condition);
     }
@@ -2143,7 +2232,7 @@ class AgentModel {
     return [
       asc(sql`
         CASE
-          WHEN ${schema.agentsTable.scope} = 'personal'
+          WHEN ${agentAudienceIs("personal")}
             AND ${schema.agentsTable.authorId} = ${userId}
           THEN 0
           ELSE 1
@@ -2468,43 +2557,42 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
-  static async findAccessibleIdsForUser(userId: string): Promise<string[]> {
-    const rows = await db
-      .selectDistinct({ id: schema.agentsTable.id })
+  /**
+   * Whether `agentId` is its organization's LLM Proxy and `userId` a member of
+   * that organization. See {@link organizationLlmProxyCondition}.
+   */
+  static async isOrganizationLlmProxyFor(params: {
+    agentId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
-      .leftJoin(
-        schema.agentUsersTable,
+      .where(
         and(
-          eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
-          eq(schema.agentUsersTable.userId, userId),
+          eq(schema.agentsTable.id, params.agentId),
+          notDeleted(schema.agentsTable),
+          organizationLlmProxyCondition(params.userId),
         ),
       )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  static async findAccessibleIdsForUser(
+    userId: string,
+    isAgentAdmin = false,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
       .where(
         and(
           notDeleted(schema.agentsTable),
           or(
-            eq(schema.agentsTable.scope, "org"),
-            // A personal agent reaches its author, and anyone it has been
-            // shared with individually. The grant sits beside the scope rather
-            // than replacing it, so no scope enum has to learn a new value.
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              or(
-                eq(schema.agentsTable.authorId, userId),
-                eq(schema.agentUsersTable.userId, userId),
-              ),
-            ),
-            and(
-              eq(schema.agentsTable.scope, "team"),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.agentTeamsTable.teamId,
-              }),
-            ),
+            explicitAgentReadCondition(userId),
+            isAgentAdmin ? sql`true` : undefined,
+            organizationLlmProxyCondition(userId),
           ),
         ),
       );
@@ -2514,9 +2602,8 @@ class AgentModel {
 
   /**
    * Internal agents eligible as Auto-mode delegation targets for a caller:
-   * agentType "agent", not soft-deleted, that the caller user can access (org,
-   * own personal, or a team the user belongs to), minus the caller agent
-   * itself. This is the delegation analog of
+   * agentType "agent", not soft-deleted, that the caller holds a use grant on,
+   * minus the caller agent itself. This is the delegation analog of
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
@@ -2588,34 +2675,27 @@ class AgentModel {
     }
 
     return db
-      .selectDistinct({
+      .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
         builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
       .where(
         and(
           ...baseConditions,
-          or(
-            eq(schema.agentsTable.scope, "org"),
-            and(
-              eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
-            ),
-            and(
-              eq(schema.agentsTable.scope, "team"),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.agentTeamsTable.teamId,
-              }),
-            ),
-          ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: schema.agentsTable.organizationId,
+            userId,
+            resource: "agent",
+            scopeColumn: schema.agentsTable.id,
+            action: "use",
+          }),
+          // SPDX-SnippetEnd
         ),
       )
       .orderBy(asc(schema.agentsTable.name));
@@ -2664,9 +2744,8 @@ class AgentModel {
    * the permission checks, without a second round-trip per target.
    *
    * `organizationId` is an OPTIONAL tenant fence. The scope checks downstream
-   * cannot supply one: `requireScopedModifyPermission` returns early for an
-   * admin, and that admin flag is the caller's role in the caller's OWN org, so
-   * nothing ever compares the target's tenant. Callers that accept agent ids
+   * cannot supply one: an admin check reads the caller's role in the caller's
+   * OWN org, so nothing ever compares the target's tenant. Callers that accept agent ids
    * straight from a request body should pass it, which drops foreign-org agents
    * from the map and makes them indistinguishable from ids that do not exist.
    */
@@ -2689,29 +2768,31 @@ class AgentModel {
       return new Map();
     }
 
-    const [agents, teamsMap] = await Promise.all([
-      db
-        .select({
-          id: schema.agentsTable.id,
-          agentType: schema.agentsTable.agentType,
-          scope: schema.agentsTable.scope,
-          authorId: schema.agentsTable.authorId,
-          createdByServiceAccountId:
-            schema.agentsTable.createdByServiceAccountId,
-          environmentId: schema.agentsTable.environmentId,
-        })
-        .from(schema.agentsTable)
-        .where(
-          and(
-            inArray(schema.agentsTable.id, ids),
-            notDeleted(schema.agentsTable),
-            organizationId
-              ? eq(schema.agentsTable.organizationId, organizationId)
-              : undefined,
-          ),
+    // The audience and teams come from each agent's own grants, not the
+    // retired scope and team rows, so assignability follows permission edits.
+    const agents = await db
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+        scope: sql<AgentScope>`CASE
+          WHEN ${agentAudienceIs("org")} THEN 'org'
+          WHEN ${agentAudienceIs("team")} THEN 'team'
+          ELSE 'personal' END`,
+        authorId: schema.agentsTable.authorId,
+        teamIds: agentGrantedTeamIds(),
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+        environmentId: schema.agentsTable.environmentId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.id, ids),
+          notDeleted(schema.agentsTable),
+          organizationId
+            ? eq(schema.agentsTable.organizationId, organizationId)
+            : undefined,
         ),
-      AgentTeamModel.getTeamDetailsForAgents(ids),
-    ]);
+      );
 
     const result = new Map<
       string,
@@ -2724,12 +2805,11 @@ class AgentModel {
       }
     >();
     for (const agent of agents) {
-      const teams = teamsMap.get(agent.id) ?? [];
       result.set(agent.id, {
         agentType: agent.agentType,
         scope: agent.scope,
         authorId: agent.authorId,
-        teamIds: teams.map((t) => t.id),
+        teamIds: agent.teamIds,
         environmentId: agent.environmentId,
       });
     }
@@ -2783,11 +2863,11 @@ class AgentModel {
   ): Promise<Agent | null> {
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: id,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }
@@ -2838,6 +2918,7 @@ class AgentModel {
     };
 
     await Promise.all([
+      AgentModel.populateGrantedScope([result]),
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
       AgentModel.populateResolvedLlm([result]),
@@ -3037,11 +3118,11 @@ class AgentModel {
     isAgentAdmin?: boolean,
   ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
     if (userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: id,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }
@@ -3112,6 +3193,7 @@ class AgentModel {
     };
 
     await Promise.all([
+      AgentModel.populateGrantedScope([result]),
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
       AgentModel.populateResolvedLlm([result]),
@@ -3240,7 +3322,16 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: Partial<UpdateAgent>,
+    }: Partial<UpdateAgent> & {
+      /**
+       * Retired sharing columns. No longer reachable from a request body —
+       * access lives in the resource permission policy — but still written by
+       * the bulk visibility route and by seeding/migration callers.
+       */
+      scope?: AgentScope;
+      teams?: string[];
+      users?: string[];
+    },
     options?: {
       /**
        * Skip the off→on All-tools exclusion pre-fill. Used by clone, which
@@ -3441,7 +3532,7 @@ class AgentModel {
 
     if (!updatedAgent) return null;
 
-    return {
+    const result = {
       ...updatedAgent,
       tools: toolRows,
       teams: currentTeams,
@@ -3450,6 +3541,8 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
+    await AgentModel.populateGrantedScope([result]);
+    return result;
   }
 
   /**
@@ -3590,12 +3683,25 @@ class AgentModel {
   }
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await hardDelete(
-      tx ?? db,
-      schema.agentsTable,
-      eq(schema.agentsTable.id, id),
-    );
-    return count > 0;
+    const run = async (transaction: Transaction) => {
+      const count = await hardDelete(
+        transaction,
+        schema.agentsTable,
+        eq(schema.agentsTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx: transaction,
+          resources: ["agent", "mcpGateway"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    };
+    return tx ? run(tx) : withDbTransaction(run);
   }
 
   /**
@@ -3768,7 +3874,7 @@ class AgentModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.authorId, params.userId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.scope, "personal"),
+          agentAudienceIs("personal"),
           eq(schema.agentsTable.builtIn, false),
           params.excludeId
             ? ne(schema.agentsTable.id, params.excludeId)
@@ -3795,7 +3901,7 @@ class AgentModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.authorId, params.userId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.scope, "personal"),
+          agentAudienceIs("personal"),
           eq(schema.agentsTable.builtIn, false),
         ),
       )
@@ -4090,6 +4196,7 @@ class AgentModel {
    * Returns the newly created agent.
    */
   static async cloneAgent(params: {
+    initialGrants?: ResourcePermissionGrant[];
     sourceId: string;
     userId: string;
     /** Visibility for the clone; defaults to copying the source's scope. */
@@ -4147,7 +4254,10 @@ class AgentModel {
         cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's
         // default assignment force built-ins the source lacked onto the clone.
-        { skipCreationDefaultTools: true },
+        {
+          skipCreationDefaultTools: true,
+          initialPermissionGrants: params.initialGrants,
+        },
       );
 
       await AgentToolModel.cloneAssignments({
@@ -4250,19 +4360,53 @@ class AgentModel {
 
   private static async insertWithSlugRetry(
     values: typeof schema.agentsTable.$inferInsert,
+    permissions: {
+      grants?: ResourcePermissionGrant[];
+      publishToOrganization?: boolean;
+    },
   ) {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await db
-          .insert(schema.agentsTable)
-          .values(
-            await CreatedByModel.forInsert({
-              data: { ...values, scope: values.scope ?? "personal" },
-              userIdField: "authorId",
-            }),
-          )
-          .returning();
+        if (values.agentType === "llm_proxy")
+          return await db
+            .insert(schema.agentsTable)
+            .values(
+              await CreatedByModel.forInsert({
+                data: { ...values, scope: values.scope ?? "personal" },
+                userIdField: "authorId",
+              }),
+            )
+            .returning();
+        return await withDbTransaction(async (tx) => {
+          const rows = await tx
+            .insert(schema.agentsTable)
+            .values(
+              await CreatedByModel.forInsert({
+                data: { ...values, scope: values.scope ?? "personal" },
+                userIdField: "authorId",
+                transaction: tx,
+              }),
+            )
+            .returning();
+          const row = rows[0];
+          // An agent outside any organization has nobody to grant access to.
+          if (!row.organizationId) return rows;
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissionPolicyModel.createInitial({
+            tx,
+            organizationId: row.organizationId,
+            resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: row.id,
+            grants: permissions.grants,
+            authorId: row.authorId,
+            publishToOrganization: permissions.publishToOrganization,
+          });
+          // SPDX-SnippetEnd
+          return rows;
+        });
       } catch (error: unknown) {
         const isSlugConflict =
           error instanceof Error && error.message.includes("agents_slug_idx");
@@ -4407,7 +4551,18 @@ class AgentModel {
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((d) => ({ id: d.id, name: d.name }));
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return {
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: row.id,
+          })
+        )?.grants ?? [],
       id: row.id,
       name: row.name,
       organizationId: row.organizationId,
@@ -4502,6 +4657,7 @@ class AgentModel {
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };
+    // SPDX-SnippetEnd
   }
 }
 
@@ -4593,3 +4749,138 @@ const CHAT_AGENT_ROW_COLUMNS = {
     else null
   end`,
 };
+
+function explicitAgentReadCondition(userId: string) {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(
+      inArray(table.agentType, ["agent", "profile"]),
+      ResourcePermissionPolicyModel.grantCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "agent",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+    and(
+      eq(table.agentType, "mcp_gateway"),
+      ResourcePermissionPolicyModel.grantCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "mcpGateway",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+  );
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The list fence for every agent kind: agents and MCP gateways by their read
+ * grants, and LLM proxies unfenced here because they have no grant namespace
+ * of their own — the caller's own conditions decide those.
+ */
+function agentListFence(userId: string): SQL {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    eq(schema.agentsTable.agentType, "llm_proxy"),
+    explicitAgentReadCondition(userId),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The organization's LLM Proxy, for a member of that organization. A proxy has
+ * no grant namespace of its own: the one row every proxy request resolves to
+ * serves the whole organization, and the retired per-user proxy rows it
+ * replaced are reached by nobody but an administrator.
+ */
+function organizationLlmProxyCondition(userId: string): SQL {
+  const table = schema.agentsTable;
+  return and(
+    eq(table.agentType, "llm_proxy"),
+    eq(table.isDefault, true),
+    sql`EXISTS (SELECT 1 FROM member proxy_member WHERE proxy_member.organization_id = ${table.organizationId} AND proxy_member.user_id = ${userId})`,
+  ) as SQL;
+}
+
+/**
+ * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind. The
+ * organization's LLM proxy has no grant namespace and serves the whole
+ * organization, so it always reads as `org`.
+ */
+function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
+  const table = schema.agentsTable;
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.audienceIs({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      audience,
+    });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      eq(table.agentType, "llm_proxy"),
+      audience === "org" ? sql`true` : sql`false`,
+    ),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/** Agents whose own policy grants read to any of `teamIds`. */
+function agentGrantsReadToAnyTeam(teamIds: string[]): SQL {
+  const table = schema.agentsTable;
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      teamIds,
+    });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/** The first (by name) team an agent's own policy grants read to. */
+function agentFirstGrantedTeamName() {
+  return sql<string | null>`(
+    SELECT min(granted_team_name.name) FROM team granted_team_name
+    WHERE granted_team_name.id = ANY(${agentGrantedTeamIds()})
+  )`;
+}
+
+/** The teams an agent's own policy grants read to, as a SQL text array. */
+function agentGrantedTeamIds() {
+  const table = schema.agentsTable;
+  return sql<string[]>`coalesce(array(
+    SELECT DISTINCT granted_team.subject_id FROM (
+      SELECT team_entry->'subject'->>'id' AS subject_id
+      FROM resource_permission_policies team_policy,
+        jsonb_array_elements(team_policy.grants) team_entry
+      WHERE team_policy.organization_id = ${table.organizationId}
+        AND team_policy.resource = CASE WHEN ${table.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END
+        AND team_policy.scope = ${table.id}::text
+        AND (team_entry->'actions') ? 'read'
+        AND team_entry->'subject'->>'type' = 'team'
+    ) granted_team
+  ), array[]::text[])`;
+}

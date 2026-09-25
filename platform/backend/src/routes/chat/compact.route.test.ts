@@ -3,11 +3,11 @@ import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import MessageModel from "@/models/message";
 import ModelModel from "@/models/model";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -117,7 +117,7 @@ describe("POST /api/chat/conversations/:id/compact", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeCompactableConversation(agent.id);
 
@@ -127,7 +127,6 @@ describe("POST /api/chat/conversations/:id/compact", () => {
       orgSecret.id,
       {
         provider: "ollama",
-        scope: "org",
         name: "Ollama",
       },
     );
@@ -141,7 +140,7 @@ describe("POST /api/chat/conversations/:id/compact", () => {
     const chatApiKey = await makeLlmProviderApiKey(
       organizationId,
       chatSecret.id,
-      { provider: "vllm", scope: "org", name: "vLLM" },
+      { provider: "vllm", name: "vLLM" },
     );
     const chatModel = await makeModelRow("vllm", "qwen3-32b");
     await db

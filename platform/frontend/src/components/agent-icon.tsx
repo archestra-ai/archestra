@@ -7,7 +7,8 @@ import {
   getBuiltInServiceIconPath,
   isAgentImageIcon,
 } from "@/components/agent-icon.utils";
-import { cn } from "@/lib/utils";
+import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
+import { cn } from "@/lib/utils/tailwind";
 
 export type AgentIconVariant = Exclude<
   archestraApiTypes.GetAgentsResponses["200"]["data"][number]["agentType"],
@@ -30,6 +31,8 @@ export function AgentIcon({
   size = 16,
   fallbackType = "agent",
 }: AgentIconProps) {
+  const imageTone = useImageTone(isAgentImageIcon(icon) ? icon : null);
+
   if (!icon) {
     const FallbackIcon =
       fallbackType === "llm_proxy"
@@ -57,7 +60,11 @@ export function AgentIcon({
         alt="Agent icon"
         width={size}
         height={size}
-        className={cn("shrink-0 rounded-sm object-contain", className)}
+        className={cn(
+          "shrink-0 rounded-sm object-contain",
+          imageToneClassName(imageTone),
+          className,
+        )}
       />
     );
   }

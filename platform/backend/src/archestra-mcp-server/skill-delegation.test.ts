@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import type { InsertSkill } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { getSkillDelegationTools } from "./skill-delegation";
@@ -40,13 +40,11 @@ describe("skill delegation (agent-designated skills)", () => {
       name: "Parent Agent",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
     });
     const target = await makeAgent({
       name: "Research Bot",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
     });
     const skill = await seedSkill(organization.id, {
       agentName: "Research Bot",
@@ -73,11 +71,11 @@ describe("skill delegation (agent-designated skills)", () => {
         content: "Research thoroughly. Cite sources.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
         ...skillOverrides,
       },
       files: [],
       environmentIds,
+      ...accessGrants("org"),
     });
     if (!skill) throw new Error("failed to seed skill");
     return skill;
@@ -174,6 +172,7 @@ describe("skill delegation (agent-designated skills)", () => {
     makeUser,
     makeMember,
     makeAgent,
+    makeSkill,
   }) => {
     const { organization, user, parent } = await setup({
       makeOrganization,
@@ -181,18 +180,14 @@ describe("skill delegation (agent-designated skills)", () => {
       makeMember,
       makeAgent,
     });
-    await SkillModel.createWithFiles({
-      skill: {
-        organizationId: organization.id,
-        name: "orphan-skill",
-        description: "Designates a nonexistent agent.",
-        content: "Do things.",
-        agentName: "Nonexistent Bot",
-        metadata: {},
-        sourceType: "manual",
-        scope: "org",
-      },
-      files: [],
+    await makeSkill(organization.id, {
+      name: "orphan-skill",
+      description: "Designates a nonexistent agent.",
+      content: "Do things.",
+      agentName: "Nonexistent Bot",
+      metadata: {},
+      sourceType: "manual",
+      access: "org",
     });
 
     const tools = await getSkillDelegationTools({
@@ -233,7 +228,6 @@ describe("skill delegation (agent-designated skills)", () => {
       name: "Cross Env Bot",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "org",
       environmentId: otherEnv.id,
     });
     await seedSkill(organization.id, {
@@ -358,7 +352,7 @@ describe("skill delegation (agent-designated skills)", () => {
       name: "Private Bot",
       agentType: "agent",
       organizationId: organization.id,
-      scope: "personal",
+      access: "personal",
       authorId: outsider.id,
     });
     await seedSkill(organization.id, {

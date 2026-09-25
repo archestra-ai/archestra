@@ -1,9 +1,11 @@
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
+const testFiles = partitionTestFiles();
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
@@ -32,7 +34,6 @@ export default defineConfig({
   test: {
     ...vitestLogPolicy,
     globals: true,
-    include: ["./src/**/*.test.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
     testTimeout: 10_000,
@@ -50,5 +51,55 @@ export default defineConfig({
     // concurrent suite can't pile jsdom work into one worker; worker count is
     // capped separately by maxWorkers above.
     maxConcurrency: 2,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          include: testFiles.node,
+          environment: "node",
+          setupFiles: [],
+          isolate: false,
+          unstubGlobals: true,
+          unstubEnvs: true,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "jsdom",
+          include: testFiles.jsdom,
+        },
+      },
+    ],
   },
 });
+
+function partitionTestFiles(): { node: string[]; jsdom: string[] } {
+  const node: string[] = [];
+  const jsdom: string[] = [];
+  const root = path.resolve(__dirname, "src");
+
+  for (const entry of readdirSync(root, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !/\.test\.tsx?$/.test(entry.name)) continue;
+
+    const absolute = path.join(entry.parentPath, entry.name);
+    const relative = `./${path.relative(__dirname, absolute)}`;
+    const source = readFileSync(absolute, "utf8");
+    if (source.startsWith("// @vitest-environment node")) {
+      if (/\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\s*\(/.test(source)) {
+        throw new Error(
+          `${relative} cannot use module mocks in the shared-worker Node project`,
+        );
+      }
+      node.push(relative);
+    } else {
+      jsdom.push(relative);
+    }
+  }
+
+  return { node, jsdom };
+}

@@ -9,9 +9,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
-import { TeamLabelModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   validateInheritedTeamRoles,
+  validateNewTeamMembership,
   validateTeamRoles,
 } from "@/services/role-assignment";
 import {
@@ -223,7 +224,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      if (!canUpdateTeams) {
+      if (
+        !(await canManageTeamMembers({
+          isOrgTeamManager: canUpdateTeams,
+          userId: user.id,
+          teamId: id,
+        }))
+      ) {
         throw new ApiError(403, "You are not authorized to update this team");
       }
 
@@ -424,12 +431,17 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "manage team members",
       });
 
+      const orgMember = await MemberModel.getByUserId(userId, organizationId);
+      if (!orgMember) {
+        throw new ApiError(404, "User not found in this organization");
+      }
+
       const isMember = await TeamModel.isUserInTeam(id, userId);
       if (isMember) {
         throw new ApiError(409, "User is already a member of this team");
       }
 
-      await validateInheritedTeamRoles({
+      await validateNewTeamMembership({
         teamId: id,
         organizationId,
         userId: user.id,

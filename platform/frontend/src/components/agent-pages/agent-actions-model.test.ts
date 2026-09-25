@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
 
@@ -80,7 +81,7 @@ describe("getAgentActionModel", () => {
 
     expect(agentAction(model, "connect").visible).toBe(false);
     expect(agentAction(model, "edit").permissions).toEqual({
-      mcpGateway: ["update", "admin"],
+      mcpGateway: ["update"],
     });
   });
 });

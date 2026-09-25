@@ -35,7 +35,7 @@ import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
@@ -257,9 +257,10 @@ export function AuditLogTable() {
   // Server-side search rather than a client filter over the first N members:
   // an org larger than one page would otherwise silently hide every actor
   // whose name sorts past the cut-off.
-  const { data: canSeeAllAuditLogs } = useHasPermissions({
-    auditLog: ["admin"],
-  });
+  const { data: canSeeAllAuditLogs } = useHasPermissions(
+    { auditLog: ["read"] },
+    "*",
+  );
   const {
     users: actorUsers,
     onSearchQueryChange: onActorSearchChange,

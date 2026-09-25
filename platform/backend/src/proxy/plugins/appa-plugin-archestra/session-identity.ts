@@ -55,3 +55,24 @@ export function extractAppaSessionIdentity(params: {
     parentId: generic.parentId ?? native.parentId,
   };
 }
+
+/**
+ * Returns the native parent of a child prepared for spawn, when the client
+ * names a parent different from this request session.
+ * Used to skip fork tracing because children replay parent receipts and stamps.
+ *
+ * Does not write X-Appa-Parent-ID. That header is a host claim, and an
+ * unprepared parent ID is refused at session start.
+ */
+export function nativeSpawnParentId(params: {
+  headers: Readonly<Record<string, string | string[] | undefined>>;
+  body: unknown;
+  sessionId: string | undefined;
+}): string | undefined {
+  if (!params.sessionId) return undefined;
+  const context = { headers: params.headers, requestBody: params.body };
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches(context),
+  );
+  return adapter?.nativeSpawnParentId?.(context, params.sessionId);
+}

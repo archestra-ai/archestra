@@ -16,14 +16,14 @@ import {
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   McpOauthClientModel,
   OAuthAccessTokenModel,
   TeamTokenModel,
   UserTokenModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -197,8 +197,7 @@ describe("a2a route-level authentication", () => {
     const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
     const { value } = await TeamTokenModel.create({
       organizationId: org.id,

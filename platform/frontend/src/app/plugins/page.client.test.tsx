@@ -10,6 +10,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
   useHasPermissions: () => ({ data: true }),
+  useScopedCapabilities: () => ({ data: [] }),
   // The Agents-section tab bar at the top of the page asks which of its pages
   // this reader may open.
   usePermissionMap: () => ({
@@ -45,10 +46,6 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
     refetch: vi.fn(),
   }),
   useBulkDeletePlugins: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useBulkUpdatePluginVisibility: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
   useDeletePlugin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/entity-labels.query");
@@ -110,7 +107,7 @@ describe("PluginsPage", () => {
   it("groups related facts into a compact table", async () => {
     render(<PluginsPage />);
 
-    for (const name of ["Plugin", "Details", "Visibility", "Actions"]) {
+    for (const name of ["Plugin", "Details", "Actions"]) {
       expect(screen.getByRole("columnheader", { name })).toBeInTheDocument();
     }
     for (const removed of [

@@ -20,6 +20,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -139,16 +140,19 @@ export default function ServiceAccountsSettingsPage() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton
-        permissions={{ serviceAccount: ["create"] }}
-        onClick={() => {
-          form.reset(DEFAULT_FORM_VALUES);
-          setIsCreateDialogOpen(true);
-        }}
-      >
-        <Plus className="h-4 w-4" />
-        Create service account
-      </PermissionButton>,
+      <div className="flex items-center gap-2">
+        <PermissionButton
+          permissions={{ serviceAccount: ["create"] }}
+          onClick={() => {
+            form.reset(DEFAULT_FORM_VALUES);
+            setIsCreateDialogOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4" />
+          Create service account
+        </PermissionButton>
+        <ResourceListActions resource="serviceAccount" />
+      </div>,
     );
 
     return () => setActionButton(null);
@@ -587,7 +591,8 @@ export default function ServiceAccountsSettingsPage() {
                 className="w-full"
               />
               <FieldDescription>
-                The roles this service account will use for API requests.
+                Roles set allowed actions for API requests. Permissions
+                determine which objects this account can reach.
               </FieldDescription>
             </div>
             <AdvancedLabelsSection

@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -94,14 +94,21 @@ Archestra supports the following custom headers on LLM Proxy requests. All heade
 
 With OpenAPPA enabled, Claude Code, Codex, and OpenCode receive signed tool-call IDs from the proxy. The proxy detects session identity from Claude Code session headers, Codex thread metadata, and OpenCode session headers. The proxy restores original provider IDs before forwarding later requests. Archestra Chat and Mistral models keep original provider IDs.
 
-The proxy can append this two-line mark to a protected session's first reply and compaction summaries:
+The proxy can prepend this two-line mark to a protected session's first reply and compaction summaries:
 
 ```
-▄█▄▄▄█▄  protected session XK7-Q2M9
-██▄█▄██
+▄█▄▄▄█▄
+██▄█▄██  protected session XK7-Q2M9
 ```
 
-The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs provide separate lineage evidence. Structured outputs, tool data, and other non-text fields never carry the mark. If a new session lacks a valid mark or tool-call ID, the proxy cannot reconstruct source lineage. This feature requires `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`.
+The mark shows which protected session wrote the reply. A spawned subagent displays separate start and return marks:
+
+```
+▄█▄▄▄█▄
+██▄█▄██  started subagent 7Z8-K9M2
+```
+
+The short codes are display labels. The client also carries signed protocol tokens. The proxy verifies these tokens and removes them before sending requests to model providers. Most replies carry no mark. Signed tool-call IDs provide separate lineage evidence. Structured outputs, tool data, and other non-text fields never carry the mark. If a new session lacks a valid mark or tool-call ID, the proxy cannot reconstruct source lineage. This feature requires `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`.
 
 | Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |

@@ -27,7 +27,6 @@ export function ProjectActionsMenu({
   pinned: boolean;
   canPin: boolean;
   canManage: boolean;
-  /** Deleting an org-wide project needs `project:share-org` on top of canManage. */
   canDelete: boolean;
   onTogglePin: () => void;
   onEdit: () => void;

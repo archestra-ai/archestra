@@ -46,6 +46,8 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   // ---- caller-owned policy, kept explicit at the boundary ----
   /** Resolve to this agent if it is present (page passes the URL param). */
   urlAgentId?: string | null;
+  /** A model chosen by a launcher before navigating to a new chat. */
+  urlModelId?: string | null;
   /**
    * The pinned agent of the project this chat is being started in, when there
    * is one. Outranks the org default.
@@ -107,6 +109,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     chatApiKeys,
     memberDefault,
     urlAgentId,
+    urlModelId,
     projectDefaultAgentId,
     canUseSavedAgent,
     isPermissionResolving,
@@ -156,15 +159,27 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         memberDefault: memberDefault ?? null,
       });
 
-      if (resolved) {
-        setModelId(resolved.modelId);
-        setApiKeyId(resolved.apiKeyId);
+      const chosen =
+        resolveUrlModelSelection({
+          urlModelId,
+          modelsByProvider,
+          chatApiKeys,
+        }) ?? resolved;
+      if (chosen) {
+        setModelId(chosen.modelId);
+        setApiKeyId(chosen.apiKeyId);
       } else {
         setModelId("");
         setApiKeyId(null);
       }
     },
-    [modelsByProvider, chatApiKeys, organizationDefaults, memberDefault],
+    [
+      modelsByProvider,
+      chatApiKeys,
+      organizationDefaults,
+      memberDefault,
+      urlModelId,
+    ],
   );
 
   // Resolve which agent to use on load.
@@ -252,9 +267,12 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
     if (!resolved) return; // No models available yet
 
-    setModelId(resolved.modelId);
-    if (resolved.apiKeyId) {
-      setApiKeyId(resolved.apiKeyId);
+    const chosen =
+      resolveUrlModelSelection({ urlModelId, modelsByProvider, chatApiKeys }) ??
+      resolved;
+    setModelId(chosen.modelId);
+    if (chosen.apiKeyId) {
+      setApiKeyId(chosen.apiKeyId);
     }
     modelInitializedRef.current = true;
   }, [
@@ -263,6 +281,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     chatApiKeys,
     organizationDefaults,
     memberDefault,
+    urlModelId,
   ]);
 
   // Reset the resolved agent/model/key when leaving a conversation route for
@@ -405,4 +424,21 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     onProviderChange,
     onResetModelOverride,
   };
+}
+
+function resolveUrlModelSelection(params: {
+  urlModelId?: string | null;
+  modelsByProvider: Record<string, LlmModel[]>;
+  chatApiKeys: { id: string; provider: string }[];
+}) {
+  if (!params.urlModelId) return null;
+  const model = Object.values(params.modelsByProvider)
+    .flat()
+    .find((entry) => entry.dbId === params.urlModelId);
+  if (!model) return null;
+  const key = params.chatApiKeys.find(
+    (entry) => entry.provider === model.provider,
+  );
+  if (!key) return null;
+  return { modelId: model.dbId, apiKeyId: key.id };
 }

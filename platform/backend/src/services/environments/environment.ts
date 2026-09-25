@@ -1,4 +1,7 @@
-import type { EnvironmentDefaultableResource } from "@archestra/shared";
+import {
+  type EnvironmentDefaultableResource,
+  hasScopedPermission,
+} from "@archestra/shared";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -10,6 +13,7 @@ import {
   OrganizationModel,
   PlaywrightRuntimeModel,
 } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type CreateEnvironment,
@@ -80,16 +84,29 @@ function teardownEnvironmentEngine(environment: Environment): void {
 
 // === Public API ===
 
-export async function listEnvironments(
-  organizationId: string,
-  labels?: Record<string, string[]>,
-): Promise<EnvironmentList> {
-  const [environments, defaultAssignedCatalogCount, resourceDefaults] =
+export async function listEnvironments(params: {
+  organizationId: string;
+  userId: string;
+  labels?: Record<string, string[]>;
+}): Promise<EnvironmentList> {
+  const { organizationId, userId, labels } = params;
+  const [rows, defaultAssignedCatalogCount, resourceDefaults] =
     await Promise.all([
       EnvironmentModel.listForOrganization(organizationId, labels),
       EnvironmentModel.countDefaultAssigned(organizationId),
       EnvironmentResourceDefaultModel.getForOrganization(organizationId),
     ]);
+  // Deploying into an environment takes a `use` grant on it.
+  const environments = await Promise.all(
+    rows.map(async (environment) => ({
+      ...environment,
+      canDeploy: await canDeployToEnvironment({
+        organizationId,
+        userId,
+        scope: environment.id,
+      }),
+    })),
+  );
   return { environments, defaultAssignedCatalogCount, resourceDefaults };
 }
 
@@ -134,7 +151,7 @@ export async function updateEnvironmentResourceDefaults(params: {
  * The environment a newly created resource of this kind should be bound to when
  * its creator did not choose one. Returns null — the org Default environment,
  * i.e. the historical behavior — when no default is configured, or when the
- * configured one is restricted and the caller may not deploy there. Falling
+ * caller may not deploy into the configured one. Falling
  * back rather than throwing keeps an admin's convenience setting from blocking
  * a create the caller is otherwise allowed to perform; explicitly *choosing*
  * that environment is still refused by `assertCanAssignEnvironment`.
@@ -142,9 +159,9 @@ export async function updateEnvironmentResourceDefaults(params: {
 export async function resolveDefaultEnvironmentForNewResource(params: {
   organizationId: string;
   resource: EnvironmentDefaultableResource;
-  canDeployToRestricted: boolean;
+  userId: string;
 }): Promise<string | null> {
-  const { organizationId, resource, canDeployToRestricted } = params;
+  const { organizationId, resource, userId } = params;
 
   const environmentId = await EnvironmentResourceDefaultModel.findForResource({
     organizationId,
@@ -157,16 +174,25 @@ export async function resolveDefaultEnvironmentForNewResource(params: {
     organizationId,
   );
   if (!environment) return null;
-  if (environment.restricted && !canDeployToRestricted) return null;
+  if (
+    !(await canDeployToEnvironment({
+      organizationId,
+      userId,
+      scope: environment.id,
+    }))
+  )
+    return null;
 
   return environment.id;
 }
 
 export async function createEnvironment(params: {
   organizationId: string;
+  /** The creator, who gets full access. Omitted for a system create. */
+  userId?: string;
   data: CreateEnvironment;
 }): Promise<Environment> {
-  const { organizationId, data } = params;
+  const { organizationId, userId, data } = params;
   const existing = await EnvironmentModel.listForOrganization(organizationId);
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
@@ -177,9 +203,9 @@ export async function createEnvironment(params: {
     description: data.description ?? null,
     namespace: data.namespace ?? null,
     networkPolicy: data.networkPolicy ?? null,
-    restricted: data.restricted,
     validationRegex: data.validationRegex ?? null,
     trustedImageRegistries: data.trustedImageRegistries ?? null,
+    authorId: userId ?? null,
   });
 
   if (data.labels?.length) {
@@ -211,7 +237,6 @@ export async function updateEnvironment(params: {
     description: data.description,
     namespace: data.namespace,
     networkPolicy: data.networkPolicy,
-    restricted: data.restricted,
     validationRegex: data.validationRegex,
     trustedImageRegistries: data.trustedImageRegistries,
   });
@@ -230,33 +255,22 @@ export async function updateEnvironment(params: {
 }
 
 /**
- * Gate assigning a catalog item to an environment. Unrestricted environments
- * are open; a `restricted` environment requires the caller to hold the
- * resource-specific `deploy-to-restricted` permission (e.g.
- * `mcpRegistry:deploy-to-restricted` for catalog items,
- * `agent:deploy-to-restricted` for agents). The default (null) environment is
- * open unless the org has marked its default environment restricted, in which
- * case it is gated the same way. Callers compute `canDeployToRestricted` with
- * their own auth primitive (route headers vs. MCP user context) and pass the
- * result in, so this stays free of HTTP concerns.
+ * Gate assigning a catalog item to an environment: it takes a `use` grant on
+ * that environment. An environment is a place you deploy into, so the
+ * authority to deploy there belongs to the environment rather than to each
+ * kind of thing deployed.
+ *
+ * The organization's Default environment has no row to grant on, and is open
+ * to anyone who can create the resource being deployed.
  */
 export async function assertCanAssignEnvironment(params: {
   environmentId: string | null | undefined;
   organizationId: string;
-  canDeployToRestricted: boolean;
+  userId: string;
 }): Promise<void> {
-  const { environmentId, organizationId, canDeployToRestricted } = params;
+  const { environmentId, organizationId, userId } = params;
 
-  if (!environmentId) {
-    const organization = await OrganizationModel.getById(organizationId);
-    if (organization?.defaultEnvironmentRestricted && !canDeployToRestricted) {
-      throw new ApiError(
-        403,
-        "You do not have permission to assign catalog items to the default environment.",
-      );
-    }
-    return;
-  }
+  if (!environmentId) return;
 
   const environment = await EnvironmentModel.findByIdForOrganization(
     environmentId,
@@ -265,10 +279,16 @@ export async function assertCanAssignEnvironment(params: {
   if (!environment) {
     throw new ApiError(404, "Environment not found");
   }
-  if (environment.restricted && !canDeployToRestricted) {
+  if (
+    !(await canDeployToEnvironment({
+      organizationId,
+      userId,
+      scope: environment.id,
+    }))
+  ) {
     throw new ApiError(
       403,
-      "You do not have permission to assign catalog items to this restricted environment.",
+      "You do not have permission to assign catalog items to this environment.",
     );
   }
 }
@@ -443,4 +463,29 @@ async function resolveEnvironmentValidationRegex(params: {
     regex: environment?.validationRegex ?? null,
     label: environment?.name ?? "Default",
   };
+}
+
+/**
+ * Whether the caller may deploy into one environment, or into every one.
+ *
+ * Deploying is `use` on the environment, and only a stored grant confers it.
+ * No role action stands in for it: `environment:read` is held by every custom
+ * role, and reading it as `use` would open every restricted environment.
+ */
+async function canDeployToEnvironment(params: {
+  organizationId: string;
+  userId: string;
+  scope: string;
+}): Promise<boolean> {
+  const required = {
+    organizationId: params.organizationId,
+    resource: "environment" as const,
+    scope: params.scope,
+    action: "use" as const,
+  };
+  const { grants } = await ResourcePermissions.getEffective({
+    ...required,
+    userId: params.userId,
+  });
+  return hasScopedPermission({ grants, required });
 }

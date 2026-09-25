@@ -68,6 +68,33 @@ describe("useInitialChatModelState", () => {
     expect(result.current.apiKeyId).toBe("key-openai");
   });
 
+  it("uses an available model chosen by a launch page with its provider key", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        urlModelId: "uuid-claude",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
+    expect(result.current.modelId).toBe("uuid-claude");
+    expect(result.current.apiKeyId).toBe("key-anthropic");
+  });
+
+  it("ignores a launch model without an available credential", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        urlModelId: "uuid-claude",
+        chatApiKeys: [chatApiKeys[0]],
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
+    expect(result.current.modelId).toBe("uuid-gpt");
+    expect(result.current.apiKeyId).toBe("key-openai");
+  });
+
   it("honors the org default agent over the first agent", async () => {
     const { result } = renderHook(() =>
       useInitialChatModelState({

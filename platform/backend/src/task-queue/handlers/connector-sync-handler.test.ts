@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockExecuteSync = vi.hoisted(() => vi.fn());
 vi.mock("@/knowledge-base", () => ({

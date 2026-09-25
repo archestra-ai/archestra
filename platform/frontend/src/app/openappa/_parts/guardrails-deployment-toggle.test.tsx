@@ -12,6 +12,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { GuardrailsDeploymentToggle } from "./guardrails-deployment-toggle";
 
@@ -20,9 +21,24 @@ vi.mock("sonner");
 const url = "http://localhost:9000/api/guardrails-deployment";
 const server = setupServer();
 let enabled: boolean;
+let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })),
+  );
   enabled = false;
+  revision = 3;
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -30,6 +46,16 @@ beforeEach(() => {
   server.use(
     http.get(url, () =>
       HttpResponse.json({ enabled, active: enabled, featureEnabled: true }),
+    ),
+    http.get("http://localhost:9000/api/guardrails-policy", () =>
+      HttpResponse.json({
+        organizationId: "org",
+        revision,
+        content: "",
+        contentHash: "",
+        updatedAt: null,
+        updatedBy: null,
+      }),
     ),
   );
 });
@@ -44,7 +70,11 @@ function show() {
   });
   render(
     <QueryClientProvider client={client}>
-      <GuardrailsDeploymentToggle />
+      <SidebarProvider>
+        <SidebarMenu>
+          <GuardrailsDeploymentToggle />
+        </SidebarMenu>
+      </SidebarProvider>
     </QueryClientProvider>,
   );
 }
@@ -63,38 +93,32 @@ test("enables both engines deployment-wide and disables only APPA", async () => 
   );
   show();
   const toggle = await screen.findByRole("switch", {
-    name: "Enable Guardrails v2",
+    name: "OpenAPPA is disabled",
   });
   expect(toggle).not.toBeChecked();
-  expect(screen.getByText("All organizations")).toBeVisible();
+  expect(toggle).toHaveClass("text-destructive");
   fireEvent.click(toggle);
-  expect(
-    await screen.findByText("Both guardrails engines are active."),
-  ).toBeVisible();
+  expect(await screen.findByText("OpenAPPA enabled")).toBeVisible();
+  expect(toggle).toHaveAccessibleName("OpenAPPA is enabled");
+  expect(toggle).not.toHaveClass("text-destructive");
   await waitFor(() => expect(toggle).toBeEnabled());
   fireEvent.click(toggle);
-  expect(
-    await screen.findByText(
-      "Existing guardrails are active. APPA enforcement is off.",
-    ),
-  ).toBeVisible();
+  expect(await screen.findByText("OpenAPPA disabled")).toBeVisible();
   expect(toggle).not.toBeChecked();
+  expect(toggle).toHaveAccessibleName("OpenAPPA is disabled");
+  expect(toggle).toHaveClass("text-destructive");
 });
 
 test("a rejected update keeps the accepted deployment state", async () => {
   server.use(http.put(url, () => new HttpResponse(null, { status: 403 })));
   show();
   const toggle = await screen.findByRole("switch", {
-    name: "Enable Guardrails v2",
+    name: "OpenAPPA is disabled",
   });
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toBeEnabled());
   expect(toggle).not.toBeChecked();
-  expect(
-    screen.getByText(
-      "Existing guardrails are active. APPA enforcement is off.",
-    ),
-  ).toBeVisible();
+  expect(screen.getByText("OpenAPPA disabled")).toBeVisible();
 });
 
 test.each([
@@ -117,6 +141,15 @@ test.each([
     );
   show();
   expect(
-    await screen.findByRole("switch", { name: "Enable Guardrails v2" }),
+    await screen.findByRole("switch", { name: "OpenAPPA is disabled" }),
   ).toBeDisabled();
+});
+
+test("sends a never-configured deployment to the setup wizard instead of switching", async () => {
+  revision = 0;
+  show();
+  expect(
+    await screen.findByRole("link", { name: "Set up OpenAPPA" }),
+  ).toHaveAttribute("href", "/openappa/setup");
+  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 });

@@ -282,9 +282,9 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.PinAgent]:
     "Checked dynamically based on the target agent's type and the caller's visibility. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
   [RouteId.CreateAgent]:
-    "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.",
+    "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Grants on the agent may further restrict the request.",
   [RouteId.UpdateAgent]:
-    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Additional scope and team-admin checks may apply.",
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Grants on the agent may further restrict the request.",
   [RouteId.DeleteAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   [RouteId.RestoreAgent]:

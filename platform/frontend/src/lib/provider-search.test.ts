@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { builtInProviderLabel } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { providerSearchHaystack } from "./provider-search";

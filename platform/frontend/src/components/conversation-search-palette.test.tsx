@@ -38,6 +38,10 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config.query");
 
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: vi.fn(),
+}));
+
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
@@ -144,6 +148,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -171,6 +176,9 @@ describe("ConversationSearchPalette", () => {
       ),
     );
     vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: { enabled: false },
+    } as ReturnType<typeof useGuardrailsDeployment>);
     vi.mocked(usePathname).mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
       data: [
@@ -465,6 +473,28 @@ describe("ConversationSearchPalette", () => {
     }
   });
 
+  it("hides legacy Guardrails when the OpenAPPA deployment toggle is on", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "openappaEnabled",
+    );
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: { enabled: true },
+    } as ReturnType<typeof useGuardrailsDeployment>);
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "guardrails" },
+    });
+
+    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    expect(screen.getByText("OpenAPPA")).toBeInTheDocument();
+  });
+
   it("searches pages by their visible labels and navigates to a match", () => {
     mockUseConversations.mockReturnValue({
       data: [],
@@ -703,6 +733,26 @@ describe("ConversationSearchPalette", () => {
     fireEvent.click(screen.getByTestId("cmd-item-conv-conv-1"));
 
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/conv-1");
+  });
+
+  it("reopens a policy conversation in the policy workspace", () => {
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "policy-1",
+          title: "Review policy",
+          origin: "openappa",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.click(screen.getByTestId("cmd-item-conv-policy-1"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy-1");
   });
 
   it("navigates to /chat when selecting new chat", () => {

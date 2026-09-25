@@ -1,14 +1,18 @@
 import {
   escapeTemplateExpressions,
-  extractSsoGroupsFromRenderedTemplate,
   isBlockExpression,
-  isTruthyTemplateOutput,
   isUnparseableExpression,
-  registerSsoTemplateHelpers,
-  SYSTEM_PROMPT_HELPER_NAMES,
   type TemplateExpression,
+} from "@archestra/shared/handlebars-expressions";
+import {
+  extractSsoGroupsFromRenderedTemplate,
+  isTruthyTemplateOutput,
+  registerSsoTemplateHelpers,
+} from "@archestra/shared/sso-template-helpers";
+import {
+  SYSTEM_PROMPT_HELPER_NAMES,
   type UserSystemPromptContext,
-} from "@archestra/shared";
+} from "@archestra/shared/system-prompt-template";
 import Handlebars from "handlebars";
 import logger from "@/logging";
 

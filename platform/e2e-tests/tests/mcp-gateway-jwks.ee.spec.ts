@@ -8,10 +8,15 @@
  * 4. Authenticate to MCP Gateway using the JWT
  * 5. Verify tool calls succeed and the Archestra user is linked in audit logs
  */
-import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX, SSO_DOMAIN } from "../consts";
+import {
+  API_BASE_URL,
+  MCP_GATEWAY_URL_SUFFIX,
+  ORGANIZATION_USE_GRANT,
+  SSO_DOMAIN,
+} from "../consts";
 import { getKeycloakJwt } from "../utils";
 import {
-  assignArchestraToolsToProfile,
+  assignWhoamiToolToProfile,
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
@@ -59,10 +64,9 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         urlSuffix: "/api/agents",
         data: {
           name: `JWKS E2E Test ${Date.now()}`,
-          teams: [],
-          scope: "org",
           agentType: "mcp_gateway",
           identityProviderId,
+          initialGrants: [ORGANIZATION_USE_GRANT],
         },
       });
       const agent = (await agentResponse.json()) as { id: string };
@@ -76,8 +80,8 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         agentType: "mcp_gateway",
       });
 
-      // STEP 4: Assign Archestra tools to the profile
-      await assignArchestraToolsToProfile(request, pid);
+      // STEP 4: Assign the tool this authentication flow calls.
+      await assignWhoamiToolToProfile(request, pid);
 
       // STEP 5: Wait for IdP linkage/tool assignments to settle before using the
       // external JWT against the gateway. This avoids transient 401s in CI where
@@ -156,10 +160,9 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         urlSuffix: "/api/agents",
         data: {
           name: `JWKS Reject Test ${Date.now()}`,
-          teams: [],
-          scope: "org",
           agentType: "mcp_gateway",
           identityProviderId,
+          initialGrants: [ORGANIZATION_USE_GRANT],
         },
       });
       const agent = (await agentResponse.json()) as { id: string };
@@ -202,17 +205,19 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     deleteAgent,
   }) => {
     // Create a profile WITHOUT an IdP linked
+    // The organization token reaches only gateways the organization may use.
     const agentResponse = await createAgent(
       request,
       `No IdP Test ${Date.now()}`,
-      "personal",
+      undefined,
+      [ORGANIZATION_USE_GRANT],
     );
     const agent = await agentResponse.json();
     const profileId = agent.id;
 
     try {
-      // Assign Archestra tools
-      await assignArchestraToolsToProfile(request, profileId);
+      // Assign the tool used by this authentication flow.
+      await assignWhoamiToolToProfile(request, profileId);
 
       // Get org token - should work since no IdP is configured
       const tokensResponse = await makeApiRequest({

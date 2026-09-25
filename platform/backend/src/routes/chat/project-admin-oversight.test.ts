@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -24,9 +24,7 @@ describe("chat reads — hidden from project admins", () => {
 
     const owner = await makeUser();
     await makeMember(owner.id, organizationId, {});
-    agentId = (
-      await makeAgent({ organizationId, authorId: owner.id, scope: "org" })
-    ).id;
+    agentId = (await makeAgent({ organizationId, authorId: owner.id })).id;
 
     const project = await projectService.create({
       organizationId,

@@ -21,7 +21,6 @@ describe("AppModel.create", () => {
     const author = await makeUser();
     const first = await makeApp({
       name: "Dup",
-      scope: "org",
       authorId: author.id,
     });
     // Names are unique per author (apps_org_author_name_uidx), regardless of
@@ -29,7 +28,7 @@ describe("AppModel.create", () => {
     await expect(
       makeApp({
         name: "Dup",
-        scope: "personal",
+        access: "personal",
         authorId: author.id,
         organizationId: first.organizationId,
       }),
@@ -44,12 +43,12 @@ describe("AppModel.create", () => {
     const b = await makeUser();
     const first = await makeApp({
       name: "Mine",
-      scope: "personal",
+      access: "personal",
       authorId: a.id,
     });
     const second = await makeApp({
       name: "Mine",
-      scope: "personal",
+      access: "personal",
       authorId: b.id,
       organizationId: first.organizationId,
     });
@@ -147,7 +146,7 @@ describe("AppModel spec", () => {
 
 describe("AppModel.delete (soft)", () => {
   test("hides the app and frees its name for re-use", async ({ makeApp }) => {
-    const app = await makeApp({ name: "Reusable", scope: "org" });
+    const app = await makeApp({ name: "Reusable" });
     // The delete flow soft-deletes the app and tears down its backing catalog,
     // which owns the name-uniqueness — freeing the name.
     await deleteAppBacking(app);
@@ -156,7 +155,6 @@ describe("AppModel.delete (soft)", () => {
 
     const recreated = await makeApp({
       name: "Reusable",
-      scope: "org",
       organizationId: app.organizationId,
     });
     expect(recreated.id).not.toBe(app.id);
@@ -172,7 +170,6 @@ describe("AppModel.findIdByOrgAuthorName", () => {
     const other = await makeUser();
     const app = await makeApp({
       name: "Lookup",
-      scope: "org",
       authorId: author.id,
     });
 
@@ -196,7 +193,6 @@ describe("AppModel.findIdByOrgAuthorName", () => {
     // A same-name app under a different author is not surfaced for the original.
     const otherApp = await makeApp({
       name: "Lookup",
-      scope: "org",
       authorId: other.id,
       organizationId: app.organizationId,
     });
@@ -263,19 +259,18 @@ describe("AppAccessModel accessibility", () => {
     await makeTeamMember(team.id, author.id);
     await makeTeamMember(team.id, member.id);
 
-    const orgApp = await makeApp({ organizationId: org.id, scope: "org" });
+    const orgApp = await makeApp({ organizationId: org.id });
     const personalApp = await makeApp({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
     });
     const teamApp = await makeApp({
       organizationId: org.id,
-      scope: "team",
+      access: { teams: [team.id] },
       authorId: author.id,
-      teamIds: [team.id],
     });
-    const deletedApp = await makeApp({ organizationId: org.id, scope: "org" });
+    const deletedApp = await makeApp({ organizationId: org.id });
     await AppModel.delete(deletedApp.id);
 
     const authorIds = await AppAccessModel.getUserAccessibleAppIds({
@@ -298,30 +293,23 @@ describe("AppAccessModel accessibility", () => {
     });
     expect(outsiderIds).toEqual([orgApp.id]);
 
-    // An app admin bypasses scope: they see every non-deleted app in the org,
-    // including other users' personal apps and teams they don't belong to.
-    const adminIds = await AppAccessModel.getUserAccessibleAppIds({
-      organizationId: org.id,
-      userId: outsider.id,
-      isAppAdmin: true,
-    });
-    expect(new Set(adminIds)).toEqual(
-      new Set([orgApp.id, personalApp.id, teamApp.id]),
-    );
-    expect(adminIds).not.toContain(deletedApp.id);
+    expect(outsiderIds).not.toContain(deletedApp.id);
   });
 
-  test("userHasAppAccess honors scope and admin bypass", async ({
+  test("userHasAppAccess honors grants", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeApp,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
     const other = await makeUser();
+    await makeMember(author.id, org.id);
+    await makeMember(other.id, org.id);
     const personalApp = await makeApp({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
     });
 
@@ -330,7 +318,6 @@ describe("AppAccessModel accessibility", () => {
         organizationId: org.id,
         userId: author.id,
         app: personalApp,
-        isAppAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -338,17 +325,8 @@ describe("AppAccessModel accessibility", () => {
         organizationId: org.id,
         userId: other.id,
         app: personalApp,
-        isAppAdmin: false,
       }),
     ).toBe(false);
-    expect(
-      await AppAccessModel.userHasAppAccess({
-        organizationId: org.id,
-        userId: other.id,
-        app: personalApp,
-        isAppAdmin: true,
-      }),
-    ).toBe(true);
   });
 });
 

@@ -5,18 +5,28 @@ import {
   EnvironmentModel,
   SkillModel,
 } from "@/models";
+import MemberModel from "@/models/member";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
 import {
   MANIFEST,
   manifestNamed,
   seedImportedSkill,
+  useSkillRouteTestApp,
 } from "./skill.test-helpers";
 
+/** Publishes a skill created through the route to the whole organization. */
+const PUBLISH_TO_ORGANIZATION = [
+  {
+    subject: { type: "organization" as const, id: "*" as const },
+    actions: ["read" as const, "use" as const],
+  },
+];
+
 describe("GET /api/skills", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
@@ -166,17 +176,24 @@ describe("GET /api/skills", () => {
     const published = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("published-skill"), scope: "org" },
+      payload: {
+        content: manifestNamed("published-skill"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     const excluded = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("excluded-skill"), scope: "org" },
+      payload: {
+        content: manifestNamed("excluded-skill"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("team-skill"), scope: "team" },
+      // An unpublished skill: only its author reaches it.
+      payload: { content: manifestNamed("team-skill") },
     });
     await AgentExcludedSkillModel.replaceExclusions({
       agentId: gateway.id,
@@ -225,14 +242,17 @@ describe("GET /api/skills", () => {
     const everywhere = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("gateway-everywhere"), scope: "org" },
+      payload: {
+        content: manifestNamed("gateway-everywhere"),
+        initialGrants: PUBLISH_TO_ORGANIZATION,
+      },
     });
     const inStaging = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: {
         content: manifestNamed("gateway-staging"),
-        scope: "org",
+        initialGrants: PUBLISH_TO_ORGANIZATION,
         environmentIds: [staging.id],
       },
     });
@@ -241,7 +261,7 @@ describe("GET /api/skills", () => {
       url: "/api/skills",
       payload: {
         content: manifestNamed("gateway-production"),
-        scope: "org",
+        initialGrants: PUBLISH_TO_ORGANIZATION,
         environmentIds: [production.id],
       },
     });
@@ -249,8 +269,8 @@ describe("GET /api/skills", () => {
       method: "POST",
       url: "/api/skills",
       payload: {
+        // An unpublished skill: only its author reaches it.
         content: manifestNamed("gateway-team-skill"),
-        scope: "team",
       },
     });
 
@@ -282,7 +302,7 @@ describe("GET /api/skills", () => {
       name: "Private Skill Agent",
       organizationId: ctx.organizationId,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -359,13 +379,14 @@ describe("GET /api/skills", () => {
   });
 
   test("scope and teamIds filter the list by visibility", async ({
-    makeMember,
     makeTeam,
     makeUser,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const otherAuthor = await makeUser();
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
@@ -374,34 +395,30 @@ describe("GET /api/skills", () => {
       organizationId: ctx.organizationId,
       name: "org-skill",
       sourceRef: "shared/org@main:SKILL.md",
-      scope: "org",
+      access: "org",
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "team-a-skill",
       sourceRef: "team/a@main:SKILL.md",
-      scope: "team",
-      teamIds: [teamA.id],
+      access: { teams: [teamA.id] },
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "team-b-skill",
       sourceRef: "team/b@main:SKILL.md",
-      scope: "team",
-      teamIds: [teamB.id],
+      access: { teams: [teamB.id] },
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -432,7 +449,6 @@ describe("GET /api/skills", () => {
   });
 
   test("author filters apply for admins and are ignored for non-admins", async ({
-    makeMember,
     makeUser,
   }) => {
     const otherAuthor = await makeUser();
@@ -440,21 +456,33 @@ describe("GET /api/skills", () => {
       organizationId: ctx.organizationId,
       name: "org-skill",
       sourceRef: "shared/org@main:SKILL.md",
-      scope: "org",
+      access: "org",
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
+    });
+    // Another author's skill shared by grant is not "personal": the
+    // exclude-other-personal filter keeps it, like a built-in with no author.
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "other-shared-skill",
+      sourceRef: "other/shared@main:SKILL.md",
+      authorId: otherAuthor.id,
+      access: { users: [otherAuthor.id, ctx.user.id], preset: "view" },
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "built-in-skill",
+      sourceRef: "builtin/skill@main:SKILL.md",
     });
 
     const listNames = async (query: string) => {
@@ -469,43 +497,48 @@ describe("GET /api/skills", () => {
         .sort();
     };
 
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     expect(
       await listNames(`?scope=personal&authorIds=${otherAuthor.id}`),
-    ).toEqual(["other-personal-skill"]);
+    ).toEqual(["other-personal-skill", "other-shared-skill"]);
     // authorless rows (e.g. built-ins) survive an exclude filter
     expect(await listNames(`?excludeAuthorIds=${otherAuthor.id}`)).toEqual([
+      "built-in-skill",
       "my-personal-skill",
       "org-skill",
     ]);
+    // Only another author's author-only skill is hidden.
     expect(await listNames("?excludeOtherPersonalSkills=true")).toEqual([
+      "built-in-skill",
       "my-personal-skill",
       "org-skill",
+      "other-shared-skill",
     ]);
   });
 
   test("non-admins cannot use author filters to see other users' personal skills", async ({
-    makeMember,
     makeUser,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: MEMBER_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
     const otherAuthor = await makeUser();
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "my-personal-skill",
       sourceRef: "mine/personal@main:SKILL.md",
-      scope: "personal",
       authorId: ctx.user.id,
     });
     await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "other-personal-skill",
       sourceRef: "other/personal@main:SKILL.md",
-      scope: "personal",
       authorId: otherAuthor.id,
     });
 
@@ -520,9 +553,7 @@ describe("GET /api/skills", () => {
     ]);
   });
 
-  test("status=deleted returns only the trash for an admin and exposes deletedAt", async ({
-    makeMember,
-  }) => {
+  test("status=deleted returns only the trash for an admin and exposes deletedAt", async () => {
     const active = (
       await ctx.app.inject({
         method: "POST",
@@ -542,9 +573,11 @@ describe("GET /api/skills", () => {
       url: `/api/skills/${trashed.id}`,
     });
 
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const trash = await ctx.app.inject({
       method: "GET",
       url: "/api/skills?status=deleted",
@@ -565,12 +598,12 @@ describe("GET /api/skills", () => {
     expect(activeIds).not.toContain(trashed.id);
   });
 
-  test("members cannot view the deleted-skills trash", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: MEMBER_ROLE_NAME,
-    });
+  test("members cannot view the deleted-skills trash", async () => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
     const response = await ctx.app.inject({
       method: "GET",
       url: "/api/skills?status=deleted",

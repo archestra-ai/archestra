@@ -1,13 +1,14 @@
 import { and, count, eq, inArray } from "drizzle-orm";
+import { describe, expect } from "vitest";
 import db, { schema } from "@/database";
-import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import SkillModel from "@/models/skill";
+import { test } from "@/test";
 import type { InsertSkill } from "@/types";
 import skillRoutes from "./skill.routes";
-import { MANIFEST } from "./skill.test-helpers";
+import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("PATCH /api/skills/:id/github-sync", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   async function seedSynced(overrides: Partial<InsertSkill> = {}) {
     const skill = await SkillModel.createWithFiles({

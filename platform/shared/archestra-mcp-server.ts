@@ -129,11 +129,9 @@ export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
-// Change who can see a project (org-wide, teams, or owner-only).
-export const TOOL_SET_PROJECT_SHARE_SHORT_NAME = "set_project_share";
 // Discover the projects the caller can reach, and read one project's context
 // (its instructions plus the files it owns). Both work headlessly — unlike the
-// two tools above they never consult the current chat — so an external MCP
+// tool above they never consult the current chat — so an external MCP
 // client on a gateway can pull a project's context into its own session.
 export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
 export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
@@ -223,7 +221,9 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   "get_guardrails_policy",
   "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
   "update_guardrails_policy",
+  "get_guardrails_policy_change_status",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -297,7 +297,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
-  TOOL_SET_PROJECT_SHARE_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -374,6 +373,7 @@ export type ArchestraToolFullName<
  */
 export const ARCHESTRA_TOOL_GROUPS = [
   { id: "identity", label: "Identity" },
+  { id: "openappa", label: "OpenAPPA" },
   { id: "agents", label: "Agents" },
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
@@ -412,12 +412,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   ArchestraToolGroupId
 > = {
   whoami: "identity",
-  execute_remedy_plan: "identity",
-  yell: "identity",
-  get_remedy_plans: "identity",
-  get_guardrails_policy: "policies",
-  validate_guardrails_policy: "policies",
-  update_guardrails_policy: "policies",
+  execute_remedy_plan: "openappa",
+  yell: "openappa",
+  get_remedy_plans: "openappa",
+  get_guardrails_policy: "openappa",
+  validate_guardrails_policy: "openappa",
+  preview_guardrails_policy_change: "openappa",
+  update_guardrails_policy: "openappa",
+  get_guardrails_policy_change_status: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",
@@ -501,7 +503,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   ask_user: "chat",
 
   create_project_from_conversation: "projects",
-  set_project_share: "projects",
   list_projects: "projects",
   get_project: "projects",
 
@@ -1034,6 +1035,22 @@ export function isAlwaysExposedArchestraToolShortName(
   shortName: string,
 ): boolean {
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+export function buildElicitationMandateInstruction(params?: {
+  askUserToolName?: string;
+  nativeQuestionToolName?: string;
+}): string {
+  const tools: string[] = [];
+  if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
+  if (params?.askUserToolName && !tools.includes(params.askUserToolName)) {
+    tools.push(params.askUserToolName);
+  }
+  const toolName =
+    tools.length > 1
+      ? `${tools[0]} (or ${tools[1]})`
+      : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
+  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
 }
 
 /**

@@ -24,9 +24,10 @@ flowchart LR
 ## Build and run
 
 Cargo fetches the OpenAPPA runtime from upstream `main` at commit
-`8dd1272f4e093856a11ddc11d653180397afdc7d`, the merge of
-archestra-ai/OpenAPPA#386 (a hosted root document declares its batteries and
-their credentials), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
+`70e0ad33f8312af528f88271314df79f92f0ac08`, after the merge of
+archestra-ai/OpenAPPA#423 (the native `jev` annotator), #433 (per-dispatch
+pinned deployments and the host credential lookup), #424 (the shared label
+guide) and #440 (jev labels settle on argmax), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
@@ -105,20 +106,20 @@ The proxy derives the organization from the resolved agent. Internal agent runs,
 including Chat, Slack and A2A, use the existing local-request trust boundary.
 Caller identity provides audit attribution. For external clients, it scopes the session and binds remedy offers to the authenticated credential. External callers authenticate through existing proxy mechanisms.
 
-The native actor ID hashes the session ID. Authorized users share guardrail state within one organization. An organization change is refused.
+The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
 
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy can append this two-line mark to a protected session's first reply and compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can prepend this two-line mark to a protected session's first reply and compaction summaries:
 
 ```
-▄█▄▄▄█▄  protected session XK7-Q2M9
-██▄█▄██
+▄█▄▄▄█▄
+██▄█▄██  protected session XK7-Q2M9
 ```
 
-Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
+Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark shows which protected session wrote the reply. The proxy removes the mark before forwarding requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
 
 Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients never carry the mark. Compaction summaries retain the mark so lineage survives client-side history rewrites.
 
@@ -152,6 +153,7 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_sessions` | Scoped actor/root/parent mapping, start decision, and fork lineage (`forked_from`, `forked_at`) |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
+| `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
@@ -210,7 +212,7 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400, except a hosted web search on OpenAI Responses (below). Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates calls and results, but notices stay in history as notice calls.
+Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred `tool_search` declarations, including versioned Anthropic tool-search types and `defer_loading` tools, are refused with HTTP 400 because their client-callable tools are not declared on the wire. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
 
 The provider runs a hosted `web_search` inside the inference call, so the proxy cannot stop the call; it rules on what the call brought in. It withholds the response from the first `web_search_call` item on — the search record, the text the model wrote with the results in view, and any calls after it — and submits that as the result of a `web_search` tool call. An admitted result passes through unchanged. A held one reaches the client as a notice in place of the withheld part, so the model never sees it in a later request unless a remedy releases it. List `web_search` under `confined_results` to have the runtime stage the result: accepting the offer returns it. Any other denial drops it, and the model searches again once the remedy allows the call. The query itself has already reached the provider, which holds the session's context anyway. A search-backed turn loses token streaming after the search starts, since the verdict needs the whole turn.
 

@@ -5,7 +5,7 @@ import {
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
-} from "@/lib/utils";
+} from "@/lib/utils/api";
 
 const {
   applyGithubPluginUpdate,
@@ -305,47 +305,6 @@ export function useDeletePlugin(id: string) {
       queryClient.removeQueries({ queryKey: ["plugins", id] });
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin deleted");
-    },
-  });
-}
-
-export function useBulkUpdatePluginVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: {
-      plugins: Array<{ id: string; name: string }>;
-      scope: "personal" | "team" | "org";
-      teamIds: string[];
-      userIds: string[];
-    }) => {
-      const outcomes = await Promise.all(
-        params.plugins.map(async (plugin) => {
-          const { error } = await updatePlugin({
-            path: { id: plugin.id },
-            body: {
-              scope: params.scope,
-              teamIds: params.teamIds,
-              userIds: params.userIds,
-            },
-          });
-          return { plugin, error };
-        }),
-      );
-      return {
-        succeeded: outcomes
-          .filter(({ error }) => !error)
-          .map(({ plugin }) => plugin),
-        failed: outcomes.filter(({ error }) => !!error),
-      };
-    },
-    onSuccess: ({ succeeded, failed }) => {
-      queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      if (failed.length === 0)
-        toast.success(`Updated ${succeeded.length} plugins`);
-      else
-        toast.warning(
-          `Updated ${succeeded.length} plugins; ${failed.length} failed`,
-        );
     },
   });
 }

@@ -7,10 +7,12 @@
  * - Every route is constrained to the active organization; agent and MCP
  *   server permissions do not widen or narrow log visibility.
  */
+
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import McpToolCallModel from "@/models/mcp-tool-call";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("mcp-tool-call routes", () => {
@@ -59,7 +61,6 @@ describe("mcp-tool-call routes", () => {
       const agent = await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "org",
       });
       agentId = agent.id;
 
@@ -113,7 +114,14 @@ describe("mcp-tool-call routes", () => {
   }) => {
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { log: ["read"] },
+    });
+    // Every row is `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "log",
+      roleId: allLogs.id,
+      actions: ["read"],
     });
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;
@@ -137,7 +145,7 @@ describe("mcp-tool-call routes", () => {
     const ownedApp = await makeApp({
       organizationId,
       authorId: appOwner.id,
-      scope: "personal",
+      access: "personal",
     });
     const appCall = await McpToolCallModel.create({
       ownerType: "app",
@@ -150,7 +158,14 @@ describe("mcp-tool-call routes", () => {
     });
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { log: ["read"] },
+    });
+    // Every row is `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "log",
+      roleId: allLogs.id,
+      actions: ["read"],
     });
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;
@@ -212,7 +227,7 @@ describe("mcp-tool-call routes", () => {
     const privateAgent = await makeAgent({
       organizationId,
       authorId: stranger.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const caller = await makeUser();
@@ -260,7 +275,6 @@ describe("mcp-tool-call routes", () => {
     const otherAgent = await makeAgent({
       organizationId: otherOrganization.id,
       authorId: owner.id,
-      scope: "org",
     });
     const foreign = await seedCall(owner.id, { agentId: otherAgent.id });
     const otherApp = await makeApp({

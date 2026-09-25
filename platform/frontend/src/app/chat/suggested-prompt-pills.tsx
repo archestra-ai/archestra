@@ -1,6 +1,7 @@
 "use client";
 
 import { Suggestion } from "@/components/ai-elements/suggestion";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface SuggestedPrompt {
   summaryTitle: string;
@@ -20,6 +21,7 @@ interface SuggestedPromptPillsProps {
   disabled?: boolean;
   onSelect: (prompt: SuggestedPrompt) => void;
   onPreviewChange: (prompt: string | null) => void;
+  align?: "start" | "center";
 }
 
 export const SuggestedPromptPills = ({
@@ -27,8 +29,14 @@ export const SuggestedPromptPills = ({
   disabled,
   onSelect,
   onPreviewChange,
+  align = "center",
 }: SuggestedPromptPillsProps) => (
-  <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+  <div
+    className={cn(
+      "flex flex-wrap items-center gap-2 max-w-2xl",
+      align === "start" ? "justify-start" : "justify-center",
+    )}
+  >
     {prompts.map((suggestedPrompt) => (
       <Suggestion
         key={`${suggestedPrompt.summaryTitle}-${suggestedPrompt.prompt}`}

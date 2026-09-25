@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
+import { expect, test } from "vitest";
 import { AgentModel } from "@/models";
-import { expect, test } from "@/test";
 import McpToolCallModel from "./mcp-tool-call";
 
 const SECRET_VALUE = "sk-arg-PLAINTEXT-must-not-escape";

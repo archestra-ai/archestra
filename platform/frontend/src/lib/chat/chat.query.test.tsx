@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import {
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
@@ -56,8 +56,8 @@ vi.mock("@/lib/websocket/websocket", () => ({
   },
 }));
 
-vi.mock("@/lib/utils", async () => {
-  const actual = await vi.importActual("@/lib/utils");
+vi.mock("@/lib/utils/api", async () => {
+  const actual = await vi.importActual("@/lib/utils/api");
   return {
     ...actual,
     handleApiError: vi.fn(),

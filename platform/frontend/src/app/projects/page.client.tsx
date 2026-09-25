@@ -8,7 +8,7 @@ import {
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -16,7 +16,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -32,14 +32,12 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import {
@@ -80,7 +78,6 @@ import {
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useBulkDeleteProjects,
-  useBulkUpdateProjectVisibility,
   useCreateProject,
   useDeleteProject,
   usePermanentlyDeleteProject,
@@ -172,13 +169,28 @@ function ProjectsList() {
   // Only consulted on the active slice; the trash has its own empty state.
   const hasActiveFilter = hasActiveScopeFilters || !!search || !!labelsFilter;
 
+  const showNoApiKeySetup =
+    !isApiKeyLoading && !isApiKeyLoadError && !hasAnyApiKey;
+
+  // Same as /chat: the add-key prompt stands alone, centered in the viewport,
+  // so hide the app shell's version footer while it shows.
+  useEffect(() => {
+    if (!showNoApiKeySetup) return;
+    document.body.classList.add("hide-version");
+    return () => document.body.classList.remove("hide-version");
+  }, [showNoApiKeySetup]);
+
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
   // the user has no keys configured. `isLoadError` is scoped to the first-fetch
   // failure, so a failed background refetch keeps the cached state instead.
   if (!isApiKeyLoading && isApiKeyLoadError) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+      <PageLayout
+        title="Projects"
+        description={PROJECTS_DESCRIPTION}
+        actionButton={<ResourceListActions resource="project" />}
+      >
         <ApiKeyLoadError onRetry={refetchApiKeys} />
       </PageLayout>
     );
@@ -186,11 +198,10 @@ function ProjectsList() {
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
-  if (!isApiKeyLoading && !hasAnyApiKey) {
+  // Rendered bare (no page header), centered like the chat screen's prompt.
+  if (showNoApiKeySetup) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
-        <NoApiKeySetup description="Connect an LLM provider to start a project" />
-      </PageLayout>
+      <NoApiKeySetup description="Connect an LLM provider to start a project" />
     );
   }
 
@@ -198,7 +209,11 @@ function ProjectsList() {
   // failed fetch isn't misread as "No projects yet".
   if (isProjectsLoadError) {
     return (
-      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+      <PageLayout
+        title="Projects"
+        description={PROJECTS_DESCRIPTION}
+        actionButton={<ResourceListActions resource="project" />}
+      >
         <QueryLoadError
           title="Couldn't load your projects"
           onRetry={() => refetchProjects()}
@@ -212,12 +227,15 @@ function ProjectsList() {
       title="Projects"
       description={PROJECTS_DESCRIPTION}
       actionButton={
-        hasAnyApiKey ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New project
-          </Button>
-        ) : undefined
+        <div className="flex items-center gap-2">
+          {hasAnyApiKey && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New project
+            </Button>
+          )}
+          <ResourceListActions resource="project" />
+        </div>
       }
     >
       <TableCardView storageKey="archestra-projects-view">
@@ -284,25 +302,20 @@ function ProjectsList() {
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
               {!isDeletedView && (
-                <>
-                  <ResourceScopeFilter
-                    ownerLabelPlural="projects"
-                    allLabel="All projects"
-                    adminPermission={{ project: ["admin"] }}
-                  />
-                  <EntityLabelFilter
-                    useLabelKeys={useProjectLabelKeys}
-                    useLabelValues={useProjectLabelValues}
-                    className={filterControlClass({
-                      active: Boolean(labelsFilter),
-                    })}
-                  />
-                </>
+                <EntityLabelFilter
+                  useLabelKeys={useProjectLabelKeys}
+                  useLabelValues={useProjectLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(labelsFilter),
+                  })}
+                />
               )}
-              {/* Gated on `project:admin`, matching the slice the backend serves:
-              anyone else switching to Deleted would get an empty table. */}
+              {/* Gated on overseeing every project, matching the slice the
+              backend serves: anyone else switching to Deleted would get an
+              empty table. */}
               <ResourceDeletedStatusFilter
-                deletePermission={{ project: ["admin"] }}
+                deletePermission={{ project: ["update"] }}
+                deletePermissionScope="*"
               />
             </FilterBar>
           </CollectionFilters>
@@ -379,9 +392,10 @@ function ProjectSection({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
   const bulkDelete = useBulkDeleteProjects();
-  const bulkShare = useBulkUpdateProjectVisibility();
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
   const { data: canUpdateProjects } = useHasPermissions({
     project: ["update"],
   });
@@ -398,9 +412,7 @@ function ProjectSection({
       manageable &&
       canDeleteProject({
         viewerRole: project.viewerRole,
-        visibility: project.visibility,
         isProjectAdmin: !!isProjectAdmin,
-        canShareOrg: !!canShareOrg,
       })
     );
   };
@@ -445,7 +457,7 @@ function ProjectSection({
         count={selectedProjects.length}
         noun="project"
         onClear={clearSelection}
-        busy={bulkDelete.isPending || bulkShare.isPending}
+        busy={bulkDelete.isPending}
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
@@ -537,41 +549,12 @@ function ProjectSection({
         />
       )}
       {bulkShareOpen && (
-        <BulkVisibilityDialog
+        <BulkResourceAccessDialog
+          resource="project"
+          items={selectedForSharing}
           open={bulkShareOpen}
           onOpenChange={setBulkShareOpen}
-          noun="project"
-          isPending={bulkShare.isPending}
-          items={selectedForSharing.map((project) => ({
-            id: project.id,
-            // A project's list row carries names rather than audience ids, so
-            // the dialog starts at the agreed scope and asks for the audience.
-            scope:
-              project.visibility === "organization"
-                ? "org"
-                : project.visibility === "team"
-                  ? "team"
-                  : "personal",
-            teams: [],
-            users: [],
-          }))}
-          onApply={async (change) => {
-            const outcome = await bulkShare.mutateAsync({
-              projects: selectedForSharing,
-              scope: change.scope,
-              teamIds: change.teamIds,
-              userIds: change.userIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated sharing for",
-              failureVerb: "update",
-              noun: "project",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
+          onApplied={clearSelection}
         />
       )}
     </section>
@@ -629,8 +612,10 @@ function ProjectCard({
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 } & BulkCardSelectionProps) {
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
   const router = useRouter();
   return (
     <TableCard
@@ -652,9 +637,7 @@ function ProjectCard({
           canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
           canDelete={canDeleteProject({
             viewerRole: project.viewerRole,
-            visibility: project.visibility,
             isProjectAdmin: !!isProjectAdmin,
-            canShareOrg: !!canShareOrg,
           })}
           onTogglePin={() => onTogglePin(project)}
           onEdit={() => onEdit(project)}
@@ -670,12 +653,6 @@ function ProjectCard({
       onNavigate={() => router.push(`/projects/${project.id}`)}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <ScopeBadge
-          scope={projectVisibilityToScope(project.visibility)}
-          teamNames={project.shareTeamNames}
-          userNames={project.shareUserNames}
-          showLabel
-        />
         {project.viewerRole === "admin" && project.visibility === null ? (
           <Badge variant="secondary">
             {project.ownerName ? `Owned by ${project.ownerName}` : "Other user"}

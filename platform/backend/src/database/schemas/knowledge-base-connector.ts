@@ -42,6 +42,16 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
       .notNull()
       .default("org-wide"),
     teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
+    /**
+     * Whether this connector mirrors the upstream source's own access control
+     * onto each document (the permission-sync pass). The single switch every
+     * permission-sync reader consults. It replaces the
+     * `visibility = 'auto-sync-permissions'` mode, which shared a column with
+     * the retired org/team audience.
+     */
+    syncPermissionsFromSource: boolean("sync_permissions_from_source")
+      .notNull()
+      .default(false),
     connectorType: text("connector_type").$type<ConnectorType>().notNull(),
     config: jsonb("config").$type<ConnectorConfig>().notNull(),
     secretId: uuid("secret_id").references(() => secretTable.id, {

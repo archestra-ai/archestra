@@ -54,8 +54,6 @@ const assignedClient = {
   allowedGatewayIds: ["resource-1"],
   redirectUris: [],
   disabled: false,
-  scope: "personal",
-  teams: [],
 };
 
 beforeEach(() => {

@@ -3,12 +3,12 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
-import { ProjectShareModel } from "@/models";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import FileModel from "@/models/file";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import type { User } from "@/types";
 
 describe("POST /api/projects/:id/files", () => {
@@ -17,9 +17,10 @@ describe("POST /api/projects/:id/files", () => {
   let owner: User;
   let actingUser: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     actingUser = owner;
 
     app = createFastifyInstance();
@@ -257,10 +258,10 @@ describe("POST /api/projects/:id/files", () => {
 
   test("a shared member can upload", async ({ makeUser, makeMember }) => {
     const project = await seedProject("shared");
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
     });
@@ -277,12 +278,12 @@ describe("POST /api/projects/:id/files", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  test("a project admin with only oversight cannot upload (404, nothing written)", async ({
+  test("an admin's organization-wide project grant lets them upload to another member's project", async ({
     makeUser,
     makeMember,
   }) => {
-    // A foreign project NOT shared with the admin: oversight is read-only, so an
-    // upload (a write) must be refused even though the admin can view it.
+    // The retired project:admin action became Full access at `*`, which
+    // includes update. Oversight is no longer read-only.
     const otherOwner = await makeUser({ email: "oversight-owner@test.com" });
     await makeMember(otherOwner.id, organizationId, {});
     const project = await projectService.create({
@@ -302,13 +303,6 @@ describe("POST /api/projects/:id/files", () => {
       dataBase64: b64("data"),
     });
 
-    expect(res.statusCode).toBe(404);
-    expect(
-      await FileModel.findByProjectAndName({
-        organizationId,
-        projectId: project.id,
-        filename: "oversight.txt",
-      }),
-    ).toBeNull();
+    expect(res.statusCode, res.body).toBe(200);
   });
 });

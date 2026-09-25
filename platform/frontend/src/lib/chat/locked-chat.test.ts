@@ -101,5 +101,28 @@ describe("isActionAvailableForConversation", () => {
       true,
     );
     expect(isActionAvailableForConversation(undefined, "fork")).toBe(true);
+    expect(
+      isActionAvailableForConversation({ lockedChat: true }, "rename"),
+    ).toBe(true);
+  });
+
+  it("blocks policy actions while keeping ordinary chat actions available", () => {
+    for (const action of [
+      "fork",
+      "share",
+      "changeProject",
+      "generateTitle",
+      "compaction",
+      "rename",
+      "pin",
+      "export",
+    ] as const) {
+      expect(
+        isActionAvailableForConversation({ origin: "openappa" }, action),
+      ).toBe(false);
+      expect(isActionAvailableForConversation({ origin: "user" }, action)).toBe(
+        true,
+      );
+    }
   });
 });

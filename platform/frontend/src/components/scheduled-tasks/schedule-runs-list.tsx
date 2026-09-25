@@ -14,8 +14,8 @@ import {
   type ScheduleTriggerRun,
   useScheduleTriggerRuns,
 } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * A schedule's runs, reused by the project runs page and the chat right-side

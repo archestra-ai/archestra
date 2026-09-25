@@ -17,8 +17,8 @@ import {
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "@/content-encryption/index.ee";
 import db from "@/database";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -144,7 +144,7 @@ describe("POST /api/chat (locked chat)", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     agentId = agent.id;
 

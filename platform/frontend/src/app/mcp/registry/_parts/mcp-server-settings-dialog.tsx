@@ -29,7 +29,7 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { collapseMultitenantInstalls } from "./collapse-multitenant-installs";
 import {
   computeDeploymentStatusSummary,

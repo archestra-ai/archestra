@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { formSchema } from "./mcp-catalog-form.types";
 import { stripEnvVarQuotes } from "./mcp-catalog-form.utils";
 
@@ -466,7 +467,108 @@ describe("formSchema", () => {
         localConfig: undefined,
       };
 
-      expect(formSchema.parse(data)).toEqual(data);
+      expect(formSchema.parse(data)).toEqual({
+        ...data,
+        oauthConfig: {
+          ...data.oauthConfig,
+          authorizationEndpoint: undefined,
+          oauthServerUrl: undefined,
+        },
+      });
     });
+  });
+});
+
+describe("inactive authentication validation", () => {
+  const values = {
+    name: "Auth transition server",
+    serverType: "remote" as const,
+    serverUrl: "https://mcp.example.com",
+    includeBearerPrefix: true,
+    authHeaderName: "",
+    oauthConfig: {
+      grantType: "authorization_code" as const,
+      supports_resource_metadata: true,
+      redirect_uris: "",
+      authorizationEndpoint: "invalid-url",
+    },
+  };
+
+  it.each([
+    "none",
+    "auth_header",
+    "bearer",
+    "enterprise_managed",
+    "idp_jwt",
+  ])("ignores an invalid OAuth draft for %s", (authMethod) => {
+    const result = formSchema.safeParse({
+      ...values,
+      authMethod,
+      enterpriseManagedConfig: { identityProviderId: "synthetic-idp" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects the OAuth draft when OAuth is selected again", () => {
+    expect(
+      formSchema.safeParse({ ...values, authMethod: "oauth" }).success,
+    ).toBe(false);
+  });
+
+  it("ignores authorization-code-only URLs for client credentials", () => {
+    expect(
+      formSchema.safeParse({
+        ...values,
+        authMethod: "oauth_client_credentials",
+        oauthConfig: {
+          ...values.oauthConfig,
+          grantType: "client_credentials",
+          tokenEndpoint: "https://auth.example.com/token",
+          oauthServerUrl: "invalid-url",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("ignores an invalid legacy header name after leaving bearer auth", () => {
+    expect(
+      formSchema.safeParse({
+        ...values,
+        authMethod: "none",
+        authHeaderName: "Invalid Header",
+      }).success,
+    ).toBe(true);
+    expect(
+      formSchema.safeParse({
+        ...values,
+        oauthConfig: undefined,
+        authMethod: "bearer",
+        authHeaderName: "Invalid Header",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps validating shared headers and server fields after switching to none", () => {
+    const result = formSchema.safeParse({
+      ...values,
+      authMethod: "none",
+      name: "",
+      additionalHeaders: [
+        {
+          headerName: "Invalid Header",
+          promptOnInstallation: true,
+          required: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.path)).toEqual(
+        expect.arrayContaining([
+          ["name"],
+          ["additionalHeaders", 0, "headerName"],
+        ]),
+      );
+    }
   });
 });

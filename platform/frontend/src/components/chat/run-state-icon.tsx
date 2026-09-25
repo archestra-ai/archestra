@@ -10,7 +10,7 @@ import {
   type RunStatusInput,
   runStatusMarks,
 } from "@/lib/agent-run-status-marks";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function RunStateIcon({
   className,

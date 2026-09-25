@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { DynamicToolUIPart } from "ai";
 import { describe, expect, it } from "vitest";
 import { getAskUserOutcome } from "./ask-user-outcome";

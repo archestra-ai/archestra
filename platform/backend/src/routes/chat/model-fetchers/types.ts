@@ -4,7 +4,7 @@ import type {
   SupportedProvider,
   SupportedProviderEndpoint,
 } from "@archestra/shared";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 import type { ModelDefaultParameters } from "@/types/model";
 
 export const PLACEHOLDER_API_KEY = "EMPTY";

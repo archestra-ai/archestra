@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
@@ -14,6 +13,7 @@ import UserModel from "@/models/user";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -561,19 +561,21 @@ export async function processIncomingEmail(
       }
 
       // Check if user is an agent admin (can access all agents)
-      const isAgentAdmin = await userHasPermission(
-        user.id,
-        agent.organizationId,
-        "agent",
-        "admin",
-      );
+      const isAgentAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      });
 
       // Check if user has access to the agent via team membership or admin permission
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        agentId,
-        isAgentAdmin,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: agentId,
+        isAgentAdmin: isAgentAdmin,
+        action: "use",
+      });
 
       if (!hasAccess) {
         logger.warn(

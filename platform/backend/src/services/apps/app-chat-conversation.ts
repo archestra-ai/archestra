@@ -22,6 +22,7 @@ import {
 } from "@/services/apps/app-render-result";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
 import { chatAgentVisibilityFor } from "@/services/chat-agent-visibility";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
@@ -80,6 +81,7 @@ export async function createSeededAppConversation(params: {
   const { appId, userId, organizationId, agentId, lockedChat } = params;
 
   const app = await AppModel.findByIdForCaller({
+    action: "use",
     id: appId,
     organizationId,
     userId,
@@ -95,6 +97,18 @@ export async function createSeededAppConversation(params: {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    organizationId,
+    userId,
+    resource: "app",
+    scope: appId,
+    action: "use",
+  });
+  // SPDX-SnippetEnd
+
   // An app-admin can open an app they only see through oversight (someone
   // else's personal app). They may use it and change its settings, but not edit
   // it via chat — so the greeting must not invite edits the authoring tools
@@ -103,7 +117,6 @@ export async function createSeededAppConversation(params: {
     organizationId,
     userId,
     app,
-    isAppAdmin: false,
   }));
 
   return seedConversationWithRender({

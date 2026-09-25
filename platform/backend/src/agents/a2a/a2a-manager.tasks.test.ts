@@ -165,7 +165,7 @@ describe("A2AManager full task mode", () => {
   test("re-adopts a surviving background Job and settles its existing task", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "runtime-agent", teams: [] });
+    const agent = await makeAgent({ name: "runtime-agent" });
     const context = await A2AContextManager.createContext(actor);
     const task = await A2ATaskModel.create({
       contextId: context.id,
@@ -235,7 +235,6 @@ describe("A2AManager full task mode", () => {
   }) => {
     const agent = await makeAgent({
       name: "runtime-agent",
-      teams: [],
       runtime: {
         image: "example.invalid/runtime-agent:test",
         command: null,
@@ -289,7 +288,7 @@ describe("A2AManager full task mode", () => {
   test("blocking tasked run walks SUBMITTED -> WORKING -> COMPLETED with artifact, events, and timestamps", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     mockExecutorText("The answer");
 
@@ -352,7 +351,7 @@ describe("A2AManager full task mode", () => {
   test("executor failure persists TASK_STATE_FAILED with a reason and a terminal event", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     executeA2AMessage.mockRejectedValue(new Error("provider exploded"));
 
@@ -391,7 +390,7 @@ describe("A2AManager full task mode", () => {
   test("cancelTask settles a running task first and the finishing run cannot overwrite it", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const gate = mockExecutorGated();
 
@@ -443,7 +442,7 @@ describe("A2AManager full task mode", () => {
   test("messages to terminal or running tasks are rejected with UnsupportedOperation (-32004)", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
 
     // Terminal task.
@@ -507,7 +506,7 @@ describe("A2AManager full task mode", () => {
   test("detached run (returnImmediately) hands back the task before the answer exists, then completes", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const gate = mockExecutorGated();
 
@@ -554,7 +553,7 @@ describe("A2AManager full task mode", () => {
   test("approval flow: interrupt, cancel while input-required clears approvals", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const approvalMessageId = crypto.randomUUID();
     executeA2AMessage.mockResolvedValue({
@@ -611,7 +610,7 @@ describe("A2AManager full task mode", () => {
   test("concurrent decisions on different approvals cannot strand a fully-resolved task", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const approvalMessageId = crypto.randomUUID();
     executeA2AMessage.mockResolvedValue({
@@ -683,7 +682,7 @@ describe("A2AManager full task mode", () => {
   test("approval resume completes as a task response with the resumed answer", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const approvalMessageId = crypto.randomUUID();
     executeA2AMessage.mockResolvedValue({
@@ -741,7 +740,7 @@ describe("A2AManager full task mode", () => {
   test("a run interrupted for approval keeps ONE response artifact across the resume", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const approvalMessageId = crypto.randomUUID();
 
@@ -818,8 +817,8 @@ describe("A2AManager full task mode", () => {
   test("task access is agent-bound; unknown and foreign tasks are indistinguishable", async ({
     makeAgent,
   }) => {
-    const agentA = await makeAgent({ name: "agentA", teams: [] });
-    const agentB = await makeAgent({ name: "agentB", teams: [] });
+    const agentA = await makeAgent({ name: "agentA" });
+    const agentB = await makeAgent({ name: "agentB" });
     const manager = fullManager();
     mockExecutorText("bound answer");
 
@@ -878,7 +877,7 @@ describe("A2AManager full task mode", () => {
   test("subscribeToTask rejects terminal tasks and hands live tasks a watermark-bound snapshot", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     const gate = mockExecutorGated();
 
@@ -939,7 +938,7 @@ describe("A2AManager full task mode", () => {
   test("listTasks paginates on a stable cursor, filters, and never leaks across actors", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = fullManager();
     mockExecutorText("answer");
 
@@ -1030,7 +1029,7 @@ describe("A2AManager full task mode", () => {
   test("approval-only managers (chatops) are unaffected: plain sends return messages and create no tasks", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const agent = await makeAgent({ name: "agent1" });
     const manager = new A2AManager(); // default approval-only mode
     mockExecutorText("plain answer");
 

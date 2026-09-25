@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The one inline notice: a slim strip that tells the user something about the
@@ -32,6 +32,8 @@ const inlineNoticeVariants = cva(
           "border-amber-500/50 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400 *:data-[slot=inline-notice-text]:text-amber-800 dark:*:data-[slot=inline-notice-text]:text-amber-300",
         error:
           "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive *:data-[slot=inline-notice-text]:text-destructive/90",
+        success:
+          "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-200 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400 *:data-[slot=inline-notice-text]:text-emerald-800 dark:*:data-[slot=inline-notice-text]:text-emerald-300",
         info: "border-blue-500/50 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400 *:data-[slot=inline-notice-text]:text-blue-800 dark:*:data-[slot=inline-notice-text]:text-blue-300",
         neutral:
           "bg-muted/40 text-foreground [&>svg]:text-muted-foreground *:data-[slot=inline-notice-text]:text-muted-foreground",
@@ -55,6 +57,11 @@ const inlineNoticeVariants = cva(
         class: "bg-amber-50/90 dark:bg-amber-950/60",
       },
       { variant: "error", floating: true, class: "bg-destructive/10" },
+      {
+        variant: "success",
+        floating: true,
+        class: "bg-emerald-50/90 dark:bg-emerald-950/60",
+      },
       {
         variant: "info",
         floating: true,

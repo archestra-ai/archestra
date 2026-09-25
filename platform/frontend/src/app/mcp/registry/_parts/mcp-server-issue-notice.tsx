@@ -37,8 +37,8 @@ import {
   type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import {
   DismissAlertDialog,
   type DismissAlertTarget,
@@ -119,9 +119,10 @@ export function McpServerIssueNotice({
   const [dismissOpen, setDismissOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const { data: session } = useSession();
-  const { data: canManageInstalls } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: canManageInstalls } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const { data: canEditCatalog } = useHasPermissions({
     mcpRegistry: ["update"],
   });

@@ -3,12 +3,12 @@ import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import ModelModel from "@/models/model";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -191,14 +191,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
     const secret = await makeSecret({ secret: { apiKey: "refresh-token" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "microsoft-365-copilot",
-      scope: "personal",
       userId: currentUser.id,
       name: "Microsoft 365 Copilot",
     });
@@ -229,14 +228,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -270,14 +268,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id, "Hi!");
 
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -310,14 +307,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -347,14 +343,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -384,14 +379,13 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -427,13 +421,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -477,13 +470,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -523,13 +515,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -561,7 +552,7 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id, {
       title: "Q3 budget planning",
@@ -570,7 +561,6 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -598,13 +588,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -654,13 +643,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -703,13 +691,12 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "anthropic",
-      scope: "org",
       name: "Anthropic",
     });
     const model = await makeModelRow("anthropic", "claude-sonnet-5");
@@ -747,7 +734,7 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
@@ -757,7 +744,6 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       orgSecret.id,
       {
         provider: "ollama",
-        scope: "org",
         name: "Ollama",
       },
     );
@@ -768,7 +754,7 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const chatApiKey = await makeLlmProviderApiKey(
       organizationId,
       chatSecret.id,
-      { provider: "vllm", scope: "org", name: "vLLM" },
+      { provider: "vllm", name: "vLLM" },
     );
     const chatModel = await makeModelRow("vllm", "qwen3-32b");
     await db
@@ -804,7 +790,7 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await makeConversationWithExchange(agent.id);
 
@@ -814,7 +800,6 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       orgSecret.id,
       {
         provider: "anthropic",
-        scope: "org",
         name: "Anthropic",
       },
     );
@@ -829,7 +814,6 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       chatSecret.id,
       {
         provider: "microsoft-365-copilot",
-        scope: "personal",
         userId: currentUser.id,
         name: "Microsoft 365 Copilot",
       },

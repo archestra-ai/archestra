@@ -1,6 +1,6 @@
 import type { MessagingChannelId } from "@archestra/shared";
 import { Bot, Mail } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Icon for a messaging channel. Shared by the Messaging Channels tabs and the

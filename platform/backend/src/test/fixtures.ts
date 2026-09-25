@@ -2,33 +2,35 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_APP_NAME,
-  MEMBER_ROLE_NAME,
-  type SupportedProvider,
-} from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
+import { DEFAULT_APP_NAME } from "@archestra/shared/consts";
+import { MEMBER_ROLE_NAME } from "@archestra/shared/roles";
+import { and, eq, ne } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
-import {
-  AgentModel,
-  AgentToolModel,
-  AppDataModel,
-  AppModel,
-  AppToolModel,
-  AppVersionModel,
-  InternalMcpCatalogModel,
-  LlmProviderApiKeyModel,
-  ScheduleTriggerModel,
-  ScheduleTriggerRunModel,
-  SecretModel,
-  SessionModel,
-  TeamModel,
-  ToolInvocationPolicyModel,
-  ToolModel,
-  TrustedDataPolicyModel,
-  VirtualApiKeyModel,
-} from "@/models";
+import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
+import AppModel from "@/models/app";
+import AppDataModel from "@/models/app-data";
+import AppToolModel from "@/models/app-tool";
+import AppVersionModel from "@/models/app-version";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KnowledgeBaseModel from "@/models/knowledge-base";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
+import SecretModel from "@/models/secret";
+import SessionModel from "@/models/session";
+import SkillModel from "@/models/skill";
+import TeamModel from "@/models/team";
+import ToolModel from "@/models/tool";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
+import TrustedDataPolicyModel from "@/models/trusted-data-policy";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,
@@ -53,6 +55,8 @@ import type {
   InsertOrganizationRole,
   InsertScheduleTrigger,
   InsertSession,
+  InsertSkill,
+  InsertSkillFile,
   InsertTeam,
   InsertUser,
   InsertVirtualApiKey,
@@ -61,12 +65,14 @@ import type {
   OrganizationRole,
   ScheduleTrigger,
   ScheduleTriggerRun,
+  Skill,
   TeamMember,
   Tool,
   ToolInvocation,
   TrustedData,
 } from "@/types";
-import type { ResourceVisibilityScope } from "@/types/visibility";
+import { accessGrants, type TestAccess } from "./access-grants";
+import { type LegacySharing, seedLegacySharing } from "./legacy-sharing";
 
 type MakeUserOverrides = Partial<
   Pick<
@@ -99,6 +105,7 @@ interface TestFixtures {
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
+  makeServiceAccount: typeof makeServiceAccount;
   makeMember: typeof makeMember;
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
@@ -107,6 +114,7 @@ interface TestFixtures {
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
   makeKnowledgeBase: typeof makeKnowledgeBase;
+  makeSkill: typeof makeSkill;
   makeKnowledgeBaseConnector: typeof makeKnowledgeBaseConnector;
   makeConnectorRun: typeof makeConnectorRun;
   makeConversation: typeof makeConversation;
@@ -118,6 +126,11 @@ interface TestFixtures {
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
   makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  removeObjectPolicies: typeof removeObjectPolicies;
+  // SPDX-SnippetEnd
 }
 
 async function _makeUser(
@@ -159,13 +172,13 @@ async function makeAdmin(overrides: MakeUserOverrides = {}) {
  */
 async function makeVirtualApiKey(
   organizationId: string,
-  overrides: Partial<
-    Pick<InsertVirtualApiKey, "name" | "scope" | "authorId">
-  > & {
+  overrides: Partial<Pick<InsertVirtualApiKey, "name" | "authorId">> & {
     providerApiKeys?: {
       provider: SupportedProvider;
       providerApiKeyId: string;
     }[];
+    /** Who the key is shared with; see `TestAccess`. Defaults to `"org"`. */
+    access?: TestAccess;
   } = {},
 ) {
   const result = await VirtualApiKeyModel.create({
@@ -173,9 +186,9 @@ async function makeVirtualApiKey(
     name:
       overrides.name ??
       `Test Virtual Key ${crypto.randomUUID().substring(0, 8)}`,
-    scope: overrides.scope ?? "org",
     authorId: overrides.authorId ?? null,
     providerApiKeys: overrides.providerApiKeys ?? [],
+    ...accessGrants(overrides.access ?? "org"),
   });
   return result.virtualKey;
 }
@@ -201,8 +214,9 @@ async function makeOrganization(
       | "mcpIdleHibernationEnabled"
       // SPDX-SnippetEnd
     >
-  > = {},
+  > & { legacyPermissions?: boolean } = {},
 ) {
+  const { legacyPermissions = false, ...organizationOverrides } = overrides;
   const orgId = crypto.randomUUID();
   const [org] = await db
     .insert(schema.organizationsTable)
@@ -213,9 +227,21 @@ async function makeOrganization(
       createdAt: new Date(),
       theme: "cosmic-night",
       customFont: "lato",
-      ...overrides,
+      ...organizationOverrides,
     })
     .returning();
+  if (!legacyPermissions) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await db.transaction((tx) =>
+      ResourcePermissionPolicyModel.initializeOrganization({
+        tx,
+        organizationId: org.id,
+      }),
+    );
+    // SPDX-SnippetEnd
+  }
   return org;
 }
 
@@ -252,6 +278,13 @@ async function makeTeamMember(
   userId: string,
   overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
 ): Promise<TeamMember> {
+  // Team members are organization members in the product. Keep fixtures valid
+  // now that grant resolution enforces that boundary for every principal.
+  const team = await TeamModel.findById(teamId);
+  if (!team) throw new Error("Team fixture does not exist");
+  if (!(await MemberModel.getByUserId(userId, team.organizationId))) {
+    await makeMember(userId, team.organizationId);
+  }
   return await TeamModel.addMember(
     teamId,
     userId,
@@ -260,19 +293,27 @@ async function makeTeamMember(
   );
 }
 
+type MakeAgentOverrides = Partial<
+  Omit<InsertAgent, "scope" | "teams" | "users">
+> & {
+  authorId?: string;
+  // `isPersonalGateway`, `accessAllSkills` and `slug` mirror
+  // AgentModel.create's own signature: real columns create() honours, but not
+  // part of InsertAgent.
+  isPersonalGateway?: boolean;
+  accessAllSkills?: boolean;
+  slug?: string;
+  /** Who the agent is shared with; see `TestAccess`. Defaults to `"org"`. */
+  access?: TestAccess;
+  /** Retired sharing columns, for upgrade (cutover) tests only. */
+  legacy?: LegacySharing;
+};
+
 /**
  * Creates a test agent using the Agent model.
  * Auto-creates an organization if not provided.
  */
-async function makeAgent(
-  // `isPersonalGateway` and `accessAllSkills` mirror AgentModel.create's own
-  // signature: real columns create() honours, but not part of InsertAgent.
-  overrides: Partial<InsertAgent> & {
-    authorId?: string;
-    isPersonalGateway?: boolean;
-    accessAllSkills?: boolean;
-  } = {},
-): Promise<Agent> {
+async function makeAgent(overrides: MakeAgentOverrides = {}): Promise<Agent> {
   // Auto-create organization if not provided
   let organizationId = overrides.organizationId;
   if (!organizationId) {
@@ -280,31 +321,36 @@ async function makeAgent(
     organizationId = org.id;
   }
 
-  const { authorId, ...agentOverrides } = overrides;
+  const { authorId, access, legacy, ...agentOverrides } = overrides;
 
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
-    scope: "org",
+    // The retired visibility column; like the create route, it is always
+    // "personal" and nothing reads it. `access` decides who sees the agent.
+    scope: "personal",
     teams: [],
     labels: [],
     knowledgeBaseIds: [],
     connectorIds: [],
   };
-  return await AgentModel.create(
-    {
-      ...defaults,
-      ...agentOverrides,
-    },
+  const agent = await AgentModel.create(
+    { ...defaults, ...agentOverrides },
     authorId,
+    accessGrants(access ?? "org"),
   );
+  if (legacy) {
+    await seedLegacySharing({ resource: "agent", id: agent.id, legacy });
+    return (await AgentModel.findById(agent.id)) ?? agent;
+  }
+  return agent;
 }
 
 /**
  * Creates an internal test agent (with prompts/chat capabilities).
  */
 async function makeInternalAgent(
-  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+  overrides: MakeAgentOverrides = {},
 ): Promise<Agent> {
   return await makeAgent({
     agentType: "agent",
@@ -439,8 +485,10 @@ async function makeAgentTool(
 async function makeApp(
   overrides: Partial<InsertApp> & {
     html?: string;
-    teamIds?: string[];
-    scope?: ResourceVisibilityScope;
+    /** Who the app is shared with; see `TestAccess`. Defaults to `"org"`. */
+    access?: TestAccess;
+    /** Retired sharing on the backing catalog, for upgrade tests only. */
+    legacy?: LegacySharing;
     environmentId?: string | null;
     /** Display icon; like scope and environment it lives on the backing catalog. */
     icon?: string | null;
@@ -451,15 +499,8 @@ async function makeApp(
     const org = await makeOrganization();
     organizationId = org.id;
   }
-  const {
-    html,
-    teamIds,
-    scope: scopeOverride,
-    environmentId,
-    icon,
-    ...appOverrides
-  } = overrides;
-  const scope = scopeOverride ?? "org";
+  const { html, access, legacy, environmentId, icon, ...appOverrides } =
+    overrides;
   // Visibility/environment live on the backing catalog, so an author is needed
   // (catalog authorId + personal-scope access checks).
   const authorId = appOverrides.authorId ?? (await makeUser()).id;
@@ -468,6 +509,7 @@ async function makeApp(
     appOverrides.name ?? `Test App ${crypto.randomUUID().substring(0, 8)}`;
 
   const created = await AppModel.create({
+    ...accessGrants(access ?? "org"),
     app: {
       // Derived like the real create paths, so fixtures carry the slug a
       // production app has; a test that pins one overrides it below.
@@ -487,13 +529,29 @@ async function makeApp(
   });
   await createAppBacking({
     app: created,
-    scope,
     environmentId: environmentId ?? null,
     icon: icon ?? null,
     userId: authorId,
     organizationId,
-    teamIds: teamIds ?? [],
   });
+
+  if (legacy) {
+    const [backing] = await db
+      .select({ catalogId: schema.mcpServersTable.catalogId })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.appsTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(eq(schema.appsTable.id, created.id));
+    if (backing?.catalogId) {
+      await seedLegacySharing({
+        resource: "mcpCatalog",
+        id: backing.catalogId,
+        legacy,
+      });
+    }
+  }
 
   const app = await AppModel.findById(created.id);
   if (!app) throw new Error("makeApp: failed to load created app");
@@ -603,9 +661,14 @@ async function makeTrustedDataPolicy(
  */
 async function makeCustomRole(
   organizationId: string,
-  overrides: Partial<
-    Pick<InsertOrganizationRole, "role" | "name" | "permission">
-  > = {},
+  overrides: Partial<Pick<InsertOrganizationRole, "role" | "name">> & {
+    /**
+     * Stored as-is. A role saved before an action was retired can still carry
+     * it in its stored JSON, so this accepts any action name, not only the
+     * current vocabulary.
+     */
+    permission?: Record<string, string[]>;
+  } = {},
 ): Promise<OrganizationRole> {
   const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
   const roleData = {
@@ -631,6 +694,32 @@ async function makeCustomRole(
     predefined: false,
     permission: JSON.parse(result.permission),
   };
+}
+
+/**
+ * Creates a service account. Inserted directly rather than through the model
+ * so a test can seed one for a deployment that has not converted yet, where
+ * the model would also write an access policy.
+ */
+async function makeServiceAccount(
+  organizationId: string,
+  overrides: Partial<{
+    name: string;
+    role: string;
+    disabled: boolean;
+    createdBy: string | null;
+  }> = {},
+) {
+  const [result] = await db
+    .insert(schema.serviceAccountsTable)
+    .values({
+      organizationId,
+      name: `test-service-account-${crypto.randomUUID().substring(0, 8)}`,
+      role: MEMBER_ROLE_NAME,
+      ...overrides,
+    })
+    .returning();
+  return result;
 }
 
 /**
@@ -730,8 +819,6 @@ async function makeInternalMcpCatalog(
       | "userConfig"
       | "oauthConfig"
       | "enterpriseManagedConfig"
-      | "scope"
-      | "teams"
       | "clonedFrom"
       | "environmentId"
       | "multitenant"
@@ -740,9 +827,14 @@ async function makeInternalMcpCatalog(
   > & {
     organizationId?: string | null;
     authorId?: string;
+    /** Who the catalog item is shared with; see `TestAccess`. Defaults to `"org"`. */
+    access?: TestAccess;
+    /** Retired sharing columns, for upgrade (cutover) tests only. */
+    legacy?: LegacySharing;
   } = {},
 ) {
-  const { organizationId, authorId, ...catalogOverrides } = overrides;
+  const { organizationId, authorId, access, legacy, ...catalogOverrides } =
+    overrides;
 
   // Auto-create organization if omitted; explicit null creates a global item.
   let orgId = organizationId;
@@ -751,16 +843,29 @@ async function makeInternalMcpCatalog(
     orgId = org.id;
   }
 
-  return await InternalMcpCatalogModel.create(
-    {
-      name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
-      serverType: "remote",
-      serverUrl: "https://api.example.com/mcp/",
-      scope: "org",
-      ...catalogOverrides,
-    },
-    orgId === null ? undefined : { organizationId: orgId, authorId },
+  const catalog = {
+    name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+    serverType: "remote" as const,
+    serverUrl: "https://api.example.com/mcp/",
+    // The retired visibility column; `access` decides who sees the item.
+    scope: "personal" as const,
+    ...catalogOverrides,
+  };
+  const created = await InternalMcpCatalogModel.create(
+    catalog,
+    orgId === null
+      ? undefined
+      : {
+          organizationId: orgId,
+          authorId,
+          ...accessGrants(access ?? "org"),
+        },
   );
+  if (legacy) {
+    await seedLegacySharing({ resource: "mcpCatalog", id: created.id, legacy });
+    return (await InternalMcpCatalogModel.findById(created.id)) ?? created;
+  }
+  return created;
 }
 
 /**
@@ -1028,32 +1133,45 @@ async function makeSecret(
  */
 async function makeLlmProviderApiKey(
   organizationId: string,
-  secretId: string,
+  secretId: string | null,
   overrides: Partial<
     Pick<
       InsertLlmProviderApiKey,
       | "name"
       | "provider"
-      | "scope"
       | "userId"
-      | "teamId"
+      | "isPrimary"
       | "baseUrl"
       | "inferenceBaseUrl"
     >
-  > = {},
+  > & {
+    /**
+     * Who the key is shared with; see `TestAccess`. Defaults to its owner
+     * alone for an own key (`userId` set), else to `"org"`.
+     */
+    access?: TestAccess;
+  } = {},
 ) {
-  return await LlmProviderApiKeyModel.create({
-    organizationId,
-    secretId,
-    name:
-      overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
-    provider: overrides.provider ?? "anthropic",
-    scope: overrides.scope ?? "org",
-    userId: overrides.userId ?? null,
-    teamId: overrides.teamId ?? null,
-    baseUrl: overrides.baseUrl ?? null,
-    inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
-  });
+  return await LlmProviderApiKeyModel.create(
+    {
+      organizationId,
+      secretId,
+      name:
+        overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
+      provider: overrides.provider ?? "anthropic",
+      // The retired visibility column, written like the create route does:
+      // "personal" for an own key, "org" for a shared one. Ownership is
+      // `userId`, the audience its grants.
+      scope: overrides.userId ? "personal" : "org",
+      userId: overrides.userId ?? null,
+      ...(overrides.isPrimary !== undefined && {
+        isPrimary: overrides.isPrimary,
+      }),
+      baseUrl: overrides.baseUrl ?? null,
+      inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
+    },
+    accessGrants(overrides.access ?? (overrides.userId ? "personal" : "org")),
+  );
 }
 
 /**
@@ -1217,21 +1335,82 @@ async function makeOAuthRefreshToken(
 async function makeKnowledgeBase(
   organizationId: string,
   overrides: Partial<
-    Pick<
-      InsertKnowledgeBase,
-      "name" | "description" | "status" | "visibility" | "teamIds" | "createdBy"
-    >
-  > = {},
+    Pick<InsertKnowledgeBase, "name" | "description" | "status" | "createdBy">
+  > & {
+    /** Retired sharing columns, for upgrade (cutover) tests only. */
+    legacy?: Pick<InsertKnowledgeBase, "visibility" | "teamIds">;
+    /**
+     * Who the knowledge base is shared with; see `TestAccess`. When set, the
+     * knowledge base is created through `KnowledgeBaseModel.create`, which
+     * writes the grants. Without it the row is inserted with no policy.
+     */
+    access?: TestAccess;
+  } = {},
 ): Promise<KnowledgeBase> {
+  const { access, legacy, ...values } = overrides;
+  if (access !== undefined) {
+    return await KnowledgeBaseModel.create(
+      {
+        organizationId,
+        name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
+        ...values,
+        ...legacy,
+      },
+      accessGrants(access),
+    );
+  }
   const [result] = await db
     .insert(schema.knowledgeBasesTable)
     .values({
       organizationId,
       name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
-      ...overrides,
+      ...values,
+      ...legacy,
     })
     .returning();
   return result;
+}
+
+/**
+ * Creates a skill through `SkillModel.createWithFiles`, the production path,
+ * with the grants `access` gives (author only by default).
+ *
+ * @example
+ *   const skill = await makeSkill(org.id, {
+ *     name: "refunds",
+ *     authorId: alice.id,
+ *     access: { teams: [team.id] },
+ *   });
+ */
+async function makeSkill(
+  organizationId: string,
+  overrides: Partial<Omit<InsertSkill, "organizationId" | "scope">> & {
+    files?: Omit<InsertSkillFile, "skillId">[];
+    /** Environments the skill is restricted to; omitted = every environment. */
+    environmentIds?: string[];
+    /** Who the skill is shared with; see `TestAccess`. Defaults to the author. */
+    access?: TestAccess;
+  } = {},
+): Promise<Skill> {
+  const { files, environmentIds, access, ...skillOverrides } = overrides;
+  const name =
+    skillOverrides.name ?? `test-skill-${crypto.randomUUID().substring(0, 8)}`;
+  const description = skillOverrides.description ?? `The ${name} skill`;
+  const skill = await SkillModel.createWithFiles({
+    skill: {
+      content: `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.`,
+      authorId: null,
+      ...skillOverrides,
+      organizationId,
+      name,
+      description,
+    },
+    files: files ?? [],
+    ...(environmentIds && { environmentIds }),
+    ...accessGrants(access),
+  });
+  if (!skill) throw new Error(`makeSkill: the name "${name}" is taken`);
+  return skill;
 }
 
 /**
@@ -1245,8 +1424,7 @@ async function makeKnowledgeBaseConnector(
       InsertKnowledgeBaseConnector,
       | "name"
       | "description"
-      | "visibility"
-      | "teamIds"
+      | "syncPermissionsFromSource"
       | "connectorType"
       | "config"
       | "schedule"
@@ -1254,23 +1432,46 @@ async function makeKnowledgeBaseConnector(
       | "ftsLanguage"
       | "environmentId"
     >
-  > = {},
+  > & {
+    /**
+     * Who the connector is shared with; see `TestAccess`. Defaults to `"org"`,
+     * like the other object fixtures. The connector is created through
+     * `KnowledgeBaseConnectorModel.create`, which writes the grants.
+     */
+    access?: TestAccess;
+    /**
+     * Retired sharing columns, for upgrade (cutover) tests only. The row is
+     * then inserted with no policy, as it was before the upgrade.
+     */
+    legacy?: Pick<InsertKnowledgeBaseConnector, "visibility" | "teamIds">;
+  } = {},
 ): Promise<KnowledgeBaseConnector> {
-  const [result] = await db
-    .insert(schema.knowledgeBaseConnectorsTable)
-    .values({
-      organizationId,
-      name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
-      connectorType: "jira",
-      config: {
-        type: "jira",
-        jiraBaseUrl: "https://test.atlassian.net",
-        isCloud: true,
-        projectKey: "TEST",
-      },
-      ...overrides,
-    })
-    .returning();
+  const { access, legacy, ...values } = overrides;
+  const row = {
+    organizationId,
+    name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
+    connectorType: "jira" as const,
+    config: {
+      type: "jira" as const,
+      jiraBaseUrl: "https://test.atlassian.net",
+      isCloud: true,
+      projectKey: "TEST",
+    },
+    ...values,
+    ...legacy,
+  };
+  const [result] =
+    legacy === undefined
+      ? [
+          await KnowledgeBaseConnectorModel.create(
+            row,
+            accessGrants(access ?? "org"),
+          ),
+        ]
+      : await db
+          .insert(schema.knowledgeBaseConnectorsTable)
+          .values(row)
+          .returning();
 
   // Assign connector to the knowledge base via junction table
   await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
@@ -1344,6 +1545,31 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
   );
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Removes the per-object permission policies that creation wrote in an
+ * organization, keeping its `*` policies. Pair it with
+ * `makeOrganization({ legacyPermissions: true })` to simulate data written
+ * before the upgrade, when objects carried no policy. Call it after creating
+ * the objects and before writing any policy the test models on purpose.
+ */
+async function removeObjectPolicies(organizationId: string): Promise<void> {
+  await db
+    .delete(schema.resourcePermissionPoliciesTable)
+    .where(
+      and(
+        eq(
+          schema.resourcePermissionPoliciesTable.organizationId,
+          organizationId,
+        ),
+        ne(schema.resourcePermissionPoliciesTable.scope, "*"),
+      ),
+    );
+}
+// SPDX-SnippetEnd
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -1400,6 +1626,9 @@ export const test = baseTest.extend<TestFixtures>({
   makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);
   },
+  makeServiceAccount: async ({}, use) => {
+    await use(makeServiceAccount);
+  },
   makeMember: async ({}, use) => {
     await use(makeMember);
   },
@@ -1420,6 +1649,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAuthHeaders: async ({}, use) => {
     await use(makeAuthHeaders);
+  },
+  makeSkill: async ({}, use) => {
+    await use(makeSkill);
   },
   makeKnowledgeBase: async ({}, use) => {
     await use(makeKnowledgeBase);
@@ -1460,4 +1692,11 @@ export const test = baseTest.extend<TestFixtures>({
   seedAndAssignArchestraTools: async ({}, use) => {
     await use(seedAndAssignArchestraTools);
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  removeObjectPolicies: async ({}, use) => {
+    await use(removeObjectPolicies);
+  },
+  // SPDX-SnippetEnd
 });

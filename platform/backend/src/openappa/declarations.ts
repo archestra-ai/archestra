@@ -2,19 +2,25 @@ import { createHash, randomBytes } from "node:crypto";
 import type {
   ComposeBatteryInput,
   ComposedPolicy,
+  DispatchPolicy,
   HelperBindingInput,
   BatteryPackage as NativeBatteryPackage,
+  PolicyDeclarations,
 } from "@archestra/openappa-rs";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import { OpenappaCredentialError } from "@/openappa/failure";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
+import { resolveCredentialValue } from "@/services/credentials";
+import { ApiError } from "@/types";
 import type {
   BatteryPackageFile,
   BatterySource,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import { archestraAudience } from "./archestra-audience";
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -42,6 +48,8 @@ export type PolicyResolution = {
   aliases: AliasDeclaration[];
   /** The `[credentials]` table: helper variable → runtime credential key. */
   credentials: Record<string, string>;
+  /** The annotators the root's own tool rules route calls to. */
+  routedAnnotators: string[];
   /**
    * Everything wrong with the declarations themselves: a shape the reader could
    * not make sense of, and an entry spelled outside the two admitted forms.
@@ -107,15 +115,20 @@ class OpenAppaDeclarations {
       battery.files.reduce((total, file) => total + file.text.length, 0),
     defaultTtl: 0,
   });
+  /** Declarations of effective documents by content hash: the bytes fix the result. */
+  private readonly effective = new LRUCacheManager<PolicyDeclarations>({
+    maxSize: 64,
+    defaultTtl: 0,
+  });
 
   /**
    * Publishes the bridge bearer where the runtime reads it, and answers the
    * variable a composition must name for it.
    *
-   * Upstream contract: `Config::hosted_included` resolves every `token_env` a
-   * hosted document names with `std::env::var` on this process and refuses the
-   * document when the variable is unset, so every caller about to cross into the
-   * addon publishes the value first instead of relying on an earlier import.
+   * The addon resolves the host's own `APPA_ARCHESTRA_*` variables from this
+   * process's environment and refuses a document whose variable is unset, so
+   * every caller about to cross into the addon publishes the value first
+   * instead of relying on an earlier import.
    */
   publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
@@ -175,6 +188,7 @@ class OpenAppaDeclarations {
       credentials: Object.fromEntries(
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
+      routedAnnotators: declarations.routedAnnotators,
       errors,
     };
   }
@@ -283,6 +297,63 @@ class OpenAppaDeclarations {
     });
   }
 
+  /**
+   * The document with the values of the credentials the runtime reads itself:
+   * the `[credentials]` variables an external or profile names as its
+   * `token_env`, resolved for the organization now, so a value set, rotated or
+   * removed since the last dispatch reaches this one. A variable with no
+   * binding or no organization value is left out; a bound one that cannot be
+   * resolved rejects.
+   */
+  async dispatchPolicy(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<DispatchPolicy> {
+    const { organizationId, content } = params;
+    const contentHash = createHash("sha256").update(content).digest("hex");
+    let declarations = this.effective.get(contentHash);
+    if (!declarations) {
+      const native = await loadNative();
+      declarations = await native.parseOpenappaDeclarations(content);
+      this.effective.set(contentHash, declarations);
+    }
+    const keys = new Map(
+      declarations.credentials.map(({ variable, key }) => [variable, key]),
+    );
+    const resolved = await Promise.all(
+      declarations.runtimeCredentials.map(async (variable) => {
+        const key = keys.get(variable);
+        if (!key) return null;
+        try {
+          const value = await resolveCredentialValue({
+            organizationId,
+            credentialId: key,
+            scope: "organization",
+          });
+          return value === null ? null : ([variable, value] as const);
+        } catch (error) {
+          // A bound credential that cannot be read fails the dispatch rather
+          // than running it as though the credential were unset. Only a
+          // refused binding is the organization's to fix; any other failure
+          // stays retryable.
+          logger.warn(
+            { organizationId, variable, error },
+            "OpenAPPA runtime credential could not be resolved",
+          );
+          if (error instanceof ApiError && error.statusCode === 400)
+            throw new OpenappaCredentialError(variable, error);
+          throw error;
+        }
+      }),
+    );
+    return {
+      content,
+      credentials: Object.fromEntries(
+        resolved.filter((entry) => entry !== null),
+      ),
+    };
+  }
+
   /** Every grant a resolution holds: resolved batteries × declared variables × the table. */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
@@ -296,13 +367,28 @@ class OpenAppaDeclarations {
     return grants;
   }
 
-  /** The batteries bundled with the pinned OpenAPPA checkout. */
+  /**
+   * The batteries bundled with the pinned OpenAPPA checkout. One whose helpers
+   * the platform answers itself reads no credential and needs no setup.
+   */
   async bundledBatteries(): Promise<NativeBatteryPackage[]> {
     const native = await loadNative();
-    this.bundled ??= native.listBundledOpenappaBatteries().catch((error) => {
-      this.bundled = null;
-      throw error;
-    });
+    this.bundled ??= native
+      .listBundledOpenappaBatteries()
+      .then((batteries) =>
+        batteries.map((battery) =>
+          archestraAudience.servesBattery({
+            batteryName: battery.name,
+            packageHash: null,
+          })
+            ? { ...battery, credentials: [], setup: undefined }
+            : battery,
+        ),
+      )
+      .catch((error) => {
+        this.bundled = null;
+        throw error;
+      });
     return this.bundled;
   }
 

@@ -832,8 +832,7 @@ describe("run_tool", () => {
       const team = await makeTeam(organizationId, memberUser.id);
       const catalog = await makeInternalMcpCatalog({
         organizationId,
-        scope: "team",
-        teams: [team.id],
+        access: { teams: [team.id] },
       });
       await makeTool({
         name: "giphy__image_search",

@@ -1,11 +1,13 @@
 import { vi } from "vitest";
+import { useRouteTestApp } from "@/test/route-test-app";
 
 // Isolated from oauth.test.ts (which stays mock-free / fast path) because this
 // suite mocks @/logging to observe the warn the initiate handler emits.
 vi.mock("@/logging");
 
+import { describe, expect } from "vitest";
 import logger from "@/logging";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { test } from "@/test";
 import oauthRoutes from "./oauth";
 
 /**

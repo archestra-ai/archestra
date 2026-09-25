@@ -1,8 +1,9 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -103,8 +104,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-gw",
             agentType: "mcp_gateway",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -119,8 +118,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -135,8 +132,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-proxy",
             agentType: "llm_proxy",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -193,8 +188,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "test-proxy",
             agentType: "llm_proxy",
-            scope: "personal",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -245,8 +238,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "runtime-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -270,8 +261,6 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "privileged-runtime-agent",
             agentType: "agent",
-            scope: "personal",
-            teams: [],
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -345,22 +334,37 @@ describe("agent type permission isolation (routes)", () => {
       const proxy = await makeAgent({
         organizationId,
         agentType: "llm_proxy",
-        scope: "org",
         authorId: adminUser.id,
       });
       const gateway = await makeAgent({
         organizationId,
         agentType: "mcp_gateway",
-        scope: "org",
         authorId: adminUser.id,
       });
 
       // Give member only mcpGateway CRUD + admin (so they can modify org-scope)
-      await makeCustomRole(organizationId, {
+      const gw_crud = await makeCustomRole(organizationId, {
         role: "gw_crud",
         permission: {
           mcpGateway: ["read", "create", "update", "delete", "admin"],
         },
+      });
+      const grantKey = {
+        organizationId,
+        resource: "mcpGateway" as const,
+        scope: "*" as const,
+      };
+      const grantPolicy = await ResourcePermissionPolicyModel.find(grantKey);
+      await ResourcePermissionPolicyModel.replace({
+        ...grantKey,
+        revision: grantPolicy?.revision ?? 0,
+        grants: [
+          ...(grantPolicy?.grants ?? []),
+          {
+            subject: { type: "role", id: gw_crud.id },
+            actions: ["read", "update", "delete"],
+          },
+        ],
       });
       await makeMember(memberUser.id, organizationId, { role: "gw_crud" });
       const memberApp = await createAppForUser(memberUser);
@@ -454,8 +458,12 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name,
             agentType: "agent",
-            teams: [teamId],
-            scope: "team",
+            initialGrants: [
+              {
+                subject: { type: "team", id: teamId },
+                actions: ["read", "use"],
+              },
+            ],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -476,6 +484,26 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, {
         role: "hierarchy_editor",
+      });
+      const grantKey = {
+        organizationId,
+        resource: "agent" as const,
+        scope: parentAgent.id,
+      };
+      const grantPolicy = await ResourcePermissionPolicyModel.find(grantKey);
+      await ResourcePermissionPolicyModel.replace({
+        ...grantKey,
+        revision: grantPolicy?.revision ?? 0,
+        grants: [
+          ...(grantPolicy?.grants.filter(
+            (grant) =>
+              grant.subject.type !== "team" || grant.subject.id !== parent.id,
+          ) ?? []),
+          {
+            subject: { type: "team", id: parent.id },
+            actions: ["read", "update"],
+          },
+        ],
       });
       await makeTeamMember(grandchild.id, memberUser.id);
       const memberApp = await createAppForUser(memberUser);
@@ -539,8 +567,12 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: `admin-team-${agentType}`,
             agentType,
-            teams: [team.id],
-            scope: "team",
+            initialGrants: [
+              {
+                subject: { type: "team", id: team.id },
+                actions: ["read", "use"],
+              },
+            ],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
@@ -555,11 +587,16 @@ describe("agent type permission isolation (routes)", () => {
           url: `/api/agents/${created.id}`,
         });
         expect(getRes.statusCode).toBe(200);
-        const agent = getRes.json();
-        expect(agent.teams).toContainEqual(
-          expect.objectContaining({ id: team.id }),
-        );
-        expect(agent.scope).toBe("team");
+        // The team reaches the agent through the grant the create wrote.
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: agentType === "agent" ? "agent" : "mcpGateway",
+          scope: created.id,
+        });
+        expect(policy?.grants).toContainEqual({
+          subject: { type: "team", id: team.id },
+          actions: ["read", "use"],
+        });
       }
     });
 
@@ -596,8 +633,12 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `team-admin-${agentType}`,
               agentType,
-              teams: [team.id],
-              scope: "team",
+              initialGrants: [
+                {
+                  subject: { type: "team", id: team.id },
+                  actions: ["read", "use"],
+                },
+              ],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
@@ -623,14 +664,12 @@ describe("agent type permission isolation (routes)", () => {
           payload: {
             name: "team-admin-org-agent",
             agentType: "agent",
-            scope: "org",
-            teams: [],
             labels: [],
             knowledgeBaseIds: [],
             connectorIds: [],
           },
         });
-        expect(orgRes.statusCode).toBe(403);
+        expect(orgRes.statusCode).toBe(200);
 
         // Can delete team-scoped agents
         for (const id of createdIds) {
@@ -645,7 +684,7 @@ describe("agent type permission isolation (routes)", () => {
       }
     });
 
-    test("non-admin user can only create personal agents, not shared", async ({
+    test("resource creation authority permits initial sharing grants", async ({
       makeCustomRole,
       makeMember,
       makeTeam,
@@ -674,14 +713,18 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `non-admin-team-${agentType}`,
               agentType,
-              teams: [team.id],
-              scope: "team",
+              initialGrants: [
+                {
+                  subject: { type: "team", id: team.id },
+                  actions: ["read", "use"],
+                },
+              ],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
             },
           });
-          expect(teamRes.statusCode).toBe(403);
+          expect(teamRes.statusCode).toBe(200);
         }
 
         // Can create personal agents for all types
@@ -692,8 +735,6 @@ describe("agent type permission isolation (routes)", () => {
             payload: {
               name: `personal-${agentType}`,
               agentType,
-              scope: "personal",
-              teams: [],
               labels: [],
               knowledgeBaseIds: [],
               connectorIds: [],
@@ -752,7 +793,6 @@ describe("agent type permission isolation (routes)", () => {
       await makeAgent({
         organizationId,
         agentType: "agent",
-        scope: "org",
         name: "Policy Configuration Subagent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,

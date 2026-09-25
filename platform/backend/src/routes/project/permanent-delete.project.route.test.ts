@@ -12,13 +12,14 @@ import {
   FileModel,
   ProjectModel,
   ProjectPinModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
 } from "@/models";
 import { projectService } from "@/services/project";
 import { FilesystemObjectStore } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import { ApiError } from "@/types";
 
 // Asserting on the orphan warning below needs the mock: the real `@/logging`
@@ -65,6 +66,7 @@ describe("projectService.purge", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeGlobalAdmin(
       organizationId,
       { makeUser, makeMember },
@@ -94,10 +96,10 @@ describe("projectService.purge", () => {
     // needs `project:share-org` even to soft-delete, which is a different rule
     // than the one under test here.
     const colleague = await makeUser({ email: "colleague@test.com" });
-    await ProjectShareModel.upsert({
-      projectId: project.id,
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
       organizationId,
-      createdByUserId: owner.id,
       visibility: "user",
       teamIds: [],
       userIds: [colleague.id],
@@ -134,9 +136,8 @@ describe("projectService.purge", () => {
       .where(eq(schema.projectsTable.id, project.id));
     expect(rows).toHaveLength(0);
 
-    // Cascade: files, pins, share config, scheduled tasks.
+    // Cascade: files, pins, scheduled tasks.
     expect(await FileModel.findById(file.id)).toBeNull();
-    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
     expect(await ScheduleTriggerModel.findById(trigger.id)).toBeNull();
     const pins = await db
       .select({ projectId: schema.projectPinsTable.projectId })
@@ -164,6 +165,7 @@ describe("projectService.purge", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeGlobalAdmin(
       organizationId,
       { makeUser, makeMember },
@@ -195,14 +197,21 @@ describe("projectService.purge", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
-    // The broadest project role RBAC can express, `project:admin` and
-    // `share-org` included, and it still stops at the trash: purging takes a
-    // built-in admin role, not a permission. The refusal is indistinguishable
-    // from "no such project".
+    await makeMember(owner.id, organizationId);
+    // The broadest project authority a custom role can hold — every project
+    // action and full access to every project — and it still stops at the
+    // trash: purging takes a built-in admin role, not a permission. The
+    // refusal is indistinguishable from "no such project".
     const role = await makeCustomRole(organizationId, {
       permission: {
-        project: ["read", "create", "update", "delete", "admin", "share-org"],
+        project: ["read", "create", "update", "delete"],
       },
+    });
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "project",
+      roleId: role.id,
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     });
     const deleter = await makeUser({ email: "deleter@test.com" });
     await makeMember(deleter.id, organizationId, { role: role.role });
@@ -242,6 +251,7 @@ describe("projectService.purge", () => {
     const ownerOrgId = (await makeOrganization()).id;
     const otherOrgId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, ownerOrgId);
     const foreignAdmin = await makeGlobalAdmin(
       otherOrgId,
       { makeUser, makeMember },
@@ -284,6 +294,7 @@ describe("projectService.purge", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeGlobalAdmin(
       organizationId,
       { makeUser, makeMember },
@@ -367,6 +378,7 @@ describe("projectService.purge (filesystem provider)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeUser({ email: "bytes-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
 
@@ -421,6 +433,7 @@ describe("projectService.purge (filesystem provider)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeUser({ email: "refused-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
 
@@ -497,6 +510,7 @@ describe("projectService.purge (filesystem provider)", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
     const admin = await makeUser({ email: "leftovers-admin@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
 
@@ -546,6 +560,8 @@ describe("projectService.purge (filesystem provider)", () => {
     const orgB = (await makeOrganization()).id;
     const ownerA = await makeUser({ email: "owner-a@test.com" });
     const ownerB = await makeUser({ email: "owner-b@test.com" });
+    await makeMember(ownerA.id, orgA);
+    await makeMember(ownerB.id, orgB);
     const adminA = await makeUser({ email: "tenant-admin@test.com" });
     await makeMember(adminA.id, orgA, { role: ADMIN_ROLE_NAME });
 

@@ -2,7 +2,8 @@ import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { A2aOutboundRunModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 

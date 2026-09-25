@@ -10,9 +10,7 @@ const mockRouterPush = vi.fn();
 const mockCreateMutateAsync = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
-const mockSetShareMutateAsync = vi.fn();
 const mockBulkDeleteMutate = vi.fn();
-const mockBulkUpdateVisibilityMutateAsync = vi.fn();
 /** The detail the edit dialog loads; tests override the pin and sharing. */
 let mockEditingProject: Record<string, unknown> = {};
 const mockPinMutate = vi.fn();
@@ -49,18 +47,11 @@ type ProjectFixture = {
 
 vi.mock("next/navigation");
 
-// The edit dialog now hosts the shared user-share control, which reads the
-// session and the org member list. This suite is about the card menus, so the
-// control is stubbed rather than wiring those queries into every case.
-vi.mock("@/components/user-share-field", () => ({
-  useUserShareOption: (value: string) => ({
-    value,
-    label: "Users",
-    description: "Share this with selected people",
-    disabled: false,
-    hasCandidates: true,
-  }),
-  UserShareField: () => null,
+// The edit dialog's Permissions page loads and saves the project's own policy.
+// This suite is about the card menus and the General page, so it is stubbed
+// rather than wiring the permission queries into every case.
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => <div>permissions</div>,
 }));
 
 vi.mock("@/components/search-input", () => ({
@@ -158,28 +149,6 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
           Confirm
         </button>
       </div>
-    ) : null,
-}));
-
-vi.mock("@/components/bulk-visibility-dialog", () => ({
-  BulkVisibilityDialog: ({
-    open,
-    onApply,
-  }: {
-    open: boolean;
-    onApply: (change: {
-      scope: "personal";
-      teamIds: string[];
-      userIds: string[];
-    }) => void;
-  }) =>
-    open ? (
-      <button
-        type="button"
-        onClick={() => onApply({ scope: "personal", teamIds: [], userIds: [] })}
-      >
-        Apply sharing
-      </button>
     ) : null,
 }));
 
@@ -302,10 +271,6 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutate: mockBulkDeleteMutate,
     isPending: false,
   }),
-  useBulkUpdateProjectVisibility: () => ({
-    mutateAsync: mockBulkUpdateVisibilityMutateAsync,
-    isPending: false,
-  }),
   useUpdateProject: () => ({
     mutateAsync: mockUpdateMutateAsync,
     isPending: false,
@@ -318,10 +283,6 @@ vi.mock("@/lib/projects/projects.query", () => ({
   }),
   // The edit dialog fetches the project detail by id; return a minimal one.
   useProject: () => ({ data: mockEditingProject }),
-  useSetProjectShare: () => ({
-    mutateAsync: mockSetShareMutateAsync,
-    isPending: false,
-  }),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -369,11 +330,6 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
-    mockSetShareMutateAsync.mockResolvedValue(true);
-    mockBulkUpdateVisibilityMutateAsync.mockResolvedValue({
-      succeeded: ["Project"],
-      failed: [],
-    });
     mockEditingProject = {
       id: "owner",
       name: "Owner project",
@@ -423,31 +379,6 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Other project")).toBeInTheDocument();
   });
 
-  it("shows visibility labels on project cards", () => {
-    mockProjects = [
-      makeProject({ id: "personal", name: "Personal project" }),
-      makeProject({
-        id: "team",
-        name: "Team project",
-        visibility: "team",
-        shareTeamNames: ["Design"],
-      }),
-      makeProject({
-        id: "organization",
-        name: "Organization project",
-        visibility: "organization",
-      }),
-    ];
-
-    render(<ProjectsPageClient />);
-
-    expect(screen.getByText("Personal", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("Team", { selector: "span" })).toBeVisible();
-    expect(
-      screen.getByText("Organization", { selector: "span" }),
-    ).toBeVisible();
-  });
-
   it("shows pin, edit details, and delete in owner card menus", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 
@@ -463,11 +394,6 @@ describe("ProjectsPageClient", () => {
       id: "owner",
       pinned: true,
     });
-
-    fireEvent.click(screen.getByText("Edit details"));
-    expect(
-      screen.getByRole("heading", { name: "Edit project" }),
-    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
@@ -552,23 +478,11 @@ describe("ProjectsPageClient", () => {
   describe("default agent, with agent:read granted", () => {
     const PINNED = { id: "pinned", name: "Pinned Agent", scope: "org" };
 
-    /** Visibility options render label and description in one control. */
-    function clickOptionStartingWith(label: string) {
-      const option = screen
-        .getAllByRole("button")
-        .find((button) => button.textContent?.startsWith(label));
-      if (!option) throw new Error(`no visibility option for "${label}"`);
-      fireEvent.click(option);
-    }
-
     beforeEach(() => {
-      // share-org too, or the Organization option renders disabled.
       vi.mocked(useHasPermissions).mockImplementation(
         (permissions) =>
           ({
-            data:
-              permissions.agent?.includes("read") === true ||
-              permissions.project?.includes("share-org") === true,
+            data: permissions.agent?.includes("read") === true,
           }) as ReturnType<typeof useHasPermissions>,
       );
       mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
@@ -604,7 +518,7 @@ describe("ProjectsPageClient", () => {
       expect(screen.queryByText("Default")).not.toBeInTheDocument();
     });
 
-    it("saves the sharing change before the agent, which is judged against it", async () => {
+    it("saves the project without a sharing payload", async () => {
       vi.mocked(useInternalAgents).mockReturnValue({
         data: [PINNED],
         isPending: false,
@@ -612,17 +526,29 @@ describe("ProjectsPageClient", () => {
 
       render(<ProjectsPageClient />);
       fireEvent.click(screen.getByText("Edit details"));
-      // The visibility selector shows only the current choice until expanded.
-      clickOptionStartingWith("Personal");
-      clickOptionStartingWith("Organization");
+      fireEvent.change(screen.getByLabelText("Name *"), {
+        target: { value: "Renamed project" },
+      });
       fireEvent.click(screen.getByText("Save"));
 
-      await waitFor(() => expect(mockSetShareMutateAsync).toHaveBeenCalled());
       await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
-      // Sending the agent first would validate it against the old audience.
-      expect(mockSetShareMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
-        mockUpdateMutateAsync.mock.invocationCallOrder[0],
+      // Sharing is a permission policy now, saved by the Permissions page
+      // itself. The legacy columns this form used to write are read by nothing.
+      const body = mockUpdateMutateAsync.mock.calls[0][0];
+      expect(body).toEqual(
+        expect.objectContaining({ id: "owner", name: "Renamed project" }),
       );
+      expect(body).not.toHaveProperty("visibility");
+      expect(body).not.toHaveProperty("teamIds");
+      expect(body).not.toHaveProperty("userIds");
+    });
+
+    it("no longer offers the legacy sharing control", () => {
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.queryByText("Sharing")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
     });
   });
 
@@ -644,7 +570,7 @@ describe("ProjectsPageClient", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the add-key prompt when the keys request succeeds with no keys", () => {
+  it("shows the add-key prompt without the page header when the keys request succeeds with no keys", () => {
     mockApiKeyState = {
       hasAnyApiKey: false,
       isLoading: false,
@@ -656,6 +582,11 @@ describe("ProjectsPageClient", () => {
 
     expect(screen.getByTestId("no-api-key-setup")).toBeInTheDocument();
     expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
+    // Matches the new-chat screen: the prompt stands alone, centered, with no
+    // "Projects" header above it.
+    expect(
+      screen.queryByRole("heading", { name: "Projects" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps showing projects when a refetch fails but cached keys remain", () => {
@@ -717,12 +648,12 @@ describe("ProjectsPageClient", () => {
     // ?status=deleted is the trash. A deleted project has no card view and no
     // route to navigate to, so it renders as a table of Restore + Delete
     // permanently and nothing else.
-    // Restore is gated on `project:admin`, the same bar that serves this slice
-    // at all, so the viewer has to hold it for the row to be operable.
+    // The trash is served to overseers of every project (`update` at `*`),
+    // and restoring one is its `delete` grant, so the viewer holds both.
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: permissions.project?.includes("admin") === true,
+          data: permissions.project !== undefined,
         }) as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useSearchParams).mockReturnValue(
@@ -834,26 +765,11 @@ describe("ProjectsPageClient", () => {
     );
 
     expect(screen.getAllByText("1 project selected")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Edit sharing" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply sharing" }));
-
-    await waitFor(() =>
-      expect(mockBulkUpdateVisibilityMutateAsync).toHaveBeenCalledWith({
-        projects: [expect.objectContaining({ id: "first" })],
-        scope: "personal",
-        teamIds: [],
-        userIds: [],
-      }),
-    );
-
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Select Second project" }),
-    );
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(mockBulkDeleteMutate).toHaveBeenCalledWith(
-      [{ id: "second", name: "Second project" }],
+      [{ id: "first", name: "First project" }],
       expect.any(Object),
     );
   });

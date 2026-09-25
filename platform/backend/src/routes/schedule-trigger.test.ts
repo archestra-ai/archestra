@@ -1,9 +1,9 @@
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -60,7 +60,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -124,7 +123,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "org",
     });
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -155,7 +153,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const response = await app.inject({
       method: "POST",
@@ -178,7 +175,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -209,7 +205,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -254,7 +249,6 @@ describe("schedule trigger routes", () => {
     const defaultAgent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
       isDefault: true,
     });
     const project = await projectService.create({
@@ -286,13 +280,11 @@ describe("schedule trigger routes", () => {
     const orgDefault = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
       isDefault: true,
     });
     const projectAgent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -324,12 +316,10 @@ describe("schedule trigger routes", () => {
     const projectAgent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const chosenAgent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,
@@ -386,7 +376,6 @@ describe("schedule trigger routes", () => {
     const agent = await makeInternalAgent({
       organizationId,
       authorId: adminUser.id,
-      scope: "org",
     });
     const project = await projectService.create({
       organizationId,

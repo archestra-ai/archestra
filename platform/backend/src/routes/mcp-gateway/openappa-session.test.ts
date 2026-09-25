@@ -25,6 +25,8 @@ const native = vi.hoisted(() => ({
     include: [],
     serverAliases: [],
     credentials: [],
+    routedAnnotators: [],
+    runtimeCredentials: [],
     errors: [],
   })),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
@@ -182,8 +184,10 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     makeOrganization,
   }) => {
     // JSON-RPC ids are transport correlation values, not replay keys.
-    const agent = await makeAgent();
+    // The token and the agent share an organization: a credential from another
+    // organization is refused before any of this is reached.
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",

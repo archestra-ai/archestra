@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-20
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,7 +47,7 @@ Browser approval authorizes installation. MCP gateway authentication remains the
 Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
 
-For OpenCode, the connection agent runs the installer and `opencode mcp auth <name>` in sequence. Your browser opens twice: first for connection approval, then for gateway OAuth consent. Restart OpenCode after both steps complete.
+For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
 
 Cursor still requires its model settings and marketplace steps inside the app.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
@@ -164,8 +164,8 @@ The `claude` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
-- **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
-- **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
+- **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
+- **Plugins** — installs the selected Claude Code plugins. You can import OpenAPPA from the Plugins catalog, then select it here.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
@@ -177,12 +177,12 @@ Switching to passthrough removes saved Archestra keys from that provider's authe
 The `codex` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `codex mcp add <name> --url <url>`. Run `codex` once to finish the browser sign-in.
-- **LLM proxy** — adds a marker-delimited `[model_providers.<name>]` block to `~/.codex/config.toml`. Virtual-key mode signs in with `codex login --with-api-key`. Start Codex through the proxy with `codex -c model_provider=<name>`.
+- **LLM proxy** — adds a `[model_providers.<name>]` block to `~/.codex/config.toml` and selects it as the default provider. New `codex` sessions use the proxy automatically. Codex can use an existing ChatGPT subscription or OpenAI API key. In virtual-key mode, the script signs in with `codex login --with-api-key`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
-- **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: delete the `# >>> archestra:<name> >>>` block, run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`; if the script signed Codex in with a virtual key, run `codex logout`, then `codex login` with your own account.
+- **Revert** — the startup guard reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore `~/.codex/config.toml.archestra-backup`, or delete the `# >>> archestra:<name> >>>` block and remove `model_provider`. Run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`. If the script signed Codex in with a virtual key, run `codex logout`, then sign in with your own account.
 
 ### Cursor
 
@@ -225,7 +225,7 @@ See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for r
 
 OpenCode 1.17 or newer supports the reviewed setup script.
 
-- **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. Run `opencode mcp auth <name>` once to finish browser sign-in.
+- **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. If `opencode mcp list` reports that authentication is needed, run `opencode mcp auth <name>`. If credentials are valid but the connection fails, check the connection error instead of signing in again.
 - **LLM proxy** — keeps OpenCode provider IDs, model IDs, and local credentials. It enables compatible providers with valid credentials and routes them to proxy endpoints. Unsupported or uncredentialed providers stay hidden. If an active model becomes unavailable, OpenCode clears it without choosing a replacement.
 - **OAuth connections** — OpenCode refreshes local Google and ChatGPT access tokens. The routing guard forwards request bearer tokens and required account headers to the proxy adapter. Archestra does not store or refresh the OAuth tokens.
 - **Routing guard** — installs a global OpenCode plugin. The plugin updates the provider allowlist after project configuration loads. It blocks requests if a project overrides the Archestra base URL or chooses an unsupported provider, preventing direct provider requests.

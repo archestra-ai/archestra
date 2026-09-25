@@ -98,82 +98,47 @@ class KbDirectoryModel {
     return rows.map((row) => row.teamId);
   }
 
+  /**
+   * A directory only organizes documents. Its retired `visibility` column
+   * keeps its default and no `kb_directory_team` rows are written.
+   */
   static async create(params: {
     organizationId: string;
     name: string;
-    visibility: KnowledgeFileVisibility;
-    teamIds: string[];
     createdBy: string;
   }): Promise<KbDirectory> {
-    return db.transaction(async (tx) => {
-      const [directory] = await tx
-        .insert(schema.kbDirectoriesTable)
-        .values(
-          await CreatedByModel.forInsert({
-            data: {
-              organizationId: params.organizationId,
-              name: params.name,
-              visibility: params.visibility,
-              createdBy: params.createdBy,
-            },
-            userIdField: "createdBy",
-            transaction: tx,
-          }),
-        )
-        .returning();
-
-      if (params.visibility === "team-scoped" && params.teamIds.length > 0) {
-        await tx.insert(schema.kbDirectoryTeamsTable).values(
-          params.teamIds.map((teamId) => ({
-            directoryId: directory.id,
-            teamId,
-          })),
-        );
-      }
-      return directory;
-    });
+    const [directory] = await db
+      .insert(schema.kbDirectoriesTable)
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            organizationId: params.organizationId,
+            name: params.name,
+            createdBy: params.createdBy,
+          },
+          userIdField: "createdBy",
+        }),
+      )
+      .returning();
+    return directory;
   }
 
   static async update(params: {
     id: string;
     organizationId: string;
     name?: string;
-    visibility?: KnowledgeFileVisibility;
-    teamIds?: string[];
   }): Promise<KbDirectory | null> {
-    return db.transaction(async (tx) => {
-      const [directory] = await tx
-        .update(schema.kbDirectoriesTable)
-        .set({
-          ...(params.name === undefined ? {} : { name: params.name }),
-          ...(params.visibility === undefined
-            ? {}
-            : { visibility: params.visibility }),
-        })
-        .where(
-          and(
-            eq(schema.kbDirectoriesTable.id, params.id),
-            eq(schema.kbDirectoriesTable.organizationId, params.organizationId),
-          ),
-        )
-        .returning();
-      if (!directory) return null;
-
-      if (params.teamIds !== undefined) {
-        await tx
-          .delete(schema.kbDirectoryTeamsTable)
-          .where(eq(schema.kbDirectoryTeamsTable.directoryId, directory.id));
-        if (directory.visibility === "team-scoped" && params.teamIds.length) {
-          await tx.insert(schema.kbDirectoryTeamsTable).values(
-            params.teamIds.map((teamId) => ({
-              directoryId: directory.id,
-              teamId,
-            })),
-          );
-        }
-      }
-      return directory;
-    });
+    const [directory] = await db
+      .update(schema.kbDirectoriesTable)
+      .set(params.name === undefined ? {} : { name: params.name })
+      .where(
+        and(
+          eq(schema.kbDirectoriesTable.id, params.id),
+          eq(schema.kbDirectoriesTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning();
+    return directory ?? null;
   }
 
   /** Files fall back to the repository root; their bytes are never destroyed. */

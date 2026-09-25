@@ -14,10 +14,10 @@ import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { __test as chatToolBuilderTest } from "@/clients/chat-tool-builder";
 import config from "@/config";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -111,7 +111,13 @@ describe("POST /api/chat quote verification lifecycle (search_and_run_only)", ()
   const originalQuoteVerificationEnabled = config.kb.quoteVerificationEnabled;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       capturedInnerOnFinish = undefined;
       executionPromise = undefined;
       vi.mocked(reportQuoteVerification).mockClear();
@@ -119,6 +125,7 @@ describe("POST /api/chat quote verification lifecycle (search_and_run_only)", ()
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       // The default My Assistant configuration: knowledge access only through
       // the progressive search_tools/run_tool path.

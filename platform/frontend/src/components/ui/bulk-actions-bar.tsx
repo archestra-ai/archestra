@@ -8,7 +8,7 @@ import {
   useBulkActionsScope,
 } from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Lets a selection escalate past the page it was made on: tick every row on

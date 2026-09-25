@@ -1,7 +1,9 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
   getAgentRuntimeModelCompatibility,
+  getArchestraMcpServerName,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
@@ -11,6 +13,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
@@ -45,9 +48,11 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -103,12 +108,40 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
       const currentOrganization =
         await OrganizationModel.getById(organizationId);
       if (!currentOrganization) {
         throw new ApiError(404, "Organization not found");
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        config.enterpriseFeatures.fullWhiteLabeling &&
+        body.appName !== undefined
+      ) {
+        // The built-in tools take their prefix from appName; one an MCP server
+        // already gives its tools would route calls to either of them.
+        const serverName = getArchestraMcpServerName({
+          appName: body.appName,
+          fullWhiteLabeling: true,
+        });
+        if (
+          serverName !== archestraMcpBranding.serverName &&
+          (await InternalMcpCatalogModel.findRootByNameInOrg({
+            name: serverName,
+            organizationId,
+          }))
+        )
+          throw new ApiError(
+            409,
+            `An MCP server already gives its tools the "${serverName}" prefix this app name would give the built-in tools.`,
+            "catalog_name_conflict",
+          );
+      }
+      // SPDX-SnippetEnd
 
       const organization = await OrganizationModel.patch(organizationId, body);
 
@@ -131,9 +164,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           currentOrganization.iconLogo !== organization.iconLogo;
 
         if (appNameChanged || iconChanged) {
-          await ToolModel.syncArchestraBuiltInCatalog({
+          const renamedTools = await ToolModel.syncArchestraBuiltInCatalog({
             organization: organization,
           });
+          // A saved policy's `archestra` alias spells the old prefix.
+          if (renamedTools.length > 0)
+            await openappaBatteriesService.onCatalogPrefixesRenamed({
+              catalogId: ARCHESTRA_MCP_CATALOG_ID,
+              // The built-in catalog is global: every organization spells it.
+              organizationId: null,
+              userId: user.id,
+              renamedTools,
+            });
         }
 
         // appName is baked into the built-in skills' stored rows (name, body,
@@ -496,7 +538,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentDescription: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultNetworkPolicy: typeof body.networkPolicy;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: TrustedImageRegistries | null;
       }> = {};
@@ -511,9 +552,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("networkPolicy" in body) {
         data.defaultNetworkPolicy = body.networkPolicy ?? null;
-      }
-      if ("restricted" in body) {
-        data.defaultEnvironmentRestricted = body.restricted ?? false;
       }
       if ("validationRegex" in body) {
         data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;
@@ -1445,6 +1483,15 @@ async function assertCallerCanGrantRole(params: {
   userId: string;
   organizationId: string;
 }) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.validateSubjectAssignment({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    subjects: [{ type: "role", id: params.role.id }],
+  });
+  // SPDX-SnippetEnd
   const callerPermissions = await getPermissionsForUserContext({
     userId: params.userId,
     organizationId: params.organizationId,

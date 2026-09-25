@@ -1,0 +1,133 @@
+name: Close External Pull Requests
+
+# We take contributions as human-written text, not code. External changes come
+# in as issues that maintainers implement with coding agents. This workflow
+# closes every open PR from outside the maintainer group and leaves a comment
+# that explains the process.
+#
+# Who counts as a maintainer: anyone whose PR branch lives in this repository.
+# Only people with push access can create a branch here, so a same-repo head
+# means a maintainer and a fork head means an external contributor.
+#
+# Do NOT use `author_association` or the collaborators API for this. Org
+# memberships are private, so the Actions token reports every org member as a
+# plain CONTRIBUTOR and answers 404 on the collaborator check. Both variants
+# closed maintainer PRs in practice.
+#
+# Scheduled polling instead of `pull_request_target`: the privileged trigger runs
+# in the base repository security context for untrusted PR events and is a common
+# source of Actions incidents (see random-issue-pr-assignee.yml for the same
+# reasoning). Polling runs only from the default branch and never consumes
+# PR-controlled code.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  # Bots that open PRs as part of automated processes (release-please, dependabot,
+  # backports, task envs) are never closed by this workflow.
+  EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
+  CLOSE_MARKER: "<!-- archestra-close-external-prs -->"
+  CLOSE_COMMENT: |
+    We take contributions as human-written text, not code — see https://www.archestra.ai/docs/contributing.
+
+    Describe the change you'd like in a GitHub issue written by a human (https://github.com/archestra-ai/archestra/issues/new/choose), and if we're aligned we'll handle the implementation with our coding agents.
+
+    This PR is closed automatically.
+
+concurrency:
+  group: close-external-prs
+  cancel-in-progress: false
+
+jobs:
+  close-external-prs:
+    name: Close External Pull Requests
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # Required to comment on and close PRs.
+
+    steps:
+      - name: Close PRs from non-maintainers
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const exemptBotLogins = JSON.parse(process.env.EXEMPT_BOT_LOGINS);
+            const marker = process.env.CLOSE_MARKER;
+            const body = `${marker}\n${process.env.CLOSE_COMMENT}`;
+            let closedPrs = 0;
+
+            for await (const response of github.paginate.iterator(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100,
+            })) {
+              for (const pr of response.data) {
+                const author = pr.user.login;
+
+                if (pr.user.type === 'Bot' || exemptBotLogins.includes(author)) {
+                  console.log(`Keeping #${pr.number}: ${author} is a bot`);
+                  continue;
+                }
+
+                if (isSameRepoBranch(pr)) {
+                  console.log(`Keeping #${pr.number}: ${author} pushed a branch to this repo`);
+                  continue;
+                }
+
+                try {
+                  await closeExternalPr(pr);
+                  closedPrs += 1;
+                } catch (error) {
+                  console.log(`Failed to close #${pr.number}: ${error.message}`);
+                }
+              }
+            }
+
+            console.log(`Closed ${closedPrs} external pull requests`);
+
+            // A deleted fork leaves head.repo null, which counts as external.
+            function isSameRepoBranch(pr) {
+              return pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            }
+
+            async function closeExternalPr(pr) {
+              let alreadyCommented = false;
+
+              for await (const commentsResponse of github.paginate.iterator(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                per_page: 100,
+              })) {
+                if (commentsResponse.data.some((comment) => comment.body?.includes(marker))) {
+                  alreadyCommented = true;
+                  break;
+                }
+              }
+
+              if (!alreadyCommented) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body,
+                });
+              }
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: 'closed',
+              });
+
+              console.log(`Closed #${pr.number} from ${pr.user.login}${alreadyCommented ? ' without a new comment' : ''}`);
+            }

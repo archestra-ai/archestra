@@ -9,8 +9,8 @@
  * - Idempotency: multiple imports of the same payload
  */
 import { vi } from "vitest";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -93,7 +93,7 @@ describe("Agent export/import routes", () => {
         organizationId,
         authorId: user.id,
         systemPrompt: "You help with exports",
-        scope: "personal",
+        access: "personal",
       });
 
       const response = await app.inject({
@@ -550,7 +550,7 @@ describe("Agent export/import routes", () => {
         authorId: user.id,
         systemPrompt: "You are a roundtrip test agent",
         description: "Created for roundtrip testing",
-        scope: "personal",
+        access: "personal",
       });
 
       // 2. Export

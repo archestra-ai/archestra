@@ -110,7 +110,7 @@ import {
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorRunItem =
@@ -191,7 +191,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   // tells them apart, a filter narrows to one family); permission-only views
   // live behind the in-tab filter rather than a separate tab.
   const isAutoSync =
-    connector?.visibility === "auto-sync-permissions" && autoSyncBeta;
+    Boolean(connector?.syncPermissionsFromSource) && autoSyncBeta;
   // Notion's one roster row per connector IS the workspace, so its page says
   // "Workspace(s)" wherever the group snapshot would say "Group(s)".
   const rosterNoun =

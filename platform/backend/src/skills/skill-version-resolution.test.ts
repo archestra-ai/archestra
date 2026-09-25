@@ -6,7 +6,14 @@ import {
   SkillVersionModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import { afterAll, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { Skill } from "@/types";
 import {
   resolveActivationVersion,
@@ -23,9 +30,9 @@ async function seedSkillV2(organizationId: string): Promise<Skill> {
       content: "# v1",
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [{ path: "references/a.md", content: "# A v1", kind: "reference" }],
+    ...accessGrants("org"),
   });
   if (!created) throw new Error("seed failed");
   // fork v2 in place.
@@ -82,9 +89,9 @@ describe("resolveEffectiveSkillVersion", () => {
         content: "# v1",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     if (!created) throw new Error("seed failed");
     const v1 = await SkillVersionModel.findBySkillAndVersion(created.id, 1);
@@ -259,9 +266,9 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
         content: "# org body",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     const personalSkill = await SkillModel.createWithFiles({
       skill: {
@@ -272,7 +279,6 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
         content: "# personal body",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });

@@ -9,6 +9,7 @@ import {
   MAX_DOMAIN_LENGTH,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
+  ResourcePermissionGrantSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -29,6 +30,7 @@ import { SelectToolSchema } from "./tool";
 import {
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
+  RetiredSharingFieldSchema,
 } from "./visibility";
 
 /**
@@ -123,6 +125,9 @@ export const AgentScopeFilterSchema = z.enum([
 export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 
 // Built-in agent config — discriminated union by name
+const OpenAppaConfigAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG),
+});
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
@@ -156,6 +161,7 @@ const AdvisorAgentConfigSchema = z.object({
 
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
+  OpenAppaConfigAgentConfigSchema,
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,
@@ -444,16 +450,32 @@ export const InsertAgentSchema = InsertAgentSchemaBase.superRefine(
   validateIncomingEmailDomain,
 );
 
+/**
+ * The body of `POST /api/agents`. Who can reach the new agent is its
+ * `initialGrants` alone. The retired `scope`, `teams` and `users` fields are
+ * refused with a 400 rather than silently dropped, which would create an
+ * agent narrower than the caller asked for.
+ */
+export const CreateAgentBodySchema = InsertAgentSchemaBase.omit({
+  scope: true,
+  teams: true,
+  users: true,
+})
+  .extend({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
+    scope: RetiredSharingFieldSchema,
+    teams: RetiredSharingFieldSchema,
+    users: RetiredSharingFieldSchema,
+  })
+  .superRefine(validateIncomingEmailDomain);
+
 // Base schema without refinement - can be used with .partial()
 export const UpdateAgentSchemaBase = createUpdateSchema(
   schema.agentsTable,
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()).optional(),
-    users: z.array(z.string()).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
-    scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
     connectorIds: z.array(z.string()).optional(),
     suggestedPrompts: z
@@ -470,6 +492,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
+    // Who can reach an agent is decided by its resource permission policy,
+    // which the permissions API writes on its own. The retired visibility
+    // column is carried through an update untouched.
+    scope: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that
@@ -489,15 +515,10 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
 );
 
 export const CloneAgentBodySchema = z.object({
-  scope: AgentScopeSchema.optional().describe(
-    "Visibility of the clone. Defaults to the source agent's scope.",
-  ),
-  teams: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.",
-    ),
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
+  scope: RetiredSharingFieldSchema,
+  teams: RetiredSharingFieldSchema,
+  users: RetiredSharingFieldSchema,
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

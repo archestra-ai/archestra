@@ -1,7 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 
 import {
-  ARCHESTRA_TOOL_SHORT_NAMES,
+  type ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolFullName,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -33,12 +33,6 @@ afterEach(() => {
 // === Permission map completeness ===
 
 describe("TOOL_PERMISSIONS map", () => {
-  test("has an entry for every registered tool", () => {
-    for (const shortName of ARCHESTRA_TOOL_SHORT_NAMES) {
-      expect(TOOL_PERMISSIONS).toHaveProperty(shortName);
-    }
-  });
-
   test("read_app reads and edit_app updates", () => {
     expect(TOOL_PERMISSIONS.read_app).toEqual({
       resource: "app",

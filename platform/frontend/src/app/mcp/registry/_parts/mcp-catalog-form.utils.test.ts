@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
@@ -1080,7 +1081,7 @@ describe("team access levels", () => {
     ]);
   });
 
-  it("sends each team's level to the API", () => {
+  it("does not submit retired sharing fields during a configuration save", () => {
     const data = transformFormToApiData({
       name: "srv",
       serverType: "remote",
@@ -1093,9 +1094,7 @@ describe("team access levels", () => {
       labels: [],
     } as never);
 
-    expect(data.teams).toEqual([
-      { id: "t1", level: "write" },
-      { id: "t2", level: "use" },
-    ]);
+    expect(data).not.toHaveProperty("teams");
+    expect(data).not.toHaveProperty("scope");
   });
 });

@@ -63,7 +63,6 @@ describe("websocket Agent run attach ownership", () => {
       organizationId: organization.id,
       authorId: owner.id,
       agentType: "agent",
-      scope: "org",
     });
     const context = await A2AContextModel.create({
       actorKind: "user",

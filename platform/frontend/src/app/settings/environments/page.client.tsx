@@ -3,6 +3,7 @@
 import { Plus, Settings2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
@@ -63,6 +64,7 @@ export default function EnvironmentsPageClient() {
           <Plus className="h-4 w-4" />
           Add environment
         </PermissionButton>
+        <ResourceListActions resource="environment" />
       </div>,
     );
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
@@ -73,6 +73,15 @@ describe("resolveRunToolDispatch", () => {
         toolName: "mcp__gw__archestra__run_tool",
         args: { tool_name: "" },
         loose: true,
+      }),
+    ).toEqual({ kind: "unresolved" });
+    expect(
+      resolveRunToolDispatch({
+        toolName: "archestra__run_tool",
+        args: {
+          tool_name: "Agent Runtime Handoff",
+          tool_args: { action: "spawn" },
+        },
       }),
     ).toEqual({ kind: "unresolved" });
   });

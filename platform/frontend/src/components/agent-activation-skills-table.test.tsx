@@ -89,16 +89,13 @@ describe("AgentActivationSkillsTable", () => {
     expect(screen.getByRole("columnheader", { name: "Skill" })).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(
-      screen.getByRole("columnheader", { name: "Visibility" }),
-    ).toBeVisible();
+      screen.queryByRole("columnheader", { name: "Visibility" }),
+    ).toBeNull();
     expect(screen.getAllByRole("row")).toHaveLength(4);
     expect(screen.getByText("Skill library")).toBeVisible();
     expect(screen.getByText("Research Server")).toBeVisible();
     expect(screen.getByText("MCP")).toBeVisible();
     expect(screen.getByText("Writing Plugin")).toBeVisible();
-    expect(screen.getByText("Organization")).toBeVisible();
-    expect(screen.getByText("Team")).toBeVisible();
-    expect(screen.getByText("Personal")).toBeVisible();
     expect(mockUseAgentActivationSkills).toHaveBeenCalledWith({
       agentId: "agent-1",
       environmentId: "environment-1",

@@ -9,12 +9,14 @@ import { schema } from "@/database";
 import { ToolExposureModeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { SelectConversationCompactionSchema } from "./conversation-compaction";
-import { ConversationShareVisibilitySchema } from "./conversation-share";
 
+/**
+ * Who a chat is shared with, derived from its permission policy: the broadest
+ * audience holding read besides the owner. Null means the owner alone.
+ */
 const ConversationShareSummarySchema = z
   .object({
-    id: z.string().uuid(),
-    visibility: ConversationShareVisibilitySchema,
+    visibility: z.enum(["organization", "team", "user"]),
   })
   .nullable();
 
@@ -28,6 +30,7 @@ export const ConversationOriginSchema = z.enum([
   "user",
   "schedule_trigger",
   "app_open",
+  "openappa",
 ]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 

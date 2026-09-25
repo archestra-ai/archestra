@@ -20,6 +20,10 @@ import {
 } from "@/lib/teams/team.query";
 import NewMcpCatalogItemPage from "./page.client";
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("next/navigation");
 
 vi.mock("@/lib/config/config.query");
@@ -96,10 +100,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   ),
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: () => <div data-testid="visibility-selector" />,
-}));
-
 // Minimal remote catalog item the ?clone= param resolves to.
 const cloneSource = {
   id: "clone-source-id",
@@ -161,7 +161,6 @@ describe("NewMcpCatalogItemPage clone flow", () => {
       namespace: null,
       description: null,
       networkPolicy: null,
-      restricted: false,
     } as ReturnType<typeof useDefaultEnvironment>);
     vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useTeams

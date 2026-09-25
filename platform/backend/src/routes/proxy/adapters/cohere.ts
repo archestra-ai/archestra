@@ -255,7 +255,7 @@ class CohereRequestAdapter
     return messages.map((message) => {
       if (message.role === "tool") {
         const toolMsg = message as Cohere.Types.ToolMessage;
-        if (updates[toolMsg.tool_call_id]) {
+        if (Object.hasOwn(updates, toolMsg.tool_call_id)) {
           return {
             ...toolMsg,
             content: updates[toolMsg.tool_call_id],

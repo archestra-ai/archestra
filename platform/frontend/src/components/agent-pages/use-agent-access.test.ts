@@ -1,6 +1,10 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { computeCanModifyAgent, useAgentAccess } from "./use-agent-access";
 
@@ -86,6 +90,10 @@ describe("computeCanModifyAgent", () => {
 describe("useAgentAccess", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "me" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -96,6 +104,7 @@ describe("useAgentAccess", () => {
 
   it("checks a legacy profile against agent permissions, not the facade it is shown under", () => {
     const profile = {
+      id: "profile-1",
       scope: "personal" as const,
       authorId: "me",
       teams: [],
@@ -103,21 +112,30 @@ describe("useAgentAccess", () => {
     };
 
     grantPermissions({ agent: ["update"] });
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "agent", action: "update", scope: "profile-1" }],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     expect(
       renderHook(() => useAgentAccess(profile, "mcp_gateway")).result.current
         .canEdit,
     ).toBe(true);
 
     // The route family alone would have asked `mcpGateway` and got it wrong.
-    grantPermissions({ mcpGateway: ["update", "admin"] });
+    grantPermissions({ mcpGateway: ["update"] });
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "mcpGateway", action: "update", scope: "profile-1" }],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     expect(
       renderHook(() => useAgentAccess(profile, "mcp_gateway")).result.current
         .canEdit,
     ).toBe(false);
   });
 
-  it("lets only a resource admin edit a built-in agent", () => {
+  it("requires a matching update grant to edit a built-in agent", () => {
     const builtIn = {
+      id: "builtin-1",
       scope: "org" as const,
       authorId: null,
       teams: [],
@@ -130,7 +148,10 @@ describe("useAgentAccess", () => {
       renderHook(() => useAgentAccess(builtIn, "agent")).result.current.canEdit,
     ).toBe(false);
 
-    grantPermissions({ agent: ["update", "admin"] });
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "agent", action: "update", scope: "builtin-1" }],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     expect(
       renderHook(() => useAgentAccess(builtIn, "agent")).result.current.canEdit,
     ).toBe(true);

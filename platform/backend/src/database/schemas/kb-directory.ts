@@ -13,17 +13,9 @@ import usersTable from "./user";
 /**
  * A folder in the knowledge file repository. Flat — a directory never nests.
  *
- * `visibility` decides the audience tokens COPIED onto a document when a file
- * from this directory is indexed into a knowledge base. It is deliberately not
- * a `kb_container_acls` row: that table is owned exclusively by the
- * permission-sync pass, and an ordinary connector ACL refresh deletes every
- * container row for its connector, which would silently wipe an authored
- * audience. Copying direct tokens instead means a visibility change is one
- * UPDATE over this directory's documents and needs no cache invalidation.
- *
- * Because the tokens are copied at index time, changing this value re-ACLs
- * already-indexed documents explicitly (see `reindexDirectoryAcl`) rather than
- * taking effect implicitly.
+ * `visibility` (and `kb_directory_team`) is retired: a document's audience is
+ * the grants of its file, and nothing writes or reads a directory's audience
+ * any more. The column stays until the retired sharing columns are dropped.
  */
 const kbDirectoriesTable = pgTable(
   "kb_directories",

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import {
   QUOTE_CITATION_INSTRUCTION,
+  ResourcePermissionGrantSchema,
   TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
@@ -55,10 +57,8 @@ import {
 } from "@/models";
 import * as metrics from "@/observability/metrics";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
-import {
-  canAccessKnowledgeBase,
-  validateKnowledgeBaseAccess,
-} from "@/services/knowledge-base-access";
+import { canAccessKnowledgeBase } from "@/services/knowledge-base-access";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AclEntry,
   ConnectorTypeSchema,
@@ -72,14 +72,13 @@ import {
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 import { archestraMcpBranding } from "./branding";
 import { dynamicAccessContext } from "./dynamic-tools";
+import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
-  EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
   structuredToolErrorResult,
@@ -97,8 +96,7 @@ const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
 
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     name: InsertKnowledgeBaseSchema.shape.name.describe(
       "Name of the knowledge base.",
     ),
@@ -110,8 +108,6 @@ const KnowledgeBaseCreateToolArgsSchema = z
 
 const KnowledgeBaseUpdateToolArgsSchema = z
   .object({
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
     id: UuidIdSchema.describe("Knowledge base ID."),
     name: UpdateKnowledgeBaseSchema.shape.name
       .optional()
@@ -129,6 +125,7 @@ const DynamicObjectSchema = z
 
 const ConnectorCreateToolArgsSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     name: InsertKnowledgeBaseConnectorSchema.shape.name.describe(
       "Name of the knowledge connector.",
     ),
@@ -142,13 +139,12 @@ const ConnectorCreateToolArgsSchema = z
     description: InsertKnowledgeBaseConnectorSchema.shape.description
       .optional()
       .describe("Description of the knowledge connector."),
-    visibility: KnowledgeSourceVisibilitySchema.optional().describe(
-      "Visibility for the knowledge connector.",
-    ),
-    team_ids: z
-      .array(z.string())
+    sync_permissions_from_source: z
+      .boolean()
       .optional()
-      .describe("Team IDs allowed to access a team-scoped connector."),
+      .describe(
+        "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync connectors permission and a connector type that supports it.",
+      ),
   })
   .strict();
 
@@ -585,6 +581,7 @@ async function handleQueryKnowledgeSources(params: {
           organizationId,
           canReadAll: access.canReadAll,
           viewerTeamIds: access.teamIds,
+          viewerUserId: access.userId,
           // Query scope: auto-sync-permissions connectors stay searchable for
           // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
           visibilityScope: "query",
@@ -625,11 +622,20 @@ async function handleQueryKnowledgeSources(params: {
         ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
         : [];
       const visibleKbs = access
-        ? knowledgeSourceAccessControlService.filterKnowledgeBases(
-            access,
-            validKbs,
+        ? validKbs.filter((kb) =>
+            knowledgeSourceAccessControlService.canQueryKnowledgeBase(
+              access,
+              kb,
+            ),
           )
-        : validKbs.filter((kb) => kb.visibility === "org-wide");
+        : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+            {
+              organizationId,
+              resource: "knowledgeBase",
+              sources: validKbs,
+              action: "use",
+            },
+          );
 
       const directConnectors = directConnectorIds.length
         ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
@@ -652,6 +658,7 @@ async function handleQueryKnowledgeSources(params: {
                 KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
+                  viewerUserId: access?.userId,
                   visibilityScope: "query",
                   environmentId: agentEnvironmentId,
                 }),
@@ -715,6 +722,8 @@ async function handleQueryKnowledgeSources(params: {
         metrics.rag.reportKnowledgeQueryUnresolvedIdentity();
       }
     }
+
+    if (context.userId) userAcl.push(`principal:${context.userId}`);
 
     const bypassAcl = access?.canReadAll ?? false;
     const documentFilter = args.documentFilter;
@@ -832,29 +841,37 @@ async function handleCreateKnowledgeBase(params: {
       return errorResult("Organization context not available");
     }
 
-    if (args.visibility === "private" && !context.userId) {
-      return errorResult(
-        "Personal knowledge bases require an authenticated user",
-      );
+    if (args.initialGrants?.length && context.userId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeBase",
+        grants: args.initialGrants,
+        target: {
+          id: randomUUID(),
+          name: args.name,
+          authorId: null,
+        },
+      });
+      // SPDX-SnippetEnd
     }
-
-    await validateKnowledgeBaseAccess({
-      organizationId: context.organizationId,
-      visibility: args.visibility ?? "org-wide",
-      teamIds: args.teamIds ?? [],
-    });
     const kb = await KnowledgeBaseModel.create(
       InsertKnowledgeBaseSchema.parse({
         organizationId: context.organizationId,
         name: args.name,
         createdBy: context.userId ?? null,
-        visibility: args.visibility ?? "org-wide",
-        teamIds:
-          args.visibility === "team-scoped"
-            ? [...new Set(args.teamIds ?? [])]
-            : [],
         description: args.description ?? null,
       }),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      {
+        initialPermissionGrants: args.initialGrants ?? [],
+      },
+      // SPDX-SnippetEnd
     );
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -943,8 +960,6 @@ async function handleUpdateKnowledgeBase(params: {
     }
 
     const updates: Record<string, unknown> = {};
-    if (args.visibility !== undefined) updates.visibility = args.visibility;
-    if (args.teamIds !== undefined) updates.teamIds = args.teamIds;
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (Object.keys(updates).length === 0) {
@@ -962,15 +977,6 @@ async function handleUpdateKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.id);
     }
-    const visibility = args.visibility ?? existing.visibility;
-    const teamIds = args.teamIds ?? existing.teamIds;
-    await validateKnowledgeBaseAccess({
-      organizationId: context.organizationId,
-      visibility,
-      teamIds,
-      current: existing,
-    });
-    updates.teamIds = visibility === "team-scoped" ? [...new Set(teamIds)] : [];
     const kb = await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
       return knowledgeBaseNotFound(args.id);
@@ -1026,14 +1032,7 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const teamIds = args.team_ids ?? [];
-    const visibility = args.visibility ?? "org-wide";
-    if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
-      return errorResult(
-        "At least one team must be selected for team-scoped connectors",
-      );
-    }
-    if (visibility === "auto-sync-permissions") {
+    if (args.sync_permissions_from_source) {
       // connector_type is a free-form string arg; the gate needs a known type
       const parsedConnectorType = ConnectorTypeSchema.safeParse(
         args.connector_type,
@@ -1085,6 +1084,23 @@ async function handleCreateKnowledgeConnector(params: {
       context.agent.id,
     );
 
+    if (args.initialGrants?.length && context.userId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeConnector",
+        grants: args.initialGrants,
+        target: {
+          id: randomUUID(),
+          name: args.name,
+          authorId: null,
+        },
+      });
+      // SPDX-SnippetEnd
+    }
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
         organizationId: context.organizationId,
@@ -1092,10 +1108,18 @@ async function handleCreateKnowledgeConnector(params: {
         connectorType: args.connector_type,
         config: { type: args.connector_type, ...args.config },
         description: args.description ?? null,
-        visibility: args.visibility,
-        teamIds: args.team_ids,
+        syncPermissionsFromSource: args.sync_permissions_from_source ?? false,
         environmentId: agentEnvironmentId,
+        // The creator gets full access to the new connector.
+        createdBy: context.userId ?? null,
       }),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      {
+        initialPermissionGrants: args.initialGrants ?? [],
+      },
+      // SPDX-SnippetEnd
     );
     // Same lifecycle rule as the REST create route: a Perforce connector that
     // syncs permissions gets its shim now, not on its first pass.
@@ -1133,7 +1157,9 @@ async function handleGetKnowledgeConnectors(params: {
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
+      canManageAutoSync: access?.canManageAutoSync,
       viewerTeamIds: access?.teamIds,
+      viewerUserId: access?.userId,
       environmentId: agentEnvironmentId,
     });
     if (connectors.length === 0) {
@@ -1243,6 +1269,12 @@ async function handleUpdateKnowledgeConnector(params: {
       return knowledgeConnectorNotFound(args.id);
     }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
+    // The permission-sync switch after this update. The request still names it
+    // through the visibility input; the stored switch is the column.
+    const nextSync =
+      updates.visibility !== undefined
+        ? updates.visibility === "auto-sync-permissions"
+        : existingConnector.syncPermissionsFromSource;
     const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
     if (
       isTeamScopedWithoutTeams({
@@ -1254,10 +1286,7 @@ async function handleUpdateKnowledgeConnector(params: {
         "At least one team must be selected for team-scoped connectors",
       );
     }
-    if (
-      existingConnector.visibility !== "auto-sync-permissions" &&
-      nextVisibility === "auto-sync-permissions"
-    ) {
+    if (!existingConnector.syncPermissionsFromSource && nextSync) {
       // Same transition gate as the REST update route: beta flag + enterprise
       // license + connector-type support + knowledgeSourceAutoSync:update.
       const violation = context.userId
@@ -1273,7 +1302,7 @@ async function handleUpdateKnowledgeConnector(params: {
           violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
         );
       }
-    } else if (existingConnector.visibility === "auto-sync-permissions") {
+    } else if (existingConnector.syncPermissionsFromSource) {
       // Mutating a connector that already carries the auto-sync visibility
       // (or switching it away): mirrors the REST update route's dedicated
       // permission check.
@@ -1289,7 +1318,7 @@ async function handleUpdateKnowledgeConnector(params: {
           violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
         );
       }
-      if (nextVisibility === "auto-sync-permissions") {
+      if (nextSync) {
         const unsupported = checkAutoSyncPermissionSyncSupported(
           existingConnector.connectorType,
         );
@@ -1332,16 +1361,16 @@ async function handleUpdateKnowledgeConnector(params: {
     }
     const nextEnabled = updates.enabled ?? existingConnector.enabled;
     if (
-      existingConnector.visibility === "auto-sync-permissions" &&
+      existingConnector.syncPermissionsFromSource &&
       (updates.config !== undefined ||
-        nextVisibility !== "auto-sync-permissions" ||
+        !nextSync ||
         nextEnabled !== existingConnector.enabled)
     ) {
       // Mirrors the REST update route: a pass computed against the settings
       // this update replaced must not finish against them.
       await supersedePermissionSyncAfterSettingsChange({
         connectorId: args.id,
-        visibility: nextVisibility,
+        syncPermissionsFromSource: nextSync,
         enabled: nextEnabled,
       });
     }
@@ -1391,7 +1420,7 @@ async function handleDeleteKnowledgeConnector(params: {
     ) {
       return knowledgeConnectorNotFound(args.id);
     }
-    if (existing.visibility === "auto-sync-permissions") {
+    if (existing.syncPermissionsFromSource) {
       // Mirrors the REST delete route's dedicated permission check.
       const violation = context.userId
         ? await checkHasAutoSyncConnectorPermission({
@@ -1549,9 +1578,26 @@ async function handleUnassignKnowledgeBaseFromAgent(params: {
   args: KnowledgeBaseAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    // Same check as assigning: the caller must be able to reach the KB.
+    const knowledgeBase = await KnowledgeBaseModel.findById(
+      args.knowledge_base_id,
+    );
+    if (
+      !knowledgeBase ||
+      !(await canAccessKnowledgeBase({
+        knowledgeBase,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
+    ) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     const kbIds = await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
       args.agent_id,
     );

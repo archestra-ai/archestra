@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -12,10 +12,12 @@ describe("llmOauthClientsRoutes", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    // A client is reached through its grants, which only a member holds.
+    await makeMember(user.id, organizationId, { role: "editor" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

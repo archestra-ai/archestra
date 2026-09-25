@@ -23,6 +23,7 @@ import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-cr
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { McpServerHibernationModeSchema } from "./mcp-hibernation";
 import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
+import { RetiredSharingFieldSchema } from "./visibility";
 // SPDX-SnippetEnd
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
@@ -255,6 +256,22 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
 export const InsertInternalMcpCatalogSchema =
   InsertInternalMcpCatalogSchemaBase.superRefine(validateInternalMcpCatalog);
 
+/**
+ * The body of the catalog create route and tool. Who can reach the new item is
+ * its initial grants alone; the retired `scope` and `teams` fields are not
+ * accepted.
+ */
+export const CreateInternalMcpCatalogBodySchema =
+  InsertInternalMcpCatalogSchemaBase.omit({
+    scope: true,
+    teams: true,
+  })
+    .extend({
+      scope: RetiredSharingFieldSchema,
+      teams: RetiredSharingFieldSchema,
+    })
+    .superRefine(validateInternalMcpCatalog);
+
 const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
@@ -281,9 +298,6 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
-    // Teams for team scope (synced separately). A bare id keeps whatever level
-    // is already stored for that team; an object sets it explicitly.
-    teams: z.array(CatalogTeamInputSchema).optional(),
   })
   .omit({
     id: true,
@@ -294,6 +308,10 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     organizationId: true,
     authorId: true,
     createdByServiceAccountId: true,
+    // Who can reach a catalog item is decided by its resource permission
+    // policy, which the permissions API writes on its own. The stored
+    // visibility column is carried through an update untouched.
+    scope: true,
     // Tenancy is locked after creation
     multitenant: true,
     // Frozen at creation/adopt time — renames must never touch it

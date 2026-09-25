@@ -1,4 +1,9 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type ResourcePermissionAction,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
+import {
   and,
   count,
   desc,
@@ -13,6 +18,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -25,10 +31,12 @@ import { secretManager } from "@/secrets-manager";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
   type CatalogItemApprovalStatus,
+  type CatalogTeamInput,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
   type ListInternalMcpCatalog,
+  type ResourceVisibilityScope,
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
@@ -37,10 +45,13 @@ import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 type CatalogListOptions = {
+  /** Restrict a reader without organization-wide discovery to explicit grants. */
+  readGrantContext?: { userId: string; organizationId: string };
   expandSecrets?: boolean;
   userId?: string;
   isAdmin?: boolean;
@@ -99,7 +110,13 @@ class InternalMcpCatalogModel {
 
   static async create(
     catalogItem: InsertInternalMcpCatalog,
-    context?: { organizationId: string; authorId?: string },
+    context?: {
+      organizationId: string;
+      authorId?: string;
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
 
@@ -123,17 +140,34 @@ class InternalMcpCatalogModel {
       ...(context?.authorId ? { authorId: context.authorId } : {}),
     };
 
-    let createdItem = (
-      await db
+    let createdItem = await withDbTransaction(async (tx) => {
+      const [row] = await tx
         .insert(schema.internalMcpCatalogTable)
         .values(
           await CreatedByModel.forInsert({
             data: insertValues,
             userIdField: "authorId",
+            transaction: tx,
           }),
         )
-        .returning()
-    )[0];
+        .returning();
+      if (row.organizationId && row.serverType !== "app") {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissionPolicyModel.createInitial({
+          tx,
+          organizationId: row.organizationId,
+          resource: "mcpRegistry",
+          scope: row.id,
+          grants: context?.initialPermissionGrants,
+          authorId: row.authorId,
+          publishToOrganization: context?.publishToOrganization,
+        });
+        // SPDX-SnippetEnd
+      }
+      return row;
+    });
 
     if (labels && labels.length > 0) {
       await McpCatalogLabelModel.syncCatalogLabels(
@@ -170,6 +204,7 @@ class InternalMcpCatalogModel {
       labels: itemLabels,
       teams: itemTeams,
     };
+    await InternalMcpCatalogModel.populateGrantedScope([result]);
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
@@ -337,8 +372,31 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const searchCondition = and(
       baseSearchCondition,
+      userId && organizationId
+        ? McpCatalogTeamModel.readCondition({ organizationId, userId })
+        : undefined,
+      ...(options?.readGrantContext
+        ? [
+            or(
+              eq(
+                schema.internalMcpCatalogTable.organizationId,
+                options.readGrantContext.organizationId,
+              ),
+              isNull(schema.internalMcpCatalogTable.organizationId),
+            ),
+            ResourcePermissionPolicyModel.grantCondition({
+              ...options.readGrantContext,
+              resource: "mcpRegistry",
+              scopeColumn: schema.internalMcpCatalogTable.id,
+              action: "read",
+            }),
+          ]
+        : []),
       // Hidden runtime variants and legacy preset rows are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // App backing catalogs are never surfaced via registry search.
@@ -349,6 +407,7 @@ class InternalMcpCatalogModel {
         ? [catalogInEnvironmentPredicate(environmentId)]
         : []),
     );
+    // SPDX-SnippetEnd
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -398,6 +457,7 @@ class InternalMcpCatalogModel {
   static async findById(
     id: string,
     options?: {
+      accessAction?: ResourcePermissionAction;
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
@@ -416,12 +476,12 @@ class InternalMcpCatalogModel {
     }
 
     if (userId && organizationId) {
-      const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess(
-        userId,
-        id,
-        !!isAdmin,
-        organizationId,
-      );
+      const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess({
+        userId: userId,
+        catalogId: id,
+        organizationId: organizationId,
+        action: options?.accessAction,
+      });
       if (!hasAccess) return null;
     }
 
@@ -451,6 +511,7 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
     }
 
+    await InternalMcpCatalogModel.populateGrantedScope([catalogItem]);
     await InternalMcpCatalogModel.populateAuthorNames([catalogItem]);
 
     return catalogItem;
@@ -676,6 +737,43 @@ class InternalMcpCatalogModel {
   }
 
   /**
+   * Whether a catalog of this name would give its tools the prefix the built-in
+   * server's tools carry in every organization.
+   */
+  static takesBuiltInToolPrefix(name: string): boolean {
+    return (
+      ToolModel.sanitizeServerNameForSlug(name) ===
+      archestraMcpBranding.serverName
+    );
+  }
+
+  /** Live organization catalogs whose tools take the built-in tools' prefix. */
+  static async findTakingBuiltInToolPrefix(): Promise<
+    Array<{ id: string; organizationId: string }>
+  > {
+    const rows = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+        organizationId: schema.internalMcpCatalogTable.organizationId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+          isNotNull(schema.internalMcpCatalogTable.organizationId),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
+    return rows.flatMap(({ id, name, organizationId }) =>
+      organizationId !== null &&
+      InternalMcpCatalogModel.takesBuiltInToolPrefix(name)
+        ? [{ id, organizationId }]
+        : [],
+    );
+  }
+
+  /**
    * Root-catalog lookup within an organization by sanitized tool-slug prefix —
    * the rename 409 gate. Tool names embed `sanitizeServerNameForSlug(name)` and
    * tool-call routing resolves purely by name string, so a sibling catalog whose
@@ -688,6 +786,8 @@ class InternalMcpCatalogModel {
     name: string;
     organizationId: string;
   }): Promise<{ id: string } | null> {
+    if (InternalMcpCatalogModel.takesBuiltInToolPrefix(params.name))
+      return { id: ARCHESTRA_MCP_CATALOG_ID };
     const targetSlug = ToolModel.sanitizeServerNameForSlug(params.name);
     const rows = await db
       .select({
@@ -859,7 +959,15 @@ class InternalMcpCatalogModel {
 
   static async update(
     id: string,
-    catalogItem: Partial<UpdateInternalMcpCatalog>,
+    catalogItem: Partial<UpdateInternalMcpCatalog> & {
+      /**
+       * Retired sharing columns. No longer reachable from a request body —
+       * access lives in the resource permission policy — but still written by
+       * the app-backing sync and by seeding/migration callers.
+       */
+      scope?: ResourceVisibilityScope;
+      teams?: CatalogTeamInput[];
+    },
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
 
@@ -952,6 +1060,7 @@ class InternalMcpCatalogModel {
       labels: itemLabels,
       teams: itemTeams,
     };
+    await InternalMcpCatalogModel.populateGrantedScope([result]);
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
   }
@@ -1197,12 +1306,24 @@ class InternalMcpCatalogModel {
 
   /** Physical delete — reserved for purge/rollback flows, never a user action. */
   static async hardDelete(id: string): Promise<boolean> {
-    const count = await hardDelete(
-      db,
-      schema.internalMcpCatalogTable,
-      eq(schema.internalMcpCatalogTable.id, id),
-    );
-    return count > 0;
+    return withDbTransaction(async (tx) => {
+      const count = await hardDelete(
+        tx,
+        schema.internalMcpCatalogTable,
+        eq(schema.internalMcpCatalogTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx,
+          resources: ["mcpRegistry"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    });
   }
 
   /**
@@ -1601,7 +1722,7 @@ class InternalMcpCatalogModel {
         InternalMcpCatalogModel.getSkillStats(ids),
       ]);
 
-    return dbItems.map((item) => ({
+    const items = dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
       teams: teamsMap.get(item.id) || [],
@@ -1610,6 +1731,46 @@ class InternalMcpCatalogModel {
       skillCount: skillStatsMap.get(item.id) ?? 0,
       providesSkills: (skillStatsMap.get(item.id) ?? 0) > 0,
     }));
+    await InternalMcpCatalogModel.populateGrantedScope(items);
+    return items;
+  }
+
+  /**
+   * Set each catalog item's `scope` from its grants instead of the retired
+   * column: `org` when they reach the organization or a role, `team` when
+   * they reach a team, `personal` otherwise. A global item (no organization)
+   * and an app's backing item (no registry policy; its install scope follows
+   * the app) keep their column.
+   */
+  static async populateGrantedScope(
+    items: Array<{
+      id: string;
+      organizationId: string | null;
+      serverType: string;
+      scope: ResourceVisibilityScope;
+    }>,
+  ): Promise<void> {
+    const idsByOrganization = new Map<string, string[]>();
+    for (const item of items) {
+      if (!item.organizationId || item.serverType === "app") continue;
+      idsByOrganization.set(item.organizationId, [
+        ...(idsByOrganization.get(item.organizationId) ?? []),
+        item.id,
+      ]);
+    }
+    const audiences = new Map<string, ResourceVisibilityScope>();
+    for (const [organizationId, scopes] of idsByOrganization) {
+      const found = await ResourcePermissionPolicyModel.findAudiences({
+        organizationId,
+        resource: "mcpRegistry",
+        scopes,
+      });
+      for (const [id, { audience }] of found) audiences.set(id, audience);
+    }
+    for (const item of items) {
+      const audience = audiences.get(item.id);
+      if (audience) item.scope = audience;
+    }
   }
 
   private static buildListCondition(
@@ -1624,9 +1785,45 @@ class InternalMcpCatalogModel {
       // Hide soft-deleted catalog items from the registry.
       notDeleted(schema.internalMcpCatalogTable),
     ];
+    if (userId && options?.organizationId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      listConditions.push(
+        McpCatalogTeamModel.readCondition({
+          organizationId: options.organizationId,
+          userId,
+        }),
+      );
+      // SPDX-SnippetEnd
+    }
     if (environmentId !== undefined) {
       listConditions.push(catalogInEnvironmentPredicate(environmentId));
     }
+    if (options?.readGrantContext) {
+      listConditions.push(
+        or(
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            options.readGrantContext.organizationId,
+          ),
+          isNull(schema.internalMcpCatalogTable.organizationId),
+        ) as SQL,
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      listConditions.push(
+        ResourcePermissionPolicyModel.grantCondition({
+          ...options.readGrantContext,
+          resource: "mcpRegistry",
+          scopeColumn: schema.internalMcpCatalogTable.id,
+          action: "read",
+        }),
+      );
+      // SPDX-SnippetEnd
+    }
+
     if (!includeApps) {
       // App backing catalogs are managed on the Apps page, never surfaced in the
       // MCP registry (UI list or the agent-callable registry search).
@@ -1826,6 +2023,18 @@ class InternalMcpCatalogModel {
       : [];
 
     return {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: "mcpRegistry",
+            scope: row.id,
+          })
+        )?.grants ?? [],
+      // SPDX-SnippetEnd
       id: row.id,
       name: row.name,
       version: row.version ?? null,

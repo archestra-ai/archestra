@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The locked-chat mark: a lock. The single source for every locked-chat

@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   type PaginationQuery,
+  type ResourcePermissionGrant,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -30,6 +31,7 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -87,6 +89,10 @@ class VirtualApiKeyModel {
     authorId?: string | null;
     teamIds?: string[];
     providerApiKeys?: ProviderApiKeyInput[];
+    /** Explicit starting audience; omitted derives one from the scope. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -143,6 +149,20 @@ class VirtualApiKeyModel {
           }),
         )
         .returning();
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: createdVirtualKey.organizationId,
+        resource: "llmVirtualKey",
+        scope: createdVirtualKey.id,
+        grants: params.initialPermissionGrants,
+        authorId: createdVirtualKey.authorId,
+        publishToOrganization: params.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
 
       await syncVirtualApiKeyTeams({
         tx,
@@ -346,8 +366,6 @@ class VirtualApiKeyModel {
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId: params.organizationId,
       userId: params.userId,
-      userTeamIds: params.userTeamIds,
-      isAdmin: params.isAdmin,
       providerApiKeyId: params.providerApiKeyId,
     });
 
@@ -511,19 +529,17 @@ class VirtualApiKeyModel {
    * Find a virtual key by ID with teams, author, and provider key mappings,
    * returning it only when it is visible to the given user. Visibility follows
    * the same predicate as {@link findAllByOrganization} (via
-   * {@link getAccessibleIds}): org-scoped keys are visible to every member,
-   * personal keys only to their owner, team keys only to members of an
-   * assigned team, and admins see everything. The team and admin lookups are
-   * lazy so they are only paid when the key's scope requires them.
+   * {@link getAccessibleIds}): a read grant on the key, or at `*`.
    */
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   static async findVisibleById(params: {
     id: string;
     organizationId: string;
     userId: string;
-    getUserTeamIds: () => Promise<string[]>;
-    getIsAdmin: () => Promise<boolean>;
   }): Promise<VirtualApiKeyWithParentInfo | null> {
-    const { id, organizationId, userId, getUserTeamIds, getIsAdmin } = params;
+    const { id, organizationId, userId } = params;
 
     const virtualKey = await VirtualApiKeyModel.findByIdWithParentInfo(
       id,
@@ -533,24 +549,13 @@ class VirtualApiKeyModel {
       return null;
     }
 
-    if (virtualKey.scope === "org") {
-      return virtualKey;
-    }
-
-    const userTeamIds =
-      virtualKey.scope === "team" ? await getUserTeamIds() : [];
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
       userId,
-      userTeamIds,
-      isAdmin: false,
     });
-    if (accessibleIds.includes(id)) {
-      return virtualKey;
-    }
-
-    return (await getIsAdmin()) ? virtualKey : null;
+    return accessibleIds.includes(id) ? virtualKey : null;
   }
+  // SPDX-SnippetEnd
 
   /**
    * Find access-related metadata for a virtual key.
@@ -636,8 +641,6 @@ class VirtualApiKeyModel {
         await VirtualApiKeyModel.getAccessibleIds({
           organizationId: params.organizationId,
           userId: params.viewer.userId,
-          userTeamIds: params.viewer.userTeamIds,
-          isAdmin: false,
         }),
       );
       visibleRows = rows.filter((row) => accessible.has(row.id));
@@ -749,7 +752,9 @@ class VirtualApiKeyModel {
     organizationId: string;
     pagination: PaginationQuery;
     userId?: string;
+    /** No longer consulted: grants decide, and they resolve teams in SQL. */
     userTeamIds?: string[];
+    /** No longer consulted: an administrator's reach is its `*` grant. */
     isAdmin?: boolean;
     search?: string;
     providerApiKeyId?: string;
@@ -761,8 +766,6 @@ class VirtualApiKeyModel {
       organizationId,
       pagination,
       userId = "",
-      userTeamIds = [],
-      isAdmin = true,
       search,
       providerApiKeyId,
       keyType,
@@ -782,12 +785,10 @@ class VirtualApiKeyModel {
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
       userId,
-      userTeamIds,
-      isAdmin,
       providerApiKeyId,
     });
 
-    if ((!isAdmin || providerApiKeyId) && accessibleIds.length === 0) {
+    if (accessibleIds.length === 0) {
       return createPaginatedResult([], 0, pagination);
     }
 
@@ -795,11 +796,7 @@ class VirtualApiKeyModel {
       eq(schema.virtualApiKeysTable.organizationId, organizationId),
     ];
 
-    if (!isAdmin || providerApiKeyId) {
-      whereConditions.push(
-        inArray(schema.virtualApiKeysTable.id, accessibleIds),
-      );
-    }
+    whereConditions.push(inArray(schema.virtualApiKeysTable.id, accessibleIds));
 
     if (search) {
       whereConditions.push(
@@ -1078,6 +1075,30 @@ class VirtualApiKeyModel {
     };
   }
 
+  /**
+   * Whether a virtual key is its author's own: it has an author and its own
+   * grants reach that author and nobody else. A personal key is the one kind
+   * that identifies a user, so traffic through it is attributed to the author
+   * and it may carry a per-user credential.
+   */
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  static async isPersonal(virtualKey: {
+    id: string;
+    organizationId: string;
+    authorId: string | null;
+  }): Promise<boolean> {
+    if (!virtualKey.authorId) return false;
+    return ResourcePermissionPolicyModel.reachesOnlyUser({
+      organizationId: virtualKey.organizationId,
+      resource: "llmVirtualKey",
+      scope: virtualKey.id,
+      userId: virtualKey.authorId,
+    });
+  }
+  // SPDX-SnippetEnd
+
   static async getVisibilityForVirtualApiKeyIds(
     virtualApiKeyIds: string[],
   ): Promise<{
@@ -1087,86 +1108,39 @@ class VirtualApiKeyModel {
     return VirtualApiKeyModel.getVisibilityMetadata(virtualApiKeyIds);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   private static async getAccessibleIds(params: {
     organizationId: string | null;
     userId: string;
-    userTeamIds: string[];
-    isAdmin: boolean;
     providerApiKeyId?: string;
   }): Promise<string[]> {
-    const { organizationId, userId, userTeamIds, isAdmin, providerApiKeyId } =
-      params;
+    const { organizationId, userId, providerApiKeyId } = params;
 
-    if (isAdmin) {
-      const conditions = [];
-      if (organizationId) {
-        conditions.push(
-          eq(schema.virtualApiKeysTable.organizationId, organizationId),
-        );
-      }
-      const baseQuery = db
-        .select({ id: schema.virtualApiKeysTable.id })
-        .from(schema.virtualApiKeysTable);
-
-      const rows = await (providerApiKeyId
-        ? baseQuery
-            .innerJoin(
-              schema.virtualApiKeyProviderApiKeysTable,
-              eq(
-                schema.virtualApiKeysTable.id,
-                schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
-              ),
-            )
-            .where(
-              and(
-                ...conditions,
-                eq(
-                  schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
-                  providerApiKeyId,
-                ),
-              ),
-            )
-        : baseQuery.where(
-            conditions.length > 0 ? and(...conditions) : undefined,
-          ));
-
-      return rows.map((row) => row.id);
-    }
-
-    const teamAccessCondition =
-      userTeamIds.length > 0
-        ? sql`
-            SELECT DISTINCT vat.virtual_api_key_id AS id
-            FROM virtual_api_key_team vat
-            INNER JOIN virtual_api_keys vak ON vat.virtual_api_key_id = vak.id
-            WHERE vak.scope = 'team'
-              AND vat.team_id IN (${sql.join(
-                userTeamIds.map((id) => sql`${id}`),
-                sql`, `,
-              )})
-              ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-              ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
-          `
-        : null;
-
-    const result = await db.execute<{ id: string }>(sql`
-      SELECT vak.id
-      FROM virtual_api_keys vak
-      WHERE vak.scope = 'org'
-        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
-      UNION
-      SELECT vak.id
-      FROM virtual_api_keys vak
-      WHERE vak.scope = 'personal'
-        AND vak.author_id = ${userId}
-        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
-      ${teamAccessCondition ? sql`UNION ${teamAccessCondition}` : sql``}
-    `);
-
-    return result.rows.map((row) => row.id);
+    const table = schema.virtualApiKeysTable;
+    const rows = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          organizationId ? eq(table.organizationId, organizationId) : undefined,
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: organizationId ?? table.organizationId,
+            resource: "llmVirtualKey",
+            scopeColumn: table.id,
+            userId,
+            action: "read",
+          }),
+          providerApiKeyId
+            ? sql`EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key mapping
+        WHERE mapping.virtual_api_key_id = ${table.id} AND mapping.provider_api_key_id = ${providerApiKeyId})`
+            : undefined,
+        ),
+      );
+    return rows.map((row) => row.id);
   }
+  // SPDX-SnippetEnd
 
   private static async getVisibilityMetadata(
     virtualApiKeyIds: string[],

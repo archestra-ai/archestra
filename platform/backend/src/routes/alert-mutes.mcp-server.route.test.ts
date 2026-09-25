@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import McpServerModel from "@/models/mcp-server";
 import McpServerAlertMuteModel from "@/models/mcp-server-alert-mute";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -18,6 +18,7 @@ vi.mock("@/config", async () =>
 );
 
 import { hasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -400,8 +401,10 @@ describe("MCP server alert mute routes", () => {
     expect((await listedServer(server.id)).alertMutes).toHaveLength(1);
 
     // Re-authentication is one of the two places the fault is cleared. The
-    // route needs the install-create capability the rest of this suite denies.
+    // route needs the install-create capability the rest of this suite denies,
+    // and installation administration (`update` on every registry entry).
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    grantEverywhere(["mcpRegistry"]);
     const newSecret = await secretManager().createSecret(
       { access_token: "fresh", refresh_token: "fresh-refresh" },
       "alert-mute-reauth-secret",

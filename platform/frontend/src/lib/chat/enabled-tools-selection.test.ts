@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 import { resolveEnabledToolIds } from "./enabled-tools-selection";
 import type { PendingToolAction } from "./pending-tool-state";

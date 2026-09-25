@@ -55,6 +55,7 @@ import type {
 } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import AgentModel from "./agent";
+import AgentTeamModel from "./agent-team";
 import { interactionBelongsToOrganization } from "./log-organization";
 
 class StatisticsModel {
@@ -402,12 +403,8 @@ class StatisticsModel {
         ),
       )
       .innerJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
-      .innerJoin(
         schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+        AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
       )
       .where(
         and(
@@ -451,12 +448,19 @@ class StatisticsModel {
     const teamAgentCounts = await db
       .select({
         teamId: schema.teamsTable.id,
-        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentTeamsTable.agentId}) AS INTEGER)`,
+        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentsTable.id}) AS INTEGER)`,
       })
       .from(schema.teamsTable)
       .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
+        schema.agentsTable,
+        and(
+          eq(
+            schema.agentsTable.organizationId,
+            schema.teamsTable.organizationId,
+          ),
+          notDeleted(schema.agentsTable),
+          AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
+        ),
       )
       .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
@@ -539,12 +543,8 @@ class StatisticsModel {
         ),
       )
       .leftJoin(
-        schema.agentTeamsTable,
-        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
-      )
-      .leftJoin(
         schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+        AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
       )
       .where(
         and(

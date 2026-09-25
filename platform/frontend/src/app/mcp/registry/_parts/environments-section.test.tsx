@@ -180,7 +180,6 @@ describe("EnvironmentsSection filters", () => {
       namespace: "archestra",
       description: null,
       networkPolicy: publicInternetPolicy,
-      restricted: false,
       validationRegex: null,
       trustedImageRegistries: null,
     });
@@ -312,10 +311,17 @@ describe("EnvironmentsSection filters", () => {
     render(<EnvironmentsSection canEdit />);
 
     expect(
-      within(screen.getByTestId("dialog-description")).getByRole("link", {
-        name: /Learn more/,
-      }),
+      screen.getByRole("link", { name: /Learn more/ }),
     ).toBeInTheDocument();
+    // A new environment has no id to grant on yet, so it has no Permissions
+    // tab, and access is never a switch on the form.
+    expect(
+      screen.getByRole("button", { name: "Network Egress Policy" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Restricted")).not.toBeInTheDocument();
     expect(
       screen.getByText(/IPv4 or IPv6 CIDR ranges that workloads/),
     ).toBeInTheDocument();
@@ -381,7 +387,6 @@ function makeEnvironment(overrides: {
   return {
     organizationId: "organization-id",
     description: null,
-    restricted: false,
     validationRegex: null,
     trustedImageRegistries: null,
     labels: [],

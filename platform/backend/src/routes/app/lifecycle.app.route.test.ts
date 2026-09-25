@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -38,7 +38,7 @@ describe("/api/apps lifecycle (create → get → list → update → delete)", 
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Dashboard", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Dashboard", html: "<h1>v1</h1>" },
     });
     expect(created.statusCode).toBe(200);
     const appId = created.json().id as string;

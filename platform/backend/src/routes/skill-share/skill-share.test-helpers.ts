@@ -1,4 +1,5 @@
 import { SkillModel } from "@/models";
+import { accessGrants } from "@/test";
 
 /** An org-scoped skill a share link can point at. */
 export async function seedSkill(params: {
@@ -14,9 +15,9 @@ export async function seedSkill(params: {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;

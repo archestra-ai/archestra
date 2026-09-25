@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   builtInProviderLabel,
@@ -10,6 +11,7 @@ import {
   parseLabelsParam,
   perUserCredentialLabel,
   providerDisplayNames,
+  ResourcePermissionGrantSchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -18,7 +20,7 @@ import { eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { hasPermission, userHasPermission } from "@/auth";
+import { userHasPermission } from "@/auth";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
@@ -48,8 +50,10 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
+import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
 import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
   ApiError,
@@ -58,7 +62,6 @@ import {
   type LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
-  ResourceVisibilityScopeSchema,
   type SelectSecret,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -317,12 +320,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmProviderApiKey",
-        "admin",
-      );
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
 
       const apiKeys = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
@@ -394,7 +398,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...agentKey,
             // The viewer authenticates with their own subscription, never this owner's.
             requiresReauthentication:
-              agentKey.scope === "personal" && agentKey.userId !== user.id
+              agentKey.userId !== null && agentKey.userId !== user.id
                 ? undefined
                 : agentKey.requiresReauthentication,
             createdBy: await CreatedByModel.resolveOne(
@@ -441,8 +445,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .record(z.string(), z.string())
               .nullable()
               .optional(),
-            scope: ResourceVisibilityScopeSchema.default("personal"),
-            teamId: z.string().optional(),
+            shared: z
+              .boolean()
+              .default(false)
+              .describe(
+                "Omitted or false: the key is yours alone (you own it and " +
+                  "only you use it). True: a shared key with no owner, used " +
+                  "by whoever its initialGrants reach.",
+              ),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
@@ -459,7 +469,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Key/value labels. Omit to leave existing labels untouched; " +
                   "pass [] to clear them.",
               ),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
           })
+          // Strict: the retired scope/teamId fields are refused, not silently
+          // dropped. Ownership is `shared`, the audience initialGrants.
+          .strict()
           .refine(
             (data) => {
               const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
@@ -483,7 +500,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ body, organizationId, user, headers }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
+      // Decision: a key is either the caller's own ("just for me": they own
+      // it and only they use it) or shared (no owner; its grants are its
+      // audience). The retired column mirrors that until it is dropped.
+      const ownerId = body.shared ? null : user.id;
+      const scope: ResourceVisibilityScope = body.shared ? "org" : "personal";
+      CredentialResourcePermissions.validateProvider({
+        provider: body.provider,
+        apiKey: body.apiKey,
+        ownerId,
+        grants: body.initialGrants ?? [],
+      });
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
       // …and providers the organization's admins switched off entirely.
@@ -492,23 +520,24 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: body.provider,
       });
 
-      // Validate scope/teamId combination and authorization
-      await validateScopeAndAuthorization({
-        scope: body.scope,
-        teamId: body.teamId,
-        userId: user.id,
-        organizationId,
+      assertPerUserCredentialOwnership({
         provider: body.provider,
         apiKey: body.apiKey,
-        headers,
+        shared: body.shared,
       });
+      if (!body.shared && body.initialGrants?.length) {
+        throw new ApiError(
+          400,
+          "A key just for you is used by you alone, so it takes no grants. Create a shared key to give others access.",
+        );
+      }
 
-      // Personal-scoped keys are self-service: any authenticated user can
-      // connect their own account / create a key only they can use (this is
-      // what lets "basic users" link GitHub Copilot without elevated rights).
-      // Shareable scopes (team, org) still require the create permission — org
-      // additionally requires llmProviderApiKey:admin, enforced above.
-      if (body.scope !== "personal") {
+      // Own keys are self-service: any authenticated user can connect their
+      // own account / create a key only they can use (this is what lets
+      // "basic users" link GitHub Copilot without elevated rights). Shared
+      // keys require the create permission; who they reach is bounded by
+      // what the creator may delegate (validateInitialGrants below).
+      if (body.shared) {
         const canCreateSharedKeys = await userHasPermission(
           user.id,
           organizationId,
@@ -518,9 +547,27 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!canCreateSharedKeys) {
           throw new ApiError(
             403,
-            "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
+            "You need the llmProviderApiKey:create permission to create shared keys.",
           );
         }
+      }
+
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "llmProviderApiKey",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: ownerId,
+          },
+        });
+        // SPDX-SnippetEnd
       }
 
       let secret: SelectSecret | null = null;
@@ -555,11 +602,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             secretAccessKey: sigV4.secretAccessKey,
             ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
           },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       } else if (isByosEnabled()) {
         if (!body.vaultSecretPath || !body.vaultSecretKey) {
@@ -577,6 +620,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
           );
         }
+        assertPerUserCredentialOwnership({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          shared: body.shared,
+        });
+        CredentialResourcePermissions.validateProvider({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          ownerId,
+          grants: body.initialGrants ?? [],
+        });
         // then test the API key
         await testApiKeyOrThrow({
           organizationId,
@@ -588,11 +642,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // then create the secret
         secret = await secretManager().createSecret(
           { apiKey: vaultReference },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       } else if (body.apiKey) {
         // When readonly_vault is disabled
@@ -614,11 +664,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         secret = await secretManager().createSecret(
           { apiKey: actualApiKeyValue },
-          getChatApiKeySecretName({
-            scope: body.scope,
-            teamId: body.teamId ?? null,
-            userId: user.id,
-          }),
+          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
       }
 
@@ -693,20 +739,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ReturnType<typeof LlmProviderApiKeyModel.create>
       >;
       try {
-        createdApiKey = await LlmProviderApiKeyModel.create({
-          organizationId,
-          createdBy: user.id,
-          name: body.name,
-          provider: body.provider,
-          secretId: secret?.id ?? null,
-          baseUrl: body.baseUrl ?? null,
-          inferenceBaseUrl: body.inferenceBaseUrl ?? null,
-          extraHeaders: body.extraHeaders ?? null,
-          scope: body.scope,
-          userId: body.scope === "personal" ? user.id : null,
-          teamId: body.scope === "team" ? body.teamId : null,
-          isPrimary: body.isPrimary ?? false,
-        });
+        createdApiKey = await LlmProviderApiKeyModel.create(
+          {
+            organizationId,
+            createdBy: user.id,
+            name: body.name,
+            provider: body.provider,
+            secretId: secret?.id ?? null,
+            baseUrl: body.baseUrl ?? null,
+            inferenceBaseUrl: body.inferenceBaseUrl ?? null,
+            extraHeaders: body.extraHeaders ?? null,
+            scope,
+            userId: ownerId,
+            teamId: null,
+            isPrimary: body.isPrimary ?? false,
+          },
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          {
+            initialPermissionGrants: body.initialGrants ?? [],
+          },
+          // SPDX-SnippetEnd
+        );
       } catch (error) {
         if (isUniqueConstraintError(error)) {
           throw new ApiError(
@@ -813,30 +868,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
+
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
-        "llmProviderApiKey",
-        "admin",
+        user.id,
+        userTeamIds,
+        isLlmProviderApiKeyAdmin,
+        { ids: [storedApiKey.id] },
       );
-
-      // Personal keys: only visible to owner
-      if (
-        storedApiKey.scope === "personal" &&
-        storedApiKey.userId !== user.id
-      ) {
+      if (!visible.length)
         throw new ApiError(404, "LLM provider API key not found");
-      }
-
-      // Team keys: visible to team members or admins
-      if (storedApiKey.scope === "team" && !isLlmProviderApiKeyAdmin) {
-        if (
-          !storedApiKey.teamId ||
-          !userTeamIds.includes(storedApiKey.teamId)
-        ) {
-          throw new ApiError(404, "LLM provider API key not found");
-        }
-      }
 
       // Resolve Vault-backed subscription metadata only after organization and
       // scope authorization. The edit dialog needs it, but an unauthorized ID
@@ -864,7 +912,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmProviderApiKey,
         description:
-          "Update an LLM provider API key (name, API key value, visibility, or team)",
+          "Update an LLM provider API key (name, API key value, or runtime connection settings)",
         tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -879,8 +927,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .record(z.string(), z.string())
               .nullable()
               .optional(),
-            scope: ResourceVisibilityScopeSchema.optional(),
-            teamId: z.string().uuid().nullable().optional(),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
@@ -928,7 +974,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ params, body, organizationId, user, headers }, reply) => {
+    async ({ params, body, organizationId, user }, reply) => {
       const apiKeyFromDB = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKeyFromDB || apiKeyFromDB.organizationId !== organizationId) {
@@ -940,7 +986,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKey: apiKeyFromDB,
         userId: user.id,
         organizationId,
-        headers,
       });
 
       // A key for a provider the admins switched off is frozen: it can be
@@ -950,41 +995,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: apiKeyFromDB.provider,
       });
 
-      // If scope is changing, validate the new scope
-      const newScope = body.scope ?? apiKeyFromDB.scope;
-      const newTeamId =
-        body.teamId !== undefined ? body.teamId : apiKeyFromDB.teamId;
+      // Who can reach the key is not editable here: access lives in the key's
+      // permission policy, which the permissions API writes on its own. The
+      // stored visibility columns are carried through untouched.
+      const newScope = apiKeyFromDB.scope;
+      const newTeamId = apiKeyFromDB.teamId;
+
       let newSecretId: string | null = null;
 
-      if (body.scope !== undefined || body.teamId !== undefined) {
-        // A scope change on an existing ChatGPT-subscription (Codex) key must be
-        // rejected too, so classify by the effective secret (new or stored).
-        const effectiveApiKey =
-          body.apiKey ??
-          (apiKeyFromDB.secretId
-            ? ((await getSecretValueForLlmProviderApiKey(
-                apiKeyFromDB.secretId,
-              )) as string | undefined)
-            : undefined);
-        await validateScopeAndAuthorization({
-          scope: newScope,
-          teamId: newTeamId,
-          userId: user.id,
-          organizationId,
-          provider: apiKeyFromDB.provider,
-          apiKey: effectiveApiKey,
-          headers,
-        });
-      } else if (body.apiKey) {
+      if (body.apiKey) {
         // A new secret value alone can flip an existing shared key into a
         // per-user credential (pasting an encoded ChatGPT-subscription
         // credential into a team/org key would share one person's account
-        // with everyone), so classify the new value even when scope/team
-        // don't change.
-        assertPerUserCredentialScope({
+        // with everyone), so classify the new value.
+        assertPerUserCredentialOwnership({
           provider: apiKeyFromDB.provider,
           apiKey: body.apiKey,
-          scope: newScope,
+          shared: apiKeyFromDB.userId === null,
         });
       }
 
@@ -1004,6 +1031,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (body.apiKey) {
+        CredentialResourcePermissions.validateProvider({
+          provider: apiKeyFromDB.provider,
+          apiKey: body.apiKey,
+          ownerId: apiKeyFromDB.userId,
+          grants: await CredentialResourcePermissions.currentGrants({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scope: apiKeyFromDB.id,
+          }),
+        });
+      }
       // Update the secret if a new API key is provided (via direct value, vault reference, or SigV4 credentials)
       if (
         body.apiKey ||
@@ -1050,6 +1089,21 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "API key or vault reference is required");
         }
 
+        assertPerUserCredentialOwnership({
+          provider: apiKeyFromDB.provider,
+          apiKey: testValue,
+          shared: apiKeyFromDB.userId === null,
+        });
+        CredentialResourcePermissions.validateProvider({
+          provider: apiKeyFromDB.provider,
+          apiKey: testValue,
+          ownerId: apiKeyFromDB.userId,
+          grants: await CredentialResourcePermissions.currentGrants({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scope: apiKeyFromDB.id,
+          }),
+        });
         // Test the API key before saving
         // Use user-provided baseUrl/extraHeaders if present, otherwise fall
         // back to what's stored on the API key record.
@@ -1181,9 +1235,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: Record<string, string> | null;
-        scope: ResourceVisibilityScope;
-        userId: string | null;
-        teamId: string | null;
         secretId: string | null;
         isPrimary: boolean;
       }> = {};
@@ -1210,16 +1261,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (newSecretId) {
         updateData.secretId = newSecretId;
-      }
-
-      if (body.scope !== undefined) {
-        updateData.scope = body.scope;
-        // Set userId/teamId based on new scope
-        updateData.userId = body.scope === "personal" ? user.id : null;
-        updateData.teamId = body.scope === "team" ? newTeamId : null;
-      } else if (body.teamId !== undefined && apiKeyFromDB.scope === "team") {
-        // Only update teamId if scope is team and not changing
-        updateData.teamId = body.teamId;
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -1291,12 +1332,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!keyRow || keyRow.organizationId !== organizationId) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      // Another user's personal key is invisible (404, matching the GET route);
-      // shared keys go through the regular permission-gated edit flow.
-      if (keyRow.scope === "personal" && keyRow.userId !== user.id) {
+      // Another user's own key is invisible (404, matching the GET route);
+      // a key nobody owns goes through the regular permission-gated edit flow.
+      if (keyRow.userId !== null && keyRow.userId !== user.id) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      if (keyRow.scope !== "personal") {
+      if (keyRow.userId === null) {
         throw new ApiError(
           400,
           "Only personal subscription keys can be reconnected — shared keys use the regular edit flow.",
@@ -1413,12 +1454,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await Promise.all([
           OrganizationModel.getById(organizationId),
           TeamModel.getUserTeamIds(user.id),
-          userHasPermission(
-            user.id,
-            organizationId,
-            "llmProviderApiKey",
-            "admin",
-          ),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "llmProviderApiKey",
+            scope: "*",
+            action: "update",
+          }),
         ]);
 
       const outcome = await runBulk({
@@ -1444,10 +1486,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorize: async (apiKey) => {
           assertApiKeyIsNotSystem(apiKey);
           await authorizeApiKeyAccess({
+            action: "delete",
             apiKey,
             userId: user.id,
             organizationId,
-            headers: request.headers,
           });
           await assertApiKeyCanBeDeleted({
             apiKey,
@@ -1523,10 +1565,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check authorization based on scope
       await authorizeApiKeyAccess({
+        action: "delete",
         apiKey,
         userId: user.id,
         organizationId,
-        headers,
       });
 
       const [organization, userTeamIds] = await Promise.all([
@@ -1556,155 +1598,51 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 /**
- * Validates scope/teamId combination and checks user authorization for the scope.
- * Used for both creating and updating API keys.
- */
-async function validateScopeAndAuthorization(params: {
-  scope: ResourceVisibilityScope;
-  teamId: string | null | undefined;
-  userId: string;
-  organizationId: string;
-  provider: SupportedProvider;
-  apiKey?: string | null;
-  headers: IncomingHttpHeaders;
-}): Promise<void> {
-  const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
-    params;
-
-  assertPerUserCredentialScope({ provider, apiKey, scope });
-
-  // Validate scope-specific requirements
-  if (scope === "team" && !teamId) {
-    throw new ApiError(400, "teamId is required for team-scoped API keys");
-  }
-
-  if (scope === "personal" && teamId) {
-    throw new ApiError(
-      400,
-      "teamId should not be provided for personal-scoped API keys",
-    );
-  }
-
-  if (scope === "org" && teamId) {
-    throw new ApiError(
-      400,
-      "teamId should not be provided for org-wide API keys",
-    );
-  }
-
-  // For team-scoped keys, verify user has access to the team
-  if (scope === "team" && teamId) {
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
-      headers,
-    );
-
-    if (!canManageAllTeams) {
-      const isUserInTeam = await TeamModel.isUserInTeam(teamId, userId);
-      if (!isUserInTeam) {
-        throw new ApiError(
-          403,
-          "You must be a member of the team to use this scope",
-        );
-      }
-    }
-  }
-
-  // For org-wide keys, require the dedicated API-key admin permission
-  if (scope === "org") {
-    const isLlmProviderApiKeyAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "llmProviderApiKey",
-      "admin",
-    );
-    if (!isLlmProviderApiKeyAdmin) {
-      throw new ApiError(
-        403,
-        "Only llmProviderApiKey admins can use organization-wide scope",
-      );
-    }
-  }
-}
-
-/**
  * Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
- * (Codex) key on `openai` — hold an individual's token, so team/org scope
- * would share one person's credential with everyone. Only personal keys are
- * allowed; each user links their own account.
+ * (Codex) key on `openai` — hold an individual's token, so a shared key would
+ * share one person's credential with everyone. Only own keys may hold them;
+ * each user links their own account.
  */
-function assertPerUserCredentialScope(params: {
+function assertPerUserCredentialOwnership(params: {
   provider: SupportedProvider;
   apiKey: string | null | undefined;
-  scope: ResourceVisibilityScope;
+  shared: boolean;
 }): void {
-  const { provider, apiKey, scope } = params;
-  if (
-    credentialRequiresPerUserScope({ provider, apiKey }) &&
-    scope !== "personal"
-  ) {
+  const { provider, apiKey, shared } = params;
+  if (credentialRequiresPerUserScope({ provider, apiKey }) && shared) {
     throw new ApiError(
       400,
-      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so they cannot be shared.`,
     );
   }
 }
 
 /**
- * Helper to check if a user is authorized to modify an API key based on scope
+ * Authorize modifying an API key: the caller needs the action on the key
+ * through a grant (on the key itself or at `*`).
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function authorizeApiKeyAccess(params: {
-  apiKey: { scope: string; userId: string | null; teamId: string | null };
+  action?: "update" | "delete";
+  apiKey: { id: string; userId: string | null };
   userId: string;
   organizationId: string;
-  headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { apiKey, userId, organizationId, headers } = params;
-
-  // Personal keys: only owner can modify
-  if (apiKey.scope === "personal") {
-    if (apiKey.userId !== userId) {
-      throw new ApiError(403, "You can only modify your own personal API keys");
-    }
-    return;
+  // Only the owner changes their own key, whatever grants others hold.
+  if (params.apiKey.userId && params.apiKey.userId !== params.userId) {
+    throw new ApiError(403, "You can only modify your own personal API keys");
   }
-
-  // Team keys: require team membership or organization-level team management
-  if (apiKey.scope === "team") {
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
-      headers,
-    );
-
-    if (!canManageAllTeams && apiKey.teamId) {
-      const isUserInTeam = await TeamModel.isUserInTeam(apiKey.teamId, userId);
-      if (!isUserInTeam) {
-        throw new ApiError(
-          403,
-          "You can only modify team API keys for teams you are a member of",
-        );
-      }
-    }
-    return;
-  }
-
-  // Org-wide keys: require the dedicated API-key admin permission
-  if (apiKey.scope === "org") {
-    const isLlmProviderApiKeyAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "llmProviderApiKey",
-      "admin",
-    );
-    if (!isLlmProviderApiKeyAdmin) {
-      throw new ApiError(
-        403,
-        "Only llmProviderApiKey admins can modify organization-wide API keys",
-      );
-    }
-    return;
-  }
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "llmProviderApiKey",
+    scope: params.apiKey.id,
+    action: params.action ?? "update",
+  });
 }
+// SPDX-SnippetEnd
 
 function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
   if (apiKey.isSystem) {
@@ -1797,10 +1735,10 @@ async function deleteProviderApiKeyAtomically(params: {
 
           assertApiKeyIsNotSystem(apiKey);
           await authorizeApiKeyAccess({
+            action: "delete",
             apiKey,
             userId: params.userId,
             organizationId: params.organizationId,
-            headers: params.headers,
           });
           await assertApiKeyCanBeDeleted({
             apiKey,
@@ -1845,10 +1783,10 @@ async function deleteProviderApiKeyInPglite(params: {
   }
   assertApiKeyIsNotSystem(apiKey);
   await authorizeApiKeyAccess({
+    action: "delete",
     apiKey,
     userId: params.userId,
     organizationId: params.organizationId,
-    headers: params.headers,
   });
   await assertApiKeyCanBeDeleted({
     apiKey,

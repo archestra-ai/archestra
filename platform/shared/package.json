@@ -1,18 +1,31 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.18",
+  "version": "1.4.0-rc.21",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
+    "./archestra-mcp-server": "./archestra-mcp-server.ts",
     "./api-error": "./api-error.ts",
+    "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",
+    "./chat": "./chat.ts",
+    "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",
+    "./interactions/session-source": "./interactions/session-source.ts",
+    "./model-constants": "./model-constants.ts",
+    "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
-    "./test-mcp-server": "./test-mcp-server.ts"
+    "./roles": "./roles.ts",
+    "./sso-template-helpers": "./sso-template-helpers.ts",
+    "./system-prompt-template": "./system-prompt-template.ts",
+    "./test-mcp-server": "./test-mcp-server.ts",
+    "./types": "./types.ts",
+    "./websocket": "./websocket.ts"
   },
   "scripts": {
     "lint": "biome check",

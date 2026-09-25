@@ -38,6 +38,12 @@ pub(crate) struct Declarations {
     pub include: Vec<IncludeDeclaration>,
     pub server_aliases: Vec<AliasDeclaration>,
     pub credentials: Vec<CredentialDeclaration>,
+    /// The annotators the root's own tool rules route calls to.
+    pub routed_annotators: Vec<String>,
+    /// The `[credentials]` variables the runtime resolves itself, because an external
+    /// or a profile of the document names them as its `token_env`; the host answers
+    /// them per dispatch. A helper's own variables reach only its sandbox.
+    pub runtime_credentials: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -57,6 +63,20 @@ pub(crate) fn parse(content: &str) -> Declarations {
     read_include(content, &document, &mut declarations);
     read_aliases(content, &document, &mut declarations);
     read_credentials(content, &document, &mut declarations);
+    if let Ok(table) = toml::from_str::<toml::Table>(content) {
+        declarations.routed_annotators = crate::policy::routed_annotators(&table);
+        let named: std::collections::BTreeSet<&str> = crate::policy::external_bindings(&table)
+            .into_iter()
+            .filter_map(|(_, _, binding)| binding.get("token_env")?.as_str())
+            .collect();
+        declarations.runtime_credentials = declarations
+            .credentials
+            .iter()
+            .map(|credential| credential.variable.as_str())
+            .filter(|variable| named.contains(variable))
+            .map(str::to_owned)
+            .collect();
+    }
     declarations
 }
 
@@ -342,6 +362,16 @@ version = 2
         assert!(declarations.include.is_empty());
         assert!(declarations.server_aliases.is_empty());
         assert!(declarations.credentials.is_empty());
+        assert!(declarations.routed_annotators.is_empty());
+    }
+
+    #[test]
+    fn reads_the_annotators_the_root_rules_route_to_once_each() {
+        let declarations = parse(
+            "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"noop\"\n[[policy.tool]]\nname = \"*\"\nannotator = \"jev.tool-call\"\n[[policy.tool]]\nname = \"mcp/github/get_me\"\nannotator = \"jev.tool-call\"\n[[policy.tool]]\nname = \"mcp/github/list\"\nannotator = \"noop\"\n[[policy.tool]]\nname = \"mcp/github/search\"\ndelta = {}\n",
+        );
+        assert!(declarations.errors.is_empty());
+        assert_eq!(declarations.routed_annotators, ["jev.tool-call", "noop"]);
     }
 
     #[test]

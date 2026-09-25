@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 export function useClaudeCodeAccount(agentId: string, polling = false) {
   const client = useQueryClient();

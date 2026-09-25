@@ -6,7 +6,7 @@ import {
   hasRecentlyEnded,
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   cancelAgentRun,
@@ -14,14 +14,11 @@ const {
   deleteAgentRun,
   deleteAgentWorkspace,
   getAgentRuntimePreflight,
-  getAgentRunShare,
   getAgentRuns,
   getMyAgentRun,
   getMyAgentRuns,
   setAgentRuntimeCredential,
-  shareAgentRun,
   startAgentRun,
-  unshareAgentRun,
   updateAgentRun,
 } = archestraApiSdk;
 
@@ -257,87 +254,6 @@ export function useDeleteAgentRun() {
         queryClient.invalidateQueries({ queryKey: ["agent-runs"] }),
         queryClient.invalidateQueries({ queryKey: ["projects"] }),
       ]);
-    },
-  });
-}
-
-export type AgentRunShare = NonNullable<
-  archestraApiTypes.GetAgentRunShareResponses["200"]
->;
-
-/**
- * Owner-only: reads the current share for a run. The route 404s for
- * anyone but the owner, so this is only queried behind the owner's share
- * dialog. A `null` result means the run is private (not shared).
- */
-export function useAgentRunShare(taskId: string | undefined) {
-  return useQuery({
-    queryKey: ["agent-runs", taskId, "share"],
-    queryFn: async () => {
-      if (!taskId) return null;
-      const { data, error } = await getAgentRunShare({
-        path: { taskId },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-    enabled: !!taskId,
-    staleTime: 30 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
-}
-
-type ShareAgentRunInput = {
-  taskId: string;
-  suppressSuccessToast?: boolean;
-} & archestraApiTypes.ShareAgentRunData["body"];
-
-export function useShareAgentRun() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      taskId,
-      visibility,
-      teamIds,
-      userIds,
-      suppressSuccessToast: _suppressSuccessToast,
-    }: ShareAgentRunInput) => {
-      const { data, error } = await shareAgentRun({
-        path: { taskId },
-        body: { visibility, teamIds, userIds },
-      });
-      if (error) throw reportApiError(error);
-      return data;
-    },
-    onSuccess: async (data, { taskId, suppressSuccessToast }) => {
-      if (!data) return;
-      queryClient.setQueryData(["agent-runs", taskId, "share"], data);
-      await queryClient.invalidateQueries({
-        predicate: ({ queryKey }) =>
-          queryKey[0] === "agents" && queryKey[2] === "runs",
-      });
-      if (!suppressSuccessToast) {
-        toast.success("Run visibility updated");
-      }
-    },
-  });
-}
-
-export function useUnshareAgentRun() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (taskId: string) => {
-      const { data, error } = await unshareAgentRun({ path: { taskId } });
-      if (error) throw reportApiError(error);
-      return data;
-    },
-    onSuccess: async (_data, taskId) => {
-      queryClient.setQueryData(["agent-runs", taskId, "share"], null);
-      await queryClient.invalidateQueries({
-        predicate: ({ queryKey }) =>
-          queryKey[0] === "agents" && queryKey[2] === "runs",
-      });
-      toast.success("Run sharing removed");
     },
   });
 }

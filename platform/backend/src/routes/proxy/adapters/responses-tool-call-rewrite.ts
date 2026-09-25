@@ -66,6 +66,8 @@ export function responsesFunctionCallItem(
     call_id: toolCall.wireId ?? toolCall.id,
     type: "function_call" as const,
     name: toolCall.name,
+    // Codex requires the tool namespace to route namespaced tool calls correctly.
+    ...namespaceOf(toolCall),
     arguments: toolCall.arguments,
     ...((toolCall.namespace ?? namespace)
       ? { namespace: toolCall.namespace ?? namespace }
@@ -149,11 +151,9 @@ export function formatResponsesFunctionCallFrames(params: {
 }
 
 /**
- * A response `output` with its function-call items replaced by the rewritten
- * calls, matched by the provider's `call_id`. That id — what the client
- * correlates tool results by — is kept unless the call carries the one the
- * client is given instead. Non-call items (text, reasoning) pass through in
- * place; a rewritten call with no upstream item to replace is appended.
+ * Replaces function-call items in response output with rewritten calls matched by `call_id`.
+ * Preserves the provider `call_id` unless an explicit wire ID is provided.
+ * Omitted calls are removed. Non-call items (text, reasoning) pass through unchanged.
  */
 export function rewriteResponsesOutput<TItem extends { type?: string }>(
   output: readonly TItem[],
@@ -167,37 +167,38 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
       const callId = (item as { call_id?: unknown }).call_id;
       const rewritten =
         typeof callId === "string" ? byCallId.get(callId) : undefined;
-      if (rewritten) {
-        replaced.add(rewritten.id);
-        // Notice tools are function calls; rewrite denied custom tools to function calls.
-        const isNotice = (item as { name?: unknown }).name !== rewritten.name;
-        next.push(
-          item.type === "custom_tool_call" && isNotice
-            ? (responsesFunctionCallItem(
-                rewritten,
-                (item as { id?: string }).id,
-              ) as unknown as TItem)
-            : item.type === "custom_tool_call"
-              ? ({
+      if (!rewritten) continue;
+
+      replaced.add(rewritten.id);
+      // Notice tools are function calls; rewrite denied custom tools to function calls.
+      const isNotice = (item as { name?: unknown }).name !== rewritten.name;
+      next.push(
+        item.type === "custom_tool_call" && isNotice
+          ? (responsesFunctionCallItem(
+              rewritten,
+              (item as { id?: string }).id,
+              rewritten.namespace,
+            ) as unknown as TItem)
+          : item.type === "custom_tool_call"
+            ? ({
+                ...item,
+                call_id: rewritten.wireId ?? callId,
+              } as TItem)
+            : (withNamespace(
+                {
                   ...item,
                   call_id: rewritten.wireId ?? callId,
-                } as TItem)
-              : (withNamespace(
-                  {
-                    ...item,
-                    call_id: rewritten.wireId ?? callId,
-                    name: rewritten.name,
-                    arguments: rewritten.arguments,
-                  },
-                  // A notice lives in its own tool's namespace, not the
-                  // denied call's.
-                  isNotice
-                    ? rewritten.namespace
-                    : (rewritten.namespace ?? namespaceOf(item).namespace),
-                ) as TItem),
-        );
-        continue;
-      }
+                  name: rewritten.name,
+                  arguments: rewritten.arguments,
+                },
+                // A notice lives in its own tool's namespace, not the
+                // denied call's.
+                isNotice
+                  ? rewritten.namespace
+                  : (rewritten.namespace ?? namespaceOf(item).namespace),
+              ) as TItem),
+      );
+      continue;
     }
     next.push(item);
   }
@@ -382,4 +383,53 @@ function withNamespace<T extends object>(
   if (namespace) return { ...item, namespace };
   const { namespace: _dropped, ...rest } = item as T & { namespace?: unknown };
   return rest as T;
+}
+
+function withLeadingPrefix(text: string, prefix: string): string {
+  return text.startsWith(prefix) ? text : `${prefix}\n\n${text}`;
+}
+
+/**
+ * Prepends a stream prefix (the child trajectory banner) to a completed
+ * Responses envelope, adding a message item when the turn carried none.
+ */
+export function prependPrefixToResponse<T extends { output: unknown[] }>(
+  response: T,
+  prefix: string,
+): T {
+  let applied = false;
+  const output = (response.output as Array<Record<string, unknown>>).map(
+    (item) => {
+      if (applied || item.type !== "message") {
+        return item;
+      }
+      const message = item as unknown as {
+        content: Array<{ type: string; text?: string }>;
+      };
+      return {
+        ...item,
+        content: message.content.map((part) => {
+          if (applied || part.type !== "output_text" || part.text === undefined)
+            return part;
+          applied = true;
+          return { ...part, text: withLeadingPrefix(part.text, prefix) };
+        }),
+      };
+    },
+  );
+  if (applied) return { ...(response as object), output } as T;
+  // A tool-call-only turn has no message item to carry the banner: add one.
+  return {
+    ...(response as object),
+    output: [
+      {
+        id: `msg_${Date.now()}`,
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: prefix, annotations: [] }],
+      },
+      ...output,
+    ],
+  } as unknown as T;
 }

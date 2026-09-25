@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { ChatErrorCode } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { isRetryableError, parseStructuredChatError } from "./chat-retry.utils";

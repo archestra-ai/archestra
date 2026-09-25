@@ -1,15 +1,25 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { LabelWithDetailsSchema } from "./label";
+import {
+  isSafePluginPath,
+  PLUGIN_MAX_FILE_BYTES,
+  PLUGIN_MAX_FILES,
+  PLUGIN_MAX_TOTAL_BYTES,
+} from "./plugin-file-constraints";
 
-export const PLUGIN_MAX_FILES = 100;
-export const PLUGIN_MAX_FILE_BYTES = 750 * 1024;
-export const PLUGIN_MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+export {
+  isSafePluginPath,
+  PLUGIN_MAX_FILE_BYTES,
+  PLUGIN_MAX_FILES,
+  PLUGIN_MAX_TOTAL_BYTES,
+} from "./plugin-file-constraints";
 export const PLUGIN_DELIVERY_MAX_COUNT = 50;
 export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
 
@@ -78,12 +88,13 @@ export const CreatePluginSchema = z
     description: z.string().max(1_000).default(""),
     clientType: ClientTypeSchema,
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string().min(1)).max(100).optional(),
-    userIds: z.array(z.string().min(1)).max(100).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
     labels: z.array(LabelWithDetailsSchema).optional(),
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   })
+  // Strict: the retired scope/teamIds/userIds fields are refused, not
+  // silently dropped. Access is set with initialGrants.
+  .strict()
   .superRefine(validateFileSet);
 
 export const UpdatePluginSchema = z
@@ -92,9 +103,6 @@ export const UpdatePluginSchema = z
     description: z.string().max(1_000).optional(),
     enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string().min(1)).max(100).optional(),
-    userIds: z.array(z.string().min(1)).max(100).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({
@@ -121,6 +129,9 @@ export const UpdatePluginSchema = z
       .max(PLUGIN_MAX_FILES)
       .optional(),
   })
+  // Strict: the retired scope/teamIds/userIds fields are refused, not
+  // silently dropped. Access is edited through the resource permissions API.
+  .strict()
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {
       ctx.addIssue({
@@ -178,16 +189,6 @@ export type UpdatePlugin = z.infer<typeof UpdatePluginSchema>;
 export type PluginWithVisibility = z.infer<typeof PluginWithVisibilitySchema>;
 export type PluginWithFiles = z.infer<typeof PluginWithFilesSchema>;
 export type PluginListItem = z.infer<typeof PluginListItemSchema>;
-
-export function isSafePluginPath(value: string): boolean {
-  if (value.includes("\0") || value.includes("\\")) return false;
-  if (value.startsWith("/") || value.endsWith("/") || value.includes("//")) {
-    return false;
-  }
-  return !value
-    .split("/")
-    .some((segment) => segment === "." || segment === "..");
-}
 
 export function validateFileSet(
   value: { files?: PluginFileInput[] },

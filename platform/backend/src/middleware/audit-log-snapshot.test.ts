@@ -838,8 +838,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     const agent = await makeAgent({
       name: "Host",
       organizationId: org.id,
-      scope: "org",
-      teams: [],
       knowledgeBaseIds: [],
     });
     const tool = await makeTool({

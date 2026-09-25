@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  FileVisibilitySelector,
-  type KnowledgeFileVisibility,
-} from "@/app/knowledge/files/_parts/file-visibility-selector";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -40,9 +37,6 @@ export function EditFileDialog({
 }) {
   const [filename, setFilename] = useState("");
   const [directoryId, setDirectoryId] = useState(ROOT_VALUE);
-  const [visibility, setVisibility] =
-    useState<KnowledgeFileVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
@@ -54,15 +48,10 @@ export function EditFileDialog({
     if (!open || !file) return;
     setFilename(file.filename);
     setDirectoryId(file.directoryId ?? ROOT_VALUE);
-    setVisibility(file.visibility as KnowledgeFileVisibility);
-    setTeamIds(file.teamIds ?? []);
     setLabels(file.labels);
   }, [open, file]);
 
-  const canSubmit =
-    filename.trim().length > 0 &&
-    (visibility !== "team-scoped" || teamIds.length > 0) &&
-    !updateFile.isPending;
+  const canSubmit = filename.trim().length > 0 && !updateFile.isPending;
 
   const handleSubmit = () => {
     if (!file) return;
@@ -73,8 +62,6 @@ export function EditFileDialog({
         body: {
           filename: filename.trim(),
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
-          visibility,
-          teamIds: visibility === "team-scoped" ? teamIds : [],
           labels: finalLabels,
         },
       },
@@ -117,12 +104,9 @@ export function EditFileDialog({
           </Select>
         </div>
 
-        <FileVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-        />
+        {file && (
+          <ResourceAccessSection resource="knowledgeFile" id={file.id} />
+        )}
 
         <AdvancedLabelsSection
           ref={labelsRef}

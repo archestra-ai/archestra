@@ -16,10 +16,18 @@ import {
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import {
   type Agent,
   AgentRuntimeCredentialsRequiredError,
@@ -52,6 +60,61 @@ describe("buildAgentRunLaunchSpec", () => {
     vi.restoreAllMocks();
   });
 
+  test("tells the client when Guardrails v2 governs the run", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const launch = () =>
+      buildAgentRunLaunchSpec({
+        runtime: {
+          ...runtime(setup.agent, "openai_responses"),
+          // The switch is the platform's to report, not the Agent's to fake.
+          environment: [
+            { key: "ARCHESTRA_AGENT_RUNTIME_OPENAPPA", value: "1" },
+          ],
+        },
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+      });
+    const previousOpenAppa = config.openappa.enabled;
+    try {
+      config.openappa.enabled = true;
+      expect((await launch()).spec.env).not.toHaveProperty(
+        "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
+      );
+      await GuardrailsDeploymentModel.setEnabled(true);
+      expect((await launch()).spec.env.ARCHESTRA_AGENT_RUNTIME_OPENAPPA).toBe(
+        "1",
+      );
+    } finally {
+      config.openappa.enabled = previousOpenAppa;
+    }
+  });
+
   test("routes the Agent's selected model through its scoped model router", async ({
     makeOrganization,
     makeAdmin,
@@ -82,9 +145,9 @@ describe("buildAgentRunLaunchSpec", () => {
         content: "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
@@ -893,7 +956,6 @@ describe("buildAgentRunLaunchSpec", () => {
         subscriptionSecret.id,
         {
           provider: "openai",
-          scope: "personal",
           userId: setup.user.id,
         },
       );

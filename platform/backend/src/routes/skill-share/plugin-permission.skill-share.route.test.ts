@@ -2,7 +2,9 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import { PluginModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import skillShareRoutes from "./skill-share.routes";
 
 vi.mock("@/auth");
@@ -40,6 +42,16 @@ describe("executable marketplace link permissions", () => {
     });
     if (!plugin) throw new Error("failed to seed plugin");
 
+    grantEverywhere(["plugin"], async () =>
+      Boolean(
+        await mockUserHasPermission.getMockImplementation()?.(
+          "",
+          "",
+          "plugin",
+          "admin" as never,
+        ),
+      ),
+    );
     for (const allowedAction of ["read", "admin"] as const) {
       mockUserHasPermission.mockImplementation(
         async (_userId, _organizationId, _resource, action) =>

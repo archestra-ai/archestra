@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -24,13 +24,14 @@ describe("PUT /api/internal_mcp_catalog/:id — reinstall reason", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

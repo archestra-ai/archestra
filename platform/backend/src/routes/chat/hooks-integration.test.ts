@@ -1,9 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -107,10 +107,17 @@ describe("POST /api/chat lifecycle hooks", () => {
   let conversationId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       const agent = await makeAgent({
         organizationId,

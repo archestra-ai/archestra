@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 type WebSocketListener = (event: Event & { data?: string }) => void;
@@ -65,6 +66,17 @@ describe("WebSocketService", () => {
 
   afterEach(() => {
     globalThis.WebSocket = OriginalWebSocket;
+    vi.unstubAllEnvs();
+  });
+
+  test("does not connect to the HTTP-only MSW integration backend", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
+    vi.resetModules();
+    const { default: websocketService } = await import("./websocket");
+
+    await websocketService.connect();
+
+    expect(FakeWebSocket.instances).toHaveLength(0);
   });
 
   test("queues messages until the socket is open", async () => {

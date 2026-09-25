@@ -7,11 +7,14 @@ import {
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./guardrails-policy.routes";
 
@@ -136,6 +139,9 @@ describe("guardrails policy authoring", () => {
       `include = ["/secret"]\n${content}`,
       // The host keeps its helper-bridge bearer to itself.
       `${content}[externals.authorities.review]\nurl = "http://127.0.0.1:9000/api/openappa/helpers/x/y"\ntoken_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"\n`,
+      // A glob over one server's tools composes as text but the runtime
+      // refuses to open it; once enabled, every proxied request would fail.
+      `${content}[[policy.tool]]\nname = "grain__*"\ndelta = {}\n`,
     ]) {
       const validation = await app.inject({
         method: "POST",
@@ -190,7 +196,9 @@ describe("guardrails policy authoring", () => {
         { content, expectedRevision: 0 },
         context,
       ),
-    ).rejects.toThrow("This policy changed");
+    ).rejects.toThrow(
+      "The policy changed. Read it again before proposing changes.",
+    );
   });
 
   test("granting a battery a credential needs credential update, removing it does not", async ({

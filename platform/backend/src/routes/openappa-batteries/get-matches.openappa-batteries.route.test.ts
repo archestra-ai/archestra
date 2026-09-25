@@ -1,7 +1,11 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
+import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-batteries.routes";
 
@@ -13,6 +17,8 @@ describe("guardrails battery matches", () => {
     const user = await makeUser();
     await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
     config.openappa.enabled = true;
+    // The shipped default governs the built-in tools, as every deployment seeds them.
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });
@@ -45,9 +51,10 @@ describe("guardrails battery matches", () => {
     });
     // A synced catalog is only a suggestion: nothing is declared for it.
     await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
-    expect((await matches(catalog.id)).json()).toEqual([
-      { battery: "github", evidence: "host", install: null },
-    ]);
+    expect((await matches(catalog.id)).json()).toEqual({
+      attach: "ready",
+      matches: [{ battery: "github", evidence: "host", install: null }],
+    });
     expect(
       (
         await app.inject({
@@ -57,13 +64,15 @@ describe("guardrails battery matches", () => {
         })
       ).statusCode,
     ).toBe(200);
-    expect((await matches(catalog.id)).json()).toMatchObject([
-      {
-        battery: "github",
-        evidence: "host",
-        install: { catalogId: catalog.id, status: "missing_credentials" },
-      },
-    ]);
+    expect((await matches(catalog.id)).json()).toMatchObject({
+      matches: [
+        {
+          battery: "github",
+          evidence: "host",
+          install: { catalogId: catalog.id, status: "missing_credentials" },
+        },
+      ],
+    });
   });
 
   test("a name-only match is reported undeclared, and an unrelated entry matches nothing", async ({
@@ -75,15 +84,20 @@ describe("guardrails battery matches", () => {
       serverUrl: "https://mcp.example.com/chat",
     });
     await openappaBatteriesService.onCatalogToolsChanged(byName.id);
-    expect((await matches(byName.id)).json()).toEqual([
-      { battery: "slack", evidence: "name", install: null },
-    ]);
+    // Nothing synced yet: the match is offered, the attach is not.
+    expect((await matches(byName.id)).json()).toEqual({
+      attach: "unsynced",
+      matches: [{ battery: "slack", evidence: "name", install: null }],
+    });
     const plain = await makeInternalMcpCatalog({
       organizationId,
       name: "Weather",
       serverUrl: "https://mcp.example.com/weather",
     });
-    expect((await matches(plain.id)).json()).toEqual([]);
+    expect((await matches(plain.id)).json()).toEqual({
+      attach: "unsynced",
+      matches: [],
+    });
   });
 
   test("another organization's catalog entry is not found", async ({

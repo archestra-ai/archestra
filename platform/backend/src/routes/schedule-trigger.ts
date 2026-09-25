@@ -7,18 +7,19 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
@@ -146,7 +147,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
@@ -156,10 +156,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let excludeActorUserId: string | undefined;
 
       if (showAll) {
-        const { success: isScheduledTaskAdmin } = await hasPermission(
-          { scheduledTask: ["admin"] },
-          headers,
-        );
+        const isScheduledTaskAdmin = await ResourcePermissions.allows({
+          userId: user.id,
+          organizationId,
+          resource: "scheduledTask",
+          scope: "*",
+          action: "read",
+        });
         if (isScheduledTaskAdmin) {
           actorUserId = undefined;
           if (actorUserIdsParam) {
@@ -387,11 +390,12 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: existing.actorUserId,
           organizationId,
         });
-        const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-          existing.actorUserId,
-          body.agentId,
-          actorIsAgentAdmin,
-        );
+        const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess({
+          userId: existing.actorUserId,
+          agentId: body.agentId,
+          isAgentAdmin: actorIsAgentAdmin,
+          action: "use",
+        });
         if (!actorHasAgentAccess) {
           throw new ApiError(
             400,
@@ -736,24 +740,27 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // scheduledTask:admin can access any trigger (incl. ones inside a project).
-  // Project oversight of schedules rides this existing permission — there is no
-  // separate project:admin path here.
-  const { success: isScheduledTaskAdmin } = await hasPermission(
-    { scheduledTask: ["admin"] },
-    params.headers,
-  );
+  // Reading every scheduled task (a grant at `*`) reaches any trigger, incl.
+  // ones inside a project. Project oversight of schedules rides this grant —
+  // there is no separate project path here.
+  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "scheduledTask",
+    scope: "*",
+    action: "read",
+  });
   if (isScheduledTaskAdmin) {
     return trigger;
   }
 
   // Project members may READ the schedules of a project they can access (and
-  // their runs). Reuses the same ProjectShareModel.userCanAccessProject check
+  // their runs). Reuses the same ProjectAccessModel.userCanAccessProject check
   // that backs GET /api/projects/:id (via projectService.requireViewable).
   // Deliberately read-only — see ScheduleTriggerAccess.
   if (params.access === "read" && project) {
     if (
-      await ProjectShareModel.userCanAccessProject({
+      await ProjectAccessModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,

@@ -1,5 +1,6 @@
 import {
   EmbeddingDimensionsSchema,
+  hasScopedPermission,
   isFreeModel,
   isProviderApiKeyOptional,
   LAZY_MODEL_SYNC_STATUS_HEADER,
@@ -38,6 +39,7 @@ import {
   modelSyncService,
   withDistinctDisplayNames,
 } from "@/services/model-sync";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
@@ -289,10 +291,33 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!isModelCatalogAdmin) {
         const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
           modelIds: models.map((model) => model.dbId),
-          principalTeamIds: userTeamIds,
+          organizationId,
+          userId: user.id,
+          action: "read",
         });
         visibleModels = models.filter((model) =>
           allowedModelIds.has(model.dbId),
+        );
+      }
+
+      if (
+        !(await userHasPermission(user.id, organizationId, "llmModel", "read"))
+      ) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const grants = await ResourcePermissions.resolveAll({
+          organizationId,
+          userId: user.id,
+        });
+        // SPDX-SnippetEnd
+        visibleModels = visibleModels.filter((model) =>
+          grants.some(
+            (grant) =>
+              grant.resource === "llmModel" &&
+              grant.action === "read" &&
+              (grant.scope === "*" || grant.scope === model.dbId),
+          ),
         );
       }
 
@@ -360,12 +385,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // "Microsoft 365 Copilot" entries. Models keep showing with an empty
       // key list, like the unlinked llm-proxy models below.
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isLlmProviderApiKeyAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmProviderApiKey",
-        "admin",
-      );
+      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "llmProviderApiKey",
+        scope: "*",
+        action: "update",
+      });
       const visibleKeys = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
         user.id,
@@ -425,7 +451,26 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning models with API keys",
       );
 
-      return reply.send(response);
+      if (await userHasPermission(user.id, organizationId, "llmModel", "read"))
+        return reply.send(response);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const grants = await ResourcePermissions.resolveAll({
+        organizationId,
+        userId: user.id,
+      });
+      // SPDX-SnippetEnd
+      return reply.send(
+        response.filter((model) =>
+          grants.some(
+            (grant) =>
+              grant.resource === "llmModel" &&
+              grant.action === "read" &&
+              (grant.scope === "*" || grant.scope === model.id),
+          ),
+        ),
+      );
     },
   );
 
@@ -451,6 +496,20 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { ignored } = request.body;
+      const permissionContext = {
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "llmModel" as const,
+      };
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const [objectGrants, wildcard] = await Promise.all([
+        ResourcePermissions.resolveAll(permissionContext),
+        ResourcePermissions.getEffective({ ...permissionContext, scope: "*" }),
+      ]);
+      // SPDX-SnippetEnd
+      const grants = [...objectGrants, ...wildcard.grants];
 
       const outcome = await runBulk({
         ids: request.body.ids,
@@ -461,6 +520,22 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           new Map(
             (await ModelModel.findByIds(ids)).map((model) => [model.id, model]),
           ),
+        authorize: async (model) => {
+          if (
+            !hasScopedPermission({
+              grants,
+              required: {
+                ...permissionContext,
+                scope: model.id,
+                action: "update",
+              },
+            })
+          )
+            throw new ApiError(
+              403,
+              "You do not have permission to modify this model",
+            );
+        },
         // The row's own name, as the pickers show it.
         describe: (model) => model.modelId,
         applyEach: async (model, id) => {
@@ -494,7 +569,18 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId,
+        userId: user.id,
+        resource: "llmModel",
+        scope: id,
+        action: "update",
+      });
+      // SPDX-SnippetEnd
       const existing = await ModelModel.findById(id);
       if (!existing) {
         throw new ApiError(404, "Model not found");
@@ -606,18 +692,10 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { teamIds, userIds, labels, ...modelUpdates } = body;
+      const { labels, ...modelUpdates } = body;
       const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
-      }
-
-      if (teamIds !== undefined) {
-        await ModelTeamModel.syncModelTeams(id, teamIds);
-      }
-
-      if (userIds !== undefined) {
-        await ModelUserModel.syncModelUsers(id, userIds);
       }
 
       // Only touch labels when the caller sent them, so an update that omits

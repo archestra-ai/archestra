@@ -1,21 +1,22 @@
 import { syncBuiltInSkills } from "@/database/seed";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import {
   builtInSkillSourceRef,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
 import {
+  accessGrants,
   afterEach,
   beforeEach,
   describe,
   expect,
   test,
-  useRouteTestApp,
 } from "@/test";
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 const [BASE_SKILL] = getEnabledBuiltInSkills();
 
@@ -113,13 +114,13 @@ describe("POST /api/skills/:id/reset", () => {
     const manual = await SkillModel.createWithFiles({
       skill: {
         organizationId,
-        scope: "org",
         name: "Manual skill",
         description: "desc",
         content: "# manual",
         sourceType: "manual",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const response = await app.inject({
@@ -132,7 +133,7 @@ describe("POST /api/skills/:id/reset", () => {
 });
 
 describe("POST /api/skills/:id/reset — scope visibility", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("a skill the caller cannot see returns 404, not a 400 that leaks its type", async ({
     makeUser,
@@ -147,7 +148,6 @@ describe("POST /api/skills/:id/reset — scope visibility", () => {
         content: "# private",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });

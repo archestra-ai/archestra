@@ -20,6 +20,23 @@ const PASSTHROUGH_CREDENTIAL: OpenAiCodexPassthrough = {
   userAgent: "opencode/test",
 };
 
+const COMPACTED_RESPONSE = {
+  id: "resp_compact",
+  object: "response.compaction",
+  created_at: 1,
+  output: [
+    {
+      type: "compaction",
+      encrypted_content: "opaque-provider-ciphertext",
+    },
+  ],
+  usage: {
+    input_tokens: 20,
+    output_tokens: 4,
+    total_tokens: 24,
+  },
+};
+
 /** A Responses-API SSE body the OpenAI SDK's stream parser can consume. */
 function sseResponse(events: unknown[]): Response {
   const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
@@ -32,6 +49,7 @@ function sseResponse(events: unknown[]): Response {
 type CodexResponsesClient = {
   responses: {
     create: (request: Record<string, unknown>) => Promise<unknown>;
+    compact: (request: Record<string, unknown>) => Promise<unknown>;
   };
 };
 
@@ -158,6 +176,49 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(response.id).toBe("resp_2");
   });
 
+  it("forwards native compact requests through stored subscription auth", async () => {
+    let capturedUrl: string | undefined;
+    let capturedHeaders: Headers | undefined;
+    let capturedBody: Record<string, unknown> | undefined;
+    const innerFetch = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = String(input);
+        capturedHeaders = new Headers(init?.headers);
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify(COMPACTED_RESPONSE), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    );
+    const client = createOpenAiCodexResponsesClient({
+      credential: CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [{ type: "compaction", encrypted_content: "previous-cipher" }],
+      instructions: "Compact this history.",
+      previous_response_id: "resp_previous",
+      prompt_cache_key: "compact-cache",
+    };
+
+    await expect(client.responses.compact(request)).resolves.toEqual(
+      COMPACTED_RESPONSE,
+    );
+    expect(new URL(capturedUrl ?? "http://invalid").pathname).toMatch(
+      /\/responses\/compact$/,
+    );
+    expect(capturedBody).toEqual(request);
+    expect(capturedBody).not.toHaveProperty("stream");
+    expect(capturedBody).not.toHaveProperty("store");
+    expect(capturedBody).not.toHaveProperty("include");
+    expect(capturedHeaders?.get("authorization")).toBe("Bearer at_fresh");
+    expect(capturedHeaders?.get("chatgpt-account-id")).toBe("acc_123");
+    expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
+  });
+
   it("forwards only request-local OAuth headers without refreshing or persisting them", async () => {
     let capturedHeaders: Headers | undefined;
     const innerFetch = vi.fn(
@@ -204,6 +265,92 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
     // The injected request transport is the only fetch path. A bridge request
     // must never redeem/rotate an OAuth token through the global token endpoint.
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards Codex's version even when its custom provider omits that header", async () => {
+    const versions: Array<string | null> = [];
+    const innerFetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        versions.push(new Headers(init?.headers).get("version"));
+        return sseResponse([
+          {
+            type: "response.completed",
+            response: { id: "resp_version", status: "completed", output: [] },
+          },
+        ]);
+      },
+    );
+    for (const { originator, version } of [
+      { originator: "codex_cli_rs", version: undefined },
+      { originator: "codex_exec", version: undefined },
+      { originator: "codex_exec", version: "0.157.2" },
+    ]) {
+      const client = createOpenAiCodexPassthroughResponsesClient({
+        credential: {
+          ...PASSTHROUGH_CREDENTIAL,
+          originator,
+          userAgent: `${originator}/0.156.1`,
+          version,
+        },
+        options: { source: "api" },
+        innerFetch,
+      }) as unknown as CodexResponsesClient;
+      const stream = (await client.responses.create({
+        model: "gpt-5.6-sol",
+        input: "hi",
+        stream: true,
+      })) as AsyncIterable<unknown>;
+      for await (const _event of stream) {
+        // drain
+      }
+    }
+
+    expect(versions).toEqual(["0.156.1", "0.156.1", "0.157.2"]);
+  });
+
+  it("forwards native compact requests through request-local OAuth", async () => {
+    let capturedUrl: string | undefined;
+    let capturedHeaders: Headers | undefined;
+    let capturedBody: Record<string, unknown> | undefined;
+    const innerFetch = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = String(input);
+        capturedHeaders = new Headers(init?.headers);
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify(COMPACTED_RESPONSE), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    );
+    const client = createOpenAiCodexPassthroughResponsesClient({
+      credential: PASSTHROUGH_CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+    const request = {
+      model: "gpt-5.6-sol",
+      input: "history",
+      previous_response_id: "resp_previous",
+    };
+
+    await expect(client.responses.compact(request)).resolves.toEqual(
+      COMPACTED_RESPONSE,
+    );
+    expect(new URL(capturedUrl ?? "http://invalid").pathname).toMatch(
+      /\/responses\/compact$/,
+    );
+    expect(capturedBody).toEqual(request);
+    expect(capturedHeaders?.get("authorization")).toBe("Bearer at_ephemeral");
+    expect(capturedHeaders?.get("chatgpt-account-id")).toBe("acc_ephemeral");
+    expect(capturedHeaders?.get("x-openai-internal-codex-residency")).toBe(
+      "us",
+    );
+    expect(capturedHeaders?.get("originator")).toBe("opencode");
+    expect(capturedHeaders?.get("session-id")).toBe("session_ephemeral");
+    expect(capturedHeaders?.get("user-agent")).toBe("opencode/test");
+    expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 

@@ -109,6 +109,7 @@ describe("permission-sync end-to-end (GitLab, auto-sync-permissions)", () => {
         name: "GitLab auto-sync",
         connectorType: "gitlab",
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         secretId: secret.id,
         config: {
           type: "gitlab",

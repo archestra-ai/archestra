@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { type A2AActor, A2AErrorKind } from "./a2a-base";
 import {
   A2AContextManager,

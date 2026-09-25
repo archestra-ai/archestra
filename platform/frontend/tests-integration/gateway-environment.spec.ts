@@ -25,7 +25,7 @@ test("opening and saving a gateway preserves its saved restricted environment", 
     method: "get",
     url: "/api/user/permissions",
     body: makeUserPermissions({
-      mcpGateway: ["read", "create", "update", "delete", "admin"],
+      mcpGateway: ["read", "create", "update", "delete"],
     }),
   });
   await mswControl.use({

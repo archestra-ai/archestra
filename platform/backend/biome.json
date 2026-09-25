@@ -7,5 +7,111 @@
         "noConsole": "error"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**/*.test.ts", "!src/**/*.ee.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/server": "Tests should import the small Fastify factory module, not the server entry point.",
+                  "@/test": {
+                    "importNames": ["useRouteTestApp"],
+                    "message": "Import useRouteTestApp directly from @/test/route-test-app."
+                  }
+                },
+                "patterns": [
+                  {
+                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.ee.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/server": "Tests should import the small Fastify factory module, not the server entry point.",
+                  "@/test": {
+                    "importNames": ["useRouteTestApp"],
+                    "message": "Import useRouteTestApp directly from @/test/route-test-app."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.unit.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/test": "Database-free unit tests should import test APIs directly from vitest.",
+                  "@/config": "Database-free unit tests must not import the application config, which requires a database URL at runtime.",
+                  "@/server": "Database-free unit tests must not load the server entry point.",
+                  "@/models": "Database-free unit tests must not load models.",
+                  "@/database": "Database-free unit tests must not load the database.",
+                  "@archestra/shared": "Import from a focused @archestra/shared subpath so unit tests do not load the shared root barrel."
+                },
+                "patterns": [
+                  {
+                    "group": ["@/models/**", "@/database/**"],
+                    "message": "Database-free unit tests must not load models or database modules."
+                  },
+                  {
+                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/test/index.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "./route-test-app": "Keep route test helpers out of the general @/test barrel.",
+                  "./route-test-app.ts": "Keep route test helpers out of the general @/test barrel."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

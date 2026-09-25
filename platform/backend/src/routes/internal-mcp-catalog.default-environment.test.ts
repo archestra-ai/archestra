@@ -1,9 +1,12 @@
-import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { EnvironmentResourceDefaultModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -16,29 +19,23 @@ const mockHasPermission = hasPermission as Mock;
 /**
  * POST /api/internal_mcp_catalog binds a new catalog item to the org's
  * configured landing environment for MCP servers when the caller does not name
- * one. Harness mirrors internal-mcp-catalog.restricted-environment.test.ts: the
- * `mcpRegistry:deploy-to-restricted` probe answers from a per-test flag so the
- * restricted-default fallback can be exercised; every other probe is granted.
+ * one. Every role probe is granted; whether the caller may deploy into an
+ * environment is a `use` grant on it, so a restricted default is exercised by
+ * granting or withholding that.
  */
 describe("Internal MCP Catalog - configured default environment", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  let canDeployToRestricted: boolean;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    canDeployToRestricted = false;
-    mockHasPermission.mockImplementation(async (permissions: Permissions) => {
-      if (permissions.mcpRegistry?.includes("deploy-to-restricted")) {
-        return { success: canDeployToRestricted, error: null };
-      }
-      return { success: true, error: null };
-    });
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -154,10 +151,9 @@ describe("Internal MCP Catalog - configured default environment", () => {
   });
 
   test("a restricted default the caller may not deploy to falls back to the default environment", async () => {
-    canDeployToRestricted = false;
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,
@@ -177,10 +173,14 @@ describe("Internal MCP Catalog - configured default environment", () => {
   });
 
   test("a restricted default applies for a caller who may deploy there", async () => {
-    canDeployToRestricted = true;
-    const locked = await createEnvironment({
+    const locked = await createRestrictedEnvironment({
       organizationId,
-      data: { name: "Locked", restricted: true },
+      data: { name: "Locked" },
+    });
+    await grantEnvironmentUse({
+      organizationId,
+      environmentId: locked.id,
+      userId: user.id,
     });
     await EnvironmentResourceDefaultModel.setForResource({
       organizationId,

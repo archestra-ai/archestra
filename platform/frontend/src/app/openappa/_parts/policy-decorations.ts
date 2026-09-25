@@ -3,21 +3,26 @@ import type {
   PolicyBattery,
   PolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
+import { BATTERY_STATUS } from "./battery-status";
 
 type BatteryStatus = PolicyBattery["status"];
 
 /** How a battery's status reads wherever it is shown: a badge, an editor hover. */
-export const BATTERY_STATUS_BADGES: Record<
-  BatteryStatus,
-  { label: string; variant: "secondary" | "outline" | "destructive" }
-> = {
-  active: { label: "Active", variant: "secondary" },
-  missing_credentials: { label: "Needs a credential", variant: "destructive" },
-  naming_conflict: { label: "Tool name conflict", variant: "destructive" },
-  server_missing: { label: "No server bound", variant: "outline" },
-  refused: { label: "Not enforced", variant: "destructive" },
-  unavailable: { label: "Package missing", variant: "destructive" },
-};
+export function batteryStatusBadge(status: BatteryStatus): {
+  label: string;
+  variant: "secondary" | "outline" | "destructive";
+} {
+  const { label, severity } = BATTERY_STATUS[status];
+  return {
+    label,
+    variant:
+      severity === "ok"
+        ? "secondary"
+        : severity === "warning"
+          ? "outline"
+          : "destructive",
+  };
+}
 
 export type PolicyAnnotation =
   | { kind: "battery"; line: number; name: string; status: BatteryStatus }
@@ -80,6 +85,47 @@ type ModelDecoration = NonNullable<
   Parameters<CodeEditor["createDecorationsCollection"]>[0]
 >[number];
 
+/**
+ * Reveal the rule header linked from a tool's policy source and mark it with
+ * a whole-line highlight. An unfocused editor paints its selection in a faint
+ * inactive colour, so the mark is a decoration rather than a selection. The
+ * mark goes away as soon as the reader clicks, moves the cursor or types.
+ * Returns a function that removes it early.
+ */
+export function focusPolicyLine(
+  editor: CodeEditor,
+  line?: number,
+): (() => void) | undefined {
+  if (!line || line > (editor.getModel()?.getLineCount() ?? 0)) return;
+  editor.revealLineInCenter(line);
+  editor.setPosition({ lineNumber: line, column: 1 });
+  const highlight = editor.createDecorationsCollection([
+    {
+      range: {
+        startLineNumber: line,
+        startColumn: 1,
+        endLineNumber: line,
+        endColumn: 1,
+      },
+      options: {
+        isWholeLine: true,
+        className: "openappa-focus-line",
+        linesDecorationsClassName: "openappa-focus-line-gutter",
+      },
+    },
+  ]);
+  // Registered after `setPosition`, so only the reader's own moves count.
+  const listeners = [
+    editor.onMouseDown(() => clear()),
+    editor.onDidChangeCursorPosition(() => clear()),
+  ];
+  function clear() {
+    highlight.clear();
+    for (const listener of listeners) listener.dispose();
+  }
+  return clear;
+}
+
 function isWarning(annotation: PolicyAnnotation): boolean {
   return annotation.kind === "unusedAlias" || annotation.status !== "active";
 }
@@ -87,5 +133,5 @@ function isWarning(annotation: PolicyAnnotation): boolean {
 function annotationMessage(annotation: PolicyAnnotation): string {
   return annotation.kind === "unusedAlias"
     ? "No included battery declares this namespace."
-    : `${annotation.name}: ${BATTERY_STATUS_BADGES[annotation.status].label}`;
+    : `${annotation.name}: ${BATTERY_STATUS[annotation.status].label}`;
 }

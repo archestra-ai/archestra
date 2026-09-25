@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { describe, expect, test } from "vitest";
 import db from "@/database";
-import { describe, expect, test } from "@/test";
 import { notDeleted, softDeleteColumns } from "./schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "./soft-delete";
 

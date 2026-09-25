@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import config from "@/config";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
@@ -700,6 +701,10 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("falls back to Vertex AI when enabled and no models exist", async () => {
+    for (const value of Object.values(config.chat)) {
+      if (value && typeof value === "object" && "apiKey" in value)
+        value.apiKey = "";
+    }
     vi.mocked(isVertexAiEnabled).mockReturnValue(true);
 
     const result = await resolveConversationLlmSelectionForAgent({

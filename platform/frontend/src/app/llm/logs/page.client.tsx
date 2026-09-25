@@ -46,7 +46,7 @@ import {
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -256,7 +256,7 @@ function SessionsTable() {
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
-  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["read"] }, "*");
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;

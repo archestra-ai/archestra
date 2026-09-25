@@ -8,7 +8,14 @@ import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
 import { InternalMcpCatalogModel } from "@/models";
 import { reinstallMultitenantCatalog } from "@/services/mcp-reinstall";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -78,12 +85,11 @@ describe("POST /api/internal_mcp_catalog/:id/reinstall", () => {
       {
         name: "multitenant-local-server",
         serverType: "local",
-        scope: "org",
         multitenant: true,
         catalogReinstallRequired: overrides.catalogReinstallRequired ?? true,
         localConfig: { dockerImage: "registry.example.com/mcp:latest" },
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
   }
 
@@ -119,9 +125,8 @@ describe("POST /api/internal_mcp_catalog/:id/reinstall", () => {
         name: "remote-server",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       },
-      { organizationId, authorId: user.id },
+      { organizationId, authorId: user.id, ...accessGrants("org") },
     );
 
     const response = await app.inject({

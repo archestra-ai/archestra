@@ -5,7 +5,8 @@ import type { LucideIcon } from "lucide-react";
 import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
+import { cn } from "@/lib/utils/tailwind";
 
 interface McpCatalogIconProps {
   icon?: string | null;
@@ -28,6 +29,7 @@ export function McpCatalogIcon({
   fallback: Fallback = Server,
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
+  const imageTone = useImageTone(icon?.startsWith("data:") ? icon : null);
 
   // All variants are decorative: the icon always sits next to the server's
   // visible name, so it is hidden from assistive technologies.
@@ -60,7 +62,11 @@ export function McpCatalogIcon({
         alt=""
         width={size}
         height={size}
-        className={cn("shrink-0 rounded-sm object-contain", className)}
+        className={cn(
+          "shrink-0 rounded-sm object-contain",
+          imageToneClassName(imageTone),
+          className,
+        )}
         style={{ width: size, height: size }}
       />
     );

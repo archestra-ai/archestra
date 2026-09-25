@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, ProjectModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -38,7 +38,7 @@ describe("DELETE /api/agents/:id — projects pinning the agent", () => {
   test("unpins the agent, so restoring it does not re-pin the project", async ({
     makeInternalAgent,
   }) => {
-    const agent = await makeInternalAgent({ organizationId, scope: "org" });
+    const agent = await makeInternalAgent({ organizationId });
     const project = await projectService.create({
       organizationId,
       userId: admin.id,
@@ -63,8 +63,8 @@ describe("DELETE /api/agents/:id — projects pinning the agent", () => {
   });
 
   test("leaves other projects' pins alone", async ({ makeInternalAgent }) => {
-    const doomed = await makeInternalAgent({ organizationId, scope: "org" });
-    const keeper = await makeInternalAgent({ organizationId, scope: "org" });
+    const doomed = await makeInternalAgent({ organizationId });
+    const keeper = await makeInternalAgent({ organizationId });
     const other = await projectService.create({
       organizationId,
       userId: admin.id,

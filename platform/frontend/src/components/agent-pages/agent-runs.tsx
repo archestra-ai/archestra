@@ -8,10 +8,9 @@ import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
+import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ScopeBadge } from "@/components/scope-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -20,8 +19,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
-import { useSession } from "@/lib/auth/auth.query";
-import { cn } from "@/lib/utils";
+import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
+import { cn } from "@/lib/utils/tailwind";
 
 export function AgentRuns({ agentId }: { agentId: string }) {
   const { data: session } = useSession();
@@ -154,12 +153,16 @@ function RunDetails({
 }) {
   const active = !run.endedAt;
   const startedBy = `Started by ${initiatorLabel(run)}${canAttach ? " (you)" : ""}`;
-  const hasNoRecipients =
-    (run.shareVisibility === "user" && run.shareUserNames?.length === 0) ||
-    (run.shareVisibility === "team" && run.shareTeamNames?.length === 0);
-  const recipientsHidden =
-    (run.shareVisibility === "user" && run.shareUserNames === null) ||
-    (run.shareVisibility === "team" && run.shareTeamNames === null);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const capabilities = useScopedCapabilities();
+  const canManageAccess =
+    canAttach ||
+    capabilities.data?.some(
+      (grant) =>
+        grant.resource === "agentRun" &&
+        grant.action === "manage-permissions" &&
+        (grant.scope === run.taskId || grant.scope === "*"),
+    );
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -186,27 +189,14 @@ function RunDetails({
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="min-w-0 break-words">{startedBy}</span>
             <span aria-hidden>·</span>
-            <span>Sharing</span>
-            {recipientsHidden ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" tabIndex={0}>
-                    {run.shareVisibility === "team" ? "Team" : "Shared"}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Only the run owner can see sharing recipients.
-                </TooltipContent>
-              </Tooltip>
-            ) : hasNoRecipients ? (
-              <Badge variant="outline">No recipients</Badge>
-            ) : (
-              <ScopeBadge
-                scope={runScope(run)}
-                teamNames={run.shareTeamNames}
-                userNames={run.shareUserNames}
-                showLabel
-              />
+            {canManageAccess && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPermissionsOpen(true)}
+              >
+                Permissions
+              </Button>
             )}
             {run.projectId && <span>+ project access</span>}
             <Tooltip>
@@ -253,6 +243,11 @@ function RunDetails({
           <AgentRunLogs run={run} title="" />
         )}
       </div>
+      <ShareAgentRunDialog
+        taskId={run.taskId}
+        open={permissionsOpen}
+        onOpenChange={setPermissionsOpen}
+      />
     </section>
   );
 }
@@ -267,10 +262,4 @@ function initiatorLabel(run: AgentRunListItem): string {
   if (run.actorKind === "team") return "a team";
   if (run.actorKind === "system") return "automation";
   return "an unknown user";
-}
-
-function runScope(run: AgentRunListItem): "personal" | "team" | "org" {
-  if (run.shareVisibility === "organization") return "org";
-  if (run.shareVisibility === "team") return "team";
-  return "personal";
 }

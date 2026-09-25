@@ -5,35 +5,48 @@ import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
 import SkillModel from "@/models/skill";
 import SkillFileModel from "@/models/skill-file";
 import { backfillSkillPublicationArtifacts } from "@/services/skill-publication-backfill";
-import { expect, test, vi } from "@/test";
+import { accessGrants, expect, type TestAccess, test, vi } from "@/test";
 import type { InsertSkill, Skill } from "@/types";
-import { handleSkillMethod, serveSkillResource } from "./skills";
+import { handleSkillMethod, serveSkillResource as serveSkill } from "./skills";
+
+/**
+ * `serveSkillResource` for a token with no user, narrowed to the contents
+ * shape. These skills have no author, so they are addressed by the bare form,
+ * which a caller with no user resolves among the org-published skills.
+ */
+async function serveSkillResource(params: { uri: string; agentId: string }) {
+  const outcome = await serveSkill({ ...params, callerUserId: null });
+  if (outcome && "error" in outcome) {
+    throw new Error(`expected contents, got ${JSON.stringify(outcome)}`);
+  }
+  return outcome;
+}
 
 async function makeSkill(
   organizationId: string,
-  overrides: Partial<InsertSkill> = {},
+  overrides: Partial<Omit<InsertSkill, "scope">> & { access?: TestAccess } = {},
   files: Array<{
     path: string;
     content: string;
     encoding?: "utf8" | "base64";
   }> = [],
 ): Promise<Skill> {
+  const { access = "org", ...skillOverrides } = overrides;
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId,
       name: `skill-${crypto.randomUUID().slice(0, 8)}`,
       description: "A test skill",
       content: "# Instructions\n\nDo the thing.",
-      scope: "org",
-      latestVersion: 1,
-      ...overrides,
-    } as InsertSkill,
+      ...skillOverrides,
+    },
     files: files.map((file) => ({
       path: file.path,
       content: file.content,
       encoding: file.encoding ?? "utf8",
       kind: "reference" as const,
     })),
+    ...accessGrants(access),
   });
   if (!skill) throw new Error("failed to create test skill");
   return skill;
@@ -55,6 +68,7 @@ function call(agentId: string, method: string, params: object = {}) {
   return handleSkillMethod({
     body: { jsonrpc: "2.0", id: 1, method, params },
     agentId,
+    callerUserId: null,
   });
 }
 
@@ -398,16 +412,17 @@ test("skills/list omits an orphaned personal skill instead of failing", async ({
 }) => {
   // `skills.author_id` is ON DELETE SET NULL, so a personal skill row can
   // predate the cleanup that now soft-deletes them with their author. The
-  // author id is a URI segment, so no `skill://` URI can name such a row: it
-  // must be withheld — and one bad row must never turn the whole catalog
-  // listing into an internal error.
+  // author id is a URI segment, so the row lost its address. It is not
+  // published to the organization either, so no caller can resolve its bare
+  // URI: it must be withheld — and one bad row must never turn the whole
+  // catalog listing into an internal error.
   const org = await makeOrganization();
   const agent = await makeAgent({ organizationId: org.id });
   const author = await makeUser();
   const survivor = await makeSkill(org.id, { name: "survivor" });
   const personal = await makeSkill(org.id, {
     name: "orphaned-notes",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   await assignSkill({ agentId: agent.id, skillId: survivor.id });

@@ -2,9 +2,9 @@ import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ToolModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -41,7 +41,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
     // Default: K8s runtime not configured (the common CI/local-test state).
@@ -52,6 +52,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -272,6 +273,21 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, beta.id));
     expect(catalogRow.name).toBe("beta");
+  });
+
+  test("the 409 gate rejects the built-in tools' prefix", async () => {
+    const beta = await createCatalog({ name: "beta", serverType: "remote" });
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${beta.id}`,
+      payload: { name: "Archestra" },
+    });
+
+    expect(putResponse.statusCode).toBe(409);
+    expect(putResponse.json().error.internal_code).toBe(
+      "catalog_name_conflict",
+    );
   });
 
   test("a case-only self-rename is allowed (self excluded from the 409 gate)", async () => {

@@ -3,6 +3,7 @@
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { GuardrailsDeploymentToggle } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,10 +23,10 @@ import {
   useHasPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useDisableBasicAuth } from "@/lib/config/config.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
   label: string;
@@ -39,6 +40,7 @@ export function SidebarWarningsAccordion() {
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
   const disableBasicAuth = useDisableBasicAuth();
+  const openappaEnabled = useFeature("openappaEnabled");
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
@@ -90,7 +92,7 @@ export function SidebarWarningsAccordion() {
     },
   ].filter((w): w is Warning => Boolean(w));
 
-  if (warnings.length === 0) {
+  if (warnings.length === 0 && !openappaEnabled) {
     return null;
   }
 
@@ -100,7 +102,7 @@ export function SidebarWarningsAccordion() {
     <SidebarGroup className="p-0 ">
       <SidebarGroupContent>
         <SidebarMenu>
-          {isCollapsed ? (
+          {isCollapsed && warnings.length > 0 ? (
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -152,6 +154,7 @@ export function SidebarWarningsAccordion() {
           ) : (
             warnings.map((w) => <WarningItem key={w.label} {...w} />)
           )}
+          {openappaEnabled && <GuardrailsDeploymentToggle />}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

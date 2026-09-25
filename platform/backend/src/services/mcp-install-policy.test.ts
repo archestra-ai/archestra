@@ -11,7 +11,7 @@ import {
   flagImageApprovalRequired,
   holdInstallIfImageGated,
 } from "@/services/mcp-install-policy";
-import { describe, expect, mustExist, test } from "@/test";
+import { describe, expect, mustExist, type TestAccess, test } from "@/test";
 import type { CatalogItemApprovalStatus } from "@/types";
 
 const UNTRUSTED_IMAGE = "ghcr.io/evil/x:1";
@@ -44,7 +44,7 @@ describe("assertInstallAllowedOrBlock", () => {
     const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -68,7 +68,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -92,7 +92,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: TRUSTED_IMAGE },
     });
@@ -106,7 +106,7 @@ describe("assertInstallAllowedOrBlock", () => {
     expect(await approvalStatus(catalog.id)).toBeNull();
   });
 
-  test("gates local items of any scope authored by a non-admin", async ({
+  test("gates local items of any audience authored by a non-admin", async ({
     makeOrganization,
     makeInternalMcpCatalog,
   }) => {
@@ -114,10 +114,14 @@ describe("assertInstallAllowedOrBlock", () => {
     await OrganizationModel.patch(org.id, {
       defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
     });
-    for (const scope of ["personal", "team", "org"] as const) {
+    for (const access of [
+      "personal",
+      { teams: [] },
+      "org",
+    ] satisfies TestAccess[]) {
       const catalog = await makeInternalMcpCatalog({
         organizationId: org.id,
-        scope,
+        access,
         serverType: "local",
         localConfig: { dockerImage: UNTRUSTED_IMAGE },
       });
@@ -141,7 +145,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "remote",
       serverUrl: "https://example.com/mcp/",
     });
@@ -163,7 +167,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { command: "node server.js" },
     });
@@ -185,7 +189,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: config.orchestrator.mcpServerBaseImage },
     });
@@ -207,7 +211,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -238,7 +242,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       environmentId: environment.id,
       localConfig: { dockerImage: "ghcr.io/acme/server:1" },
@@ -264,7 +268,7 @@ describe("assertInstallAllowedOrBlock", () => {
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -307,25 +311,25 @@ describe("flagImageApprovalRequired", () => {
 
     const gated = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
     const trusted = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/acme/server:1" },
     });
     const teamScoped = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "team",
+      access: { teams: [] },
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
     const approved = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
@@ -352,7 +356,7 @@ describe("flagImageApprovalRequired", () => {
     const org = await makeOrganization();
     const item = await makeInternalMcpCatalog({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
@@ -378,14 +382,14 @@ describe("flagImageApprovalRequired", () => {
     const byAdmin = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: admin.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
     const byMember = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -415,7 +419,7 @@ describe("author privilege exemption", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: admin.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -444,7 +448,7 @@ describe("author privilege exemption", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: editor.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -473,7 +477,7 @@ describe("author privilege exemption", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -504,7 +508,7 @@ describe("holdInstallIfImageGated", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -530,7 +534,7 @@ describe("holdInstallIfImageGated", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: admin.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });
@@ -556,7 +560,7 @@ describe("holdInstallIfImageGated", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
       serverType: "local",
       localConfig: { dockerImage: UNTRUSTED_IMAGE },
     });

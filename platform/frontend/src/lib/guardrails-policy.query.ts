@@ -5,14 +5,15 @@ import {
   guardrailsPolicyQueryKey,
   invalidatePolicyViews,
 } from "@/lib/openappa-policy-views";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export type GuardrailsPolicy =
   archestraApiTypes.GetGuardrailsPolicyResponses["200"];
 
-export function useGuardrailsPolicy() {
+export function useGuardrailsPolicy({ enabled = true } = {}) {
   return useQuery({
     queryKey: guardrailsPolicyQueryKey,
+    enabled,
     refetchInterval: 10000,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getGuardrailsPolicy();

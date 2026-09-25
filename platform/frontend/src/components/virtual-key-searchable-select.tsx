@@ -6,7 +6,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type VirtualKeyProviderApiKey = {
   provider: string;

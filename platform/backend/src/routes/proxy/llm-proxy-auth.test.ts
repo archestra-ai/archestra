@@ -6,7 +6,7 @@ import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -125,7 +125,6 @@ describe("validateVirtualApiKey", () => {
       organizationId: org.id,
       name: "pt",
       keyType: "passthrough",
-      scope: "personal",
       authorId: owner.id,
     });
 
@@ -159,6 +158,7 @@ describe("validateVirtualApiKey", () => {
       ],
       name: "expired-key",
       expiresAt: new Date("2020-01-01"),
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -188,6 +188,7 @@ describe("validateVirtualApiKey", () => {
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "openai-key",
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -219,6 +220,7 @@ describe("validateVirtualApiKey", () => {
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [{ provider: "openai", providerApiKeyId: openaiKey.id }],
       name: "out-of-band-swapped-marker",
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -250,15 +252,14 @@ describe("validateVirtualApiKey", () => {
     });
     const xaiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: owner.id,
     });
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       providerApiKeys: [{ provider: "xai", providerApiKeyId: xaiKey.id }],
       name: "legacy-shared-x-premium",
-      scope: "org",
       authorId: owner.id,
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -290,6 +291,7 @@ describe("validateVirtualApiKey", () => {
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "valid-key",
+      ...accessGrants("org"),
     });
 
     const result = await validateVirtualApiKey({
@@ -312,14 +314,12 @@ describe("validateVirtualApiKey", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
     const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "github-copilot",
-      scope: "personal",
       userId: user.id,
     });
 
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "my-copilot-vk",
-      scope: "personal",
       authorId: user.id,
       providerApiKeys: [
         { provider: "github-copilot", providerApiKeyId: copilotKey.id },
@@ -345,7 +345,6 @@ describe("validateVirtualApiKey", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
     const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "github-copilot",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -354,11 +353,11 @@ describe("validateVirtualApiKey", () => {
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "legacy-shared-copilot-vk",
-      scope: "org",
       authorId: user.id,
       providerApiKeys: [
         { provider: "github-copilot", providerApiKeyId: copilotKey.id },
       ],
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -394,6 +393,7 @@ describe("validateVirtualApiKey", () => {
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "key-with-base-url",
+      ...accessGrants("org"),
     });
 
     const result = await validateVirtualApiKey({
@@ -420,6 +420,7 @@ describe("validateVirtualApiKey", () => {
         { provider: systemKey.provider, providerApiKeyId: systemKey.id },
       ],
       name: "virtual-for-system-openai-key",
+      ...accessGrants("org"),
     });
 
     const result = await validateVirtualApiKey({
@@ -448,6 +449,7 @@ describe("validateVirtualApiKey", () => {
         { provider: systemKey.provider, providerApiKeyId: systemKey.id },
       ],
       name: "virtual-for-system-key",
+      ...accessGrants("org"),
     });
 
     const result = await validateVirtualApiKey({
@@ -476,6 +478,7 @@ describe("validateVirtualApiKey", () => {
       providerApiKeys: [
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
+      ...accessGrants("org"),
     });
 
     await expect(
@@ -1160,16 +1163,16 @@ describe("validatePassthroughVirtualKey", () => {
     const org = await makeOrganization();
     const owner = await makeUser();
     await makeMember(owner.id, org.id, { role: "member" });
+    // The organization's proxy, which every member reaches.
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "org",
+      isDefault: true,
     });
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "pt",
       keyType: "passthrough",
-      scope: "personal",
       authorId: owner.id,
     });
 
@@ -1191,14 +1194,13 @@ describe("validatePassthroughVirtualKey", () => {
     const personalProxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "pt",
       keyType: "passthrough",
-      scope: "personal",
       authorId: owner.id,
     });
 
@@ -1220,13 +1222,11 @@ describe("validatePassthroughVirtualKey", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "org",
     });
     const { value } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "pt",
       keyType: "passthrough",
-      scope: "personal",
       authorId: owner.id,
       expiresAt: new Date(Date.now() - 1000),
     });
@@ -1248,7 +1248,6 @@ describe("validatePassthroughVirtualKey", () => {
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",
-      scope: "org",
     });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(org.id, secret.id, {
@@ -1258,7 +1257,6 @@ describe("validatePassthroughVirtualKey", () => {
       organizationId: org.id,
       name: "std",
       keyType: "standard",
-      scope: "personal",
       authorId: owner.id,
       providerApiKeys: [
         { provider: parentKey.provider, providerApiKeyId: parentKey.id },

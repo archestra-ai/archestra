@@ -3,8 +3,8 @@ import db, { schema } from "@/database";
 import { softDelete } from "@/database/soft-delete";
 import { ProjectModel } from "@/models";
 import ConversationModel from "@/models/conversation";
-import { projectService } from "@/services/project";
 import { expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import { resolveProjectFileScope } from "./project-file-scope";
 import { SkillSandboxError } from "./types";
 
@@ -12,9 +12,11 @@ test("resolveProjectFileScope returns the project's id and name", async ({
   makeUser,
   makeOrganization,
   makeAgent,
+  makeMember,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
+  await makeMember(user.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
   const project = await ProjectModel.create({
     organizationId: org.id,
@@ -98,7 +100,6 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser();
-  // Org-wide sharing requires the member role's project:share-org.
   await makeMember(owner.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
   const project = await ProjectModel.create({
@@ -107,10 +108,10 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
     name: "shared-project",
     description: null,
   });
-  await projectService.setShare({
-    id: project.id,
+  await shareForTest({
+    resource: "project",
+    scope: project.id,
     organizationId: org.id,
-    userId: owner.id,
     visibility: "organization",
     teamIds: [],
   });
@@ -121,7 +122,9 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
     projectId: project.id,
   });
 
+  // Organization sharing reaches the organization's members.
   const member = await makeUser({ email: "org-share-member@test.com" });
+  await makeMember(member.id, org.id);
   const scope = await resolveProjectFileScope({
     conversationId: conv.id,
     userId: member.id,

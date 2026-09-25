@@ -1,4 +1,5 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -25,6 +26,7 @@ import type {
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -33,7 +35,9 @@ class KnowledgeBaseConnectorModel {
     offset?: number;
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
+    canManageAutoSync?: boolean;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
      * in that environment (environment isolation). Omit to return all
@@ -53,6 +57,8 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params.canReadAll,
+            canManageAutoSync: params.canManageAutoSync,
+            userId: params.viewerUserId,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
           }),
@@ -107,7 +113,9 @@ class KnowledgeBaseConnectorModel {
     excludeConnectorTypes?: ConnectorType[];
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
+    canManageAutoSync?: boolean;
     status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
@@ -135,6 +143,8 @@ class KnowledgeBaseConnectorModel {
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({
         canReadAll,
+        canManageAutoSync: params.canManageAutoSync,
+        userId: params.viewerUserId,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
@@ -204,7 +214,9 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
+      canManageAutoSync?: boolean;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
     },
@@ -217,6 +229,8 @@ class KnowledgeBaseConnectorModel {
         description: schema.knowledgeBaseConnectorsTable.description,
         visibility: schema.knowledgeBaseConnectorsTable.visibility,
         teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
+        syncPermissionsFromSource:
+          schema.knowledgeBaseConnectorsTable.syncPermissionsFromSource,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -261,6 +275,8 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
+            canManageAutoSync: params?.canManageAutoSync,
+            userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -277,7 +293,9 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
+      canManageAutoSync?: boolean;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
     if (knowledgeBaseIds.length === 0) return [];
@@ -289,6 +307,8 @@ class KnowledgeBaseConnectorModel {
         description: schema.knowledgeBaseConnectorsTable.description,
         visibility: schema.knowledgeBaseConnectorsTable.visibility,
         teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
+        syncPermissionsFromSource:
+          schema.knowledgeBaseConnectorsTable.syncPermissionsFromSource,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -335,6 +355,8 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
+            canManageAutoSync: params?.canManageAutoSync,
+            userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -372,18 +394,47 @@ class KnowledgeBaseConnectorModel {
 
   static async create(
     data: InsertKnowledgeBaseConnector,
+    /** Explicit starting audience; omitted derives one from the visibility. */
+    options?: {
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
   ): Promise<KnowledgeBaseConnector> {
-    const [result] = await db
-      .insert(schema.knowledgeBaseConnectorsTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: data,
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave a connector nobody can reach.
+    return await withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.knowledgeBaseConnectorsTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              ...data,
+              syncPermissionsFromSource: syncSwitchFor(data) ?? false,
+            },
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: result.organizationId,
+        resource: "knowledgeConnector",
+        scope: result.id,
+        grants: options?.initialPermissionGrants,
+        // The creator gets full access, like the author of every other
+        // resource. A connector a system caller creates has no creator.
+        authorId: CreatedByModel.id(result, result.createdBy) ?? null,
+        publishToOrganization: options?.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
 
-    return result;
+      return result;
+    });
   }
 
   /**
@@ -397,9 +448,14 @@ class KnowledgeBaseConnectorModel {
     id: string,
     data: Partial<UpdateKnowledgeBaseConnector>,
   ): Promise<KnowledgeBaseConnector | null> {
+    const syncPermissionsFromSource = syncSwitchFor(data);
     const [result] = await db
       .update(schema.knowledgeBaseConnectorsTable)
-      .set(data)
+      .set(
+        syncPermissionsFromSource === undefined
+          ? data
+          : { ...data, syncPermissionsFromSource },
+      )
       .where(
         and(
           eq(schema.knowledgeBaseConnectorsTable.id, id),
@@ -572,7 +628,7 @@ class KnowledgeBaseConnectorModel {
         and(
           notDeleted(t),
           eq(t.enabled, true),
-          eq(t.visibility, "auto-sync-permissions"),
+          eq(t.syncPermissionsFromSource, true),
           inArray(t.connectorType, connectorTypes),
         ),
       );
@@ -1041,42 +1097,56 @@ type ConnectorVisibilityScope = "management" | "query";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function buildVisibilityFilter(params: {
   canReadAll?: boolean;
+  userId?: string;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
+  /** Holds `knowledgeSourceAutoSync:read`; management lists need it for sync connectors. */
+  canManageAutoSync?: boolean;
 }) {
-  if (params.canReadAll) {
-    return undefined;
+  if (params.canReadAll && !params.userId) return undefined;
+
+  const table = schema.knowledgeBaseConnectorsTable;
+  const context = {
+    organizationId: table.organizationId,
+    resource: "knowledgeConnector" as const,
+    scopeColumn: table.id,
+    action: params.scope === "query" ? ("use" as const) : ("read" as const),
+  };
+  const reach = or(
+    params.userId
+      ? ResourcePermissionPolicyModel.grantCondition({
+          ...context,
+          userId: params.userId,
+        })
+      : // A caller with no user of its own reaches what is published to the
+        // organization at large, plus what its teams were granted.
+        or(
+          ResourcePermissionPolicyModel.organizationAccessCondition(context),
+          ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            ...context,
+            teamIds: params.teamIds ?? [],
+          }),
+        ),
+    // Queries span every auto-sync connector and every file-upload connector:
+    // per-chunk ACLs and per-file grants decide what a caller retrieves.
+    params.scope === "query"
+      ? or(
+          eq(table.syncPermissionsFromSource, true),
+          eq(table.connectorType, "file_upload"),
+        )
+      : undefined,
+  );
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Management lists show a permission-sync connector only to a holder of
+  // `knowledgeSourceAutoSync:read`, on top of its read grant: it exposes the
+  // upstream audience. Queries still span it (per-chunk ACLs decide).
+  if (params.scope !== "query" && !params.canManageAutoSync) {
+    return and(reach, eq(table.syncPermissionsFromSource, false));
   }
-
-  const conditions = [];
-  // Management surfaces (the default) hide auto-sync-permissions connectors
-  // from non-admins entirely; "query" scope keeps them in reach because their
-  // per-chunk ACLs — not connector visibility — decide what a user retrieves.
-  if (params.scope !== "query") {
-    conditions.push(
-      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'auto-sync-permissions'`,
-    );
-  }
-
-  // No access context means "org-wide only" by default; callers must opt into
-  // team-scoped connectors by passing the viewer's team IDs or canReadAll.
-  if (!params.teamIds || params.teamIds.length === 0) {
-    conditions.push(
-      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`,
-    );
-  } else {
-    const teamIds = sql.join(
-      params.teamIds.map((teamId) => sql`${teamId}`),
-      sql`, `,
-    );
-
-    conditions.push(sql`(
-      ${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'
-      OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
-    )`);
-  }
-
-  return and(...conditions);
+  // SPDX-SnippetEnd
+  return reach;
 }
 // SPDX-SnippetEnd
 
@@ -1091,3 +1161,19 @@ function buildVisibilityFilter(params: {
  * five minutes should surface as a failure, not hold locks indefinitely.
  */
 const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
+
+/**
+ * The permission-sync switch a write sets: stated outright, or implied by the
+ * visibility input that still carries it (`auto-sync-permissions`). Undefined
+ * when the write touches neither, so the stored switch stays as it is.
+ */
+function syncSwitchFor(data: {
+  syncPermissionsFromSource?: boolean;
+  visibility?: string;
+}): boolean | undefined {
+  if (data.syncPermissionsFromSource !== undefined) {
+    return data.syncPermissionsFromSource;
+  }
+  if (data.visibility === undefined) return undefined;
+  return data.visibility === "auto-sync-permissions";
+}

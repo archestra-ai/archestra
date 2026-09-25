@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ReactElement, useState } from "react";
+import { cloneElement, type ReactElement, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
@@ -41,10 +41,6 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 vi.mock("@/lib/mcp/use-can-reauthenticate", () => ({
   useCanReauthenticate: () => () => false,
-}));
-
-vi.mock("./catalog-edit-access", () => ({
-  useCanModifyCatalogItem: () => ({ canModify: false, isLoading: false }),
 }));
 
 vi.mock("./use-chat-with-catalog-item", () => ({
@@ -168,7 +164,7 @@ import {
   useAppearanceSettings,
   useDefaultEnvironment,
 } from "@/lib/organization.query";
-import { useAssignableTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams, useMyTeams } from "@/lib/teams/team.query";
 import { InternalMCPCatalog } from "./InternalMCPCatalog";
 import {
   type CatalogItem,
@@ -189,6 +185,8 @@ const item = {
   imageApprovalRequired: false,
   multitenant: false,
   catalogReinstallRequired: false,
+  // Editing the item is its own `update` grant, read from the list response.
+  effectiveActions: ["read", "update"],
 } as unknown as CatalogItem;
 
 const personalInstall = {
@@ -286,6 +284,10 @@ describe("McpServerCard uninstall permission", () => {
     vi.mocked(useAssignableTeams).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useAssignableTeams>);
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: undefined,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
@@ -303,6 +305,64 @@ describe("McpServerCard uninstall permission", () => {
     await user.click(screen.getByRole("button", { name: "Uninstall" }));
 
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
+  });
+
+  it("opens server settings once from the keyboard without activating the card", async () => {
+    const user = userEvent.setup();
+    renderCard(card);
+
+    const settings = screen.getByRole("button", {
+      name: `Server settings for ${item.name}`,
+    });
+    settings.focus();
+    await user.keyboard("{Enter}");
+
+    expect(routerPush).toHaveBeenCalledExactlyOnceWith("/mcp/registry/cat-1");
+  });
+
+  it("opens the ownership menu without navigating and returns focus when dismissed", async () => {
+    const user = userEvent.setup();
+    renderCard(card);
+
+    const more = screen.getByRole("button", {
+      name: `More actions ${item.name}`,
+    });
+    await user.click(more);
+
+    expect(
+      screen.getByRole("menuitem", { name: "Transfer ownership" }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(more).toHaveFocus();
+  });
+
+  it("withholds settings and refuses ownership transfer without catalog access", async () => {
+    const user = userEvent.setup();
+    // No `update` grant on the item and no registry-wide `update`: the
+    // retired `mcpServerInstallation:admin` action no longer decides this.
+    grantAllExcept({ mcpRegistry: ["update"] });
+    renderCard(
+      cloneElement(card, {
+        item: { ...item, effectiveActions: ["read"] } as CatalogItem,
+      }),
+    );
+
+    expect(
+      screen.queryByRole("button", {
+        name: `Server settings for ${item.name}`,
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: `More actions ${item.name}` }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Transfer ownership" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it("shows managed Playwright without installation actions", () => {

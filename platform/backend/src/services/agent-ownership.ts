@@ -1,16 +1,8 @@
-import {
-  getAgentTypePermissionChecker,
-  requireScopedModifyPermission,
-} from "@/auth/agent-type-permissions";
-import { isServiceAccountUserId } from "@/auth/utils";
-import {
-  AgentModel,
-  LlmProviderApiKeyModel,
-  MemberModel,
-  TeamModel,
-} from "@/models";
+import { getResourceForAgentType } from "@archestra/shared";
+import { AgentModel, LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { ApiError } from "@/types";
 import { assertNoStaticPinsBrokenByTargetChange } from "./agent-tool-assignment";
+import { ResourcePermissions } from "./resource-permissions";
 
 export async function transferAgentOwnership(params: {
   agentId: string;
@@ -23,17 +15,6 @@ export async function transferAgentOwnership(params: {
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
   }
-  const checker = await getAgentTypePermissionChecker({
-    userId,
-    organizationId,
-  });
-  checker.require(agent.agentType, "update");
-  if (agent.authorId !== userId && !checker.isAdmin(agent.agentType)) {
-    throw new ApiError(
-      403,
-      "Only the owner or a resource admin can transfer ownership",
-    );
-  }
   if (
     agent.builtIn ||
     agent.isPersonalGateway ||
@@ -42,41 +23,23 @@ export async function transferAgentOwnership(params: {
   ) {
     throw new ApiError(400, "Platform-managed resources cannot be transferred");
   }
+  const resource = getResourceForAgentType(agent.agentType);
+  if (resource !== "agent" && resource !== "mcpGateway") {
+    throw new ApiError(400, "Platform-managed resources cannot be transferred");
+  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.authorizeOwnershipTransfer({
+    organizationId,
+    userId,
+    resource,
+    scope: agentId,
+    ownerId,
+  });
+  // SPDX-SnippetEnd
   if (ownerId === agent.authorId) {
     throw new ApiError(400, "Choose a different owner");
-  }
-  if (
-    isServiceAccountUserId(ownerId) ||
-    !(await MemberModel.getByUserId(ownerId, organizationId))
-  ) {
-    throw new ApiError(
-      400,
-      "The new owner must be a user in this organization",
-    );
-  }
-  const recipient = await getAgentTypePermissionChecker({
-    userId: ownerId,
-    organizationId,
-  });
-  const recipientTeamIds = await TeamModel.getUserTeamIds(ownerId);
-  try {
-    recipient.require(agent.agentType, "read");
-    recipient.require(agent.agentType, "update");
-    requireScopedModifyPermission({
-      isAdmin: recipient.isAdmin(agent.agentType),
-      isTeamAdmin: recipient.isTeamAdmin(agent.agentType),
-      scope: agent.scope,
-      authorId: ownerId,
-      resourceTeamIds: agent.teams.map((team) => team.id),
-      userTeamIds: recipientTeamIds,
-      userId: ownerId,
-      resourceLabel: "resource",
-    });
-  } catch {
-    throw new ApiError(
-      400,
-      "The new owner needs permission to manage the resource at its current visibility",
-    );
   }
   const target = {
     organizationId,
@@ -93,7 +56,7 @@ export async function transferAgentOwnership(params: {
     const keys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
       organizationId,
       ownerId,
-      recipientTeamIds,
+      await TeamModel.getUserTeamIds(ownerId),
     );
     if (!keys.some((key) => key.id === agent.llmApiKeyId)) {
       throw new ApiError(
@@ -112,4 +75,15 @@ export async function transferAgentOwnership(params: {
   if (!transferred) {
     throw new ApiError(409, "The resource changed. Refresh and try again.");
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.transferOwnerGrant({
+    organizationId,
+    resource,
+    scope: agentId,
+    previousOwnerId: agent.authorId,
+    ownerId,
+  });
+  // SPDX-SnippetEnd
 }

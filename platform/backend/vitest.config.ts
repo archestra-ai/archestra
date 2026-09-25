@@ -34,7 +34,7 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
 }
 
 /**
- * Partition test files by whether they use Vitest module mocking.
+ * Partition test files by explicit database usage and Vitest module mocking.
  *
  * `vi.mock`/`vi.doMock` registrations live in the worker's shared module/mock
  * registry, which Vitest does NOT reset between files when `isolate: false`
@@ -43,15 +43,26 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
  * while everything else can share each worker's module cache and skip
  * re-importing the whole backend graph per file (~6s/file saved).
  *
- * Routing is computed from file CONTENT at config-load time, so a new test
+ * Rollback-eligible files join the clean project and select transaction
+ * teardown through their filename in setup hooks, retaining its shared module
+ * cache. Routing is computed from file CONTENT at config-load time, so a new test
  * that adds `vi.mock` is automatically placed in the isolated project — no
  * manual list to maintain.
  */
-function partitionTestFiles(): { mocked: string[]; clean: string[] } {
+function partitionTestFiles(): {
+  mocked: string[];
+  clean: string[];
+  unitMocked: string[];
+  unit: string[];
+  rollback: string[];
+} {
   const root = path.resolve(__dirname, "./src");
   const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
   const mocked: string[] = [];
   const clean: string[] = [];
+  const unitMocked: string[] = [];
+  const unit: string[] = [];
+  const rollback: string[] = [];
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -60,10 +71,18 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
     if (!entry.isFile() || !entry.name.endsWith(".test.ts")) continue;
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
-    if (usesModuleMocks.test(readFileSync(absolute, "utf-8"))) {
-      mocked.push(relative);
+    const databaseFree = entry.name.endsWith(".unit.test.ts");
+    const rollsBack = entry.name.endsWith(".rollback.test.ts");
+    const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
+    if (databaseFree) {
+      (moduleMocks ? unitMocked : unit).push(relative);
+    } else if (rollsBack) {
+      if (moduleMocks) {
+        throw new Error(`${relative} cannot use module mocks with rollback`);
+      }
+      rollback.push(relative);
     } else {
-      clean.push(relative);
+      (moduleMocks ? mocked : clean).push(relative);
     }
   }
 
@@ -74,7 +93,7 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
     );
   }
 
-  return { mocked, clean };
+  return { mocked, clean, unitMocked, unit, rollback };
 }
 
 const testFiles = partitionTestFiles();
@@ -82,25 +101,18 @@ const testFiles = partitionTestFiles();
 export default defineConfig({
   plugins: [rawPythonPlugin()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@archestra/shared/access-control": path.resolve(
-        __dirname,
-        "../shared/access-control.ts",
-      ),
-      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      {
+        find: /^@archestra\/shared$/,
+        replacement: path.resolve(__dirname, "../shared/index.ts"),
+      },
+    ],
   },
   test: {
     ...vitestLogPolicy,
     globals: true,
     environment: "node",
-    // Build the migrated schema once and snapshot it (see global-setup.ts); each test
-    // file's beforeAll then loads the snapshot instead of replaying all migrations.
-    // Root-level only: it must run ONCE per run, not once per project below.
-    globalSetup: ["./src/test/global-setup.ts"],
-    setupFiles: ["./src/test/setup.ts"],
-
     /**
      * Performance Optimizations
      *
@@ -117,7 +129,7 @@ export default defineConfig({
      *
      * DB state stays per-file either way (setup.ts):
      * - beforeAll: creates PGlite from the migrated snapshot ONCE per file
-     * - beforeEach: truncates tables (fast) instead of recreating DB
+     * - beforeEach: truncates after DB access, skipping pure tests
      */
 
     // Forks (child processes), not threads. PGlite is a WASM module; running
@@ -171,17 +183,41 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: "clean",
-          include: testFiles.clean,
+          // Explicit *.unit.test.ts files are audited to avoid database imports.
+          // No PGlite setup or migrated snapshot is needed for this project.
+          name: "unit",
+          include: testFiles.unit,
           isolate: false,
+          // An accidental runtime config/database import must fail even on CI,
+          // where a database URL is available to the database-backed projects.
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "unit-mocked",
+          include: testFiles.unitMocked,
+          isolate: true,
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "clean",
+          include: [...testFiles.clean, ...testFiles.rollback],
+          isolate: false,
+          // The setup hooks select rollback for *.rollback.test.ts through
+          // Vitest's current test-file context. Both variants share workers.
+          // All database-backed projects share one migrated snapshot.
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
           // shared mutable state (the config object) between tests. The
           // isolated project skips that — its per-file registries can't leak,
           // and exotic config mocks (getter-only properties) would break it.
           env: { ARCHESTRA_TEST_SHARED_WORKERS: "true" },
-          // Inherit everything else from root, but globalSetup must not be
-          // re-run per project — the snapshot is built once at the root.
-          globalSetup: [],
         },
       },
       {
@@ -190,7 +226,8 @@ export default defineConfig({
           name: "mocked",
           include: testFiles.mocked,
           isolate: true,
-          globalSetup: [],
+          globalSetup: ["./src/test/global-setup.ts"],
+          setupFiles: ["./src/test/setup.ts"],
         },
       },
     ],

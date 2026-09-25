@@ -85,7 +85,7 @@ function ResourceDefaultRow({
 }: {
   resource: EnvironmentDefaultableResource;
   value: string | null;
-  environments: { id: string; name: string; restricted: boolean }[];
+  environments: { id: string; name: string }[];
   defaultEnvironmentName: string;
   disabled: boolean;
   onChange: (environmentId: string | null) => void;
@@ -102,13 +102,10 @@ function ResourceDefaultRow({
       onChange={onChange}
       disabled={disabled}
       helpText={
-        selected?.restricted ? (
+        selected ? (
           <span>
-            Creators without{" "}
-            <code className="inline-block max-w-full rounded bg-muted px-1 py-0.5 font-mono text-xs break-all align-baseline">
-              {resource}:deploy-to-restricted
-            </code>{" "}
-            permission fall back to {defaultEnvironmentName}.
+            Creators who may not deploy into this environment fall back to{" "}
+            {defaultEnvironmentName}.
           </span>
         ) : undefined
       }

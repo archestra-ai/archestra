@@ -1,17 +1,24 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import { Globe, Key, Loader2, User, Users } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
-import { TerminalBlock } from "@/app/connection/terminal-block";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
+// SPDX-SnippetEnd
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
   OwnerSelectField,
@@ -32,31 +39,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
-import {
-  TeamVisibilityPicker,
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
+import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
   useCreateVirtualApiKey,
 } from "@/lib/virtual-api-keys.query";
 
-export type VirtualKeyScope = NonNullable<
-  archestraApiTypes.CreateVirtualApiKeyData["body"]["scope"]
->;
 export type VirtualKeyType = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["keyType"]
 >;
 type VirtualKeySummary =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
+type CreatedVirtualKey = archestraApiTypes.CreateVirtualApiKeyResponses["200"];
 
 /**
  * Self-contained variant for resource connection surfaces: gathers the option
@@ -81,23 +81,12 @@ export function CreateVirtualKeyDialogWithData({
     enabled: open && keyType === "standard",
     toastOnError: false,
   });
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: isVirtualKeyAdmin } = useHasPermissions({
-    llmVirtualKey: ["admin"],
-  });
-  const { data: teams = [] } = useTeams({
-    enabled: open && !!canReadTeams,
-  });
+  const { data: isVirtualKeyAdmin } = useHasPermissions(
+    { llmVirtualKey: ["update"] },
+    "*",
+  );
   const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
-  );
-  const visibilityOptions = useMemo(
-    () =>
-      getVirtualKeyVisibilityOptions({
-        canReadTeams: !!canReadTeams,
-        isAdmin: !!isVirtualKeyAdmin,
-      }),
-    [canReadTeams, isVirtualKeyAdmin],
   );
 
   return (
@@ -108,9 +97,6 @@ export function CreateVirtualKeyDialogWithData({
       parentableKeys={apiKeys}
       connectionBaseUrl={connectionBaseUrl}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
-      visibilityOptions={visibilityOptions}
-      teams={teams}
-      canReadTeams={!!canReadTeams}
       isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       currentUser={
         session?.user
@@ -132,9 +118,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys,
   connectionBaseUrl,
   defaultExpirationSeconds,
-  visibilityOptions,
-  teams,
-  canReadTeams,
   isVirtualKeyAdmin,
   currentUser,
   existingKeys,
@@ -145,9 +128,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys: LlmProviderApiKeyResponse[];
   connectionBaseUrl: string;
   defaultExpirationSeconds: number | null;
-  visibilityOptions: VisibilityOption<VirtualKeyScope>[];
-  teams: Array<{ id: string; name: string }>;
-  canReadTeams: boolean;
   isVirtualKeyAdmin: boolean;
   currentUser: { id: string; name: string | null } | null;
   existingKeys: VirtualKeySummary[];
@@ -160,19 +140,16 @@ export function CreateVirtualKeyDialog({
     null,
   );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [scope, setScope] = useState<VirtualKeyScope>(
-    getDefaultVirtualKeyScope(visibilityOptions),
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
   );
-  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
-  const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
-  const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
-    null,
-  );
+  const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
+  const createdKeyValue = createdKey?.value ?? null;
 
   const prevOpenRef = useRef(open);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -181,10 +158,7 @@ export function CreateVirtualKeyDialog({
   const isPassthrough = keyType === "passthrough";
   // Passthrough keys are always personal. Admins can mint a key on behalf of
   // another org member; left unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(
-    isVirtualKeyAdmin,
-    isPassthrough ? "personal" : scope,
-  );
+  const showOwnerField = shouldShowOwnerField(isVirtualKeyAdmin, "personal");
   const effectiveOwnerId =
     showOwnerField && ownerId ? ownerId : currentUser?.id;
   const effectiveOwnerName =
@@ -205,17 +179,14 @@ export function CreateVirtualKeyDialog({
     const wasOpen = prevOpenRef.current;
     prevOpenRef.current = open;
     if (open && !wasOpen) {
-      setCreatedKeyValue(null);
-      setCreatedKeyExpiresAt(null);
+      setCreatedKey(null);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
       );
-      const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
       setNewKeyName(generatedName);
       generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
-      setScope(initialScope);
-      setTeamIds([]);
+      setInitialGrants([]);
       setLabels([]);
       setProviderApiKeyIds({});
       setOwnerId("");
@@ -225,19 +196,12 @@ export function CreateVirtualKeyDialog({
         newKeyName: generatedName,
         ownerId: "",
         expiresAt: initialExpiresAt,
-        scope: initialScope,
-        teamIds: [],
+        initialGrants: [],
         providerApiKeyIds: {},
         labels: [],
       };
     }
-  }, [
-    open,
-    defaultExpirationSeconds,
-    visibilityOptions,
-    keyType,
-    generatedName,
-  ]);
+  }, [open, defaultExpirationSeconds, keyType, generatedName]);
 
   useEffect(() => {
     if (!open || createdKeyValue) return;
@@ -255,9 +219,7 @@ export function CreateVirtualKeyDialog({
       return generatedName;
     });
   }, [createdKeyValue, generatedName, open]);
-  const standardReady =
-    (scope !== "team" || teamIds.length > 0) &&
-    providerApiKeyMapToArray(providerApiKeyIds).length > 0;
+  const standardReady = providerApiKeyMapToArray(providerApiKeyIds).length > 0;
   const canSubmit =
     newKeyName.trim().length > 0 &&
     (isPassthrough || standardReady) &&
@@ -273,8 +235,7 @@ export function CreateVirtualKeyDialog({
       newKeyName,
       ownerId,
       expiresAt,
-      scope,
-      teamIds: [...teamIds].sort(),
+      initialGrants,
       providerApiKeyIds,
       labels,
     });
@@ -297,8 +258,9 @@ export function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "standard",
               expiresAt: expiresAt ?? undefined,
-              scope,
-              teams: scope === "team" ? teamIds : [],
+              initialGrants: initialGrants.map(
+                ({ name: _name, ...grant }) => grant,
+              ),
               providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
               ownerId: owner,
               labels: finalLabels,
@@ -306,8 +268,7 @@ export function CreateVirtualKeyDialog({
       });
       setNewKeyName("");
       if (result?.value) {
-        setCreatedKeyValue(result.value);
-        setCreatedKeyExpiresAt(expiresAt);
+        setCreatedKey(result);
       }
     } catch {
       // handled by mutation
@@ -319,8 +280,7 @@ export function CreateVirtualKeyDialog({
     labels,
     providerApiKeyIds,
     newKeyName,
-    scope,
-    teamIds,
+    initialGrants,
     showOwnerField,
     ownerId,
   ]);
@@ -353,26 +313,20 @@ export function CreateVirtualKeyDialog({
           className="space-y-4"
           data-testid={E2eTestId.VirtualKeyCreateDialog}
         >
-          {createdKeyValue ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Endpoint</h3>
-                <TerminalBlock code={`${connectionBaseUrl}/model-router`} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Key className="h-4 w-4" />
-                  Copy this key now. It won&apos;t be shown again.
-                </div>
-                <div data-testid={E2eTestId.VirtualKeyValue}>
-                  <TerminalBlock code={createdKeyValue} />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Expires:</span>{" "}
-                {formatExpiration(createdKeyExpiresAt)}
-              </div>
-            </div>
+          {createdKey ? (
+            <VirtualKeyConnectionGuide
+              keyValue={createdKey.value}
+              keyType={createdKey.keyType}
+              mappedProviderKeys={createdKey.providerApiKeys}
+              connectionBaseUrl={connectionBaseUrl}
+              name={createdKey.name}
+              expiration={formatExpiration(createdKey.expiresAt)}
+              visibleTo={getVisibleToLabel({
+                keyType: createdKey.keyType,
+                grants: initialGrants,
+                ownerName: ownerId ? selectedOwnerName : null,
+              })}
+            />
           ) : (
             <>
               <div className="space-y-2">
@@ -395,78 +349,49 @@ export function CreateVirtualKeyDialog({
                 />
               )}
 
-              {isPassthrough ? (
-                <>
-                  {showOwnerField && (
-                    <OwnerSelectField
-                      value={ownerId}
-                      onChange={setOwnerId}
-                      onSelectedOwnerChange={(owner) =>
-                        setSelectedOwnerName(
-                          owner.userId === currentUser?.id
-                            ? null
-                            : (owner.name ?? owner.email ?? null),
-                        )
-                      }
-                    />
-                  )}
+              <ExpirationDateTimeField
+                value={expiresAt}
+                onChange={setExpiresAt}
+                noExpirationText="Key will never expire"
+                formatExpiration={formatExpiration}
+              />
 
-                  <div className="space-y-2">
-                    <ExpirationDateTimeField
-                      value={expiresAt}
-                      onChange={setExpiresAt}
-                      noExpirationText="Key will never expire"
-                      formatExpiration={formatExpiration}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <VirtualKeyVisibilityField
-                    value={scope}
-                    onValueChange={(nextScope) => {
-                      setScope(nextScope);
-                      if (nextScope !== "team") {
-                        setTeamIds([]);
-                      }
-                    }}
-                    teamIds={teamIds}
-                    onTeamIdsChange={setTeamIds}
-                    teams={teams}
-                    canReadTeams={canReadTeams}
-                    visibilityOptions={visibilityOptions}
-                  />
-
-                  {showOwnerField && (
-                    <OwnerSelectField
-                      value={ownerId}
-                      onChange={setOwnerId}
-                      onSelectedOwnerChange={(owner) =>
-                        setSelectedOwnerName(
-                          owner.userId === currentUser?.id
-                            ? null
-                            : (owner.name ?? owner.email ?? null),
-                        )
-                      }
-                    />
-                  )}
-
-                  <div className="space-y-2">
-                    <ExpirationDateTimeField
-                      value={expiresAt}
-                      onChange={setExpiresAt}
-                      noExpirationText="Key will never expire"
-                      formatExpiration={formatExpiration}
-                    />
-                  </div>
-                </>
+              {/* SPDX-SnippetBegin
+                  SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                  SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+              {!isPassthrough && (
+                <InitialResourcePermissions
+                  resource="llmVirtualKey"
+                  grants={initialGrants}
+                  onChange={setInitialGrants}
+                  ownerName={
+                    ownerId
+                      ? (selectedOwnerName ?? "Selected owner")
+                      : (currentUser?.name ?? "You")
+                  }
+                />
               )}
+              {/* SPDX-SnippetEnd */}
 
               <AdvancedLabelsSection
                 ref={labelsRef}
                 labels={labels}
                 onLabelsChange={setLabels}
-              />
+              >
+                {showOwnerField && (
+                  <OwnerSelectField
+                    value={ownerId}
+                    onChange={setOwnerId}
+                    onSelectedOwnerChange={(owner) =>
+                      setSelectedOwnerName(
+                        owner.userId === currentUser?.id
+                          ? null
+                          : (owner.name ?? owner.email ?? null),
+                      )
+                    }
+                  />
+                )}
+              </AdvancedLabelsSection>
             </>
           )}
         </DialogBody>
@@ -488,41 +413,23 @@ export function CreateVirtualKeyDialog({
   );
 }
 
-export function VirtualKeyVisibilityField({
-  value,
-  onValueChange,
-  teamIds,
-  onTeamIdsChange,
-  teams,
-  canReadTeams,
-  visibilityOptions,
-}: {
-  value: VirtualKeyScope;
-  onValueChange: (value: VirtualKeyScope) => void;
-  teamIds: string[];
-  onTeamIdsChange: (value: string[]) => void;
-  teams: Array<{ id: string; name: string }>;
-  canReadTeams: boolean;
-  visibilityOptions: VisibilityOption<VirtualKeyScope>[];
-}) {
-  return (
-    <VisibilitySelector
-      heading="Who can use this virtual key"
-      value={value}
-      options={visibilityOptions}
-      onValueChange={onValueChange}
-    >
-      {value === "team" && (
-        <TeamVisibilityPicker
-          disabled={!canReadTeams}
-          teams={teams}
-          value={teamIds}
-          onChange={onTeamIdsChange}
-          unavailableMessage={canReadTeams ? undefined : "Teams unavailable"}
-        />
-      )}
-    </VisibilitySelector>
-  );
+/**
+ * Who can use a freshly created key, read from the grants chosen in the form:
+ * the retired `scope` column no longer says who reaches a key.
+ */
+function getVisibleToLabel(params: {
+  keyType: VirtualKeyType;
+  grants: InitialPermissionGrant[];
+  ownerName: string | null;
+}): string | null {
+  if (params.keyType === "passthrough") return null;
+  if (params.grants.length === 0) {
+    return params.ownerName ? `Only ${params.ownerName}` : "Only you";
+  }
+  return [
+    params.ownerName ?? "You",
+    ...params.grants.map((grant) => grant.name),
+  ].join(", ");
 }
 
 export function formatExpiration(date: Date | string | null): string {
@@ -552,50 +459,6 @@ function getGeneratedVirtualKeyName({
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
   if (defaultSeconds === null) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
-}
-
-export function getDefaultVirtualKeyScope(
-  visibilityOptions: VisibilityOption<VirtualKeyScope>[],
-): VirtualKeyScope {
-  return (
-    visibilityOptions.find((option) => !option.disabled)?.value ?? "personal"
-  );
-}
-
-export function getVirtualKeyVisibilityOptions(params: {
-  isAdmin: boolean;
-  canReadTeams: boolean;
-}): VisibilityOption<VirtualKeyScope>[] {
-  const { isAdmin, canReadTeams } = params;
-
-  return [
-    {
-      value: "personal",
-      label: "Personal",
-      description: "Only you can view and manage this virtual key",
-      icon: User,
-    },
-    {
-      value: "team",
-      label: "Team",
-      description: "Visible to selected teams",
-      icon: Users,
-      disabled: !canReadTeams,
-      disabledReason: !canReadTeams
-        ? "Team sharing is unavailable without team:read permission"
-        : undefined,
-    },
-    {
-      value: "org",
-      label: "Organization",
-      description: "Visible to everyone in the organization",
-      icon: Globe,
-      disabled: !isAdmin,
-      disabledReason: !isAdmin
-        ? "You need llmVirtualKey:admin permission to share org-wide"
-        : undefined,
-    },
-  ];
 }
 
 /** Same base-URL resolution as the /connection and /llm/proxy pages. */

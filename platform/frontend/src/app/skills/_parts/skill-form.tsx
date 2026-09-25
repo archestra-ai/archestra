@@ -2,6 +2,10 @@
 
 import { type ReactNode, type Ref, useMemo } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +32,7 @@ import type { SkillDraft } from "./skill-draft";
  */
 export function SkillForm({
   draft,
+  creating = false,
   onChange,
   onFilesChange,
   labelsRef,
@@ -36,6 +41,7 @@ export function SkillForm({
   contentNotice,
 }: {
   draft: SkillDraft;
+  creating?: boolean;
   onChange: (patch: Partial<SkillDraft>) => void;
   onFilesChange: (
     update: (files: SkillDraft["files"]) => SkillDraft["files"],
@@ -59,10 +65,10 @@ export function SkillForm({
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <SettingsSectionGroup>
       {/* No heading: the page header already names the skill, and the fields
           — Skill name, Description, the manifest — say what they are. */}
-      <FormPanel>
+      <SettingsSection>
         {/* Name and description are frontmatter keys, written straight back
             into the manifest below rather than held beside it: the editor
             stays the source of truth, so the two never disagree. */}
@@ -116,27 +122,19 @@ export function SkillForm({
           readOnly={readOnly || contentReadOnly}
           className={SKILL_WIZARD_EDITOR_CLASS}
         />
-      </FormPanel>
+      </SettingsSection>
 
       {/* No heading: the visibility control names the section itself. */}
-      <FormPanel>
+      <SettingsSection>
         <fieldset disabled={readOnly} className="contents">
           <SkillAccessFields
+            creating={creating}
             ref={labelsRef}
             draft={draft}
             onChange={onChange}
           />
         </fieldset>
-      </FormPanel>
-    </div>
-  );
-}
-
-/** One panel of the form. Every panel's own fields name it, so none is titled. */
-function FormPanel({ children }: { children: ReactNode }) {
-  return (
-    <section className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
-      {children}
-    </section>
+      </SettingsSection>
+    </SettingsSectionGroup>
   );
 }

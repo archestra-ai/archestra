@@ -34,7 +34,7 @@ import {
   selectAllIds,
   selectionCheckState,
 } from "@/lib/chat/file-selection";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The list-view body shared by the chat and project Files panels. Multi-select

@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import {
   addedGrants,
+  bundledEntry,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
@@ -55,12 +58,13 @@ export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 export const guardrailsPolicyService = {
   async get(organizationId: string): Promise<GuardrailsPolicy> {
     requireEnabled();
+    const initial = initialPolicy();
     return (
       (await GuardrailsPolicyModel.findLatest(organizationId)) ?? {
         organizationId,
         revision: 0,
-        content: INITIAL_POLICY,
-        contentHash: hash(INITIAL_POLICY),
+        content: initial,
+        contentHash: hash(initial),
         updatedAt: null,
         updatedBy: null,
       }
@@ -211,9 +215,25 @@ function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-/** The text an organization that never saved a revision is read as. */
-export const INITIAL_POLICY = `[policy]
+/**
+ * The text an organization that never saved a revision is read as. It installs
+ * the bundled `archestra` battery over the built-in tools, under the name they
+ * carry in this deployment, and reads the organization's members as `internal`.
+ */
+export function initialPolicy(): string {
+  return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
+
+[server_aliases]
+${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
+
+[policy]
 version = 2
+
+[policy.audience]
+internal = ["${ARCHESTRA_BATTERY}:members"]
+
+[policy.deployment]
+context_control = true
 
 [[policy.annotator]]
 name = "noop"
@@ -226,3 +246,4 @@ annotator = "noop"
 [externals.annotators.noop]
 url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
 `;
+}

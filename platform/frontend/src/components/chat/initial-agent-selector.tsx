@@ -80,7 +80,11 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   indexReadinessByAgent,
   listServerNames,
@@ -105,7 +109,7 @@ import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
 } from "@/lib/mcp/mcp-server.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   filterAndSortInitialAgents,
   truncateAgentDescription,
@@ -148,7 +152,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: session } = useSession();
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const userId = session?.user?.id;
-  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: scopedGrants } = useScopedCapabilities();
   const createProfile = useCreateProfile();
   const cloningStartedForRef = useRef<string | null>(null);
   const [dialogView, setDialogView] = useState<
@@ -206,10 +210,15 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   const canEditCurrentAgent = useMemo(() => {
     if (!currentAgent) return false;
-    if (isAgentAdmin) return true;
-    const authorId = currentAgent.authorId;
-    return authorId === userId;
-  }, [currentAgent, isAgentAdmin, userId]);
+    return (
+      scopedGrants?.some(
+        (grant) =>
+          grant.resource === "agent" &&
+          grant.action === "update" &&
+          (grant.scope === "*" || grant.scope === currentAgent.id),
+      ) === true
+    );
+  }, [currentAgent, scopedGrants]);
 
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
@@ -318,7 +327,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     createProfile.mutate(
       {
         name: `Copy ${cloningAgent.name}`,
-        scope: "personal",
         agentType: "agent",
         description: cloningAgent.description,
         systemPrompt: cloningAgent.systemPrompt,
@@ -425,7 +433,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
                 const isHighlighted = navigation.activeValue === agent.id;
-                const canEdit = isAgentAdmin || agent.authorId === userId;
+                const canEdit =
+                  scopedGrants?.some(
+                    (grant) =>
+                      grant.resource === "agent" &&
+                      grant.action === "update" &&
+                      (grant.scope === "*" || grant.scope === agent.id),
+                  ) === true;
                 const gate = resolveAgentConnectionGate(
                   readinessByAgent.get(agent.id),
                 );

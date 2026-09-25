@@ -77,3 +77,14 @@ export function GatewayGrantField({
     </div>
   );
 }
+
+/** The tabs of the OAuth client create and edit dialogs. */
+export type OAuthClientSection = "general" | "permissions";
+
+export const OAUTH_CLIENT_SECTIONS: Array<{
+  id: OAuthClientSection;
+  label: string;
+}> = [
+  { id: "general", label: "General" },
+  { id: "permissions", label: "Permissions" },
+];

@@ -6,7 +6,8 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
-  BatteryMatchSchema,
+  BatteryMatchesSchema,
+  BatteryPolicySourceSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   EffectivePolicySchema,
@@ -29,6 +30,7 @@ const PackageHashParamsSchema = z.object({
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 const MatchesQuerySchema = z.object({ catalogId: z.uuid() });
+const PolicySourceQuerySchema = z.object({ entry: z.string().min(1).max(512) });
 const DeletedSchema = z.object({ success: z.literal(true) });
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -77,6 +79,22 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       openappaBatteriesService.policyDeclarations(request.organizationId),
   );
   app.get(
+    "/api/openappa/battery-policy-source",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaBatteryPolicySource,
+        tags: ["OpenAPPA"],
+        querystring: PolicySourceQuerySchema,
+        response: constructResponseSchema(BatteryPolicySourceSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.policySource(
+        request.organizationId,
+        request.query.entry,
+      ),
+  );
+  app.get(
     "/api/openappa/effective-policy",
     {
       schema: {
@@ -95,7 +113,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.GetOpenappaBatteryMatches,
         tags: ["OpenAPPA"],
         querystring: MatchesQuerySchema,
-        response: constructResponseSchema(z.array(BatteryMatchSchema)),
+        response: constructResponseSchema(BatteryMatchesSchema),
       },
     },
     async (request) =>
@@ -167,6 +185,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         userId: request.user.id,
         organizationId: request.organizationId,
         id: request.params.id,
+      });
+      return { success: true as const };
+    },
+  );
+  app.delete(
+    "/api/openappa/battery-includes/:name",
+    {
+      schema: {
+        operationId: RouteId.DeleteOpenappaBatteryInclude,
+        tags: ["OpenAPPA"],
+        params: PackageNameParamsSchema,
+        response: constructResponseSchema(DeletedSchema),
+      },
+    },
+    async (request) => {
+      await openappaBatteriesService.removeInclude({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        name: request.params.name,
       });
       return { success: true as const };
     },

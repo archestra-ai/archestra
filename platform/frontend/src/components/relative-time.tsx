@@ -7,8 +7,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The one way this app says "happened X ago": a relative, never-wrapping

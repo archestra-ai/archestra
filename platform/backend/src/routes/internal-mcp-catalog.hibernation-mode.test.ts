@@ -3,13 +3,18 @@
 
 import { type Mock, vi } from "vitest";
 import { enterpriseTier } from "@/enterprise-tier";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import { McpServerModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    enterpriseFeatures: { core: false },
+  }),
+);
 
 import { hasPermission } from "@/auth";
 

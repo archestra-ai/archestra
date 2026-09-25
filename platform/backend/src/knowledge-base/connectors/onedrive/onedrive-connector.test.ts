@@ -59,19 +59,19 @@ function setupMockClient(connector: OneDriveConnector) {
 describe("OneDriveConnector", () => {
   describe("validateConfig", () => {
     it("accepts valid config with tenantId and userIds", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const result = await connector.validateConfig(baseConfig);
       expect(result.valid).toBe(true);
     });
 
     it("rejects config without tenantId", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const result = await connector.validateConfig({ userIds: ["user-1"] });
       expect(result.valid).toBe(false);
     });
 
     it("rejects config with empty userIds", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const result = await connector.validateConfig({
         tenantId: "test-tenant-id",
         userIds: [],
@@ -80,7 +80,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("rejects config without userIds", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const result = await connector.validateConfig({
         tenantId: "test-tenant-id",
       });
@@ -90,7 +90,7 @@ describe("OneDriveConnector", () => {
 
   describe("testConnection", () => {
     it("returns failure when Client ID is missing", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
 
       const result = await connector.testConnection({
         config: baseConfig,
@@ -102,7 +102,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("returns success when drive is accessible", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ id: "drive-id", name: "OneDrive" });
@@ -116,7 +116,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("returns failure on API error", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockRejectedValueOnce(new Error("Unauthorized"));
@@ -131,7 +131,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("returns failure for invalid config", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
 
       const result = await connector.testConnection({
         config: { tenantId: "test" }, // missing userIds
@@ -144,7 +144,7 @@ describe("OneDriveConnector", () => {
 
   describe("estimateTotalItems", () => {
     it("returns count of supported files", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // for-await natural order: countFilesInFolder("root") first
@@ -168,7 +168,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("returns null on API error", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockRejectedValueOnce(new Error("Forbidden"));
@@ -183,7 +183,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("counts files across multiple users", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // User 1: countFilesInFolder("root") then listDirectSubfolders("root")
@@ -213,7 +213,7 @@ describe("OneDriveConnector", () => {
 
   describe("sync", () => {
     it("yields documents for text files", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // Peek-ahead: listDirectSubfolders("root") called before syncFilesInFolder
@@ -239,7 +239,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("marks text that exceeds the connector indexing limit", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
       const source = Buffer.from("x".repeat(500_001));
 
@@ -270,7 +270,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("skips unsupported file types", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -291,7 +291,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("reports a file with no extractable text as a categorized skip naming the file", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // Standalone ArrayBuffer (not from the Node.js pool) so the download
@@ -329,7 +329,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("records a fileTypes extension with no extractor as an unsupported-type skip, not a document without text", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -355,7 +355,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("reports an oversized image as a categorized skip", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       const oversized = new ArrayBuffer(4 * 1024 * 1024 + 1);
@@ -389,7 +389,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("handles pagination with @odata.nextLink", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -422,7 +422,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("syncs multiple users sequentially", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // User 1: listDirectSubfolders then files
@@ -455,7 +455,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("respects incremental sync from checkpoint", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -490,7 +490,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("traverses subfolders recursively", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // Peek-ahead: listDirectSubfolders("root") → [folder-1]
@@ -525,7 +525,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("traverses all subfolder pages when listDirectSubfolders response is paginated", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // listDirectSubfolders("root") — page 1 with nextLink, page 2 terminates
@@ -574,7 +574,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("does not traverse subfolders when recursive is false", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // recursive=false: traverseFolders yields only root, never calls listDirectSubfolders
@@ -602,7 +602,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("syncs image files when embedding model supports images", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       const imageBuffer = Buffer.from("fake-png-data");
@@ -628,7 +628,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("skips image files when embedding model does not support images", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -650,7 +650,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("throws on drive items API error", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       // listDirectSubfolders("root") succeeds, then syncFilesInFolder throws
@@ -669,7 +669,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("records failure and continues when individual file download fails", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -703,7 +703,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("emits checkpoint that advances monotonically", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -738,7 +738,7 @@ describe("OneDriveConnector", () => {
       // would advance lastSyncedAt to the latest file seen so far. If the process was
       // interrupted after the first page, the resumed run would skip files in
       // unvisited pages/folders whose timestamps are earlier than the advanced checkpoint.
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       const previousCheckpoint = "2024-01-01T00:00:00.000Z";
@@ -794,7 +794,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("filters files by fileTypes config when provided", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
@@ -823,7 +823,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("does not let fileTypes opt images into a text-only embedding model", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({ value: [] });
@@ -848,7 +848,7 @@ describe("OneDriveConnector", () => {
 
   describe("estimateTotalItems — fileTypes filter", () => {
     it("counts only files matching fileTypes when provided", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       const { mockGet } = setupMockClient(connector);
 
       mockGet.mockResolvedValueOnce({
@@ -1020,7 +1020,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("scopeKeyForDocument maps metadata.userId to the container key", () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       expect(connector.scopeKeyForDocument({ userId: "user-1" })).toBe(
         "user:user-1",
       );
@@ -1029,7 +1029,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("root audience: direct grant + entra group token + drive owner; plain items assign to the top container", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([
@@ -1078,7 +1078,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("a permission-hierarchy root becomes a nested item container with its own audience", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([
@@ -1133,7 +1133,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("an unreadable root permission list fail-closes the container — owner included", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([{ id: "root", parentReference: {} }]);
@@ -1157,7 +1157,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("an unreadable nested item fail-closes that subtree only", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([
@@ -1194,7 +1194,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("a failed drive resolution fail-closes the whole corpus under the top container", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       routes.push({
         match: "/users/user-1/drive?$select=id,owner",
@@ -1212,7 +1212,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("an empty corpus emits the boundary container without resolving its audience", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
 
       const { containers, documents } = await collectSnapshot(
@@ -1231,7 +1231,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("anonymous links are public; organization links expand to active tenant users", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([{ id: "root", parentReference: {} }]);
@@ -1268,7 +1268,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("User.Read.All denied: unresolvable principals drop fail-closed, group tokens survive, member overrides still apply", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       stubDrive();
       stubDeltaWalk([{ id: "root", parentReference: {} }]);
@@ -1304,7 +1304,7 @@ describe("OneDriveConnector", () => {
     });
 
     it("resume cursor skips containers strictly before it; scope filters containers", async () => {
-      const connector = new OneDriveConnector();
+      const connector = new OneDriveConnector(0);
       installClient(connector);
       const config = { ...permConfig, userIds: ["user-1", "user-2"] };
       const docs = [
@@ -1348,7 +1348,7 @@ describe("OneDriveConnector", () => {
 
     describe("syncGroups", () => {
       it("rosters entra groups, site groups (empty), and direct grantees incl. the owner", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         stubUsersTier();
@@ -1428,7 +1428,7 @@ describe("OneDriveConnector", () => {
       });
 
       it("GroupMember.Read.All denied: the group rosters empty (fail-closed)", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         stubUsersTier();
@@ -1453,7 +1453,7 @@ describe("OneDriveConnector", () => {
       });
 
       it("an unreadable permission surface is skipped, not fail-closed here", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         stubUsersTier();
@@ -1473,7 +1473,7 @@ describe("OneDriveConnector", () => {
 
     describe("probePermissionChanges", () => {
       it("no stored state: fullRequired with fresh delta tokens", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         routes.push({
@@ -1494,7 +1494,7 @@ describe("OneDriveConnector", () => {
       });
 
       it("sharing-annotated drift dirties the container; unannotated drift does not (elevated tier)", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         routes.push({
@@ -1527,7 +1527,7 @@ describe("OneDriveConnector", () => {
       });
 
       it("sharing preference denied (403): degrades to coarse probing where any drift dirties", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         routes.push(
@@ -1556,7 +1556,7 @@ describe("OneDriveConnector", () => {
       });
 
       it("a rejected delta token (410) promotes to a full reconcile", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         routes.push(
@@ -1582,7 +1582,7 @@ describe("OneDriveConnector", () => {
 
     describe("refreshContainerAudiences", () => {
       it("re-resolves top-level audiences and skips nested item containers", async () => {
-        const connector = new OneDriveConnector();
+        const connector = new OneDriveConnector(0);
         installClient(connector);
         stubDrive();
         stubUsersTier();

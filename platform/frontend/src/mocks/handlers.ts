@@ -11,6 +11,7 @@ import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
 import {
   adminPermissionsSeed,
+  adminScopedCapabilitiesSeed,
   betterAuthOrgSeed,
   sessionSeed,
 } from "./data/auth";
@@ -143,6 +144,28 @@ export const handlers: HttpHandler[] = [
     role: sessionSeed.user.role,
   }),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
+  ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
+  // An object's own permissions: none beyond the admin's, who may edit them.
+  ...paths("/api/resource-permissions/:resource/:scope").map((url) =>
+    http.get(url, ({ params }) =>
+      HttpResponse.json({
+        resource: params.resource,
+        scope: params.scope,
+        name: "",
+        revision: 0,
+        grants: [],
+        inheritedGrants: [],
+        effectiveActions: [
+          "read",
+          "use",
+          "update",
+          "delete",
+          "manage-permissions",
+        ],
+      }),
+    ),
+  ),
+  ...getJson("/api/resource-permissions/:resource/:scope/subjects", []),
   ...getJson("/api/user/permission-sources", [
     {
       role: sessionSeed.user.role,
@@ -153,6 +176,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/credentials", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
+  ...getJson("/api/guardrails-deployment", {
+    enabled: false,
+    featureEnabled: false,
+    active: false,
+  }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {
     ...healthSeed,

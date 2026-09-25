@@ -3,7 +3,7 @@
 // per-credential cache key, and the cache helpers' degrade-don't-fail
 // contract.
 
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   isOpenAiReasoningSummaryMarkedUnsupported,
   isReasoningSummaryVerificationError,

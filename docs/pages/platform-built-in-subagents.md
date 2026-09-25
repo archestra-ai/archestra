@@ -10,7 +10,7 @@ lastUpdated: 2026-08-26
 
 Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: an administrator configures it once for the organization, and it can then be enabled on individual agents.
 
-An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported.
+An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires an `update` grant on that agent or on `*`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported.
 
 When a subagent has no model set, it runs on the model of the work it serves. A chat subagent uses the conversation's own model, so titles and compaction summaries stay on the model you picked for that chat. The organization's default model is the fallback when there is no such model to follow.
 

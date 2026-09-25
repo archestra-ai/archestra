@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { AskUserArguments } from "../types";
 import { AppaClaudeCodeAdapter } from "./claude-code";
 import { AppaCodexAdapter } from "./codex";

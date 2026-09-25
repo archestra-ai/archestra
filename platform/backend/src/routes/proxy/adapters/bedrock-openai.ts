@@ -121,9 +121,15 @@ class BedrockOpenaiResponseAdapter
   }
 
   toRefusalResponse(
-    _refusalMessage: string,
+    refusalMessage: string,
     contentMessage: string,
   ): BedrockResponse {
+    // Stores the refusal in the inner Converse format for interaction logging.
+    // This prevents logging the blocked tool call payload.
+    this.rewrittenInner = this.inner.toRefusalResponse(
+      refusalMessage,
+      contentMessage,
+    );
     const usage = this.inner.getUsage();
     return {
       id: this.ctx.chatcmplId,

@@ -26,8 +26,8 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("sonner");
 
-type Match =
-  archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"][number];
+type Matches = archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];
+type Match = Matches["matches"][number];
 type Install = NonNullable<Match["install"]>;
 type Battery = archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 type Declarations =
@@ -40,6 +40,7 @@ const uploadedHash = "a".repeat(64);
 const newerHash = "b".repeat(64);
 const server = setupServer();
 let matches: Match[];
+let attach: Matches["attach"];
 let batteries: Battery[];
 let declarations: Declarations;
 let permissions: { manage: boolean; credential: boolean };
@@ -50,6 +51,8 @@ const battery = (fields: Partial<Battery>): Battery => ({
   source: "bundled",
   contentHash: null,
   namespaces: [],
+  annotators: [],
+  scope: "catalogs",
   helpers: [],
   credentials: [],
   setup: null,
@@ -62,6 +65,8 @@ const declared = (fields: Partial<PolicyBattery>): PolicyBattery => ({
   source: "bundled",
   packageHash: null,
   status: "active",
+  scope: "catalogs",
+  composed: true,
   line: 3,
   servers: [],
   credentials: [],
@@ -107,13 +112,14 @@ beforeEach(() => {
     heldPull: null,
   };
   fetches = 0;
+  attach = "ready";
   server.use(
     http.get(`${baseUrl}/api/openappa/battery-matches`, ({ request }) => {
       fetches += 1;
       expect(new URL(request.url).searchParams.get("catalogId")).toBe(
         catalogId,
       );
-      return HttpResponse.json(matches);
+      return HttpResponse.json({ attach, matches });
     }),
     http.get(`${baseUrl}/api/openappa/batteries`, () =>
       HttpResponse.json(batteries),
@@ -141,7 +147,13 @@ function show() {
 }
 
 test("an installed battery follows its install and is switched through it", async () => {
-  matches = [{ battery: "github", evidence: "host", install: install({}) }];
+  matches = [
+    {
+      battery: "github",
+      evidence: "host",
+      install: install({}),
+    },
+  ];
   server.use(
     http.patch(
       `${baseUrl}/api/openappa/battery-installs/install-1`,
@@ -184,7 +196,13 @@ test("a battery matched by name alone starts off and is installed when turned on
           batteryName: "slack",
           status: "missing_credentials",
         });
-        matches = [{ battery: "slack", evidence: "name", install: created }];
+        matches = [
+          {
+            battery: "slack",
+            evidence: "name",
+            install: created,
+          },
+        ];
         return HttpResponse.json(created);
       },
     ),
@@ -229,7 +247,13 @@ test("a choice made while another write installs the battery lands on its instal
       async ({ request }) => {
         expect(await request.json()).toEqual({ enabled: true });
         const updated = install({ id: "install-3" });
-        matches = [{ battery: "github", evidence: "host", install: updated }];
+        matches = [
+          {
+            battery: "github",
+            evidence: "host",
+            install: updated,
+          },
+        ];
         return HttpResponse.json(updated);
       },
     ),
@@ -241,6 +265,41 @@ test("a choice made while another write installs the battery lands on its instal
   await waitFor(() =>
     expect(screen.getByRole("checkbox", { name: /github/ })).toBeChecked(),
   );
+});
+
+test("a server whose tools are not synced yet cannot take a battery", async () => {
+  attach = "unsynced";
+  matches = [{ battery: "github", evidence: "host", install: null }];
+  batteries = [battery({})];
+  show();
+  const checkbox = await screen.findByRole("checkbox", { name: /github/ });
+  expect(checkbox).toBeDisabled();
+  expect(screen.getByRole("note")).toBeInTheDocument();
+});
+
+test("an installed battery cannot be switched while its server's tools are not synced", async () => {
+  attach = "unsynced";
+  matches = [{ battery: "github", evidence: "host", install: install({}) }];
+  batteries = [battery({})];
+  show();
+  const checkbox = await screen.findByRole("checkbox", { name: /github/ });
+  expect(checkbox).toBeChecked();
+  expect(checkbox).toBeDisabled();
+  expect(screen.getByRole("note")).toBeInTheDocument();
+});
+
+test("a server with a conflicting prefix cannot take a battery but can let one go", async () => {
+  attach = "conflicting";
+  matches = [
+    { battery: "github", evidence: "host", install: null },
+    { battery: "linear", evidence: "name", install: install({}) },
+  ];
+  batteries = [battery({}), battery({ name: "linear" })];
+  show();
+  expect(
+    await screen.findByRole("checkbox", { name: /github/ }),
+  ).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /linear/ })).toBeEnabled();
 });
 
 test("a battery is off until the policy declares it, whatever matched it", async () => {
@@ -272,9 +331,10 @@ test("a failed lookup shows an error with a retry instead of nothing", async () 
       attempts += 1;
       return attempts === 1
         ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json([
-            { battery: "github", evidence: "host", install: null },
-          ]);
+        : HttpResponse.json({
+            attach: "ready",
+            matches: [{ battery: "github", evidence: "host", install: null }],
+          });
     }),
   );
   show();
@@ -286,7 +346,13 @@ test("a failed lookup shows an error with a retry instead of nothing", async () 
 });
 
 test("the checkbox is read-only without the permission to manage guardrails", async () => {
-  matches = [{ battery: "github", evidence: "host", install: install({}) }];
+  matches = [
+    {
+      battery: "github",
+      evidence: "host",
+      install: install({}),
+    },
+  ];
   permissions = { manage: false, credential: false };
   show();
   expect(
@@ -320,7 +386,13 @@ test("a battery the policy already includes is added under that entry's package"
           batteryName: "slack",
           packageHash: uploadedHash,
         });
-        matches = [{ battery: "slack", evidence: "host", install: created }];
+        matches = [
+          {
+            battery: "slack",
+            evidence: "host",
+            install: created,
+          },
+        ];
         return HttpResponse.json(created);
       },
     ),
@@ -353,7 +425,13 @@ test("an uploaded battery the policy does not include yet is added under its new
           batteryName: "slack",
           packageHash: newerHash,
         });
-        matches = [{ battery: "slack", evidence: "host", install: created }];
+        matches = [
+          {
+            battery: "slack",
+            evidence: "host",
+            install: created,
+          },
+        ];
         return HttpResponse.json(created);
       },
     ),
@@ -371,7 +449,13 @@ test("an uploaded battery the policy does not include yet is added under its new
 });
 
 test("a battery with a credential says who has to bind it only when the reader cannot", async () => {
-  matches = [{ battery: "github", evidence: "host", install: install({}) }];
+  matches = [
+    {
+      battery: "github",
+      evidence: "host",
+      install: install({}),
+    },
+  ];
   batteries = [battery({ credentials: ["APPA_PROVIDER_GITHUB_TOKEN"] })];
   const { unmount } = show();
   await screen.findByRole("checkbox", { name: /github/ });

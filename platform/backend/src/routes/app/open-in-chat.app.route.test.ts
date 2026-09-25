@@ -8,6 +8,8 @@ import { sql } from "drizzle-orm";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import db from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AppModel,
@@ -16,8 +18,6 @@ import {
   MessageModel,
   OrganizationModel,
 } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { isContentEnvelope } from "@/utils/crypto";
@@ -479,7 +479,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const foreignPersonal = await makeAgent({
       organizationId,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       authorId: other.id,
     });
     await OrganizationModel.patch(organizationId, {

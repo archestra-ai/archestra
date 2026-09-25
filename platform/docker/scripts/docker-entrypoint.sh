@@ -239,7 +239,15 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
                 echo "Container already connected to KinD network"
             else
                 echo "Connecting container to KinD network..."
-                if ! docker network connect kind "$CONTAINER_ID"; then
+                # The KinD network is dual-stack, but our servers listen on IPv4
+                # only. With an IPv6 address on this interface, Docker runtimes
+                # such as OrbStack forward host `localhost` (::1) to it and the
+                # connection is reset. Join without IPv6; fall back to a plain
+                # connect on engines that reject per-endpoint sysctls.
+                if ! docker network connect \
+                        --driver-opt 'com.docker.network.endpoint.sysctls=net.ipv6.conf.IFNAME.disable_ipv6=1' \
+                        kind "$CONTAINER_ID" 2>/dev/null \
+                    && ! docker network connect kind "$CONTAINER_ID"; then
                     echo "ERROR: Failed to connect container to KinD network"
                     exit 1
                 fi

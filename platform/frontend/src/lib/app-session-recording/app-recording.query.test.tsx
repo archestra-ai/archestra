@@ -36,8 +36,8 @@ const sdk = vi.mocked(archestraApiSdk);
 
 // Bundle validation requires a real UUID app id.
 const APP_ID = "3b1f8d3e-8f5a-4c57-9a4e-2f60cf1f2b01";
-/** Just past one poll interval, so a cancelled loop reaches its exit. */
-const DRAIN_MS = 1_700;
+/** Past the accelerated poll interval, so a cancelled loop reaches its exit. */
+const DRAIN_MS = 50;
 
 function bundle(title: string): AppRecordingBundle {
   return {
@@ -103,7 +103,18 @@ async function startRender(conversationId: string, started: number) {
 }
 
 describe("useRenderAppRecordingVideo", () => {
+  let restoreTimer: () => void;
+
   beforeEach(async () => {
+    // Exercise the real poll loop and cancellation with a short clock interval.
+    // Its 1.5-second production cadence is outside these tests' contract.
+    const nativeSetTimeout = globalThis.setTimeout;
+    const timerSpy = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((handler, timeout, ...args) =>
+        nativeSetTimeout(handler, timeout === 1_500 ? 10 : timeout, ...args),
+      );
+    restoreTimer = () => timerSpy.mockRestore();
     vi.clearAllMocks();
     await recordingStore.put("conv-a", bundle("A"));
     await recordingStore.put("conv-b", bundle("B"));
@@ -123,10 +134,14 @@ describe("useRenderAppRecordingVideo", () => {
     // leaves one polling would otherwise still be registered when the next
     // case counts them — so stop them, then give the poll loops the one
     // interval they need to notice and deregister.
-    cancelAppRecordingVideoRender();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, DRAIN_MS));
-    });
+    try {
+      cancelAppRecordingVideoRender();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, DRAIN_MS));
+      });
+    } finally {
+      restoreTimer();
+    }
   });
 
   it("cancels the render its own toast belongs to, not whichever started last", async () => {

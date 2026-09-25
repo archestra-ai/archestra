@@ -24,7 +24,7 @@ import {
   subscribeToRecordingChanges,
 } from "@/lib/app-session-recording/app-recording-store";
 import { useFeature } from "@/lib/config/config.query";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, toApiError } from "@/lib/utils/api";
 
 const {
   cancelAppRecordingRender,

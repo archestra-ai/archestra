@@ -770,16 +770,18 @@ jobs:
             sudo apt-get install -y zsh
           fi
 
-      # The NAPI package builds are deliberately uncacheable in turbo
-      # (turbo.json sets cache:false on them — the .node artifacts are
-      # platform-specific and the remote cache is shared with dev machines),
-      # so every shard really compiles the three Rust crates: measured at
-      # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. Both shards restore
-      # the same entry (shared-key); only shard 1 saves. Fresh PR branches
-      # restore the entry maintained by the warm-backend-build-cache job on
-      # main pushes (Actions caches only flow down from the default branch).
-      - name: Cache cargo registry and target
+      # The native addons are small compared with the Cargo target cache.
+      # Load-verify an exact-source binary cache first; fall back to the warm
+      # Cargo cache and build when it misses. The main-branch warmer publishes
+      # entries that fresh PR and merge-group runs can restore.
+      - name: Restore backend NAPI binaries
+        id: native-cache
+        uses: ./.github/actions/cache-backend-napi
+        with:
+          save: ${{ matrix.shard == 1 }}
+
+      - name: Cache cargo registry and target on native cache miss
+        if: steps.native-cache.outputs.usable != 'true'
         uses: ./.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
@@ -818,6 +820,7 @@ jobs:
       # and fails with "could not rename downloaded file" — so on failure,
       # sync the toolchain serially and retry once.
       - name: Build backend workspace dependencies
+        if: steps.native-cache.outputs.usable != 'true'
         run: |
           pnpm exec turbo build --filter="@backend^..." || {
             echo "Build failed — syncing pinned Rust toolchain and retrying once..."

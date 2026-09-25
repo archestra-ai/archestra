@@ -747,24 +747,15 @@ jobs:
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
-  # eight jobs partition the suite exactly once. Splitting this out of the
-  # lint job takes the suite off the workflow's critical path. The previous
-  # four-shard shape reached 5m15s on the current suite (PR #7574); an isolated
-  # same-host benchmark reduced a representative shard from 484s (265 files)
-  # to 304s (133 files) at eight-way width. Keep the 16-vCPU runner: the old
-  # 16-shard fan-out on free 4-vCPU runners paid module-import overhead without
-  # enough per-shard parallelism and took 6-9 minutes.
+  # two jobs partition the suite exactly once. This trades about four minutes
+  # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
-    # the pre-migration July runs on these same runners). The private
-    # mirror's task-env PRs run on the same Blacksmith installation now, so
-    # the old 2-vCPU private ubuntu-latest sizing no longer applies. Beyond
-    # this, something is hung.
+    # The measured two-shard gate is about 7m30s. Allow for cold caches and
+    # normal variance, while bounding hung test workers.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -779,7 +770,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -804,7 +795,7 @@ jobs:
       # platform-specific and the remote cache is shared with dev machines),
       # so every shard really compiles the three Rust crates: measured at
       # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. All eight shards restore
+      # dir turns that into an incremental no-op. Both shards restore
       # the same entry (shared-key); only shard 1 saves. Fresh PR branches
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
@@ -854,12 +845,12 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 8)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/8"
+        run: pnpm exec vitest run --shard="${SHARD}/2"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

@@ -883,7 +883,7 @@ jobs:
           echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
-    name: Frontend Integration Tests (MSW group ${{ matrix.group }}/${{ github.event_name == 'merge_group' && 2 || 1 }})
+    name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
@@ -899,9 +899,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PRs run all four isolated servers on one 8-vCPU runner. The merge
-        # queue keeps two jobs on the shared macOS host.
-        group: ${{ fromJSON(github.event_name == 'merge_group' && '[1,2]' || '[1]') }}
+        group: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -965,20 +963,10 @@ jobs:
         if: runner.os == 'macOS'
         run: pnpm --filter @frontend exec playwright install chromium
 
-      # Four dist dirs are costly to upload after every PR. Restore the prior
-      # cache and let Next validate it against the current source tree.
-      - name: Restore integration test compiler output (PR)
-        if: github.event_name != 'merge_group'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: platform/frontend/.next-pw-shard-*
-          key: frontend-integration-next-${{ runner.os }}-group-one-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
-          restore-keys: |
-            frontend-integration-next-${{ runner.os }}-group-one-
-            frontend-integration-next-${{ runner.os }}-group-
-
-      - name: Cache integration test compiler output (merge queue)
-        if: github.event_name == 'merge_group'
+      # Next validates its compiler cache against the current source tree. A
+      # group-specific key lets each pair of shards reuse its own dist dirs on
+      # later PR pushes without two jobs racing to save the same cache entry.
+      - name: Cache integration test compiler output
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*
@@ -1008,13 +996,8 @@ jobs:
           set -euo pipefail
           group=$GROUP
           shard_count=4
-          if [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            first_shard=$(( (group - 1) * 2 + 1 ))
-            last_shard=$(( first_shard + 1 ))
-          else
-            first_shard=1
-            last_shard=4
-          fi
+          first_shard=$(( (group - 1) * 2 + 1 ))
+          last_shard=$(( first_shard + 1 ))
           pids=()
           for shard in $(seq "$first_shard" "$last_shard"); do
             # Three macOS runner slots share one host. Derive non-overlapping

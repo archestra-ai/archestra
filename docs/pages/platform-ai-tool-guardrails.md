@@ -3,7 +3,7 @@ title: OpenAPPA
 category: LLM Proxy
 order: 5
 description: Configure policy for agent tool calls and results
-lastUpdated: 2026-09-24
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,6 +67,10 @@ Some batteries consult a provider. Bind each required variable to an organizatio
 ![Available batteries and their attachment actions](/docs/automated_screenshots/platform-openappa_batteries.webp)
 
 Helpers run in the [code execution sandbox](./platform-code-sandbox). Enable that runtime before using a battery with helper scripts. The [OpenAPPA battery guide](https://www.openappa.com/batteries) explains package structure and rule order.
+
+## External Consults
+
+Each call OpenAPPA makes to a provider — an annotator, authority, or sanitizer — is recorded as an external consult. Go to **Logs → Guardrail consults** to review them. Filter by provider name, outcome, session, or time range. Open a consult to see the tool call, the provider's answer, and its diagnostics. For Jev, the diagnostics show each label's probabilities and the decision. **Export JSONL** downloads the consults that match your filters, so you can analyze them offline.
 
 ## GitHub Policy Review
 

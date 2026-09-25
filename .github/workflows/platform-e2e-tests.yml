@@ -842,9 +842,8 @@ jobs:
             projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
             shard: ""
             workers_arg: ""
-          # Three shards preserve all selected tests. PR #7574's API-driven
-          # gateway cleanup removed the list-UI failure that blocked this width
-          # in its earlier experiment.
+          # Two Chromium shards retain the complete project while avoiding a
+          # third full lite stack and its runner setup.
           # The OpenAPPA root tool flow, on a stack booted with the feature on.
           # It is its own leg because the flag is not additive: with OpenAPPA
           # enabled the proxy rejects any tool-declaring request that omits the
@@ -858,20 +857,15 @@ jobs:
             shard: ""
             workers_arg: ""
             openappa_enabled: "true"
-          - name: chromium-1of3
+          - name: chromium-1of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=1/3"
+            shard: "--shard=1/2"
             workers_arg: "--workers=2"
-          - name: chromium-2of3
+          - name: chromium-2of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=2/3"
-            workers_arg: "--workers=2"
-          - name: chromium-3of3
-            projects_default: chromium
-            projects_nightly: chromium
-            shard: "--shard=3/3"
+            shard: "--shard=2/2"
             workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.

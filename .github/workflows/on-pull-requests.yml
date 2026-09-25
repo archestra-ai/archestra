@@ -745,14 +745,18 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
-  # TEMPORARY: measure the full backend suite on one 16-vCPU runner. Restore
-  # the two-shard layout after the benchmark, before merge queue.
+  # Backend unit tests, sharded across parallel runners. Vitest's --shard
+  # slices the file list deterministically (SHA1 of each path), so the
+  # two jobs partition the suite exactly once. This trades about four minutes
+  # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/1)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 25
+    # The measured two-shard gate is about 7m30s. Allow for cold caches and
+    # normal variance, while bounding hung test workers.
+    timeout-minutes: 15
     permissions:
       contents: read
     defaults:
@@ -766,7 +770,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1]
+        shard: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -841,33 +845,12 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 1)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: |
-          # Temporary profiling: sample fork count, aggregate RSS, and CPU
-          # during the full suite. Keep only summary numbers in the log.
-          samples=$(mktemp)
-          (
-            while true; do
-              ps -eo rss=,%cpu=,comm=,args= |
-                awk '$NF ~ /\/vitest\/dist\/workers\/forks\.js$/ { workers++; rss += $1; cpu += $2 } END { print workers + 0, rss + 0, cpu + 0 }' >> "$samples"
-              sleep 1
-            done
-          ) &
-          sampler_pid=$!
-          if pnpm exec vitest run --shard="${SHARD}/1"; then
-            test_status=0
-          else
-            test_status=$?
-          fi
-          kill "$sampler_pid" 2>/dev/null || true
-          wait "$sampler_pid" 2>/dev/null || true
-          awk '$1 > 0 { samples++; if ($1 > workers) workers = $1; if ($2 > rss) rss = $2; if ($3 > cpu) cpu = $3 } END { printf "Vitest worker telemetry: sampled_seconds=%d peak_forks=%d peak_aggregate_rss_gib=%.2f peak_aggregate_cpu_cores=%.1f\n", samples, workers, rss / 1048576, cpu / 100 }' "$samples"
-          rm "$samples"
-          exit "$test_status"
+        run: pnpm exec vitest run --shard="${SHARD}/2"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

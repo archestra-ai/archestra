@@ -3,6 +3,7 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_SERVER_NAME,
+  BUILT_IN_AGENT_IDS,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -1113,6 +1114,34 @@ describe("mcp server tools respect the agent's environment", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+  });
+
+  test("policy configuration can inspect a visible server in another environment", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+  }) => {
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Server",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const policyAgent = await makeAgent({
+      name: "Policy configuration",
+      organizationId: orgId,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const policyContext: ArchestraContext = {
+      ...stagingContext,
+      agent: { id: policyAgent.id, name: policyAgent.name },
+    };
+
+    const result = await executeArchestraTool(
+      tool(TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME),
+      { mcpServerId: prodCatalog.id },
+      policyContext,
+    );
+
+    expect(result.isError).toBe(false);
   });
 
   test("create_mcp_server defaults to the calling agent's environment", async () => {

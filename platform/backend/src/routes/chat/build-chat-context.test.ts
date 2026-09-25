@@ -33,6 +33,7 @@ describe("buildChatContext", () => {
     organizationId: string;
     user: { id: string; email: string; name: string };
     conversationOrigin?: "openappa";
+    openAppaPolicyTargetContext?: string;
   }) =>
     buildChatContext({
       conversationId: params.conversationId,
@@ -50,6 +51,7 @@ describe("buildChatContext", () => {
       projectInstructions: undefined,
       openedApp: undefined,
       projectFileNames: undefined,
+      openAppaPolicyTargetContext: params.openAppaPolicyTargetContext,
       hookRunCollector: [],
       kbChunksCollector: [],
       elicitation: {} as never,
@@ -184,28 +186,41 @@ describe("buildChatContext", () => {
       const policyTool = archestraMcpBranding.getToolName(
         "get_guardrails_policy",
       );
+      const getAgentTool = archestraMcpBranding.getToolName("get_agent");
+      const getGatewayTool =
+        archestraMcpBranding.getToolName("get_mcp_gateway");
       const remedyTool = archestraMcpBranding.getToolName("get_remedy_plans");
       const appTool = archestraMcpBranding.getToolName("scaffold_app");
       mockGetChatMcpTools.mockResolvedValue({
         [policyTool]: {},
+        [getAgentTool]: {},
+        [getGatewayTool]: {},
         [remedyTool]: {},
         [appTool]: {},
       });
       const policyChat = await run({
         ...common,
         conversationOrigin: "openappa",
+        openAppaPolicyTargetContext: "scoped to target ID",
       });
-      const ordinaryChat = await run(common);
+      const ordinaryChat = await run({
+        ...common,
+        openAppaPolicyTargetContext: "scoped to target ID",
+      });
       expect(policyChat.systemPrompt).toContain("appa-guide");
       expect(policyChat.systemPrompt).toContain("preview proposed changes");
+      expect(policyChat.systemPrompt).toContain("scoped to target ID");
       expect(Object.keys(policyChat.mcpTools)).toEqual([
         policyTool,
+        getAgentTool,
+        getGatewayTool,
         remedyTool,
       ]);
       expect(Object.keys(ordinaryChat.mcpTools)).toContain(appTool);
       expect(ordinaryChat.systemPrompt).not.toContain(
         "You are helping the user configure this deployment's OpenAPPA policy",
       );
+      expect(ordinaryChat.systemPrompt).not.toContain("scoped to target ID");
     } finally {
       config.openappa.enabled = originalEnabled;
     }

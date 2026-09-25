@@ -642,6 +642,21 @@ export const ChatOpenedAppMetadataSchema = z.union([
 
 export type ChatOpenedAppMetadata = z.infer<typeof ChatOpenedAppMetadataSchema>;
 
+/**
+ * The OpenAPPA policy target (an agent, MCP gateway, or MCP server) an
+ * OpenAPPA configuration chat is scoped to, attached to every outgoing user
+ * message. Only the row's stable UUID and kind reach the system prompt. The
+ * client-provided display name stays in the welcome screen and user prompts.
+ */
+export const ChatOpenAppaPolicyTargetMetadataSchema = z.object({
+  kind: z.enum(["agent", "mcp_gateway", "mcp_server"]),
+  id: z.uuid(),
+});
+
+export type ChatOpenAppaPolicyTargetMetadata = z.infer<
+  typeof ChatOpenAppaPolicyTargetMetadataSchema
+>;
+
 export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
 export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
 
@@ -653,6 +668,7 @@ export const ChatMessageMetadataSchema = z
     pluginSkill: ChatPluginSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
     openedApp: ChatOpenedAppMetadataSchema.optional(),
+    openAppaPolicyTarget: ChatOpenAppaPolicyTargetMetadataSchema.optional(),
     /**
      * Owner's thumbs verdict on an assistant message. Projected from the
      * `messages.feedback` column on read — the column is authoritative, any

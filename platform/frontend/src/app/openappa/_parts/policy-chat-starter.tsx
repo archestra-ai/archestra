@@ -1,6 +1,10 @@
 "use client";
 
-import { OPENAPPA_CONFIG_SUGGESTED_PROMPTS } from "@archestra/shared";
+import {
+  ChatMessageMetadataSchema,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  type OpenAppaPolicyTargetKind,
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -9,12 +13,16 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { ChatLandingLayout } from "@/app/chat/chat-landing-layout";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { SuggestedPromptPills } from "@/app/chat/suggested-prompt-pills";
+import {
+  type SuggestedPrompt,
+  SuggestedPromptPills,
+} from "@/app/chat/suggested-prompt-pills";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
@@ -35,10 +43,24 @@ export function PolicyChatStarter({
   initialPrompt,
   conversationId,
   onConversationStart,
+  title = "What should the policy do?",
+  subtitle = "Describe a change.",
+  suggestedPrompts = OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  policyTarget,
 }: {
   initialPrompt?: string;
   conversationId?: string;
   onConversationStart?: () => void;
+  title?: string;
+  subtitle?: string;
+  suggestedPrompts?: readonly SuggestedPrompt[];
+  /**
+   * The policy target (agent, MCP gateway, or MCP server) this conversation
+   * is scoped to. Attached as hidden metadata on every outgoing message
+   * instead of an auto-sent first message, so the scope reaches the agent
+   * before the user's first visible turn and persists on every follow-up.
+   */
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +74,23 @@ export function PolicyChatStarter({
   const createConversation = useCreateConversation();
   const conversation = useConversation(conversationId);
   const isPolicyConversation = conversation.data?.origin === "openappa";
+  // History links omit the target query. Recover the scope from a persisted
+  // user message so later turns remain scoped after reopening the conversation.
+  const activePolicyTarget = useMemo(() => {
+    const persistedMessages = conversation.data?.messages as
+      | UIMessage[]
+      | undefined;
+    const lastScopedMessage = persistedMessages?.findLast(
+      (message) =>
+        message.role === "user" &&
+        ChatMessageMetadataSchema.safeParse(message.metadata).data
+          ?.openAppaPolicyTarget,
+    );
+    return (
+      ChatMessageMetadataSchema.safeParse(lastScopedMessage?.metadata).data
+        ?.openAppaPolicyTarget ?? policyTarget
+    );
+  }, [conversation.data?.messages, policyTarget]);
   const selectedModel = conversation.data?.modelId ?? "";
   const modelName = models.data?.find(
     (model) => model.dbId === selectedModel,
@@ -74,6 +113,16 @@ export function PolicyChatStarter({
     if (handoff) pendingPrompt.current = handoff.prompt;
   }, [conversationId]);
 
+  const messageMetadata = useCallback(
+    () => ({
+      createdAt: new Date().toISOString(),
+      ...(activePolicyTarget
+        ? { openAppaPolicyTarget: activePolicyTarget }
+        : {}),
+    }),
+    [activePolicyTarget],
+  );
+
   useEffect(() => {
     if (!session || !pendingPrompt.current) return;
     const text = pendingPrompt.current;
@@ -82,10 +131,10 @@ export function PolicyChatStarter({
       session.sendMessage({
         role: "user",
         parts: [{ type: "text", text }],
-        metadata: { createdAt: new Date().toISOString() },
+        metadata: messageMetadata(),
       });
     });
-  }, [session]);
+  }, [session, messageMetadata]);
 
   const sync = useAppaGithubSync();
   const usesGitHub = Boolean(sync.data?.source?.interval);
@@ -99,7 +148,7 @@ export function PolicyChatStarter({
         session.sendMessage({
           role: "user",
           parts: [{ type: "text", text }],
-          metadata: { createdAt: new Date().toISOString() },
+          metadata: messageMetadata(),
         });
         return;
       }
@@ -114,14 +163,30 @@ export function PolicyChatStarter({
           prompt: text,
         });
         onConversationStart?.();
-        router.push(`/openappa/${encodeURIComponent(created.id)}`);
+        // The target scope must survive this navigation: `[conversationId]`
+        // remounts `PolicyChatStarter` from scratch, so without it in the
+        // URL both the deferred opening message and every follow-up would
+        // lose their `openAppaPolicyTarget` metadata.
+        const targetQuery = policyTarget
+          ? `?targetType=${encodeURIComponent(policyTarget.kind)}&targetId=${encodeURIComponent(policyTarget.id)}`
+          : "";
+        router.push(
+          `/openappa/${encodeURIComponent(created.id)}${targetQuery}`,
+        );
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "Could not start chat",
         );
       }
     },
-    [session, createConversation, onConversationStart, router],
+    [
+      session,
+      createConversation,
+      onConversationStart,
+      router,
+      messageMetadata,
+      policyTarget,
+    ],
   );
 
   useEffect(() => {
@@ -225,16 +290,16 @@ export function PolicyChatStarter({
         </>
       ) : (
         <ChatLandingLayout
-          title="What should the policy do?"
+          title={title}
           description={
             <>
-              Describe a change. The agent will show you a diff before it{" "}
+              {subtitle} The agent will show you a diff before it{" "}
               {usesGitHub ? "opens a GitHub pull request" : "saves a revision"}.
             </>
           }
           suggestions={
             <SuggestedPromptPills
-              prompts={[...OPENAPPA_CONFIG_SUGGESTED_PROMPTS]}
+              prompts={[...suggestedPrompts]}
               align="start"
               disabled={createConversation.isPending}
               onPreviewChange={setSuggestionPreview}

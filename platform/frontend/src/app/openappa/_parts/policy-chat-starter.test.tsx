@@ -1,3 +1,4 @@
+import type { OpenAppaPolicyTargetKind } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter } from "next/navigation";
@@ -10,6 +11,7 @@ import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-ha
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import OpenAppaConversationPage from "../[conversationId]/page";
 import { PolicyChatStarter } from "./policy-chat-starter";
 
 vi.mock("@/lib/auth/auth.query");
@@ -63,15 +65,21 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
 }));
 
 const create = vi.fn();
+const targetId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const sendMessage = vi.fn();
 const push = vi.fn();
 const replace = vi.fn();
-const renderStarter = (initialPrompt?: string, conversationId?: string) =>
+const renderStarter = (
+  initialPrompt?: string,
+  conversationId?: string,
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string },
+) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <PolicyChatStarter
         initialPrompt={initialPrompt}
         conversationId={conversationId}
+        policyTarget={policyTarget}
       />
     </QueryClientProvider>,
   );
@@ -228,6 +236,83 @@ test("starts with a policy-specific suggested prompt", async () => {
         ],
       }),
     ),
+  );
+});
+
+test("attaches the scoped policy target as hidden metadata on the opening message", async () => {
+  const view = renderStarter(undefined, undefined, {
+    kind: "mcp_server",
+    id: targetId,
+  });
+  expect(screen.getByText("What should the policy do?")).toBeVisible();
+  expect(create).not.toHaveBeenCalled();
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "What can this server do?" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  await vi.waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      `/openappa/conversation-1?targetType=mcp_server&targetId=${targetId}`,
+    ),
+  );
+  view.unmount();
+  // The opening message goes through the create → handoff → sendMessage
+  // round-trip, including the conversation route's target forwarding.
+  const page = await OpenAppaConversationPage({
+    params: Promise.resolve({ conversationId: "conversation-1" }),
+    searchParams: Promise.resolve({
+      targetType: "mcp_server",
+      targetId,
+    }),
+  });
+  renderStarter(undefined, "conversation-1", page.props.policyTarget);
+  await vi.waitFor(() =>
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "What can this server do?" }],
+        metadata: expect.objectContaining({
+          openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+        }),
+      }),
+    ),
+  );
+});
+
+test("recovers the policy target when a conversation is reopened from history", () => {
+  vi.mocked(useConversation).mockReturnValue({
+    data: {
+      id: "conversation-1",
+      origin: "openappa",
+      messages: [
+        {
+          id: "previous-user-message",
+          role: "user",
+          parts: [{ type: "text", text: "Explain this policy" }],
+          metadata: {
+            openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+          },
+        },
+      ],
+    },
+  } as unknown as ReturnType<typeof useConversation>);
+  renderStarter(undefined, "conversation-1");
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "Describe the OpenAPPA policy change",
+    }),
+    { target: { value: "What about approvals?" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start policy chat" }));
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      parts: [{ type: "text", text: "What about approvals?" }],
+      metadata: expect.objectContaining({
+        openAppaPolicyTarget: { kind: "mcp_server", id: targetId },
+      }),
+    }),
   );
 });
 

@@ -1,8 +1,10 @@
 "use client";
 
+import type { OpenAppaPolicyTargetKind } from "@archestra/shared";
 import { CircleHelp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import type { SuggestedPrompt } from "@/app/chat/suggested-prompt-pills";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { GithubSyncNotice } from "./github-sync-notice";
 import { PolicyChatStarter } from "./policy-chat-starter";
@@ -10,9 +12,17 @@ import { PolicyChatStarter } from "./policy-chat-starter";
 export function OpenAppaOverview({
   initialPrompt,
   conversationId,
+  title,
+  subtitle,
+  suggestedPrompts,
+  policyTarget,
 }: {
   initialPrompt?: string;
   conversationId?: string;
+  title?: string;
+  subtitle?: string;
+  suggestedPrompts?: readonly SuggestedPrompt[];
+  policyTarget?: { kind: OpenAppaPolicyTargetKind; id: string };
 }) {
   const [chatStarted, setChatStarted] = useState(false);
   const showChat = chatStarted || Boolean(conversationId);
@@ -51,6 +61,10 @@ export function OpenAppaOverview({
         initialPrompt={initialPrompt}
         conversationId={conversationId}
         onConversationStart={() => setChatStarted(true)}
+        title={title}
+        subtitle={subtitle}
+        suggestedPrompts={suggestedPrompts}
+        policyTarget={policyTarget}
       />
     </div>
   );

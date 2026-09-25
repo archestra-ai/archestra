@@ -406,6 +406,8 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
   if (!config.openappa.enabled) return;
 
   const toolShortNames = [
+    "get_agent",
+    "get_mcp_gateway",
     "get_guardrails_policy",
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",

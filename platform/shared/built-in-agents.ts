@@ -39,6 +39,67 @@ export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   },
 ] as const;
 
+/** One row of the OpenAPPA policy target table: an agent, MCP gateway, or MCP server. */
+export type OpenAppaPolicyTargetKind = "agent" | "mcp_gateway" | "mcp_server";
+
+const OPENAPPA_POLICY_TARGET_KIND_LABELS: Record<
+  OpenAppaPolicyTargetKind,
+  string
+> = {
+  agent: "agent",
+  mcp_gateway: "MCP gateway",
+  mcp_server: "MCP server",
+};
+
+/** How a policy target reads inline in a sentence, e.g. `the agent "Foo"`. */
+export function describeOpenAppaPolicyTarget(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+): string {
+  return `the ${OPENAPPA_POLICY_TARGET_KIND_LABELS[kind]} "${name}"`;
+}
+
+/**
+ * Hidden scope reminder for a policy-target conversation. Use only the stable
+ * UUID and a validated kind: target names are free text and must not be
+ * promoted from client metadata into the system prompt.
+ */
+export function openAppaTargetScopeContext(
+  kind: OpenAppaPolicyTargetKind,
+  id: string,
+): string {
+  const targetKind = OPENAPPA_POLICY_TARGET_KIND_LABELS[kind];
+  const lookup = {
+    agent: "Call archestra__get_agent with this ID",
+    mcp_gateway: "Call archestra__get_mcp_gateway with this ID",
+    mcp_server:
+      "Call archestra__get_mcp_server_tools with this ID as mcpServerId",
+  }[kind];
+  return `This conversation is scoped to the ${targetKind} with ID ${id}. ${lookup} before explaining its current OpenAPPA policy rules or proposing changes. If it is unavailable, ask the user to select a target again. Keep changes scoped to this target unless the user says otherwise.`;
+}
+
+/** {@link OPENAPPA_CONFIG_SUGGESTED_PROMPTS}, reworded to name the policy target. */
+export function openAppaTargetSuggestedPrompts(
+  kind: OpenAppaPolicyTargetKind,
+  name: string,
+) {
+  const target = describeOpenAppaPolicyTarget(kind, name);
+  return [
+    {
+      summaryTitle: `Explain the policy for ${name}`,
+      prompt: `Explain the current OpenAPPA policy for ${target} in plain language. What do its rules allow, deny, or require approval for? Do not change it.`,
+    },
+    {
+      summaryTitle: `Review risky calls for ${name}`,
+      prompt: `Review the current OpenAPPA policy for ${target} for risky tool calls and gaps. Suggest specific changes, but do not publish anything yet.`,
+    },
+    {
+      summaryTitle: `Change the policy for ${name}`,
+      prompt: `Help me change the OpenAPPA policy for ${target}. Ask what I want to protect, inspect its current rules, and show me the proposed diff before publishing.`,
+    },
+  ];
+}
+
 /**
  * Default question rounds per dual LLM analysis. Three rounds capture what
  * the transcripts show matters (content type, dominant topics, overall

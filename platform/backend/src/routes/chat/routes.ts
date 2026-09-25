@@ -209,6 +209,7 @@ import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildOpenAiThinkingProviderOptions } from "./openai-provider-options";
 import { buildOpenRouterProviderOptions } from "./openrouter-provider-options";
 import { buildModelMessages } from "./prepare-model-messages";
+import { readOpenAppaPolicyTargetContext } from "./read-openappa-policy-target-context";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
   detectSandboxCommand,
@@ -866,6 +867,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })
           : Promise.resolve(undefined);
 
+        // For an OpenAPPA policy-target conversation, the client attaches the
+        // selected target on the turn's last user message the same way. Only
+        // its validated kind and UUID enter the prompt; policy tools perform
+        // the access checks when the agent resolves the exact target.
+        const openAppaPolicyTargetContext = readOpenAppaPolicyTargetContext(
+          messages as ChatMessage[],
+        );
+
         // A project chat also lists the project's shared files in the system
         // prompt: they are attached to the project rather than to any message,
         // so nothing else ever tells the model they exist, and it answers "you
@@ -946,6 +955,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 projectInstructions,
                 openedApp,
                 projectFileNames,
+                openAppaPolicyTargetContext,
                 hookRunCollector,
                 kbChunksCollector,
                 elicitation: chatMcpElicitation,

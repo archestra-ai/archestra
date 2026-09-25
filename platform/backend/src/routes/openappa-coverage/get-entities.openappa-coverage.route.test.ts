@@ -71,6 +71,15 @@ describe("GET /api/openappa/coverage/entities", () => {
       }),
     ]);
 
+    const byId = await ctx.app.inject({
+      method: "GET",
+      url: `/api/openappa/coverage/entities?entityId=${unassigned.id}&limit=1`,
+    });
+    expect(byId.statusCode).toBe(200);
+    expect(byId.json().data).toEqual([
+      expect.objectContaining({ id: unassigned.id, name: unassigned.name }),
+    ]);
+
     await expect(
       ToolModel.findCoverageInventory(ctx.organizationId, {
         userId: ctx.user.id,

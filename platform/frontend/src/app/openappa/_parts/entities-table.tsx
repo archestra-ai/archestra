@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Bot, ChevronRight } from "lucide-react";
+import { Bot, Info, MessageCircle } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -15,7 +15,7 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Button } from "@/components/ui/button";
+import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -108,21 +108,28 @@ export function EntitiesTable() {
       {
         id: "actions",
         header: "Actions",
-        size: 110,
+        size: 130,
         cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`Details for ${row.original.name}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelected(row.original);
-            }}
-          >
-            <span>Details</span>
-            <ChevronRight className="size-3.5" />
-          </Button>
+          <TableRowActions
+            itemName={row.original.name}
+            actions={[
+              {
+                icon: <Info />,
+                label: "Details",
+                onClick: () => setSelected(row.original),
+              },
+              {
+                icon: <MessageCircle />,
+                label: "Configure with chat",
+                tooltip: `Configure the policy for ${row.original.name} with chat`,
+                permissions:
+                  row.original.type === "mcp_server"
+                    ? { mcpRegistry: ["read"] }
+                    : undefined,
+                href: `/openappa/configure?targetType=${row.original.type}&targetId=${encodeURIComponent(row.original.id)}`,
+              },
+            ]}
+          />
         ),
       },
     ],

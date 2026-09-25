@@ -23,11 +23,13 @@ import {
   test,
   vi,
 } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { OverviewTab } from "./overview-tab";
 import { ToolTable } from "./tool-table";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/lib/auth/auth.query");
 
 const origin = "http://localhost:9000";
 const entityId = "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0";
@@ -35,6 +37,12 @@ const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "test-user" } },
+  } as ReturnType<typeof useSession>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
@@ -157,6 +165,20 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   );
 
   expect(await screen.findByText("Research assistant")).toBeVisible();
+  expect(
+    screen.getByRole("link", {
+      name: "Configure with chat Research assistant",
+    }),
+  ).toHaveAttribute(
+    "href",
+    `/openappa/configure?targetType=agent&targetId=${entityId}`,
+  );
+  expect(
+    screen.getByRole("link", { name: "Configure with chat GitHub" }),
+  ).toHaveAttribute(
+    "href",
+    `/openappa/configure?targetType=mcp_server&targetId=${serverId}`,
+  );
   expect(screen.getByRole("heading", { name: "Policy targets" })).toBeVisible();
   expect(screen.getByRole("columnheader", { name: "Type" })).toBeVisible();
   expect(
@@ -167,7 +189,7 @@ test("shows agents and registry servers with combined tool coverage and scoped d
   expect(screen.getByText("Includes your Auto mode access")).toBeVisible();
   expect(screen.getByText("4 of 19 with tool rules")).toBeVisible();
   fireEvent.click(
-    screen.getByRole("button", { name: "Details for Research assistant" }),
+    screen.getByRole("button", { name: "Details Research assistant" }),
   );
   const researchSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
@@ -199,13 +221,32 @@ test("shows agents and registry servers with combined tool coverage and scoped d
     expect(within(dialog).queryByText("search_tools")).not.toBeInTheDocument();
   });
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  fireEvent.click(screen.getByRole("button", { name: "Details for GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Details GitHub" }));
   const githubSummary = within(await screen.findByRole("dialog"));
   expect(
     githubSummary.getByText("synced tools").parentElement,
   ).toHaveTextContent("19synced tools");
   expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
+});
+
+test("disables server chat when registry read access is missing", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as ReturnType<typeof useHasPermissions>);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <OverviewTab />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("GitHub")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Configure with chat GitHub" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Configure with chat GitHub" }),
+  ).toHaveAttribute("aria-disabled", "true");
 });
 
 test("filters tool policy sources and links each rule to its TOML line", async () => {

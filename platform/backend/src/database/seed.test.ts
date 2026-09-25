@@ -102,6 +102,8 @@ describe("syncBuiltInAgents", () => {
       const loadSkillIds = await ToolModel.findBuiltInToolIdsByNames([
         archestraMcpBranding.getToolName("load_skill"),
         archestraMcpBranding.getToolName("get_guardrails_policy"),
+        archestraMcpBranding.getToolName("get_agent"),
+        archestraMcpBranding.getToolName("get_mcp_gateway"),
       ]);
       expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
       expect(

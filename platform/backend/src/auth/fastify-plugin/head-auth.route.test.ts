@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
+import chatRoutes from "@/routes/chat/routes";
 import { authPlugin } from "./plugin";
 
 describe("protected route authentication", () => {
@@ -27,10 +28,9 @@ describe("protected route authentication", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  test("rejects an unauthenticated chat message PATCH before its handler runs", async () => {
-    const handler = vi.fn(async () => ({ updated: true }));
+  test("rejects an unauthenticated chat message PATCH", async () => {
     await app.register(authPlugin);
-    app.patch("/api/chat/messages/:id", handler);
+    await app.register(chatRoutes);
 
     const response = await app.inject({
       method: "PATCH",
@@ -43,6 +43,5 @@ describe("protected route authentication", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(handler).not.toHaveBeenCalled();
   });
 });

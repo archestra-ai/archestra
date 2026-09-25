@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { collapseMultitenantInstalls } from "./collapse-multitenant-installs";

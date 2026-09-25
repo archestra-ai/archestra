@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-testing
-description: Use when deciding whether a change needs a test and at which level — unit, backend route-level integration, MSW-backed frontend integration, or e2e — or when reviewing tests for the "fluff test" anti-pattern. Start here before archestra-dev-backend-tests or archestra-dev-e2e.
+description: Use for test selection and quality across backend, frontend, and e2e; load its backend reference for Vitest projects, mocking, DB fixtures, and performance.
 ---
 
 # What to test, and at which level
@@ -10,9 +10,15 @@ Run commands from `platform/` unless specifically instructed otherwise.
 This skill answers *should this test exist, and where does it belong*. Once you
 know the level, the mechanics live elsewhere:
 
-- `archestra-dev-backend-tests` — backend mocking rules, vitest projects, DB fixtures.
+- For backend Vitest tests, read [references/backend-tests.md](references/backend-tests.md) for mocking rules, project selection, DB fixtures, and performance.
 - `archestra-dev-e2e` — Playwright fixtures, WireMock, selectors.
 - `archestra-dev-frontend` — component/query-hook conventions.
+
+Frontend Vitest defaults to jsdom. For a test of pure logic whose runtime
+imports do not need browser APIs, put `// @vitest-environment node` at the top
+of the file. Check its dependency graph and run the file under Node before
+adding the directive; a `.test.ts` suffix alone does not establish that it is
+browser-free. Keep UI, storage, canvas, and browser binary API tests on jsdom.
 
 ## The one rule
 

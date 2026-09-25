@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 type WebSocketListener = (event: Event & { data?: string }) => void;

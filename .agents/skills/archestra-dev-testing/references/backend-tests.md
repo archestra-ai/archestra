@@ -1,8 +1,3 @@
----
-name: archestra-dev-backend-tests
-description: Use when writing or modifying Archestra backend unit tests (platform/backend/src/**/*.test.ts) — mocking modules, stubbing globals, database fixtures, vitest projects/isolation, or test performance.
----
-
 # Archestra Backend Unit Tests
 
 Run commands from `platform/` unless specifically instructed otherwise. Run a single file with `pnpm --dir backend exec vitest run <file>`.

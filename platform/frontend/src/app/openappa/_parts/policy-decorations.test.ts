@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PolicyDeclarations } from "@/lib/openappa-batteries.query";
 import { policyAnnotations } from "./policy-decorations";

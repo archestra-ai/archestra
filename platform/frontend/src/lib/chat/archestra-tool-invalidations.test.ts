@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { collectArchestraToolInvalidations } from "./archestra-tool-invalidations";

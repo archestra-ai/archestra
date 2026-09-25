@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, test } from "vitest";
 import { messagesToMarkdown } from "./export-markdown";

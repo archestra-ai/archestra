@@ -134,8 +134,10 @@ const mockCanvasContext = new Proxy(
   },
 ) as unknown as CanvasRenderingContext2D;
 
-vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-  function getContext(this: HTMLCanvasElement) {
-    return Object.assign(Object.create(mockCanvasContext), { canvas: this });
-  },
-);
+if (typeof HTMLCanvasElement !== "undefined") {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function getContext(this: HTMLCanvasElement) {
+      return Object.assign(Object.create(mockCanvasContext), { canvas: this });
+    },
+  );
+}

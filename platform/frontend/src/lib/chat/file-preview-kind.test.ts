@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
 

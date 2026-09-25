@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { addDays, subDays } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {

@@ -366,14 +366,14 @@ describe("Perforce connector end-to-end sync", () => {
 
     fakeDepot({
       headChange: 200,
-      files: Array.from({ length: 60 }, (_, i) => ({
+      files: Array.from({ length: 51 }, (_, i) => ({
         depotFile: `//depot/docs/file-${String(i).padStart(3, "0")}.md`,
         content: `# File ${i}\n`,
         change: 150,
       })),
     });
 
-    // 60 files = 2 connector batches; a 1ms budget stops after the first.
+    // 51 files = 2 connector batches; a 1ms budget stops after the first.
     const partial = await connectorSyncService.executeSync(connector.id, {
       maxDurationMs: 1,
     });
@@ -393,7 +393,7 @@ describe("Perforce connector end-to-end sync", () => {
     // Continuation run picks the sweep back up and commits the cursor.
     const resumed = await connectorSyncService.executeSync(connector.id);
     expect(resumed.status).toBe("success");
-    expect(await KbDocumentModel.countByConnector(connector.id)).toBe(60);
+    expect(await KbDocumentModel.countByConnector(connector.id)).toBe(51);
 
     const committed = await KnowledgeBaseConnectorModel.findById(connector.id);
     expect(committed?.checkpoint).toEqual({

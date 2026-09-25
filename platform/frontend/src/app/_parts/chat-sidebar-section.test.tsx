@@ -326,7 +326,7 @@ vi.mock("@/components/truncated-text", () => ({
   TruncatedText: ({ message }: { message: string }) => <span>{message}</span>,
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils/tailwind", () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
 }));
 

@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { openappaActor } from "./actor";
 import { forkedSession } from "./lineage";

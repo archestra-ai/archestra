@@ -10,7 +10,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   getInteraction,

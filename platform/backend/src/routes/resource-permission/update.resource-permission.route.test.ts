@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { vi } from "vitest";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
   createFastifyInstance,
@@ -17,18 +17,13 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import resourcePermissionRoutes from "./resource-permission.routes";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: false },
-  }),
-);
-
 describe("resource permission routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    config.enterpriseFeatures.core = false;
     enterpriseTier.setUserCountForTesting(0);
     const org = await makeOrganization();
     organizationId = org.id;

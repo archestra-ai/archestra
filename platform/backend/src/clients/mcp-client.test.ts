@@ -235,6 +235,25 @@ vi.mock("@/k8s/mcp-server-runtime", () => {
   };
 });
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/** Exercise the real wake retry and deadline paths without wall-clock waits. */
+async function withVirtualWakeTime<T>(
+  run: () => Promise<T>,
+  advanceMs: number,
+): Promise<T> {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  try {
+    const result = run();
+    await vi.advanceTimersByTimeAsync(advanceMs);
+    return await result;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+// SPDX-SnippetEnd
+
 // The shared fixture connection below is personal-scope with no owner (as a
 // connection looks once its owning user is deleted), so calls through it run
 // as an unattributed personal connection.
@@ -2762,13 +2781,17 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCallForOwner(
-          {
-            id: "call_wake_race_retry",
-            name: "local-streamable-http-server__test_tool",
-            arguments: {},
-          },
-          agentOwner(agentId),
+        const result = await withVirtualWakeTime(
+          () =>
+            mcpClient.executeToolCallForOwner(
+              {
+                id: "call_wake_race_retry",
+                name: "local-streamable-http-server__test_tool",
+                arguments: {},
+              },
+              agentOwner(agentId),
+            ),
+          1_000,
         );
 
         // The race never reaches the caller: the funnel re-entered the wake
@@ -2813,13 +2836,17 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCallForOwner(
-          {
-            id: "call_wake_verdict_recovers",
-            name: "local-streamable-http-server__test_tool",
-            arguments: {},
-          },
-          agentOwner(agentId),
+        const result = await withVirtualWakeTime(
+          () =>
+            mcpClient.executeToolCallForOwner(
+              {
+                id: "call_wake_verdict_recovers",
+                name: "local-streamable-http-server__test_tool",
+                arguments: {},
+              },
+              agentOwner(agentId),
+            ),
+          1_000,
         );
 
         expect(result.isError).toBe(false);
@@ -2856,13 +2883,17 @@ describe("McpClient", () => {
           )
           .mockReturnValue(new Promise(() => {}));
 
-        const result = await mcpClient.executeToolCallForOwner(
-          {
-            id: "call_wake_verdict_expires",
-            name: "local-streamable-http-server__test_tool",
-            arguments: {},
-          },
-          agentOwner(agentId),
+        const result = await withVirtualWakeTime(
+          () =>
+            mcpClient.executeToolCallForOwner(
+              {
+                id: "call_wake_verdict_expires",
+                name: "local-streamable-http-server__test_tool",
+                arguments: {},
+              },
+              agentOwner(agentId),
+            ),
+          WAKE_BUDGET.ms,
         );
 
         expect(result.isError).toBe(true);
@@ -2902,13 +2933,17 @@ describe("McpClient", () => {
           )
           .mockReturnValue(new Promise(() => {}));
 
-        const result = await mcpClient.executeToolCallForOwner(
-          {
-            id: "call_wake_verdict_readdressed",
-            name: "local-streamable-http-server__test_tool",
-            arguments: {},
-          },
-          agentOwner(agentId),
+        const result = await withVirtualWakeTime(
+          () =>
+            mcpClient.executeToolCallForOwner(
+              {
+                id: "call_wake_verdict_readdressed",
+                name: "local-streamable-http-server__test_tool",
+                arguments: {},
+              },
+              agentOwner(agentId),
+            ),
+          WAKE_BUDGET.ms,
         );
 
         expect(result.isError).toBe(true);

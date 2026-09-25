@@ -3,7 +3,7 @@
 
 import { HttpResponse, http } from "msw";
 import pino from "pino";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import { AtlassianAdminEmailResolver } from "./atlassian-admin-email-resolver";
 

@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import type { IncomingEmail } from "@/types";
 import {
   MAX_ATTACHMENT_SIZE,

@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
-import { afterEach, describe, expect, test } from "@/test";
 
 vi.mock("fastify-metrics", () => ({
   default: async function mockMetricsPlugin(

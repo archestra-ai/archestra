@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { BrowserStreamService } from "./browser-stream.service";
 import { Ok } from "./browser-stream.state.types";
 import { browserStateManager } from "./browser-stream.state-manager";

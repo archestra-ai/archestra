@@ -25,7 +25,7 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useImportAgent } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type ImportAgentDialogProps = {
   open: boolean;

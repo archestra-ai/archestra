@@ -132,7 +132,6 @@ export {
   ConversationNotOwnedError,
   default as ProjectModel,
   ProjectAlreadyAssignedError,
-  ProjectNameExistsError,
 } from "./project";
 export { default as ProjectAccessModel } from "./project-access";
 export { default as ProjectPinModel } from "./project-pin";

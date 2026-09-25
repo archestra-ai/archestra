@@ -29,7 +29,7 @@ import {
   lockedChatRequestHeaders,
   storeLockedChatKey,
 } from "@/lib/chat/locked-chat";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
 const {

@@ -1,5 +1,4 @@
-import { beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Minimax } from "@/types/llm-providers";
 import { minimaxAdapterFactory } from "./minimax";
 

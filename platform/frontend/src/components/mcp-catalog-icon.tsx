@@ -6,7 +6,7 @@ import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface McpCatalogIconProps {
   icon?: string | null;

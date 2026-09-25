@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Separator } from "@/components/ui/separator";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
 

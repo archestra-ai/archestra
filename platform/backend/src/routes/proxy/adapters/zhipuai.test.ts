@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { Zhipuai } from "@/types/llm-providers";
 import { zhipuaiAdapterFactory } from "./zhipuai";
 

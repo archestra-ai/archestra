@@ -15,7 +15,7 @@ vi.mock("./connectors/pdf-utils", async (importOriginal) => {
   };
 });
 
-import { expect, test } from "@/test";
+import { expect, test } from "vitest";
 import { makeTestPdf } from "@/test/pdf";
 import { parsePdfBuffer } from "./connectors/pdf-utils";
 import type { OcrConfig } from "./kb-llm-client";

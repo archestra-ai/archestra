@@ -1,6 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
+import { describe, expect, test } from "vitest";
 import { sanitizeMetadataLabels } from "@/k8s/shared";
-import { describe, expect, test } from "@/test";
 import type { EffectiveNetworkPolicy } from "@/types";
 import {
   buildEgressBaselineAwsApplicationNetworkPolicy,

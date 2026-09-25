@@ -4,9 +4,9 @@ import {
   generateExportedKeyPair,
   signJWT,
 } from "better-auth/plugins/jwt";
+import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
 import JwksModel from "@/models/jwks";
-import { describe, expect, test } from "@/test";
 import { auth, JWT_PLUGIN_OPTIONS } from "./better-auth";
 import { verifyJwksSigningKey } from "./jwks-signing-key-guard";
 

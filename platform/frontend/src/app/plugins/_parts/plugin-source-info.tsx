@@ -6,8 +6,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { PluginListItem } from "@/lib/plugins/plugin.query";
-import { cn } from "@/lib/utils";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 export function PluginSourceInfo({
   plugin,

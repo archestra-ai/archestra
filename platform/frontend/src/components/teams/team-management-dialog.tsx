@@ -59,8 +59,8 @@ import {
   getTeamDescendantIds,
 } from "@/lib/teams/team-hierarchy";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];

@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useServiceIcons } from "./service-logo-picker.hook";
 import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
 

@@ -33,7 +33,7 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ClientIcon } from "./client-icon";
 import type {
   ConnectClient,

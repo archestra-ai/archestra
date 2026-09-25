@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Marks an agent with a dedicated runtime: `glyph` for dense pickers, `pill`

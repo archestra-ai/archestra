@@ -3,7 +3,7 @@
 import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomDateTimeRangeDialog } from "@/components/ui/custom-date-time-range-dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface DateTimeRangePickerProps {
   startDate: Date | undefined;

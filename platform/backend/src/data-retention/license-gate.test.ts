@@ -2,9 +2,9 @@ import { vi } from "vitest";
 
 vi.mock("@/logging");
 
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import logger from "@/logging";
-import { beforeEach, describe, expect, test } from "@/test";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { assertRetentionConfigLicensed } from "./license-gate.ee";
 

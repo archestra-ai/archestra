@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import {
   callVoyageEmbedding,

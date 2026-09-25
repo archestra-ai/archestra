@@ -3,7 +3,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 type ConnectorSyncStatus = NonNullable<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number]["lastSyncStatus"]

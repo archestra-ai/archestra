@@ -1,5 +1,5 @@
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
 import {
   appendChildTrajectoryReceipt,
   mintChildTrajectoryReceipt,

@@ -3,7 +3,6 @@ import {
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
-import { vi } from "vitest";
 import {
   afterAll,
   afterEach,
@@ -11,7 +10,8 @@ import {
   describe,
   expect,
   test,
-} from "@/test";
+  vi,
+} from "vitest";
 import config, {
   betaFeatureEnabled,
   deriveOllamaNativeBaseUrl,

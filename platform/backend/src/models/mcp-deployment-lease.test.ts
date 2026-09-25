@@ -1,11 +1,11 @@
 import { and, eq, sql } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
 import McpDeploymentLeaseModel, {
   type ClusterLeaseGuard,
   ClusterLeaseHeldError,
   ClusterLeaseLostError,
 } from "@/models/mcp-deployment-lease";
-import { describe, expect, test } from "@/test";
 
 const SCOPE = "lease-test";
 

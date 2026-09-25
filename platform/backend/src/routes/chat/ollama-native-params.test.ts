@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import { OLLAMA_THINK_EXPLICIT_HEADER } from "@/clients/llm-client";
-import { describe, expect, test } from "@/test";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 
 describe("buildOllamaNativeProviderOptions", () => {

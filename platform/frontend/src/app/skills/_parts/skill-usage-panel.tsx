@@ -33,7 +33,7 @@ import {
   type SkillUsageReference,
   useSkillUsageStatistics,
 } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type UsageStatistics =
   archestraApiTypes.GetSkillUsageStatisticsResponses["200"];

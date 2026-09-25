@@ -51,7 +51,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
@@ -366,6 +366,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             variant="ghost"
             size="sm"
             className="h-8 px-2"
+            aria-label="Change model or provider"
             onClick={expandModelSelector}
           >
             <ModelSelectorLogo provider={logoProvider} className="size-4" />
@@ -666,6 +667,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               variant="ghost"
               size="sm"
               className="h-8 px-2"
+              aria-label="Change model or provider"
               onClick={expandModelSelector}
             >
               <ModelSelectorLogo provider={logoProvider} className="size-4" />

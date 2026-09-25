@@ -23,7 +23,7 @@ import {
   type CoverageTool,
   useAllCoverageToolsForCatalogs,
 } from "@/lib/openappa-coverage.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { hasSource, type SetupShape } from "./setup-rule";
 
 /** A tool picked in the flow, with what the stations and summary show. */

@@ -1,6 +1,6 @@
 import { HttpResponse, http } from "msw";
+import { describe, expect, test } from "vitest";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
-import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 
 /**

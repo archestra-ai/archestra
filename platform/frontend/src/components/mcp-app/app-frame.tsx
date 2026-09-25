@@ -4,7 +4,7 @@ import { getArchestraAppResourceUri } from "@archestra/shared";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import { useApp } from "@/lib/app.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Stable no-op size reporter: page surfaces fill their own layout. */
 const noopSizeChange = () => {};

@@ -10,7 +10,7 @@ import {
   terminalCodeClass,
 } from "@/components/terminal-surface";
 import { copyToClipboard } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface TerminalBlockProps {
   /** Raw code to render and copy. Ignored when `rows` is provided. */

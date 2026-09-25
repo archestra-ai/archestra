@@ -49,7 +49,7 @@ import {
   type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import {

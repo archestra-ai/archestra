@@ -2,16 +2,15 @@ import { MCP_TASK_PART_TYPE, type McpTaskPartData } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
 import { vi } from "vitest";
 import { createChatTaskBridge } from "@/clients/chat-task-bridge";
+import config from "@/config";
 import { McpGatewayTaskModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 
 // The threshold derives from the one timeout knob: min(10s, timeout/2).
 // 120ms ⇒ a 60ms threshold, so slow-vs-fast is deterministic.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    mcpGateway: { toolCallTimeoutMs: 120 },
-  }),
-);
+beforeEach(() => {
+  config.mcpGateway.toolCallTimeoutMs = 120;
+});
 
 describe("chat task bridge", () => {
   function bridgeWithWriter() {

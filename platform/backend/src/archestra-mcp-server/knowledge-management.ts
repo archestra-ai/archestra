@@ -74,11 +74,11 @@ import {
 } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { dynamicAccessContext } from "./dynamic-tools";
+import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
-  EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
   structuredToolErrorResult,

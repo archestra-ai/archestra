@@ -5,7 +5,7 @@ import {
   guardrailsPolicyQueryKey,
   invalidatePolicyViews,
 } from "@/lib/openappa-policy-views";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export type GuardrailsPolicy =
   archestraApiTypes.GetGuardrailsPolicyResponses["200"];

@@ -5,7 +5,7 @@ import {
   runtimeCredentialsQueryKey,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 
 const { createGithubPat, updateGithubPat, deleteGithubPat } = archestraApiSdk;
 

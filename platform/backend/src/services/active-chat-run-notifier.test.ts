@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { afterEach, beforeEach, expect, test } from "@/test";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const originalEnv = process.env;
 

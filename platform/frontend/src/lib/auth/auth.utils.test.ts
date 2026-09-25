@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Permissions } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { describe, expect, it } from "vitest";

@@ -26,7 +26,7 @@ import {
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
   label: string;

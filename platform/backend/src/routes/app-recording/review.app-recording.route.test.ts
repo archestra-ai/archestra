@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { GITHUB_MAX_FILE_BYTES } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "@/test";
+import { describe, expect } from "vitest";
+import { test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appRecordingRoutes from "./app-recording.routes";

@@ -11,7 +11,7 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface TabbedDialogNavItem<TSection extends string> {
   id: TSection;

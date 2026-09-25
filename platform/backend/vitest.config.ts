@@ -43,7 +43,9 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
  * while everything else can share each worker's module cache and skip
  * re-importing the whole backend graph per file (~6s/file saved).
  *
- * Routing is computed from file CONTENT at config-load time, so a new test
+ * Rollback-eligible files join the clean project and select transaction
+ * teardown through their filename in setup hooks, retaining its shared module
+ * cache. Routing is computed from file CONTENT at config-load time, so a new test
  * that adds `vi.mock` is automatically placed in the isolated project — no
  * manual list to maintain.
  */
@@ -52,6 +54,7 @@ function partitionTestFiles(): {
   clean: string[];
   unitMocked: string[];
   unit: string[];
+  rollback: string[];
 } {
   const root = path.resolve(__dirname, "./src");
   const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
@@ -59,6 +62,7 @@ function partitionTestFiles(): {
   const clean: string[] = [];
   const unitMocked: string[] = [];
   const unit: string[] = [];
+  const rollback: string[] = [];
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -68,9 +72,15 @@ function partitionTestFiles(): {
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
     const databaseFree = entry.name.endsWith(".unit.test.ts");
+    const rollsBack = entry.name.endsWith(".rollback.test.ts");
     const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
     if (databaseFree) {
       (moduleMocks ? unitMocked : unit).push(relative);
+    } else if (rollsBack) {
+      if (moduleMocks) {
+        throw new Error(`${relative} cannot use module mocks with rollback`);
+      }
+      rollback.push(relative);
     } else {
       (moduleMocks ? mocked : clean).push(relative);
     }
@@ -83,7 +93,7 @@ function partitionTestFiles(): {
     );
   }
 
-  return { mocked, clean, unitMocked, unit };
+  return { mocked, clean, unitMocked, unit, rollback };
 }
 
 const testFiles = partitionTestFiles();
@@ -91,14 +101,13 @@ const testFiles = partitionTestFiles();
 export default defineConfig({
   plugins: [rawPythonPlugin()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@archestra/shared/access-control": path.resolve(
-        __dirname,
-        "../shared/access-control.ts",
-      ),
-      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      {
+        find: /^@archestra\/shared$/,
+        replacement: path.resolve(__dirname, "../shared/index.ts"),
+      },
+    ],
   },
   test: {
     ...vitestLogPolicy,
@@ -120,7 +129,7 @@ export default defineConfig({
      *
      * DB state stays per-file either way (setup.ts):
      * - beforeAll: creates PGlite from the migrated snapshot ONCE per file
-     * - beforeEach: truncates tables (fast) instead of recreating DB
+     * - beforeEach: truncates after DB access, skipping pure tests
      */
 
     // Forks (child processes), not threads. PGlite is a WASM module; running
@@ -179,6 +188,9 @@ export default defineConfig({
           name: "unit",
           include: testFiles.unit,
           isolate: false,
+          // An accidental runtime config/database import must fail even on CI,
+          // where a database URL is available to the database-backed projects.
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
         },
       },
       {
@@ -187,15 +199,18 @@ export default defineConfig({
           name: "unit-mocked",
           include: testFiles.unitMocked,
           isolate: true,
+          env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
         },
       },
       {
         extends: true,
         test: {
           name: "clean",
-          include: testFiles.clean,
+          include: [...testFiles.clean, ...testFiles.rollback],
           isolate: false,
-          // This project and `mocked` share one snapshot through global-setup.ts.
+          // The setup hooks select rollback for *.rollback.test.ts through
+          // Vitest's current test-file context. Both variants share workers.
+          // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
           setupFiles: ["./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores

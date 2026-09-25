@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 /**
  * Better Auth refuses `/list-sessions` for a session older than its freshness

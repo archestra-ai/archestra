@@ -17,7 +17,7 @@ import {
   useUpdateGuardrailsDeployment,
 } from "@/lib/guardrails-deployment.query";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * OpenAPPA is off and its policy was never saved, so it was never set up: an

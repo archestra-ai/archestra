@@ -3,7 +3,7 @@
 import type { AgentRunAttachPhase } from "@archestra/shared";
 import { Check, CircleAlert, Info, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** What the terminal knows about an attach that has not completed yet. */
 export type ExecSessionProgress = {

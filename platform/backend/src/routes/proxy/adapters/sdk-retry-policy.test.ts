@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, test } from "@/test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { anthropicAdapterFactory } from "./anthropic";
 import { archestraAdapterFactory } from "./archestra";
 import { cerebrasAdapterFactory } from "./cerebras";

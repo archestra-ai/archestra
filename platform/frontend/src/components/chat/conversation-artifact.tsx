@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { copyToClipboard } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const MermaidDiagram = dynamic(
   async () => {

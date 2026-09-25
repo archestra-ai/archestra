@@ -1,7 +1,7 @@
+import { describe, expect, test } from "vitest";
 import config from "@/config";
 import EncryptionKeyCanaryModel from "@/models/encryption-key-canary";
 import SecretModel from "@/models/secret";
-import { describe, expect, test } from "@/test";
 import { _resetCachedKey } from "@/utils/crypto";
 import { verifySecretsEncryptionKey } from "./encryption-key-guard";
 

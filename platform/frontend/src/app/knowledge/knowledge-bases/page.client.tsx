@@ -89,8 +89,8 @@ import {
   useRestoreKnowledgeBase,
 } from "@/lib/knowledge/knowledge-base.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { ConnectorChip } from "./_parts/connector-chip";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";

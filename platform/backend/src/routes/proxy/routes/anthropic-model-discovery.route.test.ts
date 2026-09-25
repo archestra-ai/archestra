@@ -5,8 +5,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
+import { expect, test } from "vitest";
 import config from "@/config";
-import { expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import anthropicProxyRoutes from "./anthropic";
 

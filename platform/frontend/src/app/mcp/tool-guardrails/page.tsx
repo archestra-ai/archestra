@@ -10,7 +10,7 @@ import {
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "@/lib/policy.utils";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { ToolGuardrailsClient } from "./page.client";
 import type { ToolsInitialData } from "./types";

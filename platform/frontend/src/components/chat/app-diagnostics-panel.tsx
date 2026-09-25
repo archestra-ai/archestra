@@ -8,7 +8,7 @@ import {
   isErrorDiagnostic,
   subscribeAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Summary of an owned app's latest-render runtime errors / logs, shown below the

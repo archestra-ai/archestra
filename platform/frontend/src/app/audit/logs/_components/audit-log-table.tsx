@@ -35,7 +35,7 @@ import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,

@@ -5,7 +5,7 @@ import { ConversationArtifactPanel } from "@/components/chat/conversation-artifa
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The shared textarea editor shell: a controlled textarea with a count/limit

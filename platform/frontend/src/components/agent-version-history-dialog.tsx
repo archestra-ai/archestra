@@ -33,8 +33,8 @@ import {
   useAgentVersions,
   useRestoreAgentVersion,
 } from "@/lib/agent-version.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * What the pane reads: the whole version, or only the sections that moved. The

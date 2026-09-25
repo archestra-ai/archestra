@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { resolveAgentMaxOutputTokens } from "./agent-output-budget";
 
 // The documented fallback budget for a model whose real output ceiling is unknown.

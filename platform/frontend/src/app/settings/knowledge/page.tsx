@@ -98,7 +98,7 @@ import {
   useTestRerankerConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   type ConnectionStatus,
   type SectionStatus,

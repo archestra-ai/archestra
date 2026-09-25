@@ -786,10 +786,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       "waitForDeploymentReady",
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const res = await response;
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -960,10 +963,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
     });
     cluster.rebuildComesUp = false;
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const res = await response;
 
     expect(res.statusCode).toBe(200);
     expect(res.json().rebuild.outcome).toBe("not-ready");
@@ -1022,10 +1028,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       },
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${first.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(pendingWriteFailed).toBe(true);
     expect(finalWriteFailed).toBe(true);
@@ -1061,10 +1070,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       },
     );
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(res.statusCode).toBe(500);
     expect(pendingAttempts).toBe(5);
@@ -1094,10 +1106,13 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
         return originalUpdate(params);
       });
 
-    const res = await app.inject({
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const response = app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/hard-reset`,
     });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const res = await response;
 
     expect(res.statusCode).toBe(500);
     const stranded = await readInstall(mcpServer.id);

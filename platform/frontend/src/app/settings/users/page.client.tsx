@@ -67,7 +67,7 @@ import {
   useMemberSignupStatus,
   useOrganization,
 } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useSetSettingsAction } from "../layout";
 
 export default function UsersPageClient() {

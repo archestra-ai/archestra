@@ -6,7 +6,7 @@ import {
   findAppShellMain,
   readAppShellRegion,
 } from "@/lib/app-shell-region";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Shared layout chrome for every MCP App surface (chat, right panel, Apps page).

@@ -1,5 +1,5 @@
+import { expect, test } from "vitest";
 import { secretManager } from "@/secrets-manager";
-import { expect, test } from "@/test";
 import { extractLocalConfigSecrets } from "./mcp-catalog-secrets";
 
 test("saved credential bindings never copy a value into the catalog or its secret bag", async () => {

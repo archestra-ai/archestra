@@ -6,24 +6,16 @@ import {
   xaiOauthEndpoints,
   xaiSubscriptionTokenManager,
 } from "@/services/xai-subscription-token";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      xai: {
-        baseUrl: "https://api.x.ai/v1",
-        subscription: {
-          baseUrl: "https://cli-chat-proxy.grok.test/v1",
-          issuer: "https://auth.x.ai",
-          clientVersion: "1.0.0-test",
-          clientId: "test-xai-client-id",
-          scopes: "openid offline_access api:access",
-        },
-      },
-    },
-  }),
-);
+beforeEach(() => {
+  config.llm.xai.baseUrl = "https://api.x.ai/v1";
+  config.llm.xai.subscription.baseUrl = "https://cli-chat-proxy.grok.test/v1";
+  config.llm.xai.subscription.issuer = "https://auth.x.ai";
+  config.llm.xai.subscription.clientVersion = "1.0.0-test";
+  config.llm.xai.subscription.clientId = "test-xai-client-id";
+  config.llm.xai.subscription.scopes = "openid offline_access api:access";
+});
 
 /**
  * Discovery is memoized per issuer for the process lifetime, so each test that

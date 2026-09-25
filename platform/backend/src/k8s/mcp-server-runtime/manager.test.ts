@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
-import { vi } from "vitest";
+// SPDX-SnippetEnd
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -20,8 +21,6 @@ import OrganizationModel from "@/models/organization";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
-// SPDX-SnippetEnd
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { McpServer, NetworkPolicy } from "@/types";
 
 const McpServerModel = McpServerModule.default;

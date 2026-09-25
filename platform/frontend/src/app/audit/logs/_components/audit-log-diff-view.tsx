@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Top-level audit `before` / `after` payloads from the API. */
 export type AuditSnapshot = Record<string, unknown>;

@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/select";
 import { TimezonePicker } from "@/components/ui/timezone-picker";
 import { Toggle } from "@/components/ui/toggle";
-import { cn } from "@/lib/utils";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
+import { cn } from "@/lib/utils/tailwind";
 
 export type ScheduleTriggerPickerValue = {
   enabled: boolean;

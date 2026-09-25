@@ -95,6 +95,7 @@ describe("custom role routes", () => {
 
   test("accepts a UI-only permission the author's own role does not hold", async ({
     makeCustomRole,
+    makeMember,
     makeUser,
   }) => {
     // `simpleView:enable` is a display preference, not a privilege: admin
@@ -107,13 +108,7 @@ describe("custom role routes", () => {
       name: "Role Maker",
       permission: { ac: ["create"], agent: ["read"] },
     });
-    await db.insert(schema.membersTable).values({
-      id: crypto.randomUUID(),
-      organizationId,
-      userId: author.id,
-      role: authorRole.role,
-      createdAt: new Date(),
-    });
+    await makeMember(author.id, organizationId, { role: authorRole.role });
     authenticatedUser = author;
 
     const response = await app.inject({
@@ -134,6 +129,7 @@ describe("custom role routes", () => {
 
   test("rejects creating a role with permissions the user does not have", async ({
     makeCustomRole,
+    makeMember,
     makeUser,
   }) => {
     const limitedUser = await makeUser();
@@ -142,12 +138,8 @@ describe("custom role routes", () => {
       name: "Limited Admin",
       permission: { ac: ["create"] },
     });
-    await db.insert(schema.membersTable).values({
-      id: crypto.randomUUID(),
-      organizationId,
-      userId: limitedUser.id,
+    await makeMember(limitedUser.id, organizationId, {
       role: limitedRole.role,
-      createdAt: new Date(),
     });
     authenticatedUser = limitedUser;
 
@@ -176,17 +168,14 @@ describe("custom role routes", () => {
   test("rejects updating a role to grant permissions the user does not have", async ({
     makeUser,
     makeCustomRole,
+    makeMember,
   }) => {
     const limitedUser = await makeUser();
     const limitedRole = await makeCustomRole(organizationId, {
       permission: { ac: ["read", "update"] },
     });
-    await db.insert(schema.membersTable).values({
-      id: crypto.randomUUID(),
-      userId: limitedUser.id,
-      organizationId,
+    await makeMember(limitedUser.id, organizationId, {
       role: limitedRole.role,
-      createdAt: new Date(),
     });
     const targetRole = await makeCustomRole(organizationId, {
       permission: { ac: ["read"] },
@@ -689,6 +678,7 @@ describe("custom role routes", () => {
 
   test("PUT /api/roles/:roleId accepts pairs the no-escalation rule exempts", async ({
     makeCustomRole,
+    makeMember,
     makeUser,
   }) => {
     // Same divergence as on create: editing a role to switch on a UI-only
@@ -699,13 +689,7 @@ describe("custom role routes", () => {
       name: "Role Editor",
       permission: { ac: ["read", "update"], agent: ["read"] },
     });
-    await db.insert(schema.membersTable).values({
-      id: crypto.randomUUID(),
-      organizationId,
-      userId: author.id,
-      role: authorRole.role,
-      createdAt: new Date(),
-    });
+    await makeMember(author.id, organizationId, { role: authorRole.role });
     const target = await makeCustomRole(organizationId, {
       role: "target_role",
       name: "Target Role",

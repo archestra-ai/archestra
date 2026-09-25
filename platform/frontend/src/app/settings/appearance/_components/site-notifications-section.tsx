@@ -14,7 +14,7 @@ import {
   useDeleteSiteNotification,
   useSiteNotification,
 } from "@/lib/site-notification.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 
 const markdownComponents: Components = {
   pre({ children }) {

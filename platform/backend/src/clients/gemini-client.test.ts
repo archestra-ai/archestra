@@ -1,11 +1,10 @@
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   createGoogleGenAIClient,
   isVertexModelReachable,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
 
 const mockGoogleGenAI = vi.hoisted(() => vi.fn());
 

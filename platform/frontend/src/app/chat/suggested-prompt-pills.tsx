@@ -1,7 +1,7 @@
 "use client";
 
 import { Suggestion } from "@/components/ai-elements/suggestion";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface SuggestedPrompt {
   summaryTitle: string;

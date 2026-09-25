@@ -7,7 +7,7 @@
 //     `/internal-test/api/[...path]`, which answers SSR fetches.
 //   - The browser `setupWorker`, which intercepts client-side fetches.
 //
-// POST registers on the server side immediately and persists the descriptor in
+// POST registers on the server side immediately and persists the descriptors in
 // `globalThis.__archestraMswOverrides`. The browser bootstrap (`MswInit`) GETs
 // this list right after `worker.start()` and replays each descriptor via
 // `worker.use(...)`, so a single POST covers both runtimes.
@@ -41,10 +41,11 @@ const ENABLED =
 export async function POST(req: Request): Promise<Response> {
   if (!ENABLED) return notFound();
 
-  const override = (await req.json()) as HandlerOverride;
-  if (!isValidOverride(override)) {
+  const input = await req.json();
+  const overrides = Array.isArray(input) ? input : [input];
+  if (overrides.length === 0 || !overrides.every(isValidOverride)) {
     return Response.json(
-      { error: "invalid_override", override },
+      { error: "invalid_override", override: input },
       { status: 400 },
     );
   }
@@ -59,10 +60,15 @@ export async function POST(req: Request): Promise<Response> {
 
   // Built once and kept, rather than rebuilt per request: a `once: true`
   // handler tracks on the instance whether it has already been spent.
-  addOverrideHandler(buildHandler(msw, override.url, override));
-  registry().push(override);
+  for (const override of overrides) {
+    addOverrideHandler(buildHandler(msw, override.url, override));
+    registry().push(override);
+  }
 
-  return Response.json({ ok: true, registered: [override.url] });
+  return Response.json({
+    ok: true,
+    registered: overrides.map((override) => override.url),
+  });
 }
 
 export async function GET(): Promise<Response> {

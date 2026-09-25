@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, test } from "@/test";
+import { describe, expect, it, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import { callNativeRerank, isNativeRerankModel } from "./native-rerank";
 

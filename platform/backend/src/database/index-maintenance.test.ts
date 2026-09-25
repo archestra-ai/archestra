@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
 import db from "@/database";
-import { describe, expect, test } from "@/test";
 import { dropLegacyPayloadTrgmIndexes } from "./index-maintenance";
 
 async function indexExists(name: string): Promise<boolean> {

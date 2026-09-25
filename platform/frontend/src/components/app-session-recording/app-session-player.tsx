@@ -101,7 +101,7 @@ import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature, useMcpSandboxDomain } from "@/lib/config/config.query";
 import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The stored recording flattened for playback: the immutable capture plus the

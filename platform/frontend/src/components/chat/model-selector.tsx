@@ -63,7 +63,7 @@ import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { logoNameForProvider } from "@/lib/provider-logos";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
 type FilterableModality = Exclude<ModelInputModality, "text">;

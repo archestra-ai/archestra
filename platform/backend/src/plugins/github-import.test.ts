@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
-import { PLUGIN_MAX_TOTAL_BYTES } from "@/types";
+import { PLUGIN_MAX_TOTAL_BYTES } from "@/types/plugin-file-constraints";
 import { importPluginFromGithub, PluginImportError } from "./github-import";
 
 const gitFallback = vi.hoisted(() => ({

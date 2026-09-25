@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // TODO: Reuse this OpenAPPA landing layout for the main chat landing after its design is approved.
 interface ChatLandingLayoutProps {

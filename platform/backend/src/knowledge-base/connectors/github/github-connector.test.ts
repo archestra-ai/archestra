@@ -1,6 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
 import { GithubConnector } from "./github-connector";
 
@@ -80,7 +79,8 @@ describe("GithubConnector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedOctokitOptions.length = 0;
-    connector = new GithubConnector();
+    // The sync tests cover pagination and output, not wall-clock throttling.
+    connector = new GithubConnector(0);
     // Default: repos.get returns main as default branch
     mockReposGet.mockResolvedValue({
       data: { default_branch: "main" },

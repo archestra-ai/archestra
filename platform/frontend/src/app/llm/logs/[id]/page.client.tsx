@@ -28,7 +28,8 @@ import { describeKey } from "@/components/virtual-key-badge";
 import { useProfiles } from "@/lib/agent.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useInteraction } from "@/lib/interactions/interaction.query";
-import { cn, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 export function ChatPage({
   initialData,

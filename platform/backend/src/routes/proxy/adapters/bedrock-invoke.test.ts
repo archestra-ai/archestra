@@ -12,7 +12,7 @@
 import type AnthropicProvider from "@anthropic-ai/sdk";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { bedrockInvokeAdapterFactory } from "./bedrock-invoke";
 
 type AnthropicStreamChunk = AnthropicProvider.Messages.MessageStreamEvent;

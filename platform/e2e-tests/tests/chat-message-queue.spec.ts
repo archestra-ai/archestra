@@ -58,7 +58,7 @@ test.describe("Chat message queue", () => {
           sentTexts.push(latestUserMessage.parts[0].text);
         }
       });
-      await textarea.fill("Start a slow response chat-reconnect-e2e-test");
+      await textarea.fill("Start a slow response chat-queue-e2e-test");
       await page.keyboard.press("Enter");
       await expect(
         page.getByText(/Reconnect stream part one/).first(),
@@ -122,7 +122,7 @@ test.describe("Chat message queue", () => {
         page.getByTestId(E2eTestId.ChatMessageQueueItem),
       ).toHaveCount(0);
       expect(sentTexts).toEqual([
-        "Start a slow response chat-reconnect-e2e-test",
+        "Start a slow response chat-queue-e2e-test",
         queuedText,
         secondQueuedText,
       ]);

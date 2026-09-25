@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import type { ConnectorSyncBatch } from "@/types";
 import { GitlabConnector } from "./gitlab-connector";
@@ -186,7 +186,8 @@ describe("GitlabConnector", () => {
     groupProjectsRequests.length = 0;
     treeRequests.length = 0;
     fileRequests.length = 0;
-    connector = new GitlabConnector();
+    // Network responses are mocked; keep the production request spacing out of these tests.
+    connector = new GitlabConnector(0);
   });
 
   describe("validateConfig", () => {

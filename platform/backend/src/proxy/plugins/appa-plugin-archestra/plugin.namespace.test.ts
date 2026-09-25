@@ -1,6 +1,6 @@
+import { describe, expect, test, vi } from "vitest";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
-import { describe, expect, test, vi } from "@/test";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT } from "./types";

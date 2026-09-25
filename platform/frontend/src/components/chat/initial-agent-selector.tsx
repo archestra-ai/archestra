@@ -109,7 +109,7 @@ import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
 } from "@/lib/mcp/mcp-server.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   filterAndSortInitialAgents,
   truncateAgentDescription,

@@ -16,7 +16,7 @@ import {
 } from "../consts";
 import { getKeycloakJwt } from "../utils";
 import {
-  assignArchestraToolsToProfile,
+  assignWhoamiToolToProfile,
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
@@ -80,8 +80,8 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         agentType: "mcp_gateway",
       });
 
-      // STEP 4: Assign Archestra tools to the profile
-      await assignArchestraToolsToProfile(request, pid);
+      // STEP 4: Assign the tool this authentication flow calls.
+      await assignWhoamiToolToProfile(request, pid);
 
       // STEP 5: Wait for IdP linkage/tool assignments to settle before using the
       // external JWT against the gateway. This avoids transient 401s in CI where
@@ -216,8 +216,8 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const profileId = agent.id;
 
     try {
-      // Assign Archestra tools
-      await assignArchestraToolsToProfile(request, profileId);
+      // Assign the tool used by this authentication flow.
+      await assignWhoamiToolToProfile(request, profileId);
 
       // Get org token - should work since no IdP is configured
       const tokensResponse = await makeApiRequest({

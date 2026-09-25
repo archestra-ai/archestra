@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const { getTokens, getTokenValue, rotateToken } = archestraApiSdk;
 

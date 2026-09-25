@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { Agent } from "undici";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { getLlmUpstreamDispatcher } from "./llm-upstream-dispatcher";
 
 describe("getLlmUpstreamDispatcher", () => {

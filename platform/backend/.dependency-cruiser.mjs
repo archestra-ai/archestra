@@ -15,6 +15,19 @@ export default {
         reachable: true,
       },
     },
+    {
+      name: "plugin-imports-do-not-load-database",
+      severity: "error",
+      comment:
+        "GitHub plugin import helpers must stay outside the database and server import graph so their tests remain cheap to load.",
+      from: {
+        path: "^src/plugins/(github-import|github-tree|plugin-tree-files)\\.ts$",
+      },
+      to: {
+        path: forbiddenRuntimeModules,
+        reachable: true,
+      },
+    },
   ],
   options: {
     includeOnly: "^src/",

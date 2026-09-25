@@ -31,7 +31,7 @@
     "type-check": "tsc --noEmit",
     "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-sandbox-base-sync.ts",
-    "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' --output-type err && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-test-fixture-imports.ts",
+    "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-test-fixture-imports.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node ./scripts/migrate-with-lock.mjs",
     "db:studio": "drizzle-kit studio",

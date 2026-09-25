@@ -22,6 +22,10 @@ import {
   executeYell,
   loadOfferReview,
 } from "@/openappa/service";
+import {
+  recallYellSession,
+  YellArgumentsSchema,
+} from "@/openappa/yell-session";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { getAppaGithubSync } from "@/services/openappa-github-sync";
 import {
@@ -71,31 +75,38 @@ const registry = defineArchestraTools([
     title: "Report OpenAPPA feedback",
     description:
       "Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. Sends your message and filtered policy diagnostics to the shared OpenAPPA reporting service (GCS and Slack). with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: do not include secrets, personal data, or task content. This does not change policy or grant permission.",
-    schema: z.strictObject({
-      message: z
-        .string()
-        .min(1)
-        .max(65536)
-        .refine((value) => value.trim().length > 0, "A message is required"),
-      with_trajectory: z.boolean(),
-    }),
+    schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;
-      const session =
+      const known =
         context.openappaSession ??
         (context.organizationId && context.userId && id
           ? chatOpenAppaSession(context.organizationId, context.userId, id)
           : undefined);
-      if (!session || !context.currentToolCallId)
+      const recalled =
+        (!known || !context.currentToolCallId) && context.organizationId
+          ? await recallYellSession({
+              organizationId: context.organizationId,
+              args,
+            })
+          : undefined;
+      const session = known ?? recalled?.session;
+      const toolCallId = context.currentToolCallId ?? recalled?.callId;
+      if (!session || !toolCallId) {
+        logger.warn(
+          {
+            agentId: context.agentId,
+            hasSession: Boolean(session),
+            hasToolCallId: Boolean(toolCallId),
+          },
+          "OpenAPPA yell refused: no session or tool-call identity",
+        );
         throw new ApiError(
           400,
           "OpenAPPA reporting requires an authenticated session and tool-call identity",
         );
-      return executeYell({
-        session,
-        toolCallId: context.currentToolCallId,
-        args,
-      });
+      }
+      return executeYell({ session, toolCallId, args });
     },
   }),
   defineArchestraTool({

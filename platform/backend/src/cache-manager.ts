@@ -44,6 +44,8 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
+  OpenAppaYellSession: "openappa-yell-session",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */

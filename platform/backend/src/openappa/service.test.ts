@@ -23,6 +23,7 @@ import {
   processProxyResults,
   sessionFromHeaders,
 } from "./service";
+import { rememberYellSession } from "./yell-session";
 
 function signedRemedyArgs(offerId = "offer-1") {
   const jws = signOfferClaims(
@@ -60,6 +61,7 @@ const native = vi.hoisted(() => ({
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
+vi.mock("@/cache-manager");
 // The effective-policy store foreign-keys the organization: a real row must
 // exist for every organization_id the sessions below name.
 let organizationId = "org";
@@ -236,6 +238,99 @@ describe("APPA feature boundary", () => {
         arguments: args,
       },
     ]);
+  });
+
+  test("a gateway yell reports under the session and call the proxy allowed", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: false };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt report-1" }] },
+      }),
+    );
+    await rememberYellSession({
+      session,
+      call: {
+        id: "toolu_report",
+        name: "mcp__gateway__archestra__yell",
+        // The model's spelling: key order and whitespace the gateway never sees.
+        arguments:
+          '{ "with_trajectory": false, "message": "Confusing feedback" }',
+      },
+      resolution: {
+        canonicalize: (name) => name.replace("mcp__gateway__", ""),
+        looseRunToolDispatch: false,
+      },
+    });
+    const gateway = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    };
+    const result = await executeArchestraTool("archestra__yell", args, gateway);
+    expect(result.content).toEqual([
+      { type: "text", text: "Receipt report-1" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...session,
+        event: "yell",
+        operation_id: "yell:toolu_report",
+        arguments: args,
+      },
+    ]);
+    await expect(
+      executeArchestraTool("archestra__yell", args, gateway),
+    ).rejects.toThrow("requires an authenticated session");
+  });
+
+  test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: true };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
+    );
+    const resolution = {
+      canonicalize: (name: string) => name,
+      looseRunToolDispatch: false,
+    };
+    const gateway = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    };
+    await rememberYellSession({
+      session,
+      call: { id: "foreign", name: "other_server__yell", arguments: args },
+      resolution,
+    });
+    await expect(
+      executeArchestraTool("archestra__yell", args, gateway),
+    ).rejects.toThrow("requires an authenticated session");
+
+    await rememberYellSession({
+      session,
+      call: {
+        id: "wrapped",
+        name: "archestra__run_tool",
+        arguments: { tool_name: "yell", tool_args: args },
+      },
+      resolution,
+    });
+    for (const [context, other] of [
+      [{ ...gateway, organizationId: "another-org" }, args],
+      [gateway, { ...args, message: "Another report" }],
+    ] as const) {
+      await expect(
+        executeArchestraTool("archestra__yell", other, context),
+      ).rejects.toThrow("requires an authenticated session");
+    }
+    await executeArchestraTool("archestra__yell", args, gateway);
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "yell",
+      operation_id: "yell:wrapped",
+    });
   });
 
   test("reporting refuses missing identity and unprotected child calls", async () => {

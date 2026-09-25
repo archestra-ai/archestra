@@ -884,7 +884,7 @@ jobs:
           echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
-    name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
+    name: Frontend Integration Tests (MSW runner)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     # mac-mini routing (see comment above platform-rust-checks)
@@ -897,10 +897,6 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -965,15 +961,15 @@ jobs:
         run: pnpm --filter @frontend exec playwright install chromium
 
       # Next validates its compiler cache against the current source tree. A
-      # group-specific key lets each pair of shards reuse its own dist dirs on
-      # later PR pushes without two jobs racing to save the same cache entry.
+      # Stable key lets all four shards reuse their own dist dirs on later PR
+      # pushes without competing jobs racing to save the same cache entry.
       - name: Cache integration test compiler output
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*
-          key: frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
+          key: frontend-integration-next-${{ runner.os }}-group-1-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
           restore-keys: |
-            frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-
+            frontend-integration-next-${{ runner.os }}-group-1-
 
       - name: Reap stale MSW webServers
         # Three runner slots share this machine (mac-mini-1, -1-2, -1-3), so
@@ -991,16 +987,11 @@ jobs:
 
       - name: Run integration tests
         shell: bash
-        env:
-          GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          group=$GROUP
           shard_count=4
-          first_shard=$(( (group - 1) * 2 + 1 ))
-          last_shard=$(( first_shard + 1 ))
           pids=()
-          for shard in $(seq "$first_shard" "$last_shard"); do
+          for shard in $(seq 1 "$shard_count"); do
             # Three macOS runner slots share one host. Derive non-overlapping
             # ports from the run/attempt/shard instead of discovering a free
             # port and racing another process to bind it after the probe closes.
@@ -1024,7 +1015,7 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-report-group-${{ matrix.group }}
+          name: playwright-integration-report
           path: platform/frontend/playwright-report-shard-*/
           retention-days: "7"
 
@@ -1032,12 +1023,12 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-traces-group-${{ matrix.group }}
+          name: playwright-integration-traces
           path: platform/frontend/test-results-shard-*/
           retention-days: "7"
 
-  # Keep the existing required check name stable while the work runs in a
-  # matrix. The gate fails if either group fails or is cancelled.
+  # Keep the existing required check name stable. The gate fails if the
+  # integration runner fails or is cancelled.
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
@@ -1045,15 +1036,15 @@ jobs:
     needs: [frontend-integration-tests]
     permissions: {}
     steps:
-      - name: Check integration test group results
+      - name: Check integration test results
         env:
-          GROUPS_RESULT: ${{ needs.frontend-integration-tests.result }}
+          TESTS_RESULT: ${{ needs.frontend-integration-tests.result }}
         run: |
-          if [ "$GROUPS_RESULT" != "success" ]; then
-            echo "::error::One or more frontend integration test groups failed (result: $GROUPS_RESULT)."
+          if [ "$TESTS_RESULT" != "success" ]; then
+            echo "::error::Frontend integration tests failed (result: $TESTS_RESULT)."
             exit 1
           fi
-          echo "All frontend integration test groups passed."
+          echo "Frontend integration tests passed."
 
   # Fallback for the mac-mini routing above: GitHub has no queue timeout for
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and

@@ -825,23 +825,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Each leg boots its own full lite stack — the duplicated setup
-          # buys test wall-clock. The nightly
-          # cross-browser projects ride the api leg: they only carry the
-          # small @firefox/@webkit-tagged subset.
+          # Each leg boots its own full lite stack. The API and identity
+          # provider projects follow the first Chromium shard on its existing
+          # stack, avoiding a separate runner and duplicate setup. Nightly
+          # cross-browser projects ride that second step too.
           # The chromium legs cap Playwright at 2 workers: sized on 4-vcpu
           # standard runners, where the CI default (90% of cores) oversubscribed
           # a runner that was also hosting the whole lite stack, and the
           # resulting CPU starvation made the heavy dialog-interaction specs
           # (static-credentials, chat) miss their interaction windows.
-          # Conservative on the 8-vcpu runners; raising it is a follow-up. The
-          # api leg keeps the default — API-bound specs gain from parallelism
-          # and don't fight for paint time.
-          - name: api
-            projects_default: api --project=identity-providers
-            projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
-            shard: ""
-            workers_arg: ""
+          # Conservative on the 8-vcpu runners; raising it is a follow-up.
+          # The API step keeps the default worker count because it runs after
+          # Chromium and does not compete with its browser interaction tests.
           # Two Chromium shards retain the complete project while avoiding a
           # third full lite stack and its runner setup.
           # The OpenAPPA root tool flow, on a stack booted with the feature on.
@@ -862,6 +857,8 @@ jobs:
             projects_nightly: chromium
             shard: "--shard=1/2"
             workers_arg: "--workers=2"
+            secondary_projects_default: api --project=identity-providers
+            secondary_projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
           - name: chromium-2of2
             projects_default: chromium
             projects_nightly: chromium
@@ -963,6 +960,16 @@ jobs:
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
+      - name: Run API and identity provider E2E tests on the same stack
+        if: ${{ matrix.name == 'chromium-1of2' }}
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.secondary_projects_nightly || matrix.secondary_projects_default }}
+          extra_args: "--grep-invert '@quickstart'"
+          timeout: "20"
+          env_file: /tmp/lite-e2e.env
+          blob_report_dir: blob-report-api
+
       - name: Upload blob report
         if: ${{ !cancelled() }}
         # Playwright reports are diagnostic artifacts; an artifact-service
@@ -972,6 +979,15 @@ jobs:
         with:
           name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
+      - name: Upload API and identity provider blob report
+        if: ${{ !cancelled() && matrix.name == 'chromium-1of2' }}
+        continue-on-error: true
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-lite-api
+          path: platform/e2e-tests/blob-report-api/
           retention-days: 1
 
       - name: Show platform logs on failure
